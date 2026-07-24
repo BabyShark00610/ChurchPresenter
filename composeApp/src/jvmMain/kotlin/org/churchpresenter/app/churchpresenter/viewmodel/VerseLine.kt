@@ -18,6 +18,20 @@ internal fun verseTextOf(verseLine: String, fallback: String = verseLine): Strin
 internal fun indexOfFirstLiveVerse(verses: List<String>, liveVerseNumbers: Set<Int>): Int =
     verses.indexOfFirst { verseNumberOf(it)?.let { n -> n in liveVerseNumbers } == true }
 
+/**
+ * The verse number to move to when the operator presses Up/Down in the live chapter panel: locates
+ * [refVerse] in [verses] (or starts at the top if it isn't present), steps one line toward the start
+ * ([moveUp]) or the end — clamped to the list bounds — and returns that line's number. Null when
+ * [verses] is empty or the target line carries no number.
+ */
+internal fun nextLiveVerseNumber(verses: List<String>, refVerse: Int, moveUp: Boolean): Int? {
+    if (verses.isEmpty()) return null
+    val currentIdx = verses.indexOfFirst { verseNumberOf(it) == refVerse }.takeIf { it >= 0 } ?: 0
+    val nextIdx = if (moveUp) (currentIdx - 1).coerceAtLeast(0)
+                  else (currentIdx + 1).coerceAtMost(verses.size - 1)
+    return verses.getOrNull(nextIdx)?.let { verseNumberOf(it) }
+}
+
 /** The reference label for a verse line — `"John 3:16"`, or `"John 3"` when the line carries no number. */
 internal fun formatVerseReference(verseLine: String, bookName: String, chapter: Int): String {
     val verseNum = verseNumberOf(verseLine)

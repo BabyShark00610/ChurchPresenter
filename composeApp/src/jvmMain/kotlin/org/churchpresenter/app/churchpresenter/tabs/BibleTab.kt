@@ -130,6 +130,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.DetectionSource
 import org.churchpresenter.app.churchpresenter.viewmodel.ContinuationSpeed
 import org.churchpresenter.app.churchpresenter.viewmodel.formatVerseReference
 import org.churchpresenter.app.churchpresenter.viewmodel.indexOfFirstLiveVerse
+import org.churchpresenter.app.churchpresenter.viewmodel.nextLiveVerseNumber
 import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
 import org.churchpresenter.app.churchpresenter.viewmodel.verseSpan
 import org.churchpresenter.app.churchpresenter.viewmodel.verseTextOf
@@ -210,6 +211,7 @@ import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleSearchMode
 import org.churchpresenter.app.churchpresenter.utils.TrainingDataLogger
+import org.churchpresenter.app.churchpresenter.utils.highlightRanges
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -549,15 +551,9 @@ fun BibleTab(
         ) {
             val refVerse = if (liveNavTargetVerse > 0) liveNavTargetVerse
                            else liveVerseNumbers.minOrNull() ?: 1
-            val currentIdx = liveChapterVerses.indexOfFirst { v ->
-                verseNumberOf(v) == refVerse
-            }.takeIf { it >= 0 } ?: 0
-            val nextIdx = if (event.key == Key.DirectionUp)
-                (currentIdx - 1).coerceAtLeast(0)
-            else
-                (currentIdx + 1).coerceAtMost(liveChapterVerses.size - 1)
-            val nextVerseNum = liveChapterVerses.getOrNull(nextIdx)
-                ?.let { verseNumberOf(it) }
+            val nextVerseNum = nextLiveVerseNumber(
+                liveChapterVerses, refVerse, moveUp = event.key == Key.DirectionUp,
+            )
             if (nextVerseNum != null) {
                 liveNavTargetVerse = nextVerseNum
                 liveNavToken++
@@ -1304,16 +1300,8 @@ fun BibleTab(
                             val resultText = "${result.book} ${result.chapter}:${result.verse} - ${result.verseText}"
                             val highlightedText = buildAnnotatedString {
                                 var lastIndex = 0
-                                val lowerText = resultText.lowercase()
-                                // Match against the same trimmed query that produced the results;
-                                // an empty query would make indexOf() loop forever below.
-                                val lowerQuery = searchQuery.trim().lowercase()
-                                var startIndex = if (lowerQuery.isEmpty()) -1 else lowerText.indexOf(lowerQuery, lastIndex)
-                                while (startIndex != -1) {
-                                    // lowercase() can change string length in some locales, so clamp
-                                    // indices derived from lowerText before slicing resultText
-                                    val safeStart = startIndex.coerceAtMost(resultText.length)
-                                    val safeEnd = (startIndex + lowerQuery.length).coerceAtMost(resultText.length)
+                                // Match against the same trimmed query that produced the results.
+                                for ((safeStart, safeEnd) in highlightRanges(resultText, searchQuery)) {
                                     append(resultText.substring(lastIndex.coerceAtMost(safeStart), safeStart))
                                     withStyle(style = SpanStyle(
                                         background = MaterialTheme.colorScheme.primaryContainer,
@@ -1322,8 +1310,7 @@ fun BibleTab(
                                     )) {
                                         append(resultText.substring(safeStart, safeEnd))
                                     }
-                                    lastIndex = startIndex + lowerQuery.length
-                                    startIndex = lowerText.indexOf(lowerQuery, lastIndex)
+                                    lastIndex = safeEnd
                                 }
                                 if (lastIndex < resultText.length) append(resultText.substring(lastIndex))
                             }

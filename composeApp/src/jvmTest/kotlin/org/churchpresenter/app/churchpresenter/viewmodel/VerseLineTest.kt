@@ -50,6 +50,26 @@ class VerseLineTest {
     @Test fun `first live verse ignores lines that carry no number`() =
         assertEquals(1, indexOfFirstLiveVerse(listOf("intro", "2. beta"), setOf(2)))
 
+    // ── nextLiveVerseNumber ───────────────────────────────────────────────────
+
+    @Test fun `next verse steps down to the following line`() =
+        assertEquals(3, nextLiveVerseNumber(chapter, refVerse = 2, moveUp = false))
+
+    @Test fun `next verse steps up to the preceding line`() =
+        assertEquals(1, nextLiveVerseNumber(chapter, refVerse = 2, moveUp = true))
+
+    @Test fun `stepping up from the first line stays on it`() =
+        assertEquals(1, nextLiveVerseNumber(chapter, refVerse = 1, moveUp = true))
+
+    @Test fun `stepping down from the last line stays on it`() =
+        assertEquals(4, nextLiveVerseNumber(chapter, refVerse = 4, moveUp = false))
+
+    @Test fun `an unknown reference starts from the top`() =
+        assertEquals(2, nextLiveVerseNumber(chapter, refVerse = 99, moveUp = false))
+
+    @Test fun `no next verse in an empty chapter`() =
+        assertNull(nextLiveVerseNumber(emptyList(), refVerse = 1, moveUp = false))
+
     // ── formatVerseReference ──────────────────────────────────────────────────
 
     @Test fun `reference includes the verse number when present`() =
