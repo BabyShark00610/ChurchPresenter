@@ -637,6 +637,41 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     finalizedBy("printCoverageLink")
 }
 
+// Coverage floor — the 75% line-coverage target agreed for this MVVM app. 85% overall isn't a sane
+// goal here: the View layer (tabs/dialogs/composables) is a large share of the lines but low-logic,
+// so chasing the last slices means render-testing near-pure UI wiring. 75% is the honest ceiling.
+//
+// Deliberately NOT wired into `check` yet: overall coverage is still climbing toward 75%, and a
+// failing gate would block every build in the meantime. Run it on demand:
+//   ./gradlew :composeApp:jacocoTestCoverageVerification
+// Once the report clears 75%, enforce it in CI by adding:
+//   tasks.named("check") { dependsOn("jacocoTestCoverageVerification") }
+// Mirrors jacocoTestReport's execution/class/source wiring exactly so the number it gates on is the
+// same one the report prints (app package only; submodules measured by their own builds).
+tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    group = "verification"
+    description = "Fails the build if the app's overall line coverage is below the 75% target."
+    dependsOn("jvmTest")
+    executionData.setFrom(layout.buildDirectory.file("jacoco/jvmTest.exec"))
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir("classes/kotlin/jvm/main")) {
+            include("org/churchpresenter/**")
+            exclude("**/BuildConfig*")
+            exclude("**/ComposableSingletons*")
+        }
+    )
+    sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.75".toBigDecimal()
+            }
+        }
+    }
+}
+
 // Prints the headline number and a clickable file:// link so the report doesn't have to be hunted
 // for under build/. Deliberately a SEPARATE task rather than a doLast on jacocoTestReport: a
 // doLast is skipped when the report is UP-TO-DATE, so re-running `check` would silently print
