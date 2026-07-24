@@ -649,9 +649,9 @@ class BibleViewModel(
             val verseList = mutableListOf<SelectedVerse>()
             val chapterVerses = primaryBible.getChapter(bookId, chapter).verses
             val verseStr = chapterVerses.firstOrNull { v ->
-                v.substringBefore(". ").toIntOrNull() == verseNum
+                verseNumberOf(v) == verseNum
             }
-            val primaryVerseText = verseStr?.substringAfter(". ", "") ?: ""
+            val primaryVerseText = verseStr?.let { verseTextOf(it, "") } ?: ""
             val primaryBookName = primaryBible.getBookName(bookId) ?: bookName
             if (primaryVerseText.isNotEmpty()) {
                 verseList.add(
@@ -966,11 +966,11 @@ class BibleViewModel(
 
             for (idx in sortedIndices) {
                 val verse = _verses.value.getOrNull(idx) ?: continue
-                val vNum = verse.substringBefore(". ").toIntOrNull() ?: continue
+                val vNum = verseNumberOf(verse) ?: continue
                 verseNumbers.add(vNum)
 
                 // Primary: use text from _verses.value to stay in sync with Bible tab
-                val primaryText = verse.substringAfter(". ")
+                val primaryText = verseTextOf(verse)
                 if (primaryText.isNotEmpty()) {
                     if (bookName.isEmpty()) bookName = _primaryBible.value?.getBookName(bookId) ?: ""
                     primaryTexts.add(primaryText)
@@ -1033,13 +1033,13 @@ class BibleViewModel(
         }
 
         val verse = _verses.value[safeIndex]
-        val verseNumber = verse.substringBefore(". ").toIntOrNull() ?: 1
+        val verseNumber = verseNumberOf(verse) ?: 1
 
         // Add primary Bible verse — use text from _verses.value (the verse list displayed
         // in the Bible tab) to guarantee the presenter always matches what the user sees.
         // Re-querying via getVerseDetails could return different data if _selectedChapter
         // updated before _verses was reloaded.
-        val primaryVerseText = verse.substringAfter(". ")
+        val primaryVerseText = verseTextOf(verse)
         val primaryBookName = _primaryBible.value?.getBookName(bookId) ?: ""
         if (primaryVerseText.isNotEmpty()) {
             verseList.add(
@@ -1101,8 +1101,8 @@ class BibleViewModel(
         // Next verse is in the same chapter.
         if (referenceIndex < _verses.value.size - 1) {
             val verse = _verses.value[referenceIndex + 1]
-            val verseNumber = verse.substringBefore(". ").toIntOrNull() ?: return emptyList()
-            return buildNextVerseList(bookId, _selectedChapter.value, verseNumber, verse.substringAfter(". "))
+            val verseNumber = verseNumberOf(verse) ?: return emptyList()
+            return buildNextVerseList(bookId, _selectedChapter.value, verseNumber, verseTextOf(verse))
         }
 
         // Roll into the next chapter, and into the next book if this was the last chapter.
@@ -1116,8 +1116,8 @@ class BibleViewModel(
         }
         val nextBookId = bible.getBookId(nextBookIndex)
         val firstVerse = bible.getChapter(nextBookId, nextChapter).verses.firstOrNull() ?: return emptyList()
-        val verseNumber = firstVerse.substringBefore(". ").toIntOrNull() ?: return emptyList()
-        return buildNextVerseList(nextBookId, nextChapter, verseNumber, firstVerse.substringAfter(". "))
+        val verseNumber = verseNumberOf(firstVerse) ?: return emptyList()
+        return buildNextVerseList(nextBookId, nextChapter, verseNumber, verseTextOf(firstVerse))
     }
 
     /** Builds primary (+ secondary, if bilingual) [SelectedVerse] entries for one verse, by book id. */
@@ -1161,7 +1161,7 @@ class BibleViewModel(
     /** Returns verse numbers currently selected in multi-verse mode. */
     fun getSelectedVerseNumbers(): List<Int> {
         return _selectedVerseIndices.sorted().mapNotNull { idx ->
-            _verses.value.getOrNull(idx)?.substringBefore(". ")?.toIntOrNull()
+            _verses.value.getOrNull(idx)?.let { verseNumberOf(it) }
         }
     }
 
