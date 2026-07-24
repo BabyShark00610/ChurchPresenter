@@ -29,6 +29,18 @@ sealed class TunnelStatus {
     data class Error(val message: String) : TunnelStatus()
 }
 
+private val TUNNEL_URL_REGEX = Regex("""https://[a-z0-9-]+\.trycloudflare\.com""")
+
+internal fun extractTunnelUrl(line: String): String? = TUNNEL_URL_REGEX.find(line)?.value
+
+internal fun cloudflaredDownloadUrl(isWin: Boolean, isMac: Boolean, isArm: Boolean): String = when {
+    isWin -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+    isMac && isArm -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz"
+    isMac -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz"
+    isArm -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+    else -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+}
+
 class TunnelManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -55,15 +67,7 @@ class TunnelManager {
     private val binaryFile = File(dataDir, binaryName)
     private val tmpFile = File(dataDir, if (isMac) "cloudflared.tgz.tmp" else "$binaryName.tmp")
 
-    private val downloadUrl = when {
-        isWin -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-        isMac && isArm -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz"
-        isMac -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz"
-        isArm -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
-        else -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
-    }
-
-    private val urlRegex = Regex("""https://[a-z0-9-]+\.trycloudflare\.com""")
+    private val downloadUrl = cloudflaredDownloadUrl(isWin, isMac, isArm)
 
     init {
         Runtime.getRuntime().addShutdownHook(Thread {
@@ -171,10 +175,9 @@ class TunnelManager {
                 proc.inputStream.bufferedReader().use { reader ->
                     var line = reader.readLine()
                     while (line != null) {
-                        val match = urlRegex.find(line)
-                        if (match != null && !foundUrl) {
+                        val url = extractTunnelUrl(line)
+                        if (url != null && !foundUrl) {
                             foundUrl = true
-                            val url = match.value
                             _tunnelUrl.value = url
                             _status.value = TunnelStatus.Connected(url)
                         }

@@ -598,14 +598,14 @@ class AtemClient(val host: String, val port: Int = 9910) {
 
     // ── Packet building ──────────────────────────────────────────────────────
 
-    private fun u16(b: ByteArray, offset: Int): Int =
+    internal fun u16(b: ByteArray, offset: Int): Int =
         ((b[offset].toInt() and 0xFF) shl 8) or (b[offset + 1].toInt() and 0xFF)
 
     private fun sendRaw(bytes: ByteArray) {
         socket?.send(DatagramPacket(bytes, bytes.size, address, port))
     }
 
-    private fun buildCommandBytes(name: String, data: ByteArray): ByteArray {
+    internal fun buildCommandBytes(name: String, data: ByteArray): ByteArray {
         val cmdLen = 8 + data.size
         val cmd = ByteArray(cmdLen)
         cmd[0] = ((cmdLen shr 8) and 0xFF).toByte()
@@ -726,7 +726,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
     }
 
     /** Whether [packetId] is acknowledged by an ack for [ackId], allowing for 15-bit wrap. */
-    private fun isCoveredByAck(ackId: Int, packetId: Int): Boolean {
+    internal fun isCoveredByAck(ackId: Int, packetId: Int): Boolean {
         val tolerance = MAX_PACKET_ID / 2
         val shortlyBefore = packetId < ackId && packetId + tolerance > ackId
         val shortlyAfter = packetId > ackId && packetId < ackId + tolerance
@@ -917,13 +917,13 @@ class AtemClient(val host: String, val port: Int = 9910) {
 
     // ── Payload builders ─────────────────────────────────────────────────────
 
-    private fun writeU16(buf: ByteArray, offset: Int, value: Int) {
+    internal fun writeU16(buf: ByteArray, offset: Int, value: Int) {
         buf[offset] = ((value shr 8) and 0xFF).toByte()
         buf[offset + 1] = (value and 0xFF).toByte()
     }
 
     /** LOCK payload (4 bytes): storeId (uint16), locked (uint8), padding. */
-    private fun buildLockPayload(storeId: Int, locked: Boolean): ByteArray {
+    internal fun buildLockPayload(storeId: Int, locked: Boolean): ByteArray {
         val buf = ByteArray(4)
         writeU16(buf, 0, storeId)
         buf[2] = if (locked) 1 else 0
@@ -939,7 +939,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
      *   bytes 8-11: total data size (uint32, pre-RLE length)
      *   bytes 12-13: mode (uint16, 1 = write)
      */
-    private fun buildUploadRequestPayload(transferId: Int, storeId: Int, frameIndex: Int, size: Int): ByteArray {
+    internal fun buildUploadRequestPayload(transferId: Int, storeId: Int, frameIndex: Int, size: Int): ByteArray {
         val buf = ByteArray(16)
         writeU16(buf, 0, transferId)
         writeU16(buf, 2, storeId)
@@ -959,7 +959,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
      *   bytes 66-193: description (128 bytes, unused)
      *   bytes 194-209: MD5 hash of the encoded data (16 bytes)
      */
-    private fun buildFileDescriptionPayload(transferId: Int, name: String?, md5: ByteArray): ByteArray {
+    internal fun buildFileDescriptionPayload(transferId: Int, name: String?, md5: ByteArray): ByteArray {
         val buf = ByteArray(212)
         writeU16(buf, 0, transferId)
         if (!name.isNullOrEmpty()) {
@@ -971,7 +971,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
     }
 
     /** FTDa payload: transferId (uint16), chunk length (uint16), chunk data. */
-    private fun buildDataChunkPayload(transferId: Int, data: ByteArray, offset: Int, length: Int): ByteArray {
+    internal fun buildDataChunkPayload(transferId: Int, data: ByteArray, offset: Int, length: Int): ByteArray {
         val buf = ByteArray(4 + length)
         writeU16(buf, 0, transferId)
         writeU16(buf, 2, length)
@@ -983,7 +983,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
      * SMPC payload (68 bytes): mask (uint8, 3 = name+frames), clip index (uint8),
      * name (44 bytes UTF-8 at offset 2), frame count (uint16 at offset 66).
      */
-    private fun buildSetClipPayload(clipIndex: Int, name: String, frames: Int): ByteArray {
+    internal fun buildSetClipPayload(clipIndex: Int, name: String, frames: Int): ByteArray {
         val buf = ByteArray(68)
         buf[0] = 3
         buf[1] = clipIndex.toByte()
