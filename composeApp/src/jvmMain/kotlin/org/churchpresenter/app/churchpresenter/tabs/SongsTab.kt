@@ -179,6 +179,16 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.availableSongColumns
+import org.churchpresenter.app.churchpresenter.utils.draggedColumnIndex
+import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
+import org.churchpresenter.app.churchpresenter.utils.mergeColumnOrder
+import org.churchpresenter.app.churchpresenter.utils.moveColumn
+import org.churchpresenter.app.churchpresenter.utils.songColumnSortKey
+import org.churchpresenter.app.churchpresenter.viewmodel.resolveEditedSongPush
+import org.churchpresenter.app.churchpresenter.viewmodel.songCreditLine
+import org.churchpresenter.app.churchpresenter.viewmodel.songTitleLine
+import org.churchpresenter.app.churchpresenter.viewmodel.titleSlideSection
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -322,23 +332,14 @@ fun SongsTab(
     // updateSong() is async, so the viewModel's own selection state isn't guaranteed fresh yet.
     fun sendEditedSongToPresenter(editedSong: SongItem) {
         val sections = viewModel.getLyricSections(editedSong)
-        val sectionIndex = liveSectionIndex.coerceIn(-1, sections.size - 1)
-        val section = sections.getOrNull(sectionIndex) ?: LyricSection(
-            title = editedSong.title,
-            secondaryTitle = editedSong.secondaryTitle,
-            songNumber = editedSong.number.toIntOrNull() ?: 0,
-            lines = editedSong.lyrics,
-            secondaryLines = editedSong.secondaryLyrics,
-            type = Constants.SECTION_TYPE_SONG
-        )
-        val lineIndex = liveLineIndex.coerceIn(0, (section.lines.size - 1).coerceAtLeast(0))
         val bpm = appSettings.songBpm[editedSong.songId] ?: 0
+        val push = resolveEditedSongPush(sections, liveSectionIndex, liveLineIndex, editedSong, bpm)
         onAllSectionsChanged(sections)
-        onSectionIndexChanged(sectionIndex)
-        onLineIndexChanged(lineIndex)
-        onSongItemSelected(section.copy(bpm = bpm))
-        liveSectionIndex = sectionIndex
-        liveLineIndex = lineIndex
+        onSectionIndexChanged(push.sectionIndex)
+        onLineIndexChanged(push.lineIndex)
+        onSongItemSelected(push.section)
+        liveSectionIndex = push.sectionIndex
+        liveLineIndex = push.lineIndex
     }
 
     val tabFocusRequester = remember { FocusRequester() }
@@ -436,25 +437,9 @@ fun SongsTab(
     // Column order — "songbook" excluded when only one songbook loaded;
     // "add_to_schedule" excluded when the callback is absent
     val actionCols = setOf("favorites", "add_to_schedule")
-    val availableCols = buildList {
-        add("number"); add("title")
-        if (songbooks.size > 1) add("songbook")
-        add("tune")
-        add("play_count")
-        add("author")
-        add("composer")
-        if (onAddToSchedule != null) add("add_to_schedule")
-        add("favorites")
-    }
+    val availableCols = availableSongColumns(songbooks.size, hasAddToSchedule = onAddToSchedule != null)
     var colOrder by remember(appSettings.songColOrder, songbooks.size) {
-        val saved = appSettings.songColOrder
-        val order = if (saved.isEmpty()) availableCols
-        else {
-            val filtered = saved.filter { it in availableCols }
-            val missing = availableCols.filter { it !in filtered }
-            filtered + missing
-        }
-        mutableStateOf(order)
+        mutableStateOf(mergeColumnOrder(appSettings.songColOrder, availableCols))
     }
     // Drag-to-reorder state
     var draggingColId by remember { mutableStateOf<String?>(null) }
@@ -532,42 +517,15 @@ fun SongsTab(
         }
     }
 
-    fun sortKey(id: String) = when (id) {
-        "number"     -> Constants.SORT_NUMBER
-        "title"      -> Constants.SORT_TITLE
-        "songbook"   -> Constants.SORT_SONGBOOK
-        "tune"       -> Constants.SORT_TUNE
-        "play_count" -> Constants.SORT_PLAY_COUNT
-        "favorites"  -> Constants.SORT_FAVORITES
-        "author"     -> Constants.SORT_AUTHOR
-        "composer"   -> Constants.SORT_COMPOSER
-        else         -> ""
-    }
+    fun sortKey(id: String) = songColumnSortKey(id)
 
     // NOTE: operates on visibleCols (set after state vars), returns index within visibleCols
-    fun computeNewIdx(draggedId: String, accumX: Float, visibleCols: List<String>): Int {
-        val currentIdx = visibleCols.indexOf(draggedId)
-        if (currentIdx < 0) return 0
-        val handleW = with(density) { 6.dp.toPx() }
-        var remaining = accumX
-        var newIdx = currentIdx
-        if (remaining > 0f) {
-            var i = currentIdx + 1
-            while (i < visibleCols.size) {
-                val w = colWidth(visibleCols[i]) + handleW
-                if (remaining >= w / 2f) { newIdx = i; remaining -= w } else break
-                i++
-            }
-        } else {
-            var i = currentIdx - 1
-            while (i >= 0) {
-                val w = colWidth(visibleCols[i]) + handleW
-                if (-remaining >= w / 2f) { newIdx = i; remaining += w } else break
-                i--
-            }
-        }
-        return newIdx
-    }
+    fun computeNewIdx(draggedId: String, accumX: Float, visibleCols: List<String>): Int =
+        draggedColumnIndex(
+            draggedId, accumX, visibleCols,
+            columnWidthPx = ::colWidth,
+            handleWidthPx = with(density) { 6.dp.toPx() },
+        )
 
     @Composable
     fun DragHandle(colId: String, onDrag: (Float) -> Unit, onDragEnd: () -> Unit) {
@@ -602,10 +560,7 @@ fun SongsTab(
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
-                    val isLineMode = appSettings.songSettings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                        appSettings.songSettings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                        appSettings.songSettings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                        appSettings.songSettings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+                    val isLineMode = isSongLineMode(appSettings.songSettings)
                     when (keyEvent.key) {
                         Key.DirectionLeft -> {
                             if (isLineMode) {
@@ -819,13 +774,9 @@ fun SongsTab(
                                 val newVisIdx = computeNewIdx(colId, dragAccumX, vc)
                                 val targetId = vc.getOrNull(newVisIdx)
                                 if (targetId != null) {
-                                    val fromIdx = colOrder.indexOf(colId)
-                                    val toIdx = colOrder.indexOf(targetId)
-                                    if (toIdx != fromIdx) {
-                                        val mutable = colOrder.toMutableList()
-                                        mutable.removeAt(fromIdx)
-                                        mutable.add(toIdx.coerceIn(0, mutable.size), colId)
-                                        colOrder = mutable
+                                    val reordered = moveColumn(colOrder, colId, targetId)
+                                    if (reordered !== colOrder) {
+                                        colOrder = reordered
                                         onSettingsChangeState.value { s -> s.copy(songColOrder = colOrder) }
                                     }
                                 }
@@ -1590,10 +1541,7 @@ fun SongsTab(
             }
 
             // Arrow key navigation hint — only in line mode
-            val isLineModeHint = appSettings.songSettings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                    appSettings.songSettings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                    appSettings.songSettings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                    appSettings.songSettings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+            val isLineModeHint = isSongLineMode(appSettings.songSettings)
             if (isLineModeHint) {
                 Text(
                     text = lineNavHintStr,
@@ -1681,22 +1629,11 @@ fun SongsTab(
                     // ── Title slide entry ────────────────────────────────────
                     if (titleSlideEnabled && currentSong != null && sections.isNotEmpty()) {
                         item {
-                            val titleLine = listOf(currentSong.number, currentSong.title)
-                                .filter { it.isNotBlank() }.joinToString(" – ")
-                            val creditLine = listOf(currentSong.author, currentSong.composer)
-                                .filter { it.isNotBlank() }.joinToString(" / ")
+                            val titleLine = songTitleLine(currentSong)
+                            val creditLine = songCreditLine(currentSong)
 
-                            fun buildTitleSection() = LyricSection(
-                                type = "title_slide",
-                                title = currentSong.title,
-                                secondaryTitle = currentSong.secondaryTitle,
-                                songNumber = currentSong.number.toIntOrNull() ?: 0,
-                                lines = buildList {
-                                    add(titleLine)
-                                    if (creditLine.isNotBlank()) add(creditLine)
-                                },
-                                bpm = appSettings.songBpm[currentSong.songId] ?: 0
-                            )
+                            fun buildTitleSection() =
+                                titleSlideSection(currentSong, appSettings.songBpm[currentSong.songId] ?: 0)
 
                             fun sendTitleSlide() {
                                 val ts = buildTitleSection()
@@ -1786,10 +1723,7 @@ fun SongsTab(
                                 else
                                     MaterialTheme.colorScheme.onSurface
 
-                                val isPerLineMode = appSettings.songSettings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                                    appSettings.songSettings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                                    appSettings.songSettings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-                                    appSettings.songSettings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+                                val isPerLineMode = isSongLineMode(appSettings.songSettings)
                                 val activeLineIndex = if (isPerLineMode && sectionIndex == selectedSectionIndex)
                                     viewModel.selectedLineIndex.value else -1
 
