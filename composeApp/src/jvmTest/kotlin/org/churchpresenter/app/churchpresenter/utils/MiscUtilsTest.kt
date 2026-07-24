@@ -257,17 +257,26 @@ class DevFlagsTest {
  */
 class AutoStartManagerTest {
 
-    private val macPlist = File(System.getProperty("user.home"), "Library/LaunchAgents/org.churchpresenter.app.plist")
-    private val linuxDesktop = File(System.getProperty("user.home"), ".config/autostart/churchpresenter.desktop")
+    // AutoStartManager resolves its plist/desktop paths from user.home at call time. Isolate it to a
+    // per-test temp dir so registering/unregistering — and the cleanup below — never touch, or delete,
+    // the developer's real launch-at-login files under ~/Library/LaunchAgents or ~/.config/autostart.
+    private lateinit var homeBackup: String
+    private lateinit var tempHome: File
+    private lateinit var macPlist: File
+    private lateinit var linuxDesktop: File
 
-    private fun clean() {
-        for (f in listOf(macPlist, linuxDesktop)) {
-            if (f.isDirectory) f.deleteRecursively() else f.delete()
-        }
+    @BeforeTest fun before() {
+        homeBackup = System.getProperty("user.home")
+        tempHome = Files.createTempDirectory("cp-autostart-test").toFile()
+        System.setProperty("user.home", tempHome.absolutePath)
+        macPlist = File(tempHome, "Library/LaunchAgents/org.churchpresenter.app.plist")
+        linuxDesktop = File(tempHome, ".config/autostart/churchpresenter.desktop")
     }
 
-    @BeforeTest fun before() = clean()
-    @AfterTest fun after() = clean()
+    @AfterTest fun after() {
+        System.setProperty("user.home", homeBackup)
+        tempHome.deleteRecursively()
+    }
 
     /** In-memory stand-in for the Windows `Run` key, so its branches run on any host. */
     private class FakeRunKey(var value: String? = null) : AutoStartManager.WindowsRunKey {
