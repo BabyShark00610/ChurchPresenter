@@ -128,6 +128,11 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.DetectionSource
 import org.churchpresenter.app.churchpresenter.viewmodel.ContinuationSpeed
+import org.churchpresenter.app.churchpresenter.viewmodel.formatVerseReference
+import org.churchpresenter.app.churchpresenter.viewmodel.indexOfFirstLiveVerse
+import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
+import org.churchpresenter.app.churchpresenter.viewmodel.verseSpan
+import org.churchpresenter.app.churchpresenter.viewmodel.verseTextOf
 import org.churchpresenter.app.churchpresenter.viewmodel.TextMatchLevel
 import churchpresenter.composeapp.generated.resources.bible_stt_listening
 import churchpresenter.composeapp.generated.resources.bible_stt_engine_connecting
@@ -426,14 +431,7 @@ fun BibleTab(
             // "2,4,5") when a multi-verse passage is on screen, else the single verse number. This
             // captures the full range even when shown without the multi-verse toggle (the previous
             // toggle-gated logic logged only the first verse).
-            val displayedNums = primaryVerse.verseRange
-                .takeIf { it.isNotBlank() }
-                ?.split(",", "-")
-                ?.mapNotNull { it.trim().toIntOrNull() }
-                ?.takeIf { it.isNotEmpty() }
-                ?: listOf(primaryVerse.verseNumber)
-            val verseStart = displayedNums.min()
-            val verseEnd = displayedNums.max().takeIf { it > verseStart }
+            val (verseStart, verseEnd) = verseSpan(primaryVerse.verseRange, primaryVerse.verseNumber)
             TrainingDataLogger.logLiveReference(
                 book       = bookNum,
                 chapter    = primaryVerse.chapter,
@@ -552,14 +550,14 @@ fun BibleTab(
             val refVerse = if (liveNavTargetVerse > 0) liveNavTargetVerse
                            else liveVerseNumbers.minOrNull() ?: 1
             val currentIdx = liveChapterVerses.indexOfFirst { v ->
-                v.substringBefore(". ").toIntOrNull() == refVerse
+                verseNumberOf(v) == refVerse
             }.takeIf { it >= 0 } ?: 0
             val nextIdx = if (event.key == Key.DirectionUp)
                 (currentIdx - 1).coerceAtLeast(0)
             else
                 (currentIdx + 1).coerceAtMost(liveChapterVerses.size - 1)
             val nextVerseNum = liveChapterVerses.getOrNull(nextIdx)
-                ?.substringBefore(". ")?.toIntOrNull()
+                ?.let { verseNumberOf(it) }
             if (nextVerseNum != null) {
                 liveNavTargetVerse = nextVerseNum
                 liveNavToken++
@@ -1676,10 +1674,9 @@ fun BibleTab(
                                         leadingIcon = { Icon(painter = painterResource(Res.drawable.ic_copy), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) },
                                         onClick = {
                                             val verseStr = verses.getOrNull(selectedVerseIndex) ?: ""
-                                            val verseNum = verseStr.substringBefore(". ").toIntOrNull()
-                                            val verseText = verseStr.substringAfter(". ", verseStr)
+                                            val verseText = verseTextOf(verseStr)
                                             val bookName = books.getOrNull(selectedBookIndex) ?: ""
-                                            val reference = if (verseNum != null) "$bookName $selectedChapter:$verseNum" else "$bookName $selectedChapter"
+                                            val reference = formatVerseReference(verseStr, bookName, selectedChapter)
                                             val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
                                             clipboard.setContents(java.awt.datatransfer.StringSelection("$reference\n$verseText"), null)
                                             showVerseContextMenu = false
@@ -1831,16 +1828,12 @@ private fun LiveChapterPanel(
     val listState = rememberLazyListState()
 
     LaunchedEffect(verses) {
-        val firstLiveIndex = verses.indexOfFirst { verse ->
-            verse.substringBefore(". ").toIntOrNull()?.let { it in liveVerseNumbers } == true
-        }
+        val firstLiveIndex = indexOfFirstLiveVerse(verses, liveVerseNumbers)
         if (firstLiveIndex >= 0) listState.scrollToItem(firstLiveIndex)
     }
 
     LaunchedEffect(liveVerseNumbers) {
-        val firstLiveIndex = verses.indexOfFirst { verse ->
-            verse.substringBefore(". ").toIntOrNull()?.let { it in liveVerseNumbers } == true
-        }
+        val firstLiveIndex = indexOfFirstLiveVerse(verses, liveVerseNumbers)
         if (firstLiveIndex < 0 || firstLiveIndex + 1 >= verses.size) return@LaunchedEffect
         val layoutInfo = listState.layoutInfo
         val visibleItems = layoutInfo.visibleItemsInfo
@@ -1867,7 +1860,7 @@ private fun LiveChapterPanel(
                 .padding(start = 4.dp, top = 4.dp, bottom = 4.dp, end = 12.dp)
         ) {
             itemsIndexed(verses) { _, verseStr ->
-                val verseNum = verseStr.substringBefore(". ").toIntOrNull()
+                val verseNum = verseNumberOf(verseStr)
                 val isLive = verseNum != null && verseNum in liveVerseNumbers
                 Text(
                     text = verseStr,
