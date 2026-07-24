@@ -128,6 +128,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.DetectionSource
 import org.churchpresenter.app.churchpresenter.viewmodel.ContinuationSpeed
+import org.churchpresenter.app.churchpresenter.viewmodel.filteredSelectionIndices
 import org.churchpresenter.app.churchpresenter.viewmodel.formatVerseReference
 import org.churchpresenter.app.churchpresenter.viewmodel.indexOfFirstLiveVerse
 import org.churchpresenter.app.churchpresenter.viewmodel.nextLiveVerseNumber
@@ -1602,13 +1603,9 @@ fun BibleTab(
                                     }
                                 }
                             ) {
-                                val multiIndicesInFiltered = viewModel.selectedVerseIndices
-                                    .mapNotNull { realIdx ->
-                                        val verseStr = verses.getOrNull(realIdx)
-                                        verseStr?.let { filteredVerses.indexOf(it).takeIf { i -> i >= 0 } }
-                                    }
-                                    .toSet()
-                                    .takeIf { it.isNotEmpty() }
+                                val multiIndicesInFiltered = filteredSelectionIndices(
+                                    viewModel.selectedVerseIndices, verses, filteredVerses,
+                                )
 
                                 BibleVerseColumn(
                                     verses = filteredVerses,

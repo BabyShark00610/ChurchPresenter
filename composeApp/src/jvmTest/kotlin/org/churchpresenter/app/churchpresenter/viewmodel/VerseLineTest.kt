@@ -70,6 +70,28 @@ class VerseLineTest {
     @Test fun `no next verse in an empty chapter`() =
         assertNull(nextLiveVerseNumber(emptyList(), refVerse = 1, moveUp = false))
 
+    // ── filteredSelectionIndices ──────────────────────────────────────────────
+
+    // The full chapter, and a filter that hides verse 2 ("beta").
+    private val allVerses = listOf("1. alpha", "2. beta", "3. gamma", "4. delta")
+    private val filtered = listOf("1. alpha", "3. gamma", "4. delta")
+
+    @Test fun `selections map to their positions in the filtered list`() =
+        assertEquals(setOf(0, 2), filteredSelectionIndices(listOf(0, 3), allVerses, filtered))
+
+    @Test fun `a selection hidden by the filter is dropped`() =
+        // real index 1 ("2. beta") isn't in the filtered list, so only index 0 survives.
+        assertEquals(setOf(0), filteredSelectionIndices(listOf(0, 1), allVerses, filtered))
+
+    @Test fun `no selections yields null, not an empty set`() =
+        assertNull(filteredSelectionIndices(emptyList(), allVerses, filtered))
+
+    @Test fun `selections all hidden by the filter yield null`() =
+        assertNull(filteredSelectionIndices(listOf(1), allVerses, filtered))
+
+    @Test fun `an out-of-range selection index is ignored`() =
+        assertEquals(setOf(0), filteredSelectionIndices(listOf(0, 99), allVerses, filtered))
+
     // ── formatVerseReference ──────────────────────────────────────────────────
 
     @Test fun `reference includes the verse number when present`() =

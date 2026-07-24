@@ -32,6 +32,22 @@ internal fun nextLiveVerseNumber(verses: List<String>, refVerse: Int, moveUp: Bo
     return verses.getOrNull(nextIdx)?.let { verseNumberOf(it) }
 }
 
+/**
+ * The positions within [filteredVerses] of the currently multi-selected verses. Each selection in
+ * [selectedRealIndices] is an index into the full [verses] list; its verse line is looked up in
+ * [filteredVerses] and dropped when the active filter hides it. Null when nothing maps through — the
+ * multi-select highlight is then off rather than an empty set.
+ */
+internal fun filteredSelectionIndices(
+    selectedRealIndices: Collection<Int>,
+    verses: List<String>,
+    filteredVerses: List<String>,
+): Set<Int>? =
+    selectedRealIndices
+        .mapNotNull { realIdx -> verses.getOrNull(realIdx)?.let { filteredVerses.indexOf(it).takeIf { i -> i >= 0 } } }
+        .toSet()
+        .takeIf { it.isNotEmpty() }
+
 /** The reference label for a verse line — `"John 3:16"`, or `"John 3"` when the line carries no number. */
 internal fun formatVerseReference(verseLine: String, bookName: String, chapter: Int): String {
     val verseNum = verseNumberOf(verseLine)
