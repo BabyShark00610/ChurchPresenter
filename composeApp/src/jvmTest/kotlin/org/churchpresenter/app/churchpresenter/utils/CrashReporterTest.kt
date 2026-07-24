@@ -2,12 +2,16 @@ package org.churchpresenter.app.churchpresenter.utils
 
 import io.sentry.SentryLevel
 import java.io.File
+import io.sentry.Breadcrumb
+import io.sentry.SentryEvent
+import io.sentry.protocol.Message
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -274,5 +278,150 @@ class CrashReporterTest {
         CrashReporter.reportException(RuntimeException("failed reading /Users/$user/songs/a.sps"))
         val text = crashFiles().single().readText()
         assertTrue(user in text, "the local file is intentionally unscrubbed")
+    }
+
+    @Test
+    fun `a clean previous run resets the crash count and leaves video backgrounds on`() {
+        val (count, disable) = CrashReporter.evaluateCrashEscalation(crashedLastRun = false, previousCount = 5)
+        assertEquals(0, count)
+        assertFalse(disable)
+    }
+
+    @Test
+    fun `a single crash increments the count but stays under the threshold`() {
+        val (count, disable) = CrashReporter.evaluateCrashEscalation(crashedLastRun = true, previousCount = 0)
+        assertEquals(1, count)
+        assertFalse(disable, "one crash must not disable video backgrounds")
+    }
+
+    @Test
+    fun `a second consecutive crash trips the video-background guard`() {
+        val (count, disable) = CrashReporter.evaluateCrashEscalation(crashedLastRun = true, previousCount = 1)
+        assertEquals(2, count)
+        assertTrue(disable)
+    }
+
+    @Test
+    fun `the crash count persists and reads back`() {
+        CrashReporter.writeCrashCount(4)
+        assertEquals(4, CrashReporter.readCrashCount())
+    }
+
+    @Test
+    fun `an absent count file reads as zero`() {
+        crashCountFile.delete()
+        assertEquals(0, CrashReporter.readCrashCount())
+    }
+
+    @Test
+    fun `a corrupt count file reads as zero rather than throwing`() {
+        crashCountFile.parentFile?.mkdirs()
+        crashCountFile.writeText("not a number")
+        assertEquals(0, CrashReporter.readCrashCount())
+    }
+
+    private fun crashFile(name: String, ageMs: Long): File =
+        File(crashDir, name).apply { writeText("x"); setLastModified(System.currentTimeMillis() - ageMs) }
+
+    @Test
+    fun `latestCrashFile returns the most recently modified crash file`() {
+        crashFile("crash_1.txt", ageMs = 100_000)
+        val newer = crashFile("crash_2.txt", ageMs = 0)
+        assertEquals(newer, CrashReporter.latestCrashFile())
+    }
+
+    @Test
+    fun `latestCrashFile ignores files that are not crash reports`() {
+        File(crashDir, "notes.txt").writeText("x")
+        assertNull(CrashReporter.latestCrashFile())
+    }
+
+    @Test
+    fun `latestCrashFile is null when no crash reports exist`() {
+        assertNull(CrashReporter.latestCrashFile())
+    }
+
+    @Test
+    fun `cleanOldLogs deletes aged crash reports but keeps recent ones and unrelated files`() {
+        val oldMs = 400L * 24 * 60 * 60 * 1000
+        val aged = crashFile("crash_old.txt", ageMs = oldMs)
+        val recent = crashFile("crash_recent.txt", ageMs = 0)
+        val unrelated = crashFile("keep.txt", ageMs = oldMs)
+
+        CrashReporter.cleanOldLogs()
+
+        assertFalse(aged.exists(), "a crash report past the retention age is swept")
+        assertTrue(recent.exists(), "a fresh crash report survives")
+        assertTrue(unrelated.exists(), "only crash_ files are subject to retention")
+    }
+
+    @Test
+    fun `scrubEvent redacts a home path from the event message and formatted text`() {
+        val event = SentryEvent()
+        event.message = Message().apply {
+            message = "/Users/johndoe/songs/a.sps failed to load"
+            formatted = "/Users/johndoe/songs/a.sps failed to load"
+        }
+
+        CrashReporter.scrubEvent(event)
+
+        val msg = assertNotNull(event.message)
+        assertFalse("johndoe" in (msg.message ?: ""), "the username must not reach Sentry")
+        assertTrue("<user>" in (msg.message ?: ""))
+        assertFalse("johndoe" in (msg.formatted ?: ""))
+    }
+
+    @Test
+    fun `scrubEvent redacts breadcrumb messages`() {
+        val event = SentryEvent()
+        event.breadcrumbs = mutableListOf(Breadcrumb().apply { message = "read /home/johndoe/bibles" })
+
+        CrashReporter.scrubEvent(event)
+
+        val crumb = event.breadcrumbs!!.single()
+        assertFalse("johndoe" in (crumb.message ?: ""))
+        assertTrue("<user>" in (crumb.message ?: ""))
+    }
+
+    @Test
+    fun `scrubEvent redacts string values inside context maps but leaves other types`() {
+        val event = SentryEvent()
+        event.contexts["jcef"] = mapOf("installDir" to "/Users/johndoe/jcef", "downloaded" to true)
+
+        CrashReporter.scrubEvent(event)
+
+        @Suppress("UNCHECKED_CAST")
+        val ctx = event.contexts["jcef"] as Map<String, Any?>
+        assertFalse("johndoe" in (ctx["installDir"] as String))
+        assertTrue("<user>" in (ctx["installDir"] as String))
+        assertEquals(true, ctx["downloaded"], "non-string context values are left untouched")
+    }
+
+    @Test
+    fun `scrubEvent on an empty event does not throw`() {
+        CrashReporter.scrubEvent(SentryEvent())
+    }
+
+    @Test
+    fun `a fatal crash log is tagged fatal in both its name and its body`() {
+        CrashReporter.writeCrashLog(RuntimeException("hard down"), context = "startup", fatal = true)
+
+        val file = crashFiles().single()
+        assertTrue(file.name.endsWith("_fatal.txt"), "the filename marks it fatal: ${file.name}")
+        val text = file.readText()
+        assertTrue("Fatal: true" in text)
+        assertTrue("Context: startup" in text)
+        assertTrue("hard down" in text, "the stack trace is included")
+    }
+
+    @Test
+    fun `a non-fatal crash log is tagged error`() {
+        CrashReporter.writeCrashLog(RuntimeException("recoverable"), context = "", fatal = false)
+
+        val file = crashFiles().single()
+        assertTrue(file.name.endsWith("_error.txt"))
+        val text = file.readText()
+        assertTrue("Fatal: false" in text)
+        assertFalse("Context:" in text, "an empty context is omitted")
     }
 }

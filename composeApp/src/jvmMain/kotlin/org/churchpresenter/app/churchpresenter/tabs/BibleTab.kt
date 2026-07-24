@@ -128,6 +128,15 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.DetectionSource
 import org.churchpresenter.app.churchpresenter.viewmodel.ContinuationSpeed
+import org.churchpresenter.app.churchpresenter.viewmodel.BibleSttStatus
+import org.churchpresenter.app.churchpresenter.viewmodel.bibleSttStatus
+import org.churchpresenter.app.churchpresenter.viewmodel.filteredSelectionIndices
+import org.churchpresenter.app.churchpresenter.viewmodel.formatVerseReference
+import org.churchpresenter.app.churchpresenter.viewmodel.indexOfFirstLiveVerse
+import org.churchpresenter.app.churchpresenter.viewmodel.nextLiveVerseNumber
+import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
+import org.churchpresenter.app.churchpresenter.viewmodel.verseSpan
+import org.churchpresenter.app.churchpresenter.viewmodel.verseTextOf
 import org.churchpresenter.app.churchpresenter.viewmodel.TextMatchLevel
 import churchpresenter.composeapp.generated.resources.bible_stt_listening
 import churchpresenter.composeapp.generated.resources.bible_stt_engine_connecting
@@ -205,6 +214,7 @@ import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleSearchMode
 import org.churchpresenter.app.churchpresenter.utils.TrainingDataLogger
+import org.churchpresenter.app.churchpresenter.utils.highlightRanges
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -426,14 +436,7 @@ fun BibleTab(
             // "2,4,5") when a multi-verse passage is on screen, else the single verse number. This
             // captures the full range even when shown without the multi-verse toggle (the previous
             // toggle-gated logic logged only the first verse).
-            val displayedNums = primaryVerse.verseRange
-                .takeIf { it.isNotBlank() }
-                ?.split(",", "-")
-                ?.mapNotNull { it.trim().toIntOrNull() }
-                ?.takeIf { it.isNotEmpty() }
-                ?: listOf(primaryVerse.verseNumber)
-            val verseStart = displayedNums.min()
-            val verseEnd = displayedNums.max().takeIf { it > verseStart }
+            val (verseStart, verseEnd) = verseSpan(primaryVerse.verseRange, primaryVerse.verseNumber)
             TrainingDataLogger.logLiveReference(
                 book       = bookNum,
                 chapter    = primaryVerse.chapter,
@@ -551,15 +554,9 @@ fun BibleTab(
         ) {
             val refVerse = if (liveNavTargetVerse > 0) liveNavTargetVerse
                            else liveVerseNumbers.minOrNull() ?: 1
-            val currentIdx = liveChapterVerses.indexOfFirst { v ->
-                v.substringBefore(". ").toIntOrNull() == refVerse
-            }.takeIf { it >= 0 } ?: 0
-            val nextIdx = if (event.key == Key.DirectionUp)
-                (currentIdx - 1).coerceAtLeast(0)
-            else
-                (currentIdx + 1).coerceAtMost(liveChapterVerses.size - 1)
-            val nextVerseNum = liveChapterVerses.getOrNull(nextIdx)
-                ?.substringBefore(". ")?.toIntOrNull()
+            val nextVerseNum = nextLiveVerseNumber(
+                liveChapterVerses, refVerse, moveUp = event.key == Key.DirectionUp,
+            )
             if (nextVerseNum != null) {
                 liveNavTargetVerse = nextVerseNum
                 liveNavToken++
@@ -810,21 +807,31 @@ fun BibleTab(
                 viewModel.primaryBible.value == null
             val sttReceiving = sttManager.inProgressText.value.isNotBlank() || sttManager.segments.isNotEmpty()
             val statusIsError = engineStartFailed || noBibleSelected || sttConnectError || engineSttDown
-            val statusText = when {
-                engineStartFailed -> stringResource(Res.string.bible_stt_engine_unavailable)
-                noBibleSelected -> stringResource(Res.string.bible_stt_no_bible)
-                sttConnected && !engineConnected -> stringResource(Res.string.bible_stt_engine_connecting)
-                // Engine reachable but ITS STT socket is down — previously invisible: the app's own
-                // separate STT connection made the UI say "Listening" while no transcript reached
-                // the engine at all.
-                engineConnected && engineSttDown -> stringResource(Res.string.bible_stt_engine_stt_down)
-                sttConnected && !sttReceiving && detectedReferences.isEmpty() ->
-                    stringResource(Res.string.bible_stt_waiting_for_stt)
-                sttConnected -> stringResource(Res.string.bible_stt_listening)
-                sttReconnecting -> stringResource(Res.string.stt_status_reconnecting)
-                sttConnectError -> stringResource(Res.string.stt_status_unreachable)
-                sttConnecting -> stringResource(Res.string.stt_status_connecting)
-                else -> stringResource(Res.string.stt_status_not_connected)
+            // Engine reachable but ITS STT socket down is surfaced here (bible_stt_engine_stt_down):
+            // previously invisible, because the app's own separate STT connection made the UI say
+            // "Listening" while no transcript reached the engine at all.
+            val statusText = when (bibleSttStatus(
+                engineStartFailed = engineStartFailed,
+                noBibleSelected = noBibleSelected,
+                sttConnected = sttConnected,
+                engineConnected = engineConnected,
+                engineSttDown = engineSttDown,
+                sttReceiving = sttReceiving,
+                hasDetectedReferences = detectedReferences.isNotEmpty(),
+                sttReconnecting = sttReconnecting,
+                sttConnectError = sttConnectError,
+                sttConnecting = sttConnecting,
+            )) {
+                BibleSttStatus.ENGINE_UNAVAILABLE -> stringResource(Res.string.bible_stt_engine_unavailable)
+                BibleSttStatus.NO_BIBLE -> stringResource(Res.string.bible_stt_no_bible)
+                BibleSttStatus.ENGINE_CONNECTING -> stringResource(Res.string.bible_stt_engine_connecting)
+                BibleSttStatus.ENGINE_STT_DOWN -> stringResource(Res.string.bible_stt_engine_stt_down)
+                BibleSttStatus.WAITING_FOR_STT -> stringResource(Res.string.bible_stt_waiting_for_stt)
+                BibleSttStatus.LISTENING -> stringResource(Res.string.bible_stt_listening)
+                BibleSttStatus.RECONNECTING -> stringResource(Res.string.stt_status_reconnecting)
+                BibleSttStatus.UNREACHABLE -> stringResource(Res.string.stt_status_unreachable)
+                BibleSttStatus.CONNECTING -> stringResource(Res.string.stt_status_connecting)
+                BibleSttStatus.NOT_CONNECTED -> stringResource(Res.string.stt_status_not_connected)
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -1306,16 +1313,8 @@ fun BibleTab(
                             val resultText = "${result.book} ${result.chapter}:${result.verse} - ${result.verseText}"
                             val highlightedText = buildAnnotatedString {
                                 var lastIndex = 0
-                                val lowerText = resultText.lowercase()
-                                // Match against the same trimmed query that produced the results;
-                                // an empty query would make indexOf() loop forever below.
-                                val lowerQuery = searchQuery.trim().lowercase()
-                                var startIndex = if (lowerQuery.isEmpty()) -1 else lowerText.indexOf(lowerQuery, lastIndex)
-                                while (startIndex != -1) {
-                                    // lowercase() can change string length in some locales, so clamp
-                                    // indices derived from lowerText before slicing resultText
-                                    val safeStart = startIndex.coerceAtMost(resultText.length)
-                                    val safeEnd = (startIndex + lowerQuery.length).coerceAtMost(resultText.length)
+                                // Match against the same trimmed query that produced the results.
+                                for ((safeStart, safeEnd) in highlightRanges(resultText, searchQuery)) {
                                     append(resultText.substring(lastIndex.coerceAtMost(safeStart), safeStart))
                                     withStyle(style = SpanStyle(
                                         background = MaterialTheme.colorScheme.primaryContainer,
@@ -1324,8 +1323,7 @@ fun BibleTab(
                                     )) {
                                         append(resultText.substring(safeStart, safeEnd))
                                     }
-                                    lastIndex = startIndex + lowerQuery.length
-                                    startIndex = lowerText.indexOf(lowerQuery, lastIndex)
+                                    lastIndex = safeEnd
                                 }
                                 if (lastIndex < resultText.length) append(resultText.substring(lastIndex))
                             }
@@ -1617,13 +1615,9 @@ fun BibleTab(
                                     }
                                 }
                             ) {
-                                val multiIndicesInFiltered = viewModel.selectedVerseIndices
-                                    .mapNotNull { realIdx ->
-                                        val verseStr = verses.getOrNull(realIdx)
-                                        verseStr?.let { filteredVerses.indexOf(it).takeIf { i -> i >= 0 } }
-                                    }
-                                    .toSet()
-                                    .takeIf { it.isNotEmpty() }
+                                val multiIndicesInFiltered = filteredSelectionIndices(
+                                    viewModel.selectedVerseIndices, verses, filteredVerses,
+                                )
 
                                 BibleVerseColumn(
                                     verses = filteredVerses,
@@ -1676,10 +1670,9 @@ fun BibleTab(
                                         leadingIcon = { Icon(painter = painterResource(Res.drawable.ic_copy), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) },
                                         onClick = {
                                             val verseStr = verses.getOrNull(selectedVerseIndex) ?: ""
-                                            val verseNum = verseStr.substringBefore(". ").toIntOrNull()
-                                            val verseText = verseStr.substringAfter(". ", verseStr)
+                                            val verseText = verseTextOf(verseStr)
                                             val bookName = books.getOrNull(selectedBookIndex) ?: ""
-                                            val reference = if (verseNum != null) "$bookName $selectedChapter:$verseNum" else "$bookName $selectedChapter"
+                                            val reference = formatVerseReference(verseStr, bookName, selectedChapter)
                                             val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
                                             clipboard.setContents(java.awt.datatransfer.StringSelection("$reference\n$verseText"), null)
                                             showVerseContextMenu = false
@@ -1831,16 +1824,12 @@ private fun LiveChapterPanel(
     val listState = rememberLazyListState()
 
     LaunchedEffect(verses) {
-        val firstLiveIndex = verses.indexOfFirst { verse ->
-            verse.substringBefore(". ").toIntOrNull()?.let { it in liveVerseNumbers } == true
-        }
+        val firstLiveIndex = indexOfFirstLiveVerse(verses, liveVerseNumbers)
         if (firstLiveIndex >= 0) listState.scrollToItem(firstLiveIndex)
     }
 
     LaunchedEffect(liveVerseNumbers) {
-        val firstLiveIndex = verses.indexOfFirst { verse ->
-            verse.substringBefore(". ").toIntOrNull()?.let { it in liveVerseNumbers } == true
-        }
+        val firstLiveIndex = indexOfFirstLiveVerse(verses, liveVerseNumbers)
         if (firstLiveIndex < 0 || firstLiveIndex + 1 >= verses.size) return@LaunchedEffect
         val layoutInfo = listState.layoutInfo
         val visibleItems = layoutInfo.visibleItemsInfo
@@ -1867,7 +1856,7 @@ private fun LiveChapterPanel(
                 .padding(start = 4.dp, top = 4.dp, bottom = 4.dp, end = 12.dp)
         ) {
             itemsIndexed(verses) { _, verseStr ->
-                val verseNum = verseStr.substringBefore(". ").toIntOrNull()
+                val verseNum = verseNumberOf(verseStr)
                 val isLive = verseNum != null && verseNum in liveVerseNumbers
                 Text(
                     text = verseStr,

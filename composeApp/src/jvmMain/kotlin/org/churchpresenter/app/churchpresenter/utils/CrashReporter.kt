@@ -74,19 +74,10 @@ object CrashReporter {
 
         // Check if previous run crashed (lock file still exists)
         didCrashLastRun = runningFile.exists()
-        if (didCrashLastRun) {
-            consecutiveCrashes = readCrashCount() + 1
-            writeCrashCount(consecutiveCrashes)
-            if (consecutiveCrashes >= CRASH_THRESHOLD) {
-                videoBackgroundsDisabled = true
-            } else {
-                // previous run crashed but threshold not yet reached
-            }
-        } else {
-            // Clean run — reset crash counter
-            consecutiveCrashes = 0
-            writeCrashCount(0)
-        }
+        val (count, disable) = evaluateCrashEscalation(didCrashLastRun, readCrashCount())
+        consecutiveCrashes = count
+        writeCrashCount(count)
+        if (disable) videoBackgroundsDisabled = true
 
         // Create lock file for this run
         try { runningFile.parentFile?.mkdirs(); runningFile.createNewFile() } catch (_: Exception) {}
@@ -129,11 +120,24 @@ object CrashReporter {
         writeCrashCount(0)
     }
 
-    private fun readCrashCount(): Int = try {
+    /**
+     * Given whether the previous run crashed and the persisted consecutive-crash count, returns the
+     * new count and whether video backgrounds should be disabled (a crash-loop guard that trips at
+     * [CRASH_THRESHOLD]). A clean run resets the count to zero.
+     */
+    internal fun evaluateCrashEscalation(crashedLastRun: Boolean, previousCount: Int): Pair<Int, Boolean> =
+        if (crashedLastRun) {
+            val n = previousCount + 1
+            n to (n >= CRASH_THRESHOLD)
+        } else {
+            0 to false
+        }
+
+    internal fun readCrashCount(): Int = try {
         if (crashCountFile.exists()) crashCountFile.readText().trim().toIntOrNull() ?: 0 else 0
     } catch (_: Exception) { 0 }
 
-    private fun writeCrashCount(count: Int) = try {
+    internal fun writeCrashCount(count: Int) = try {
         crashCountFile.parentFile?.mkdirs()
         crashCountFile.writeText(count.toString())
     } catch (_: Exception) { }
@@ -277,7 +281,7 @@ object CrashReporter {
     }
 
     /** Most recently written local crash-report file, if any (used for event attachments). */
-    private fun latestCrashFile(): File? = try {
+    internal fun latestCrashFile(): File? = try {
         crashDir.listFiles { f -> f.isFile && f.name.startsWith("crash_") }
             ?.maxByOrNull { it.lastModified() }
     } catch (_: Exception) { null }
@@ -303,7 +307,7 @@ object CrashReporter {
      * breadcrumb messages, and context values (e.g. the `jcef` block's `installDir`).
      * All best-effort — each sub-step is wrapped so telemetry never throws.
      */
-    private fun scrubEvent(event: SentryEvent) {
+    internal fun scrubEvent(event: SentryEvent) {
         try {
             event.message?.let { msg ->
                 msg.formatted = scrubPii(msg.formatted)
@@ -399,7 +403,7 @@ object CrashReporter {
 
     // ── Local file logging ────────────────────────────────────────────────────
 
-    private fun writeCrashLog(throwable: Throwable, context: String, fatal: Boolean) {
+    internal fun writeCrashLog(throwable: Throwable, context: String, fatal: Boolean) {
         writeLocalLog(throwable, context, fatal)
         sendToSentry(throwable, context, fatal)
     }
@@ -436,7 +440,7 @@ object CrashReporter {
         }
     }
 
-    private fun cleanOldLogs() {
+    internal fun cleanOldLogs() {
         try {
             val cutoff = System.currentTimeMillis() - (MAX_AGE_DAYS * 24 * 60 * 60 * 1000)
             crashDir.listFiles()?.forEach { file ->

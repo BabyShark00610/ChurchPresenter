@@ -97,6 +97,22 @@ data class ActivityPoint(
     val verseCount: Int
 )
 
+internal enum class ActivityGranularity { WEEKLY, MONTHLY, YEARLY }
+
+/** Chooses the activity-chart bucket size from the selected range: up to ~3 months → weekly, up to
+ *  ~2 years → monthly, longer → yearly. */
+internal fun activityGranularityFor(rangeMs: Long): ActivityGranularity {
+    val dayMs = 86_400_000L
+    return when {
+        rangeMs <= 90 * dayMs -> ActivityGranularity.WEEKLY
+        rangeMs <= 730 * dayMs -> ActivityGranularity.MONTHLY
+        else -> ActivityGranularity.YEARLY
+    }
+}
+
+/** RFC-4180 CSV field: wrap in double quotes and double any embedded quote. */
+internal fun csvQuote(s: String): String = "\"${s.replace("\"", "\"\"")}\""
+
 // ── Manager ───────────────────────────────────────────────────────────────────
 
 class StatisticsManager {
@@ -250,8 +266,8 @@ class StatisticsManager {
         val songEvents = eventLog.songEvents.filter { it.timestamp in fromMs..toMs }
         val verseEvents = eventLog.verseEvents.filter { it.timestamp in fromMs..toMs }
 
-        when {
-            rangeMs <= 90 * dayMs -> {
+        when (activityGranularityFor(rangeMs)) {
+            ActivityGranularity.WEEKLY -> {
                 // Weekly buckets
                 val weekStart = (fromMs / weekMs) * weekMs
                 val numWeeks = ((toMs - weekStart) / weekMs + 1).toInt().coerceIn(1, 52)
@@ -266,7 +282,7 @@ class StatisticsManager {
                     )
                 }
             }
-            rangeMs <= 730 * dayMs -> {
+            ActivityGranularity.MONTHLY -> {
                 // Monthly buckets
                 val zone = ZoneId.systemDefault()
                 val fromLocal = Instant.ofEpochMilli(fromMs).atZone(zone).toLocalDate()
@@ -287,7 +303,7 @@ class StatisticsManager {
                 }
                 points
             }
-            else -> {
+            ActivityGranularity.YEARLY -> {
                 // Yearly buckets
                 val zone = ZoneId.systemDefault()
                 val fromYear = Instant.ofEpochMilli(fromMs).atZone(zone).year
@@ -412,7 +428,7 @@ class StatisticsManager {
         val sb = StringBuilder()
         sb.appendLine("Title,Author,Songbook,Song Number,CCLI Number,Times Used,First Used,Last Used")
         for (song in songs) {
-            fun esc(s: String) = "\"${s.replace("\"", "\"\"")}\""
+            fun esc(s: String) = csvQuote(s)
             sb.appendLine("${esc(song.title)},${esc(song.author)},${esc(song.songbook)},${song.songNumber},${esc(song.ccliNumber)},${song.count},${dateFmt.format(Date(song.firstUsed))},${dateFmt.format(Date(song.lastUsed))}")
         }
         file.writeText(sb.toString())
