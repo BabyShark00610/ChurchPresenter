@@ -185,6 +185,10 @@ import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
 import org.churchpresenter.app.churchpresenter.utils.mergeColumnOrder
 import org.churchpresenter.app.churchpresenter.utils.moveColumn
 import org.churchpresenter.app.churchpresenter.utils.songColumnSortKey
+import org.churchpresenter.app.churchpresenter.viewmodel.resolveEditedSongPush
+import org.churchpresenter.app.churchpresenter.viewmodel.songCreditLine
+import org.churchpresenter.app.churchpresenter.viewmodel.songTitleLine
+import org.churchpresenter.app.churchpresenter.viewmodel.titleSlideSection
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -328,23 +332,14 @@ fun SongsTab(
     // updateSong() is async, so the viewModel's own selection state isn't guaranteed fresh yet.
     fun sendEditedSongToPresenter(editedSong: SongItem) {
         val sections = viewModel.getLyricSections(editedSong)
-        val sectionIndex = liveSectionIndex.coerceIn(-1, sections.size - 1)
-        val section = sections.getOrNull(sectionIndex) ?: LyricSection(
-            title = editedSong.title,
-            secondaryTitle = editedSong.secondaryTitle,
-            songNumber = editedSong.number.toIntOrNull() ?: 0,
-            lines = editedSong.lyrics,
-            secondaryLines = editedSong.secondaryLyrics,
-            type = Constants.SECTION_TYPE_SONG
-        )
-        val lineIndex = liveLineIndex.coerceIn(0, (section.lines.size - 1).coerceAtLeast(0))
         val bpm = appSettings.songBpm[editedSong.songId] ?: 0
+        val push = resolveEditedSongPush(sections, liveSectionIndex, liveLineIndex, editedSong, bpm)
         onAllSectionsChanged(sections)
-        onSectionIndexChanged(sectionIndex)
-        onLineIndexChanged(lineIndex)
-        onSongItemSelected(section.copy(bpm = bpm))
-        liveSectionIndex = sectionIndex
-        liveLineIndex = lineIndex
+        onSectionIndexChanged(push.sectionIndex)
+        onLineIndexChanged(push.lineIndex)
+        onSongItemSelected(push.section)
+        liveSectionIndex = push.sectionIndex
+        liveLineIndex = push.lineIndex
     }
 
     val tabFocusRequester = remember { FocusRequester() }
@@ -1634,22 +1629,11 @@ fun SongsTab(
                     // ── Title slide entry ────────────────────────────────────
                     if (titleSlideEnabled && currentSong != null && sections.isNotEmpty()) {
                         item {
-                            val titleLine = listOf(currentSong.number, currentSong.title)
-                                .filter { it.isNotBlank() }.joinToString(" – ")
-                            val creditLine = listOf(currentSong.author, currentSong.composer)
-                                .filter { it.isNotBlank() }.joinToString(" / ")
+                            val titleLine = songTitleLine(currentSong)
+                            val creditLine = songCreditLine(currentSong)
 
-                            fun buildTitleSection() = LyricSection(
-                                type = "title_slide",
-                                title = currentSong.title,
-                                secondaryTitle = currentSong.secondaryTitle,
-                                songNumber = currentSong.number.toIntOrNull() ?: 0,
-                                lines = buildList {
-                                    add(titleLine)
-                                    if (creditLine.isNotBlank()) add(creditLine)
-                                },
-                                bpm = appSettings.songBpm[currentSong.songId] ?: 0
-                            )
+                            fun buildTitleSection() =
+                                titleSlideSection(currentSong, appSettings.songBpm[currentSong.songId] ?: 0)
 
                             fun sendTitleSlide() {
                                 val ts = buildTitleSection()
