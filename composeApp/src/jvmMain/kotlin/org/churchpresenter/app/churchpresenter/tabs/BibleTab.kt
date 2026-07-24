@@ -128,6 +128,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.DetectionSource
 import org.churchpresenter.app.churchpresenter.viewmodel.ContinuationSpeed
+import org.churchpresenter.app.churchpresenter.viewmodel.BibleSttStatus
+import org.churchpresenter.app.churchpresenter.viewmodel.bibleSttStatus
 import org.churchpresenter.app.churchpresenter.viewmodel.filteredSelectionIndices
 import org.churchpresenter.app.churchpresenter.viewmodel.formatVerseReference
 import org.churchpresenter.app.churchpresenter.viewmodel.indexOfFirstLiveVerse
@@ -805,21 +807,31 @@ fun BibleTab(
                 viewModel.primaryBible.value == null
             val sttReceiving = sttManager.inProgressText.value.isNotBlank() || sttManager.segments.isNotEmpty()
             val statusIsError = engineStartFailed || noBibleSelected || sttConnectError || engineSttDown
-            val statusText = when {
-                engineStartFailed -> stringResource(Res.string.bible_stt_engine_unavailable)
-                noBibleSelected -> stringResource(Res.string.bible_stt_no_bible)
-                sttConnected && !engineConnected -> stringResource(Res.string.bible_stt_engine_connecting)
-                // Engine reachable but ITS STT socket is down — previously invisible: the app's own
-                // separate STT connection made the UI say "Listening" while no transcript reached
-                // the engine at all.
-                engineConnected && engineSttDown -> stringResource(Res.string.bible_stt_engine_stt_down)
-                sttConnected && !sttReceiving && detectedReferences.isEmpty() ->
-                    stringResource(Res.string.bible_stt_waiting_for_stt)
-                sttConnected -> stringResource(Res.string.bible_stt_listening)
-                sttReconnecting -> stringResource(Res.string.stt_status_reconnecting)
-                sttConnectError -> stringResource(Res.string.stt_status_unreachable)
-                sttConnecting -> stringResource(Res.string.stt_status_connecting)
-                else -> stringResource(Res.string.stt_status_not_connected)
+            // Engine reachable but ITS STT socket down is surfaced here (bible_stt_engine_stt_down):
+            // previously invisible, because the app's own separate STT connection made the UI say
+            // "Listening" while no transcript reached the engine at all.
+            val statusText = when (bibleSttStatus(
+                engineStartFailed = engineStartFailed,
+                noBibleSelected = noBibleSelected,
+                sttConnected = sttConnected,
+                engineConnected = engineConnected,
+                engineSttDown = engineSttDown,
+                sttReceiving = sttReceiving,
+                hasDetectedReferences = detectedReferences.isNotEmpty(),
+                sttReconnecting = sttReconnecting,
+                sttConnectError = sttConnectError,
+                sttConnecting = sttConnecting,
+            )) {
+                BibleSttStatus.ENGINE_UNAVAILABLE -> stringResource(Res.string.bible_stt_engine_unavailable)
+                BibleSttStatus.NO_BIBLE -> stringResource(Res.string.bible_stt_no_bible)
+                BibleSttStatus.ENGINE_CONNECTING -> stringResource(Res.string.bible_stt_engine_connecting)
+                BibleSttStatus.ENGINE_STT_DOWN -> stringResource(Res.string.bible_stt_engine_stt_down)
+                BibleSttStatus.WAITING_FOR_STT -> stringResource(Res.string.bible_stt_waiting_for_stt)
+                BibleSttStatus.LISTENING -> stringResource(Res.string.bible_stt_listening)
+                BibleSttStatus.RECONNECTING -> stringResource(Res.string.stt_status_reconnecting)
+                BibleSttStatus.UNREACHABLE -> stringResource(Res.string.stt_status_unreachable)
+                BibleSttStatus.CONNECTING -> stringResource(Res.string.stt_status_connecting)
+                BibleSttStatus.NOT_CONNECTED -> stringResource(Res.string.stt_status_not_connected)
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
