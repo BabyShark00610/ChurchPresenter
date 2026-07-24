@@ -116,7 +116,7 @@ object BibleBookAbbreviations {
     @Volatile private var cachedLocaleTag: String? = null
     @Volatile private var cachedForLocale: Map<Int, List<String>>? = null
 
-    private fun parseVariants(raw: String): List<String> =
+    internal fun parseVariants(raw: String): List<String> =
         raw.split("|").map { it.trim() }.filter { it.isNotBlank() }
 
     private suspend fun loadAbbreviations(locale: Locale): Map<Int, List<String>> =
@@ -140,10 +140,10 @@ object BibleBookAbbreviations {
         return map
     }
 
-    private fun normalize(text: String): String =
+    internal fun normalize(text: String): String =
         text.trim().trimEnd('.').lowercase().replace(Regex("\\s+"), " ")
 
-    private fun findBookId(map: Map<Int, List<String>>, normalized: String, collapsed: String): Int? =
+    internal fun findBookId(map: Map<Int, List<String>>, normalized: String, collapsed: String): Int? =
         map.entries.firstOrNull { (_, variants) ->
             variants.any {
                 val n = normalize(it)

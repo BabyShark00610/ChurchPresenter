@@ -64,7 +64,7 @@ object StrongsDictionaryRepository {
     private val interlinear = InterlinearRepository()
     private val strongsRef = Regex("[HG]\\d{1,5}")
 
-    private fun normalizeLang(lang: String?): String = if (lang?.lowercase() == "ru") "ru" else "en"
+    internal fun normalizeLang(lang: String?): String = if (lang?.lowercase() == "ru") "ru" else "en"
 
     /** Loads both interlinear indexes (once) so occurrence counts are available. */
     private suspend fun ensureInterlinear() {
@@ -76,7 +76,7 @@ object StrongsDictionaryRepository {
     private fun occurrencesOf(number: String): Int = interlinear.getVersesForEntry(number).size
 
     /** First Strong's reference in the definition other than the entry's own number, or "". */
-    private fun rootOf(entry: StrongsEntry): String =
+    internal fun rootOf(entry: StrongsEntry): String =
         strongsRef.findAll(entry.definition).map { it.value }.firstOrNull { it != entry.number } ?: ""
 
     private fun StrongsEntry.toDto(): StrongsEntryDto = StrongsEntryDto(
@@ -188,14 +188,17 @@ object StrongsDictionaryRepository {
         // distinct(): a number occurring twice in one verse is added twice by the
         // index, but "Appears in" lists each verse once (and total counts verses).
         val refs = interlinear.getVersesForEntry(number.trim().uppercase()).map { it.ref }.distinct()
-        val ordered = if (book != null) {
-            val (inScope, rest) = refs.partition { ref ->
-                ref.substring(0, 3).toInt() == book &&
-                    (chapter == null || ref.substring(3, 6).toInt() == chapter) &&
-                    (verse == null || ref.substring(6, 9).toInt() == verse)
-            }
-            inScope + rest
-        } else refs
+        val ordered = orderRefsByScope(refs, book, chapter, verse)
         return refs.size to ordered.take(limit.coerceIn(1, 200))
+    }
+
+    internal fun orderRefsByScope(refs: List<String>, book: Int?, chapter: Int?, verse: Int?): List<String> {
+        if (book == null) return refs
+        val (inScope, rest) = refs.partition { ref ->
+            ref.substring(0, 3).toInt() == book &&
+                (chapter == null || ref.substring(3, 6).toInt() == chapter) &&
+                (verse == null || ref.substring(6, 9).toInt() == verse)
+        }
+        return inScope + rest
     }
 }

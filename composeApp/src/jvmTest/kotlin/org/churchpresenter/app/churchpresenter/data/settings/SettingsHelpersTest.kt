@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -305,6 +306,38 @@ class StageMonitorSettingsTest {
             "what is coming next sits beside what is live — that is the point of the screen",
         )
         assertEquals(StageMonitorZone.BOTTOM_MIDDLE, defaults.getValue(StageMonitorContentType.CLOCK))
+    }
+
+    @Test
+    fun `each drawable zone maps to its matching style zone`() {
+        assertEquals(StageMonitorStyleZone.TOP_LEFT, StageMonitorZone.TOP_LEFT.toStyleZone())
+        assertEquals(StageMonitorStyleZone.TOP_RIGHT, StageMonitorZone.TOP_RIGHT.toStyleZone())
+        assertEquals(StageMonitorStyleZone.BOTTOM_LEFT, StageMonitorZone.BOTTOM_LEFT.toStyleZone())
+        assertEquals(StageMonitorStyleZone.BOTTOM_MIDDLE, StageMonitorZone.BOTTOM_MIDDLE.toStyleZone())
+        assertEquals(StageMonitorStyleZone.BOTTOM_RIGHT, StageMonitorZone.BOTTOM_RIGHT.toStyleZone())
+        assertEquals(StageMonitorStyleZone.FULL_SCREEN, StageMonitorZone.FULL_SCREEN.toStyleZone())
+    }
+
+    @Test
+    fun `NONE is the only zone with no style zone`() {
+        assertNull(StageMonitorZone.NONE.toStyleZone(), "NONE means 'not drawn', so it has no style")
+        val unmapped = StageMonitorZone.entries.filter { it.toStyleZone() == null }
+        assertEquals(
+            listOf(StageMonitorZone.NONE),
+            unmapped,
+            "a new drawable zone added without a toStyleZone mapping would silently render unstyled",
+        )
+    }
+
+    @Test
+    fun `every style zone is the target of exactly one drawable zone`() {
+        val mapped = StageMonitorZone.entries.mapNotNull { it.toStyleZone() }
+        assertEquals(
+            StageMonitorStyleZone.entries.toSet(),
+            mapped.toSet(),
+            "every drawable style zone must be reachable from a content zone",
+        )
+        assertEquals(mapped.size, mapped.toSet().size, "no two zones may collapse onto the same style zone")
     }
 }
 
