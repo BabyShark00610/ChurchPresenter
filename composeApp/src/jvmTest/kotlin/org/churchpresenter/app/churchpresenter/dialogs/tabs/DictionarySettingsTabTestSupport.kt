@@ -132,14 +132,17 @@ internal fun ComposeUiTest.switch(ordinal: Int): SemanticsNodeInteraction = swit
  * reaches for, and it opens a menu whose items write the setting by a different path than the
  * keyboard commit.
  */
-internal fun ComposeUiTest.fontDropdownArrow(group: Int): SemanticsNodeInteraction =
+internal fun ComposeUiTest.fontDropdownArrows(): SemanticsNodeInteractionCollection =
     onAllNodes(
         hasClickAction() and
             SemanticsMatcher.keyNotDefined(SemanticsProperties.Text) and
             SemanticsMatcher.keyNotDefined(SemanticsProperties.EditableText) and
             SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription) and
             SemanticsMatcher.keyNotDefined(SemanticsProperties.Role),
-    )[group]
+    )
+
+internal fun ComposeUiTest.fontDropdownArrow(group: Int): SemanticsNodeInteraction =
+    fontDropdownArrows()[group]
 
 // ── Sliders ─────────────────────────────────────────────────────────────────────────────────────
 
