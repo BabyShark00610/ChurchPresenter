@@ -154,7 +154,6 @@ import org.churchpresenter.app.churchpresenter.tabs.getStringName
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
-import org.churchpresenter.app.churchpresenter.utils.TrainingDataLogger
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
@@ -647,14 +646,12 @@ fun MainDesktop(
         if (verses.isNotEmpty()) {
             onVerseSelected(verses)
             val primary = verses.first()
-            val bookNum = bibleViewModel.canonicalBookIdForDisplayIndex(bibleViewModel.selectedBookIndex.value)
-            TrainingDataLogger.logLiveReference(
-                book       = bookNum,
+            bibleViewModel.logLiveReference(
+                displayBookIndex = bibleViewModel.selectedBookIndex.value,
                 chapter    = primary.chapter,
                 verseStart = primary.verseNumber,
                 verseEnd   = null,
                 source     = "auto",
-                segmentId  = bibleViewModel.lastDetectionSegmentId,
                 autoFollow = true,
                 matchType  = bibleViewModel.autoFollowLiveMatchType.value,
             )
@@ -898,14 +895,13 @@ fun MainDesktop(
                     ?.mapNotNull { it.trim().toIntOrNull() }
                     ?.takeIf { it.isNotEmpty() }
                 val verseEnd = rangeNums?.max()?.takeIf { it > req.verseNumber }
-                TrainingDataLogger.logLiveReference(
-                    book       = bibleViewModel.canonicalBookIdForDisplayIndex(bookIndex),
+                bibleViewModel.logLiveReference(
+                    displayBookIndex = bookIndex,
                     chapter    = req.chapter,
                     verseStart = req.verseNumber,
                     verseEnd   = verseEnd,
                     source     = "remote",
-                    segmentId  = bibleViewModel.lastDetectionSegmentId,
-                    autoFollow = bibleViewModel.autoFollowEnabled.value
+                    autoFollow = bibleViewModel.autoFollowEnabled.value,
                 )
             }
         }
