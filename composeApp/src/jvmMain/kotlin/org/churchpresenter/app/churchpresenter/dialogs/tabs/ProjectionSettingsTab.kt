@@ -182,6 +182,43 @@ import java.awt.GraphicsEnvironment
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 
+/**
+ * One physical display, reduced to what this tab needs of it: its index in the device list (which is
+ * what gets stored as a `targetDisplay`), whether it is the primary monitor, and its bounds.
+ */
+data class DetectedScreen(
+    val index: Int,
+    val isPrimary: Boolean,
+    val boundsX: Int = Int.MIN_VALUE,
+    val boundsY: Int = Int.MIN_VALUE,
+    val boundsW: Int = 0,
+    val boundsH: Int = 0
+)
+
+/**
+ * The real display list, read from AWT.
+ *
+ * Enumerating screens needs a windowing system, so this one call is what [ProjectionSettingsTab]
+ * takes as a parameter rather than doing inline: it is the only part of the tab that cannot run
+ * without a display, and hoisting it lets everything built on top of it — slot allocation, the
+ * target and key-output menus, the whole assignment grid — be exercised against a stand-in list.
+ */
+fun detectScreensFromAwt(): List<DetectedScreen> {
+    val environment = GraphicsEnvironment.getLocalGraphicsEnvironment()
+    val primary = environment.defaultScreenDevice
+    return environment.screenDevices.mapIndexed { index, device ->
+        val bounds = device.defaultConfiguration.bounds
+        DetectedScreen(
+            index = index,
+            isPrimary = device == primary,
+            boundsX = bounds.x,
+            boundsY = bounds.y,
+            boundsW = bounds.width,
+            boundsH = bounds.height
+        )
+    }
+}
+
 @Composable
 fun ProjectionSettingsTab(
     settings: AppSettings,
@@ -189,21 +226,17 @@ fun ProjectionSettingsTab(
     companionServer: CompanionServer,
     onIdentifyScreen: () -> Unit = {},
     onIdentifyBrowserSource: (Int) -> Unit = {},
-    scenes: List<Scene> = emptyList()
+    scenes: List<Scene> = emptyList(),
+    detectScreens: () -> List<DetectedScreen> = ::detectScreensFromAwt
 ) {
     val scope = rememberCoroutineScope()
     val proj = settings.projectionSettings
 
     // Detect physical screens; exclude the primary monitor from presenter targets.
-    val screenDevicesAll = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
-    }
-    val primaryDevice = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
-    }
+    val screenDevicesAll = remember { detectScreens() }
     val detectedScreens = screenDevicesAll.size
     val deckLinkDeviceCount = remember { if (DeckLinkManager.isAvailable()) DeckLinkManager.listDevices().size else 0 }
-    val realWindowCount = screenDevicesAll.count { it != primaryDevice } + deckLinkDeviceCount
+    val realWindowCount = screenDevicesAll.count { !it.isPrimary } + deckLinkDeviceCount
     // Dev convenience: mirrors main.kt's devWindowedFallback — on a single-monitor dev machine
     // with no DeckLink device, main.kt opens an extra windowed "dev" output at assignment slot 0.
     // Without this, that window would have no row here to configure it.
@@ -212,8 +245,8 @@ fun ProjectionSettingsTab(
     val presenterWindowCount = realWindowCount + if (devWindowedFallback) devWindowCount else 0
 
     // Extend the assignments list and resolve any unassigned (-1 auto) to actual non-primary displays.
-    val nonPrimaryDevices = remember(screenDevicesAll, primaryDevice) {
-        screenDevicesAll.filter { it != primaryDevice }
+    val nonPrimaryDevices = remember(screenDevicesAll) {
+        screenDevicesAll.filter { !it.isPrimary }
     }
     LaunchedEffect(presenterWindowCount, nonPrimaryDevices) {
         var changed = false
@@ -221,14 +254,12 @@ fun ProjectionSettingsTab(
         while (assignments.size < presenterWindowCount) {
             val npIdx = assignments.size
             val device = nonPrimaryDevices.getOrNull(npIdx)
-            val deviceIdx = if (device != null) screenDevicesAll.indexOf(device) else Constants.KEY_TARGET_NONE
-            val bounds = device?.defaultConfiguration?.bounds
             assignments.add(ScreenAssignment(
-                targetDisplay = deviceIdx,
-                targetBoundsX = bounds?.x ?: Int.MIN_VALUE,
-                targetBoundsY = bounds?.y ?: Int.MIN_VALUE,
-                targetBoundsW = bounds?.width ?: 0,
-                targetBoundsH = bounds?.height ?: 0
+                targetDisplay = device?.index ?: Constants.KEY_TARGET_NONE,
+                targetBoundsX = device?.boundsX ?: Int.MIN_VALUE,
+                targetBoundsY = device?.boundsY ?: Int.MIN_VALUE,
+                targetBoundsW = device?.boundsW ?: 0,
+                targetBoundsH = device?.boundsH ?: 0
             ))
             changed = true
         }
@@ -237,14 +268,12 @@ fun ProjectionSettingsTab(
             if (assignments[idx].targetDisplay == -1) {
                 val device = nonPrimaryDevices.getOrNull(idx)
                 if (device != null) {
-                    val deviceIdx = screenDevicesAll.indexOf(device)
-                    val bounds = device.defaultConfiguration.bounds
                     assignments[idx] = assignments[idx].copy(
-                        targetDisplay = deviceIdx,
-                        targetBoundsX = bounds.x,
-                        targetBoundsY = bounds.y,
-                        targetBoundsW = bounds.width,
-                        targetBoundsH = bounds.height
+                        targetDisplay = device.index,
+                        targetBoundsX = device.boundsX,
+                        targetBoundsY = device.boundsY,
+                        targetBoundsW = device.boundsW,
+                        targetBoundsH = device.boundsH
                     )
                 } else {
                     // No physical display available for this slot (e.g. DeckLink-only) — set to None
@@ -281,19 +310,18 @@ fun ProjectionSettingsTab(
         options.add(DisplayOption(label = noneLabel, targetDisplay = Constants.KEY_TARGET_NONE, targetType = "screen"))
         // Add physical displays, skipping the primary monitor
         var displayNum = 1
-        for (idx in screenDevicesAll.indices) {
-            if (screenDevicesAll[idx] == primaryDevice) continue
-            val bounds = screenDevicesAll[idx].defaultConfiguration.bounds
+        for (screen in screenDevicesAll) {
+            if (screen.isPrimary) continue
             options.add(
                 DisplayOption(
-                    label = "Display $displayNum (${bounds.width}x${bounds.height} @ ${bounds.x},${bounds.y})",
-                    shortLabel = "D$displayNum (${bounds.width}x${bounds.height})",
-                    targetDisplay = idx,
+                    label = "Display $displayNum (${screen.boundsW}x${screen.boundsH} @ ${screen.boundsX},${screen.boundsY})",
+                    shortLabel = "D$displayNum (${screen.boundsW}x${screen.boundsH})",
+                    targetDisplay = screen.index,
                     targetType = "screen",
-                    boundsX = bounds.x,
-                    boundsY = bounds.y,
-                    boundsW = bounds.width,
-                    boundsH = bounds.height
+                    boundsX = screen.boundsX,
+                    boundsY = screen.boundsY,
+                    boundsW = screen.boundsW,
+                    boundsH = screen.boundsH
                 )
             )
             displayNum++
@@ -653,14 +681,13 @@ fun ProjectionSettingsTab(
                     val keyOutputOptions = remember(screenDevicesAll, noneLabel) {
                         val opts = mutableListOf(KeyOutputOption(label = noneLabel, targetDisplay = Constants.KEY_TARGET_NONE, targetType = "screen"))
                         var keyDisplayNum = 1
-                        for (idx in screenDevicesAll.indices) {
-                            if (screenDevicesAll[idx] == primaryDevice) continue
-                            val bounds = screenDevicesAll[idx].defaultConfiguration.bounds
+                        for (screen in screenDevicesAll) {
+                            if (screen.isPrimary) continue
                             opts.add(KeyOutputOption(
-                                label = "Display $keyDisplayNum (${bounds.width}x${bounds.height} @ ${bounds.x},${bounds.y})",
-                                shortLabel = "D$keyDisplayNum (${bounds.width}x${bounds.height})",
-                                targetDisplay = idx, targetType = "screen",
-                                boundsX = bounds.x, boundsY = bounds.y, boundsW = bounds.width, boundsH = bounds.height
+                                label = "Display $keyDisplayNum (${screen.boundsW}x${screen.boundsH} @ ${screen.boundsX},${screen.boundsY})",
+                                shortLabel = "D$keyDisplayNum (${screen.boundsW}x${screen.boundsH})",
+                                targetDisplay = screen.index, targetType = "screen",
+                                boundsX = screen.boundsX, boundsY = screen.boundsY, boundsW = screen.boundsW, boundsH = screen.boundsH
                             ))
                             keyDisplayNum++
                         }
