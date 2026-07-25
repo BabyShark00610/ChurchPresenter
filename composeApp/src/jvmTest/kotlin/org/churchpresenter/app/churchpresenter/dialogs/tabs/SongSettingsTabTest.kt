@@ -89,14 +89,12 @@ class SongSettingsTabTest {
     fun `the show-number fullscreen dropdown stores Every Page`() = songTab { get ->
         chooseShowOption(ShowDropdown.NUMBER_FULLSCREEN, "Every Page")
         assertEquals(Constants.EVERY_PAGE, get().songSettings.showNumber, "picking Every Page must be stored")
-        showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("Every Page")
     }
 
     @Test
     fun `the show-number fullscreen dropdown stores None`() = songTab { get ->
         chooseShowOption(ShowDropdown.NUMBER_FULLSCREEN, "None")
         assertEquals(Constants.NONE, get().songSettings.showNumber, "picking None must be stored")
-        showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("None")
     }
 
     @Test
@@ -104,7 +102,9 @@ class SongSettingsTabTest {
         chooseShowOption(ShowDropdown.NUMBER_LOWER_THIRD, "Every Page")
         assertEquals(Constants.EVERY_PAGE, get().songSettings.showNumberLowerThird, "the lower-third choice is separate")
         assertEquals(Constants.FIRST_PAGE, get().songSettings.showNumber, "the fullscreen choice must be untouched")
-        showDropdowns()[ShowDropdown.NUMBER_LOWER_THIRD].assertTextContains("Every Page")
+        // Only the untouched dropdown is asserted on screen: a dropdown that was just clicked
+        // echoes the choice from its own state, so its display proves nothing. See the round-trip
+        // test below for how a picked value's display is actually verified.
         showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("First Page")
     }
 
@@ -242,7 +242,6 @@ class SongSettingsTabTest {
     fun `the show-title fullscreen dropdown stores Every Page`() = songTab { get ->
         chooseShowOption(ShowDropdown.TITLE_FULLSCREEN, "Every Page")
         assertEquals(Constants.EVERY_PAGE, get().songSettings.titleDisplay, "picking Every Page must be stored")
-        showDropdowns()[ShowDropdown.TITLE_FULLSCREEN].assertTextContains("Every Page")
     }
 
     @Test
@@ -250,7 +249,6 @@ class SongSettingsTabTest {
         chooseShowOption(ShowDropdown.TITLE_LOWER_THIRD, "None")
         assertEquals(Constants.NONE, get().songSettings.titleLowerThirdDisplay, "picking None must be stored")
         assertEquals(Constants.FIRST_PAGE, get().songSettings.titleDisplay, "the fullscreen choice must be untouched")
-        showDropdowns()[ShowDropdown.TITLE_LOWER_THIRD].assertTextContains("None")
         showDropdowns()[ShowDropdown.TITLE_FULLSCREEN].assertTextContains("First Page")
     }
 
@@ -276,7 +274,6 @@ class SongSettingsTabTest {
                         readers[dropdown](get().songSettings),
                         "picking $label in dropdown $dropdown must store $stored",
                     )
-                    showDropdowns()[dropdown].assertTextContains(label)
                 }
             }
         }
@@ -319,6 +316,28 @@ class SongSettingsTabTest {
                 showDropdowns()[dropdown].assertTextContains("First Page")
             }
             assertEquals("Legacy", get().songSettings.showNumber, "the stored value itself is left alone")
+        }
+    }
+
+    /**
+     * `DropdownSettingsField` echoes the option you click into its own state, so its display right
+     * after a pick would look right even if the choice were never stored. This closes that loop the
+     * only way that means anything: pick in one composition, then render a fresh tab from the
+     * settings that came out and assert the field shows the choice there.
+     */
+    @Test
+    fun `a picked option is what a fresh render of the saved settings shows`() {
+        var saved = AppSettings()
+        songTab { get ->
+            chooseShowOption(ShowDropdown.NUMBER_FULLSCREEN, "Every Page")
+            chooseShowOption(ShowDropdown.TITLE_LOWER_THIRD, "None")
+            saved = get()
+        }
+        songTab(initial = saved) { _ ->
+            showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("Every Page")
+            showDropdowns()[ShowDropdown.TITLE_LOWER_THIRD].assertTextContains("None")
+            showDropdowns()[ShowDropdown.NUMBER_LOWER_THIRD].assertTextContains("First Page")
+            showDropdowns()[ShowDropdown.TITLE_FULLSCREEN].assertTextContains("First Page")
         }
     }
 
@@ -718,7 +737,6 @@ class SongSettingsTabTest {
 
         onNodeWithTag("song_titleSlideEnabled").assertIsOn()
         onNodeWithTag("song_crossfade").assertIsOn()
-        showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("Every Page")
 
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         val restored = json.decodeFromString<AppSettings>(json.encodeToString(get()))
