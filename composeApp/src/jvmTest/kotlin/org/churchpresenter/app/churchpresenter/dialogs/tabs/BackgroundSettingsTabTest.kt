@@ -7,15 +7,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The background settings tab is one of the largest pure-View surfaces in the app. Beyond composing,
@@ -57,6 +61,23 @@ class BackgroundSettingsTabTest {
             Constants.BACKGROUND_TRANSPARENT,
             get().backgroundSettings.defaultBackgroundType,
             "picking Transparent must set the default background type",
+        )
+    }
+
+    @Test
+    fun `editing the default colour through the picker dialog updates the setting`() = runTab { get ->
+        assertEquals("#000000", get().backgroundSettings.defaultBackgroundColor, "default is black")
+
+        // The colour field (tagged) opens a dialog whose only text field is the hex input.
+        onNodeWithTag("bg_defaultColor").performClick()
+        waitForIdle()
+        onNode(hasSetTextAction()).performTextReplacement("#123456")
+        onNodeWithText("OK").performClick()
+        waitForIdle()
+
+        assertTrue(
+            get().backgroundSettings.defaultBackgroundColor.equals("#123456", ignoreCase = true),
+            "the picked hex must become the default background colour, was ${get().backgroundSettings.defaultBackgroundColor}",
         )
     }
 }
