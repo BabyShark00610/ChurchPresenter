@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -67,9 +68,11 @@ import kotlin.test.assertTrue
  *    500 ms hover delay. That delay is the test's whole cost and is not injectable, which
  *    `AGENT.md` says to note rather than test. The tooltips' text is still asserted — it doubles as
  *    each button's content description, which is how the buttons are located here.
- *  * **The "(Install VLC)" labelling** of the Video option only renders where VLC is absent.
- *    `BackgroundSettingsTabStructureTest` branches on `isVlcAvailable` so it holds either way, but
- *    only the branch matching the machine running the suite is exercised.
+ *  * **The "(Install VLC)" labelling** of the Video option only renders where VLC is absent, and
+ *    that item is disabled there — so a machine without VLC (CI) cannot *pick* Video at all. Tests
+ *    address the item through [videoMenuLabel] and take video-dependent rows from a fixture rather
+ *    than from a click, which keeps them true on both kinds of machine; only the enabled/disabled
+ *    branch itself differs, and just the one matching the running machine is exercised.
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun backgroundTab(
@@ -111,6 +114,16 @@ internal object TypeLabel {
     const val GRADIENT = "Gradient"
     val all = listOf(FOLLOW_DEFAULT, DEFAULT, COLOR, IMAGE, VIDEO, TRANSPARENT, GRADIENT)
 }
+
+/**
+ * The text the Video option carries **inside an open menu**.
+ *
+ * Where VLC is missing — a CI runner, typically — the tab appends "(Install VLC)" to that one menu
+ * item and disables it, so neither its label nor its clickability can be assumed. A dropdown that is
+ * *closed* on Video still shows the plain [TypeLabel.VIDEO] either way; this is only for menu items.
+ */
+internal val videoMenuLabel: String
+    get() = if (isVlcAvailable) TypeLabel.VIDEO else "${TypeLabel.VIDEO} (Install VLC)"
 
 // ── Locators ────────────────────────────────────────────────────────────────────────────────────
 

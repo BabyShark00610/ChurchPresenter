@@ -14,6 +14,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.input.ImeAction
+import org.junit.Assume
+import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
@@ -28,37 +30,92 @@ import kotlin.test.assertEquals
  * a particular device — only the entry every machine has ("System Default"), and the fallback the
  * tab uses when the stored device id matches nothing currently plugged in, which is the branch that
  * actually matters when a USB interface is unplugged between services.
+ *
+ * Where VLC is missing altogether — a CI runner — the tab composes **no device row at all**, only a
+ * message saying so. That branch is asserted by
+ * [the audio card offers devices only where VLC is installed]; the four tests that drive the
+ * dropdown itself have nothing to drive there and declare an [Assume] on VLC so they are reported
+ * as skipped rather than quietly passing. The VLC-path row below the card is composed either way and
+ * is tested unconditionally.
  */
 class ProjectionSettingsTabAudioAndLabelsTest {
+
+    private companion object {
+        /**
+         * The two lines the card shows in place of the device row when VLC is not installed —
+         * which, together, are the whole of that layout: it composes no icon and no button.
+         *
+         * The second line has a variant, `media_vlc_load_failed`, shown when VLC was found but
+         * would not load. Reaching it means writing `vlcUnavailableReason`, a public `var` on a
+         * singleton, which would leak into every later test in the JVM — so it is left uncovered
+         * rather than reached that way.
+         */
+        const val VLC_REQUIRED = "VLC media player is required for media playback"
+        const val VLC_INSTALL = "Please install VLC from videolan.org and restart the application"
+        const val VLC_NEEDED = "no audio device row is composed without VLC installed"
+    }
 
     private fun settingsWith(change: ProjectionSettings.() -> ProjectionSettings): AppSettings =
         AppSettings().let { it.copy(projectionSettings = it.projectionSettings.change()) }
 
     // ── Audio output ────────────────────────────────────────────────────────────────────────────
 
+    /** Whether the device row exists at all is the one thing the audio card decides on its own. */
     @Test
-    fun `the audio device dropdown starts on the system default`() = projectionTab { get ->
-        assertEquals("", get().projectionSettings.audioOutputDeviceId, "no device chosen out of the box")
-        onNodeWithText("System Default").assertExists("so the dropdown reads System Default")
+    fun `the audio card offers devices only where VLC is installed`() = projectionTab { _ ->
+        if (isVlcAvailable) {
+            onNodeWithText("System Default").assertExists("with VLC the device dropdown is composed")
+            onNodeWithText(VLC_REQUIRED).assertDoesNotExist() // and the install prompt is not
+        } else {
+            onNodeWithText(VLC_REQUIRED).assertExists("without VLC the card says so instead")
+            onNodeWithText(VLC_INSTALL).assertExists("and tells the operator what to do about it")
+            onNodeWithText("System Default").assertDoesNotExist() // and no device dropdown at all
+        }
+        onNodeWithText("Custom VLC path").assertExists("the path row is below the card either way")
     }
 
     @Test
-    fun `the audio device dropdown offers the system default`() = projectionTab { _ ->
-        onNodeWithText("System Default").performScrollTo().performClick()
-        waitForIdle()
-        // The closed button and the menu's own entry — the machine's real devices join them, and
-        // which those are is not asserted here because it differs per machine.
-        onAllNodesWithText("System Default").assertCountEquals(2)
+    fun `the audio device dropdown starts on the system default`() {
+        Assume.assumeTrue(VLC_NEEDED, isVlcAvailable)
+        projectionTab { get ->
+            assertEquals("", get().projectionSettings.audioOutputDeviceId, "no device chosen out of the box")
+            onNodeWithText("System Default").assertExists("so the dropdown reads System Default")
+        }
     }
 
     @Test
-    fun `picking the system default clears any stored device`() = projectionTab { get ->
-        onNodeWithText("System Default").performScrollTo().performClick()
-        waitForIdle()
-        onAllNodesWithText("System Default")[1].performClick()
-        waitForIdle()
-        assertEquals("", get().projectionSettings.audioOutputDeviceId, "the default stores an empty id")
-        onNodeWithText("System Default").assertExists()
+    fun `the audio device dropdown offers the system default`() {
+        Assume.assumeTrue(VLC_NEEDED, isVlcAvailable)
+        projectionTab { _ ->
+            onNodeWithText("System Default").performScrollTo().performClick()
+            waitForIdle()
+            // The closed button and the menu's own entry — the machine's real devices join them, and
+            // which those are is not asserted here because it differs per machine.
+            onAllNodesWithText("System Default").assertCountEquals(2)
+        }
+    }
+
+    /**
+     * Starts from a **stored** device on purpose. Out of the box the id is already empty, so picking
+     * the default and asserting an empty id would hold whether or not the click did anything — the
+     * assertion has to have somewhere to move from to mean anything.
+     */
+    @Test
+    fun `picking the system default clears any stored device`() {
+        Assume.assumeTrue(VLC_NEEDED, isVlcAvailable)
+        projectionTab(initial = settingsWith { copy(audioOutputDeviceId = "some-stored-interface") }) { get ->
+            assertEquals(
+                "some-stored-interface",
+                get().projectionSettings.audioOutputDeviceId,
+                "fixture: a device must be stored before the click, or clearing it proves nothing",
+            )
+            onNodeWithText("System Default").performScrollTo().performClick()
+            waitForIdle()
+            onAllNodesWithText("System Default")[1].performClick()
+            waitForIdle()
+            assertEquals("", get().projectionSettings.audioOutputDeviceId, "the default stores an empty id")
+            onNodeWithText("System Default").assertExists()
+        }
     }
 
     /**
@@ -67,6 +124,7 @@ class ProjectionSettingsTabAudioAndLabelsTest {
      */
     @Test
     fun `a stored device that is no longer present falls back to the system default`() {
+        Assume.assumeTrue(VLC_NEEDED, isVlcAvailable)
         projectionTab(initial = settingsWith { copy(audioOutputDeviceId = "usb-interface-that-is-gone") }) { get ->
             onNodeWithText("System Default").assertExists("an unknown device must not render blank")
             assertEquals(

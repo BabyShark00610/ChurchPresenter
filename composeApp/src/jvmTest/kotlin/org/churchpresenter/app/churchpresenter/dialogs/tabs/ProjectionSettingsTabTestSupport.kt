@@ -19,6 +19,7 @@ import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import kotlin.test.assertEquals
@@ -112,6 +113,15 @@ internal object Grid {
 
     /** The first button after the grid, given [rows] assignment rows: "Add Output". */
     fun addOutput(rows: Int) = 1 + rows * CONTROLS_PER_ROW
+
+    /**
+     * How many labelled buttons follow the grid.
+     *
+     * "Add Output" and the VLC-path "Browse" button are always there. The audio-device dropdown
+     * between them is not: the tab composes the whole device row only when VLC is present, and
+     * shows an "install VLC" message in its place otherwise — the state on a CI runner.
+     */
+    val trailing: Int get() = if (isVlcAvailable) 3 else 2
 }
 
 /**

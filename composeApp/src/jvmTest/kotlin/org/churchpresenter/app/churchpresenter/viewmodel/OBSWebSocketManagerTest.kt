@@ -59,7 +59,6 @@ class OBSWebSocketManagerTest {
      * authentication, then answers the client's Identify with [identifiedOp] (2 in real life).
      */
     private class FakeObs(
-        val port: Int,
         private val helloOp: Int = 0,
         private val identifiedOp: Int = 2,
         private val salt: String? = null,
@@ -78,7 +77,11 @@ class OBSWebSocketManagerTest {
                 return """{"op":$helloOp,"d":{"obsWebSocketVersion":"5.1.0","rpcVersion":1$auth}}"""
             }
 
-        private val server = embeddedServer(Netty, port = port) {
+        /** Assigned by the OS when the server starts — see [start]. */
+        var port: Int = 0
+            private set
+
+        private val server = embeddedServer(Netty, port = 0) {
             install(WebSockets)
             routing {
                 webSocket("/") {
@@ -98,19 +101,36 @@ class OBSWebSocketManagerTest {
             }
         }
 
-        fun start() = server.start(wait = false)
+        /**
+         * Starts on an OS-assigned port and reads back the one actually bound.
+         *
+         * Deliberately not "find a free port, then bind it": between closing the probe socket and
+         * binding, anything else in the suite that opens a port can take it — and this suite runs
+         * alongside several that do. The bind then fails, nothing is listening, and the test dies
+         * on a handshake timeout far from the real cause.
+         */
+        fun start() {
+            server.start(wait = false)
+            port = runBlocking { server.engine.resolvedConnectors().first().port }
+        }
         fun dropConnections() = runBlocking { sessions.toList().forEach { it.close() } }
         fun stop() = server.stop(0, 0)
     }
 
-    private fun freePort(): Int = ServerSocket(0).use { it.localPort }
+    /**
+     * A port with nothing listening on it, for the connection-refused cases. Closing the socket
+     * straight away leaves the port free; a later binder could in principle take it, but these
+     * call sites only need "probably nothing there", and a wrong guess fails the connection either
+     * way — which is what they assert.
+     */
+    private fun unusedPort(): Int = ServerSocket(0).use { it.localPort }
 
     private fun startObs(
         helloOp: Int = 0,
         identifiedOp: Int = 2,
         salt: String? = null,
         challenge: String? = null,
-    ): FakeObs = FakeObs(freePort(), helloOp, identifiedOp, salt, challenge).also {
+    ): FakeObs = FakeObs(helloOp, identifiedOp, salt, challenge).also {
         servers.add(it)
         it.start()
     }
@@ -244,7 +264,7 @@ class OBSWebSocketManagerTest {
     fun `an obs that is not running is reported rather than left spinning`() {
         val obs = manager()
 
-        obs.connect("127.0.0.1", freePort(), "") // nothing listening there
+        obs.connect("127.0.0.1", unusedPort(), "") // nothing listening there
 
         awaitUntil("the failed connection to be reported") {
             obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR
@@ -354,7 +374,7 @@ class OBSWebSocketManagerTest {
     @Test
     fun `disconnecting clears a previous error`() {
         val obs = manager()
-        obs.connect("127.0.0.1", freePort(), "")
+        obs.connect("127.0.0.1", unusedPort(), "")
         awaitUntil("the failure") { obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR }
 
         obs.disconnect()

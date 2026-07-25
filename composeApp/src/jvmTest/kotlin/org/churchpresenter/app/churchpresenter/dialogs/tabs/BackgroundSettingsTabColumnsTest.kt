@@ -80,9 +80,12 @@ class BackgroundSettingsTabColumnsTest {
 
     @Test
     fun `the Songs full-screen column stores the type it is given`() = backgroundTab { get ->
-        chooseBackgroundType(TypeDropdown.SONG_FULLSCREEN, TypeLabel.VIDEO)
+        // Deliberately not Video: that option is disabled where VLC is missing, so it cannot be
+        // picked on every machine. A column's video row is covered from a fixture instead, below.
+        // Gradient is not an option here either — the tab offers it to lower-third slots only.
+        chooseBackgroundType(TypeDropdown.SONG_FULLSCREEN, TypeLabel.IMAGE)
         assertEquals(
-            Constants.BACKGROUND_VIDEO,
+            Constants.BACKGROUND_IMAGE,
             get().backgroundSettings.songBackground.backgroundType,
             "the Songs full-screen type must be stored",
         )
@@ -91,6 +94,24 @@ class BackgroundSettingsTabColumnsTest {
             get().backgroundSettings.songLowerThirdBackground.backgroundType,
             "the Songs lower-third column must be untouched",
         )
+    }
+
+    /** A column set to Video renders the same picker row the default cards do. */
+    @Test
+    fun `a column set to Video shows the video picker`() {
+        val songVideo = settingsWith {
+            copy(
+                songBackground = BackgroundConfig(
+                    backgroundType = Constants.BACKGROUND_VIDEO,
+                    backgroundVideo = "/tmp/backdrops/column.mp4",
+                ),
+            )
+        }
+        backgroundTab(initial = songVideo) { _ ->
+            typeDropdowns()[TypeDropdown.SONG_FULLSCREEN].assertTextEquals(TypeLabel.VIDEO)
+            onAllNodesWithText("Background Video:").assertCountEquals(1)
+            onNodeWithText("column.mp4").assertExists("the column's picker must name the stored file")
+        }
     }
 
     @Test

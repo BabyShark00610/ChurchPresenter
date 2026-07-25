@@ -39,7 +39,7 @@ class ProjectionSettingsTabRecompositionTest {
     private val inertCallback: (((AppSettings) -> AppSettings) -> Unit) = { }
 
     private fun ComposeUiTest.assertGridIsIntact(rows: Int) {
-        gridButtons().assertCountEquals(1 + rows * Grid.CONTROLS_PER_ROW + 3)
+        gridButtons().assertCountEquals(1 + rows * Grid.CONTROLS_PER_ROW + Grid.trailing)
         for (row in 0 until rows) {
             gridButton(Grid.displayMode(row)).assertTextEquals("Full Screen")
             gridButton(Grid.contentOutputs(row)).assertTextEquals("15 of 16 enabled")
