@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import kotlin.test.Test
 
@@ -88,7 +89,7 @@ class ProjectionSettingsTabStructureTest {
     @Test
     fun `the grid lays out four controls per row between Identify and Add Output`() = projectionTab { _ ->
         // Identify, then 4 per row for 2 rows, then Add Output, the audio device and Browse.
-        gridButtons().assertCountEquals(1 + 2 * Grid.CONTROLS_PER_ROW + 3)
+        gridButtons().assertCountEquals(1 + 2 * Grid.CONTROLS_PER_ROW + Grid.trailing)
         gridButton(Grid.IDENTIFY).assertTextEquals("Identify")
         gridButton(Grid.addOutput(rows = 2)).assertTextEquals("Add Output")
     }
@@ -106,7 +107,7 @@ class ProjectionSettingsTabStructureTest {
     @Test
     fun `the dev fallback row carries the same four controls`() {
         projectionTab(screens = noExternalScreens()) { _ ->
-            gridButtons().assertCountEquals(1 + 1 * Grid.CONTROLS_PER_ROW + 3)
+            gridButtons().assertCountEquals(1 + 1 * Grid.CONTROLS_PER_ROW + Grid.trailing)
             gridButton(Grid.targetDisplay(row = 0)).assertTextEquals("None")
             gridButton(Grid.keyOutput(row = 0)).assertTextEquals("None")
             gridButton(Grid.displayMode(row = 0)).assertTextEquals("Full Screen")
@@ -156,8 +157,14 @@ class ProjectionSettingsTabStructureTest {
 
     @Test
     fun `the audio card offers a device and a VLC path`() = projectionTab { _ ->
-        onNodeWithText("Output device").assertExists()
-        onNodeWithText("System Default").assertExists("the device dropdown starts on the system default")
+        // The device row is VLC's — the tab drops it and says so where VLC is absent. The path row
+        // below it is composed either way, which is what makes VLC installable from here at all.
+        if (isVlcAvailable) {
+            onNodeWithText("Output device").assertExists()
+            onNodeWithText("System Default").assertExists("the device dropdown starts on the system default")
+        } else {
+            onNodeWithText("Output device").assertDoesNotExist()
+        }
         onNodeWithText("Custom VLC path").assertExists()
         onNodeWithText("Browse").assertExists("with a chooser button beside it")
     }
