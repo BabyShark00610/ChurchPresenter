@@ -1,7 +1,9 @@
 package org.churchpresenter.app.churchpresenter.data.settings
 
+import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -22,6 +24,32 @@ class SettingsSerializationTest {
         assertEquals(value, decoded, "${value::class.simpleName} did not survive a JSON round-trip")
         assertEquals(value.hashCode(), decoded.hashCode())
         assertTrue(value.toString().isNotEmpty())
+    }
+
+    /**
+     * Changes one primitive field at a time (decoding a JSON object that sets only that field) and
+     * asserts the result no longer equals the default — reaching every field's own branch in the
+     * generated equals(), and proving a field can't silently be dropped from equality/persistence.
+     */
+    private inline fun <reified T : Any> assertEqualsAccountsForEveryPrimitiveField(default: T) {
+        val serializer = serializer<T>()
+        val descriptor = serializer.descriptor
+        for (i in 0 until descriptor.elementsCount) {
+            val candidates = when (descriptor.getElementDescriptor(i).kind) {
+                PrimitiveKind.STRING -> listOf("\"__cp_alt_1__\"", "\"__cp_alt_2__\"")
+                PrimitiveKind.BOOLEAN -> listOf("true", "false")
+                PrimitiveKind.INT, PrimitiveKind.SHORT, PrimitiveKind.BYTE -> listOf("2147483111", "-2147483111")
+                PrimitiveKind.LONG -> listOf("9000000000111", "-9000000000111")
+                PrimitiveKind.FLOAT, PrimitiveKind.DOUBLE -> listOf("1234567.75", "-1234567.75")
+                else -> continue
+            }
+            val name = descriptor.getElementName(i)
+            val differs = candidates.any { candidate ->
+                runCatching { json.decodeFromString(serializer, "{\"$name\":$candidate}") != default }
+                    .getOrDefault(false)
+            }
+            assertTrue(differs, "equals() must account for field '$name' of ${T::class.simpleName}")
+        }
     }
 
     @Test
@@ -218,5 +246,42 @@ class SettingsSerializationTest {
         assertEquals(9000, decoded.serverSettings.port)
         assertEquals(false, decoded.analyticsReportingEnabled)
         assertEquals(1_726_000_000_000L, decoded.lastUpdateCheckTimestamp)
+    }
+
+    @Test
+    fun `equals distinguishes every primitive field of the network and integration settings`() {
+        assertEqualsAccountsForEveryPrimitiveField(ServerSettings())
+        assertEqualsAccountsForEveryPrimitiveField(InstanceLinkSettings())
+        assertEqualsAccountsForEveryPrimitiveField(AtemSettings())
+        assertEqualsAccountsForEveryPrimitiveField(OBSSettings())
+        assertEqualsAccountsForEveryPrimitiveField(StreamingSettings())
+        assertEqualsAccountsForEveryPrimitiveField(PlanningCenterSettings())
+        assertEqualsAccountsForEveryPrimitiveField(PresentationRemoteSettings())
+        assertEqualsAccountsForEveryPrimitiveField(BibleEngineSettings())
+    }
+
+    @Test
+    fun `equals distinguishes every primitive field of the content and library settings`() {
+        assertEqualsAccountsForEveryPrimitiveField(SongSettings())
+        assertEqualsAccountsForEveryPrimitiveField(BibleSettings())
+        assertEqualsAccountsForEveryPrimitiveField(DictionarySettings())
+        assertEqualsAccountsForEveryPrimitiveField(PresentationSettings())
+        assertEqualsAccountsForEveryPrimitiveField(PictureSettings())
+        assertEqualsAccountsForEveryPrimitiveField(AnnouncementsSettings())
+        assertEqualsAccountsForEveryPrimitiveField(STTSettings())
+        assertEqualsAccountsForEveryPrimitiveField(QASettings())
+    }
+
+    @Test
+    fun `equals distinguishes every primitive field of the output and appearance settings`() {
+        assertEqualsAccountsForEveryPrimitiveField(ScreenAssignment())
+        assertEqualsAccountsForEveryPrimitiveField(BackgroundSettings())
+        assertEqualsAccountsForEveryPrimitiveField(BackgroundConfig())
+        assertEqualsAccountsForEveryPrimitiveField(StageMonitorZoneStyle())
+        assertEqualsAccountsForEveryPrimitiveField(WindowLayoutSettings())
+        assertEqualsAccountsForEveryPrimitiveField(StockPhotoSettings())
+        assertEqualsAccountsForEveryPrimitiveField(LottieSearchReplacePair())
+        assertEqualsAccountsForEveryPrimitiveField(WebBookmark())
+        assertEqualsAccountsForEveryPrimitiveField(AppSettings())
     }
 }
