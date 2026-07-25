@@ -213,7 +213,6 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleSearchMode
-import org.churchpresenter.app.churchpresenter.utils.TrainingDataLogger
 import org.churchpresenter.app.churchpresenter.utils.highlightRanges
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
@@ -384,13 +383,12 @@ fun BibleTab(
             onInstanceLinkSendVerse?.invoke(primary.bookName, primary.chapter, primary.verseNumber, primary.verseText, primary.verseRange)
             presenterManager?.let { if (it.bibleHold.value) { it.setBibleHold(false); onInstanceLinkSendBibleHold?.invoke(false) } }
             onPresenting(Presenting.BIBLE)
-            TrainingDataLogger.logLiveReference(
-                book       = viewModel.canonicalBookIdForDisplayIndex(viewModel.selectedBookIndex.value),
+            viewModel.logLiveReference(
+                displayBookIndex = viewModel.selectedBookIndex.value,
                 chapter    = primary.chapter,
                 verseStart = primary.verseNumber,
                 verseEnd   = null,
                 source     = "manual",
-                segmentId  = viewModel.lastDetectionSegmentId,
                 autoFollow = viewModel.autoFollowEnabled.value,
             )
         }
@@ -429,21 +427,17 @@ fun BibleTab(
             onInstanceLinkSendVerse?.invoke(v.bookName, v.chapter, v.verseNumber, v.verseText, v.verseRange)
         }
         if (primaryVerse != null) {
-            // Canonical book id (not the raw display position) so the ground-truth log is comparable
-            // to the engine's canonical detection log.
-            val bookNum = viewModel.canonicalBookIdForDisplayIndex(viewModel.selectedBookIndex.value)
             // Derive the displayed span from the primary verse itself: its range string ("1-3",
             // "2,4,5") when a multi-verse passage is on screen, else the single verse number. This
             // captures the full range even when shown without the multi-verse toggle (the previous
             // toggle-gated logic logged only the first verse).
             val (verseStart, verseEnd) = verseSpan(primaryVerse.verseRange, primaryVerse.verseNumber)
-            TrainingDataLogger.logLiveReference(
-                book       = bookNum,
+            viewModel.logLiveReference(
+                displayBookIndex = viewModel.selectedBookIndex.value,
                 chapter    = primaryVerse.chapter,
                 verseStart = verseStart,
                 verseEnd   = verseEnd,
                 source     = source,
-                segmentId  = viewModel.lastDetectionSegmentId,
                 autoFollow = viewModel.autoFollowEnabled.value,
                 matchType  = matchType,
             )
@@ -487,14 +481,12 @@ fun BibleTab(
                 // token this frame — goLiveWithHistory already logs that case with source="auto".
                 if (currentIsPresenting && autoFollowLiveToken == autoFollowTokenGate.lastHandled) {
                     val primary = selectedVerses.first()
-                    val bookNum = viewModel.canonicalBookIdForDisplayIndex(viewModel.selectedBookIndex.value)
-                    TrainingDataLogger.logLiveReference(
-                        book       = bookNum,
+                    viewModel.logLiveReference(
+                        displayBookIndex = viewModel.selectedBookIndex.value,
                         chapter    = primary.chapter,
                         verseStart = primary.verseNumber,
                         verseEnd   = null,
                         source     = "manual",
-                        segmentId  = viewModel.lastDetectionSegmentId,
                         autoFollow = viewModel.autoFollowEnabled.value,
                     )
                 }
@@ -1050,13 +1042,12 @@ fun BibleTab(
                         onClick = {
                             val live = displayedVerses
                             if (live.isNotEmpty()) {
-                                TrainingDataLogger.logOperatorFlag(
+                                viewModel.logOperatorFlag(
                                     kind = "wrong_passage",
-                                    book = live.first().bookId,
+                                    bookName = live.first().bookName,
                                     chapter = live.first().chapter,
                                     verseStart = live.minOf { it.verseNumber },
                                     verseEnd = live.maxOf { it.verseNumber }.takeIf { live.size > 1 },
-                                    segmentId = viewModel.lastDetectionSegmentId,
                                     matchType = viewModel.autoFollowLiveMatchType.value,
                                 )
                             }
@@ -1069,13 +1060,12 @@ fun BibleTab(
                         onClick = {
                             val live = displayedVerses
                             if (live.isNotEmpty()) {
-                                TrainingDataLogger.logOperatorFlag(
+                                viewModel.logOperatorFlag(
                                     kind = "premature",
-                                    book = live.first().bookId,
+                                    bookName = live.first().bookName,
                                     chapter = live.first().chapter,
                                     verseStart = live.minOf { it.verseNumber },
                                     verseEnd = live.maxOf { it.verseNumber }.takeIf { live.size > 1 },
-                                    segmentId = viewModel.lastDetectionSegmentId,
                                     matchType = viewModel.autoFollowLiveMatchType.value,
                                 )
                             }
@@ -1086,10 +1076,7 @@ fun BibleTab(
                         label = stringResource(Res.string.bible_stt_flag_missed),
                         tooltip = stringResource(Res.string.bible_stt_flag_missed_hint),
                         onClick = {
-                            TrainingDataLogger.logOperatorFlag(
-                                kind = "missed_passage",
-                                segmentId = viewModel.lastDetectionSegmentId,
-                            )
+                            viewModel.logOperatorFlag(kind = "missed_passage")
                         }
                     )
                 }
@@ -1717,13 +1704,12 @@ fun BibleTab(
                                                 onInstanceLinkSendVerse?.invoke(primary.bookName, primary.chapter, primary.verseNumber, primary.verseText, primary.verseRange)
                                                 presenterManager?.let { if (it.bibleHold.value) { it.setBibleHold(false); onInstanceLinkSendBibleHold?.invoke(false) } }
                                                 onPresenting(Presenting.BIBLE)
-                                                TrainingDataLogger.logLiveReference(
-                                                    book       = viewModel.canonicalBookIdForDisplayIndex(viewModel.selectedBookIndex.value),
+                                                viewModel.logLiveReference(
+                                                    displayBookIndex = viewModel.selectedBookIndex.value,
                                                     chapter    = primary.chapter,
                                                     verseStart = primary.verseNumber,
                                                     verseEnd   = null,
                                                     source     = "manual",
-                                                    segmentId  = viewModel.lastDetectionSegmentId,
                                                     autoFollow = viewModel.autoFollowEnabled.value,
                                                 )
                                             }
