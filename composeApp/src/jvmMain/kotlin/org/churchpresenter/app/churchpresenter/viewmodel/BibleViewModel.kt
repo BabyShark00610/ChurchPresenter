@@ -661,7 +661,11 @@ class BibleViewModel(
                         bookName = primaryBookName,
                         chapter = chapter,
                         verseNumber = verseNum,
-                        verseText = primaryVerseText
+                        verseText = primaryVerseText,
+                        // Without this the verse reaches the presenter with bookId 0, and anything
+                        // downstream that names the book from it (the Help-Dev operator flags) logs
+                        // a reference that can't be anchored to any book.
+                        bookId = bookId,
                     )
                 )
             }
@@ -677,7 +681,8 @@ class BibleViewModel(
                         bookName = result.bookName,
                         chapter = result.displayChapter,
                         verseNumber = result.displayVerse,
-                        verseText = result.verseText
+                        verseText = result.verseText,
+                        bookId = secBook,
                     )
                 )
             }
@@ -1633,6 +1638,94 @@ class BibleViewModel(
         _primaryBible.value?.getBookId(displayIndex) ?: (displayIndex + 1)
 
     /**
+     * Canonical (Hebrew, `BXXXCXXXVXXX`) book/chapter/verse for a reference expressed in the primary
+     * Bible's own display numbering. The book id alone is not enough: a Synodal module follows the
+     * LXX, so its Psalm 22 is canonical Psalm 23, and a training log that recorded the displayed
+     * chapter would not line up with the engine's detections at all.
+     *
+     * [verse] may be null for a chapter-level reference — the chapter still maps (through its first
+     * verse) and the returned verse stays null rather than inventing one. Returns null when the
+     * reference isn't in the primary Bible, so callers fall back to the display numbers rather than
+     * logging a guess.
+     */
+    fun canonicalRefForDisplay(displayBookIndex: Int, chapter: Int, verse: Int?): Triple<Int, Int, Int?>? {
+        val bible = _primaryBible.value ?: return null
+        val bookId = bible.getBookId(displayBookIndex)
+        val code = bible.getCodeReference(bookId, chapter, verse ?: 1) ?: return null
+        return Triple(code.first, code.second, verse?.let { code.third })
+    }
+
+    /**
+     * Records a go-live in the ground-truth training log. [displayBookIndex]/[chapter]/[verseStart]/
+     * [verseEnd] are what is on screen, in the primary Bible's own numbering; this maps them into the
+     * engine's canonical numbering first (see [canonicalRefForDisplay]) so the log and the engine's
+     * detections line up verse-for-verse, and keeps the displayed numbers alongside. Every go-live
+     * path — operator, auto-follow, companion remote — goes through here so none of them can drift
+     * back to logging display numbers.
+     */
+    fun logLiveReference(
+        displayBookIndex: Int,
+        chapter: Int,
+        verseStart: Int?,
+        verseEnd: Int?,
+        source: String,
+        autoFollow: Boolean,
+        matchType: String? = null,
+    ) {
+        val canonical = canonicalRefForDisplay(displayBookIndex, chapter, verseStart)
+        val canonicalEnd = verseEnd?.let { canonicalRefForDisplay(displayBookIndex, chapter, it)?.third }
+        TrainingDataLogger.logLiveReference(
+            book              = canonical?.first ?: canonicalBookIdForDisplayIndex(displayBookIndex),
+            chapter           = canonical?.second ?: chapter,
+            verseStart        = canonical?.third ?: verseStart,
+            verseEnd          = canonicalEnd ?: verseEnd,
+            source            = source,
+            segmentId         = lastDetectionSegmentId,
+            autoFollow        = autoFollow,
+            matchType         = matchType,
+            displayChapter    = chapter,
+            displayVerseStart = verseStart,
+            displayVerseEnd   = verseEnd,
+        )
+    }
+
+    /**
+     * Records a "Help Dev" operator flag against whatever is live. [bookName] is the live verse's
+     * book as displayed; it resolves to the same canonical numbering [logLiveReference] uses, so a
+     * flag and a go-live for the same verse name it identically. Pass nulls for "missed_passage",
+     * where there is no reference to anchor to.
+     */
+    fun logOperatorFlag(
+        kind: String,
+        bookName: String? = null,
+        chapter: Int? = null,
+        verseStart: Int? = null,
+        verseEnd: Int? = null,
+        matchType: String? = null,
+    ) {
+        val displayIndex = bookName?.let { name -> _books.value.indexOfFirst { it.equals(name, ignoreCase = true) } }
+            ?.takeIf { it >= 0 }
+        val canonical = if (displayIndex != null && chapter != null) {
+            canonicalRefForDisplay(displayIndex, chapter, verseStart)
+        } else null
+        val canonicalEnd = if (displayIndex != null && chapter != null && verseEnd != null) {
+            canonicalRefForDisplay(displayIndex, chapter, verseEnd)?.third
+        } else null
+        TrainingDataLogger.logOperatorFlag(
+            kind              = kind,
+            book              = canonical?.first ?: displayIndex?.let { canonicalBookIdForDisplayIndex(it) },
+            chapter           = canonical?.second ?: chapter,
+            verseStart        = canonical?.third ?: verseStart,
+            verseEnd          = canonicalEnd ?: verseEnd,
+            segmentId         = lastDetectionSegmentId,
+            matchType         = matchType,
+            displayChapter    = chapter,
+            displayVerseStart = verseStart,
+            displayVerseEnd   = verseEnd,
+        )
+    }
+
+    /**
      * Handles a scripture event from the Bible Lookup Engine. [matchType] is "explicit", "reverse",
      * or "continuation"; [bookId] is the canonical book number. [canonicalCodeStart]/[canonicalCodeEnd]
      * are the engine's numbering-independent internal codes (`BXXXCXXXVXXX`, Hebrew numbering) — used to
@@ -1721,12 +1814,20 @@ class BibleViewModel(
             // "explicit" (the reference was stated outright) and "continuation" (simply the very next
             // verse in the passage being read) need no extra confirmation — sequential next-verse
             // reading is the expected default case while following along, not a risky jump.
-            // "chapter-scan"/"chapter-history"/"reverse" are inferred matches with no reference
-            // actually spoken — stage them (navigate/select, same as a manual single-click on a chip)
-            // without pushing live, so a wrong guess never overwrites what the congregation sees. The
-            // operator's existing double-click accepts it, or a follow-up "continuation" detection
-            // confirms it and goes live on its own.
-            val instantGoLive = matchType == "explicit" || matchType == "continuation"
+            //
+            // "chapter-scan" joined them 2026-07-24: it matches spoken words against the verses of the
+            // chapter the speaker has ALREADY announced, so it is not a free-roaming guess, and the
+            // recorded services bear that out — 12 of 13 emissions correct across eight replayed
+            // services, the most precise tier of all. Staged, it was also the least used: the operator
+            // never once clicked one, reaching the verse another way instead, so its accuracy was
+            // being thrown away.
+            //
+            // "reverse" (a match found anywhere in the whole Bible) stays staged — it is the one tier
+            // with no announced context behind it. Staging navigates/selects, exactly like a manual
+            // single-click on a chip, so a wrong guess never overwrites what the congregation sees;
+            // the operator's double-click accepts it, or a follow-up "continuation" confirms it.
+            val instantGoLive = matchType == "explicit" || matchType == "continuation" ||
+                matchType == "chapter-scan"
             navigateToReference(
                 SmartReference(bookIndex, dispChapter, dispVerseStart, verseEnd = null),
                 goLive = instantGoLive,
@@ -1770,13 +1871,7 @@ class BibleViewModel(
         // operator implicitly ignored — the outcome that was previously never recorded.
         next.drop(MAX_DETECTED).forEach { evicted ->
             if (evicted.key !in actedDetectionKeys) {
-                TrainingDataLogger.logSuggestionOutcome(
-                    suggestedBook    = evicted.bookIndex + 1,
-                    suggestedChapter = evicted.chapter,
-                    suggestedVerse   = evicted.verseStart,
-                    action           = "ignored",
-                    matchType        = evicted.matchTypeLabel(),
-                )
+                logDetectionOutcome(evicted, action = "ignored")
             }
             actedDetectionKeys.remove(evicted.key)
         }
@@ -1784,17 +1879,32 @@ class BibleViewModel(
         return true
     }
 
+    /**
+     * Records what became of a suggestion chip, in the canonical numbering the engine's own
+     * detection log uses — a chip holds display positions ([DetectedReference.bookIndex] is an index
+     * into [_books], its chapter is the primary Bible's own), and logging those raw would misname
+     * the book in any module whose order isn't canonical and misnumber every LXX-shifted Psalm.
+     * Falls back to the display values only when the reference doesn't resolve.
+     */
+    private fun logDetectionOutcome(ref: DetectedReference, action: String, correctedRef: String? = null) {
+        val canonical = canonicalRefForDisplay(ref.bookIndex, ref.chapter, ref.verseStart)
+        TrainingDataLogger.logSuggestionOutcome(
+            suggestedBook    = canonical?.first ?: canonicalBookIdForDisplayIndex(ref.bookIndex),
+            suggestedChapter = canonical?.second ?: ref.chapter,
+            suggestedVerse   = canonical?.third ?: ref.verseStart,
+            action           = action,
+            correctedRef     = correctedRef,
+            matchType        = ref.matchTypeLabel(),
+            displayChapter   = ref.chapter,
+            displayVerse     = ref.verseStart,
+        )
+    }
+
     /** Navigates the Bible tab to a row the operator tapped. */
     fun applyDetectedReference(ref: DetectedReference, goLiveSource: String? = null) {
         val matchType = ref.matchTypeLabel()
         actedDetectionKeys.add(ref.key)
-        TrainingDataLogger.logSuggestionOutcome(
-            suggestedBook    = ref.bookIndex + 1,
-            suggestedChapter = ref.chapter,
-            suggestedVerse   = ref.verseStart,
-            action           = "accepted",
-            matchType        = matchType,
-        )
+        logDetectionOutcome(ref, action = "accepted")
         // One verse at a time: clicking a range chip presents the start verse; the operator (or the
         // engine, when auto-follow is on) steps through the rest from there.
         navigateToReference(
@@ -1816,13 +1926,10 @@ class BibleViewModel(
         val matches = top.bookIndex == shownBookIndex && top.chapter == shownChapter && top.verseStart == shownVerse
         if (matches) return
         actedDetectionKeys.add(top.key)
-        TrainingDataLogger.logSuggestionOutcome(
-            suggestedBook    = top.bookIndex + 1,
-            suggestedChapter = top.chapter,
-            suggestedVerse   = top.verseStart,
-            action           = "corrected",
-            correctedRef     = buildDetectionLabel(shownBookIndex, shownChapter, shownVerse, null),
-            matchType        = top.matchTypeLabel(),
+        logDetectionOutcome(
+            top,
+            action = "corrected",
+            correctedRef = buildDetectionLabel(shownBookIndex, shownChapter, shownVerse, null),
         )
     }
 
@@ -1834,13 +1941,7 @@ class BibleViewModel(
     fun clearDetectedReferences(reason: String = "dismissed") {
         _detectedReferences.value.forEach { ref ->
             if (ref.key in actedDetectionKeys) return@forEach
-            TrainingDataLogger.logSuggestionOutcome(
-                suggestedBook    = ref.bookIndex + 1,
-                suggestedChapter = ref.chapter,
-                suggestedVerse   = ref.verseStart,
-                action           = reason,
-                matchType        = ref.matchTypeLabel(),
-            )
+            logDetectionOutcome(ref, action = reason)
         }
         if (_detectedReferences.value.isNotEmpty()) _detectedReferences.value = emptyList()
         recentDetectionKeys.clear()

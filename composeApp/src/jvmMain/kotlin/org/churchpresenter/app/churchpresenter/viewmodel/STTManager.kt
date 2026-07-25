@@ -101,6 +101,20 @@ class STTManager {
     // connect() (and therefore startDbCapture()) only runs once per explicit Connect click.
     var helpDevModeEnabled: Boolean = false
     private var dbCaptureJob: Job? = null
+    // Base URL of the STT server the capture loop is pulling from, kept so [disconnect] can take one
+    // final snapshot after the loop stops.
+    private var captureBaseUrl: String? = null
+
+    /**
+     * Whether disconnecting should pull one last .db snapshot. The periodic loop only runs while
+     * connected, so without this the archived .db stops at the last 60-second tick — and in practice
+     * further back: `2026-07-19_102718.db` ends 5 minutes before the service did, mid-sentence, which
+     * silently turned 7 references the engine had actually detected live into replay "misses". A
+     * snapshot is only worth pulling when Help Dev is on (nothing else reads it) and a server is
+     * known.
+     */
+    internal fun shouldCaptureFinalSnapshot(helpDev: Boolean, baseUrl: String?): Boolean =
+        helpDev && !baseUrl.isNullOrBlank()
 
     fun connect(url: String) {
         if (_connected.value || _connecting.value) return
@@ -211,6 +225,12 @@ class STTManager {
         _reconnecting.value = false
         dbCaptureJob?.cancel()
         dbCaptureJob = null
+        val baseUrl = captureBaseUrl
+        if (shouldCaptureFinalSnapshot(helpDevModeEnabled, baseUrl)) {
+            // Deliberately NOT on dbCaptureJob — that one was just cancelled. Best-effort: a server
+            // that has already gone away simply leaves the last periodic snapshot in place.
+            scope.launch(Dispatchers.IO) { runCatching { captureDbSnapshot(baseUrl!!) } }
+        }
     }
 
     private fun handleTranscriptionUpdate(data: JSONObject) {
@@ -362,6 +382,7 @@ class STTManager {
      * [helpDevModeEnabled] so ordinary users never pay the periodic download cost.
      */
     private fun startDbCapture(baseUrl: String) {
+        captureBaseUrl = baseUrl
         dbCaptureJob?.cancel()
         dbCaptureJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
