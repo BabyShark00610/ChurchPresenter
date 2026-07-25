@@ -3,6 +3,8 @@
 package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -13,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import kotlinx.serialization.json.Json
+import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BackgroundSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -72,16 +75,54 @@ class BackgroundSettingsTabTest {
         onNodeWithTag("bg_defaultColor").assertDoesNotExist()
     }
 
+    /**
+     * The video row is driven from a stored type rather than from a click: where VLC is absent the
+     * Video menu item is disabled and cannot be picked, but the row it governs still renders — so
+     * this holds on a machine with VLC and on one without. Picking it is covered separately, below.
+     */
     @Test
-    fun `choosing the video background type reveals the video picker`() = backgroundTab { get ->
-        chooseBackgroundType(TypeDropdown.DEFAULT, TypeLabel.VIDEO)
-        assertEquals(
-            Constants.BACKGROUND_VIDEO,
-            get().backgroundSettings.defaultBackgroundType,
-            "picking Video Loop must be stored",
-        )
-        onNodeWithText("Background Video:").assertExists("the video row must appear")
-        onNodeWithText("No video selected").assertExists("with an empty picker")
+    fun `the video background type shows the video picker`() {
+        backgroundTab(initial = settingsWith { copy(defaultBackgroundType = Constants.BACKGROUND_VIDEO) }) { _ ->
+            typeDropdowns()[TypeDropdown.DEFAULT].assertTextEquals(TypeLabel.VIDEO)
+            onNodeWithText("Background Video:").assertExists("the video row must appear")
+            onNodeWithText("No video selected").assertExists("with an empty picker")
+            onNodeWithTag("bg_defaultColor").assertDoesNotExist()
+        }
+    }
+
+    /**
+     * Video is the one type the tab can refuse: it needs VLC, and without it the option is still
+     * listed — labelled "(Install VLC)" — but disabled, and clicking it must store nothing.
+     */
+    @Test
+    fun `the video option is offered and is pickable only where VLC is installed`() = backgroundTab { get ->
+        typeDropdowns()[TypeDropdown.DEFAULT].scrollThenClick()
+        waitForIdle()
+
+        val option = onNodeWithText(videoMenuLabel)
+        option.assertExists("Video Loop must be offered whether or not VLC is installed")
+        if (isVlcAvailable) {
+            option.assertIsEnabled()
+            option.performClick()
+            waitForIdle()
+            assertEquals(
+                Constants.BACKGROUND_VIDEO,
+                get().backgroundSettings.defaultBackgroundType,
+                "picking Video Loop must be stored",
+            )
+            typeDropdowns()[TypeDropdown.DEFAULT].assertTextEquals(TypeLabel.VIDEO)
+            onNodeWithText("Background Video:").assertExists("and must reveal the video row")
+        } else {
+            option.assertIsNotEnabled()
+            option.performClick()
+            waitForIdle()
+            assertEquals(
+                Constants.BACKGROUND_COLOR,
+                get().backgroundSettings.defaultBackgroundType,
+                "a disabled Video option must leave the stored type alone",
+            )
+            onNodeWithText("Background Video:").assertDoesNotExist()
+        }
     }
 
     @Test

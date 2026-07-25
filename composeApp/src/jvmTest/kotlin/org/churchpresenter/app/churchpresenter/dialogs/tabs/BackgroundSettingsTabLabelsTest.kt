@@ -170,7 +170,10 @@ class BackgroundSettingsTabLabelsTest {
                 for (option in TypeLabel.all) {
                     val expected = if (option in options) 1 else 0
                     val onScreenAlready = if (option == TypeLabel.COLOR) TypeDropdown.COUNT else 0
-                    onAllNodesWithText(option).assertCountEquals(expected + onScreenAlready)
+                    // Video is the one item whose menu text depends on the machine: without VLC the
+                    // tab appends "(Install VLC)" to it. It is still offered, under that label.
+                    val menuText = if (option == TypeLabel.VIDEO) videoMenuLabel else option
+                    onAllNodesWithText(menuText).assertCountEquals(expected + onScreenAlready)
                 }
             }
         }
