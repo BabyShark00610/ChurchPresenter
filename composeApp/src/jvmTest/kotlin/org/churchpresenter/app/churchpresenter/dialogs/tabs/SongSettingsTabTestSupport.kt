@@ -186,10 +186,6 @@ internal fun ComposeUiTest.numberFields(): SemanticsNodeInteractionCollection =
 internal fun ComposeUiTest.fontFields(): SemanticsNodeInteractionCollection =
     onAllNodes(hasSetTextAction() and hasImeAction(ImeAction.Done))
 
-/** Every `ColorPickerField` on the tab — each displays its stored value as a `#RRGGBB` string. */
-internal fun ComposeUiTest.colorFields(): SemanticsNodeInteractionCollection =
-    onAllNodes(hasClickAction() and hasText("#", substring = true))
-
 /** Every None / First Page / Every Page dropdown on the tab. */
 internal fun ComposeUiTest.showDropdowns(): SemanticsNodeInteractionCollection =
     onAllNodes(hasClickAction() and (hasText("None") or hasText("First Page") or hasText("Every Page")))
@@ -275,13 +271,6 @@ internal fun ComposeUiTest.assertFontFieldShows(family: String, what: String) {
         .assertExists("$what must display $family")
 }
 
-/** Asserts some colour field on the tab is displaying [hex], whatever case it was stored in. */
-internal fun ComposeUiTest.assertColorFieldShows(hex: String, what: String) {
-    onAllNodes(hasClickAction() and hasText(hex, ignoreCase = true))
-        .onFirstNode("$what must display $hex")
-        .assertExists("$what must display $hex")
-}
-
 /** Asserts some number field on the tab is displaying [value]. */
 internal fun ComposeUiTest.assertNumberFieldShows(value: Int, what: String) {
     onAllNodes(hasSetTextAction() and hasImeAction(ImeAction.Default) and hasText(value.toString()))
@@ -315,38 +304,6 @@ internal fun ComposeUiTest.pickFontFilterOnly(showing: String, filter: String) {
         .onFirstNode("no font dropdown is showing $showing")
         .performTextReplacement(filter)
     waitForIdle()
-}
-
-/** Opens the colour field currently displaying [showingHex] and returns with its dialog up. */
-internal fun ComposeUiTest.openColorField(showingHex: String) {
-    onAllNodes(hasClickAction() and hasText(showingHex))
-        .onFirstNode("no colour field is showing $showingHex")
-        .performScrollTo()
-        .performClick()
-    waitForIdle()
-}
-
-/** In an open colour dialog: types [hex] and confirms. The hex box is the only editable "#" field. */
-internal fun ComposeUiTest.confirmColorDialogWith(hex: String) {
-    onAllNodes(hasSetTextAction() and hasText("#", substring = true))
-        .onFirstNode("the colour dialog must offer a hex field")
-        .performTextReplacement(hex)
-    waitForIdle()
-    onNodeWithText("OK").performClick()
-    waitForIdle()
-}
-
-/** Opens the colour field showing [fromHex], types [toHex] and confirms — the whole round trip. */
-internal fun ComposeUiTest.recolor(fromHex: String, toHex: String) {
-    fun showingOldColour() = onAllNodes(hasClickAction() and hasText(fromHex, ignoreCase = true))
-        .fetchSemanticsNodes(atLeastOneRootRequired = false).size
-    val before = showingOldColour()
-    openColorField(fromHex)
-    confirmColorDialogWith(toHex)
-    assertColorFieldShows(toHex, "the colour field just edited")
-    // Counted rather than asserted absent: several blocks share a default colour, and only the one
-    // that was edited should have stopped showing it.
-    assertEquals(before - 1, showingOldColour(), "one fewer field must show $fromHex after the edit")
 }
 
 /**
