@@ -130,7 +130,19 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Utils
+import org.churchpresenter.app.churchpresenter.utils.DroppedFileAction
+import org.churchpresenter.app.churchpresenter.utils.IMAGE_EXTENSIONS
+import org.churchpresenter.app.churchpresenter.utils.classifyDroppedFile
+import org.churchpresenter.app.churchpresenter.utils.scheduleCanZoomIn
+import org.churchpresenter.app.churchpresenter.utils.scheduleCanZoomOut
+import org.churchpresenter.app.churchpresenter.utils.scheduleShowCardActions
+import org.churchpresenter.app.churchpresenter.utils.scheduleSingleLineCards
+import org.churchpresenter.app.churchpresenter.utils.scheduleZoomIn
+import org.churchpresenter.app.churchpresenter.utils.scheduleZoomOut
 import org.churchpresenter.app.churchpresenter.viewmodel.ScheduleViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.announcementTimerSubtext
+import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemDetailText
+import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemGlyph
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import java.awt.datatransfer.DataFlavor
@@ -176,25 +188,14 @@ data class ScheduleTabActions(
     val addDictionary: (number: String, word: String, transliteration: String, definition: String) -> Unit = { _, _, _, _ -> }
 )
 
-/**
- * Card zoom rungs, as a percentage of the normal card size. The two rungs just below 100 exist
- * to strip the card down before it starts shrinking: 99 drops the action buttons, 98 collapses
- * the card to a single line (see [ZOOM_HIDE_ACTIONS_BELOW] / [ZOOM_SINGLE_LINE_AT_OR_BELOW]).
- */
-private val ZOOM_LEVELS = listOf(70, 80, 90, 98, 99, 100, 110, 120, 130, 140, 150)
+/** The card zoom percentage a schedule opens at; the rung ladder itself lives in ScheduleZoom.kt. */
 private const val ZOOM_DEFAULT = 100
-private const val ZOOM_HIDE_ACTIONS_BELOW = 100
-private const val ZOOM_SINGLE_LINE_AT_OR_BELOW = 98
 
 /** How far the pointer must travel on a card's icon before it becomes a reorder drag. */
 private val DRAG_HANDLE_THRESHOLD = 4.dp
 
 /** Height of the drop-here-to-remove zone at the bottom of the list, shown while dragging. */
 private val DELETE_ZONE_HEIGHT = 56.dp
-
-/** The rung nearest [percent], so a value persisted before the ladder existed still resolves. */
-private fun nearestZoomIndex(percent: Int): Int =
-    ZOOM_LEVELS.indices.minBy { abs(ZOOM_LEVELS[it] - percent) }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -420,21 +421,20 @@ fun ScheduleTab(
                 modifier = Modifier.padding(end = 6.dp)
             )
             // Card zoom controls (own Row so FlowRow wraps them as one group)
-            val zoomIndex = nearestZoomIndex(itemZoomPercent)
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_zoom_out),
                     text = stringResource(Res.string.tooltip_schedule_zoom_out),
-                    onClick = { onItemZoomChange(ZOOM_LEVELS[zoomIndex - 1]) },
-                    enabled = zoomIndex > 0,
+                    onClick = { onItemZoomChange(scheduleZoomOut(itemZoomPercent)) },
+                    enabled = scheduleCanZoomOut(itemZoomPercent),
                     buttonSize = 32.dp,
                     iconTint = MaterialTheme.colorScheme.onSurface
                 )
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_zoom_in),
                     text = stringResource(Res.string.tooltip_schedule_zoom_in),
-                    onClick = { onItemZoomChange(ZOOM_LEVELS[zoomIndex + 1]) },
-                    enabled = zoomIndex < ZOOM_LEVELS.lastIndex,
+                    onClick = { onItemZoomChange(scheduleZoomIn(itemZoomPercent)) },
+                    enabled = scheduleCanZoomIn(itemZoomPercent),
                     buttonSize = 32.dp,
                     iconTint = MaterialTheme.colorScheme.onSurface
                 )
@@ -464,8 +464,8 @@ fun ScheduleTab(
             val zoomedDensity = remember(baseDensity, itemZoomPercent) {
                 Density(baseDensity.density * itemZoomPercent / 100f, baseDensity.fontScale)
             }
-            val showCardActions = itemZoomPercent >= ZOOM_HIDE_ACTIONS_BELOW
-            val singleLineCards = itemZoomPercent <= ZOOM_SINGLE_LINE_AT_OR_BELOW
+            val showCardActions = scheduleShowCardActions(itemZoomPercent)
+            val singleLineCards = scheduleSingleLineCards(itemZoomPercent)
 
             // Reorder gesture, shared by the whole-card shift+drag and the per-card icon handle.
             // The handle path arms only after real movement so a plain click still selects the card.
@@ -724,19 +724,7 @@ fun ScheduleTab(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = when (item) {
-                                is ScheduleItem.SongItem -> "♪"
-                                is ScheduleItem.BibleVerseItem -> "✝"
-                                is ScheduleItem.LabelItem -> "🏷"
-                                is ScheduleItem.PictureItem -> "📷"
-                                is ScheduleItem.PresentationItem -> "📊"
-                                is ScheduleItem.MediaItem -> "🎬"
-                                is ScheduleItem.LowerThirdItem -> "▼"
-                                is ScheduleItem.AnnouncementItem -> "📢"
-                                is ScheduleItem.WebsiteItem -> "🌐"
-                                is ScheduleItem.SceneItem -> "🎬"
-                                is ScheduleItem.DictionaryItem -> "📖"
-                            },
+                            text = scheduleItemGlyph(item),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.width(24.dp)
@@ -815,11 +803,6 @@ fun ScheduleTab(
     }
 }
 
-private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "bmp", "webp")
-private val VIDEO_EXTENSIONS = setOf("mp4", "avi", "mov", "mkv", "webm")
-private val AUDIO_EXTENSIONS = setOf("mp3", "wav", "flac")
-private val PRESENTATION_EXTENSIONS = setOf("ppt", "pptx", "key", "pdf")
-
 private fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel) {
     for (file in files) {
         if (file.isDirectory) {
@@ -834,14 +817,12 @@ private fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel) 
         }
 
         val ext = file.extension.lowercase()
-        when {
-            ext in PRESENTATION_EXTENSIONS -> {
+        when (classifyDroppedFile(ext)) {
+            DroppedFileAction.PRESENTATION ->
                 viewModel.addPresentation(file.absolutePath, file.nameWithoutExtension, 0, ext)
-            }
-            ext in VIDEO_EXTENSIONS || ext in AUDIO_EXTENSIONS -> {
+            DroppedFileAction.MEDIA ->
                 viewModel.addMedia(file.absolutePath, file.nameWithoutExtension, "local")
-            }
-            ext in IMAGE_EXTENSIONS -> {
+            DroppedFileAction.PICTURE -> {
                 // Single image dropped — add parent folder as picture source
                 val parentFolder = file.parentFile
                 val imageCount = parentFolder?.listFiles()?.count { child ->
@@ -853,9 +834,9 @@ private fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel) 
                     imageCount
                 )
             }
-            ext == "json" -> {
+            DroppedFileAction.LOWER_THIRD ->
                 viewModel.addLowerThird(file.nameWithoutExtension, file.nameWithoutExtension, false, 0L)
-            }
+            DroppedFileAction.NONE -> {}
         }
     }
 }
@@ -946,19 +927,7 @@ private fun ScheduleItemRow(
                     modifier = Modifier.width(4.dp).height(16.dp)
                 )
                 Text(
-                    text = when (item) {
-                        is ScheduleItem.SongItem -> "♪"
-                        is ScheduleItem.BibleVerseItem -> "✝"
-                        is ScheduleItem.LabelItem -> "🏷"
-                        is ScheduleItem.PictureItem -> "📷"
-                        is ScheduleItem.PresentationItem -> "📊"
-                        is ScheduleItem.MediaItem -> "🎬"
-                        is ScheduleItem.LowerThirdItem -> "▼"
-                        is ScheduleItem.AnnouncementItem -> "📢"
-                        is ScheduleItem.WebsiteItem -> "🌐"
-                        is ScheduleItem.SceneItem -> "🎬"
-                        is ScheduleItem.DictionaryItem -> "📖"
-                    },
+                    text = scheduleItemGlyph(item),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.width(24.dp)
@@ -1029,28 +998,28 @@ private fun ScheduleItemRow(
                     is ScheduleItem.SongItem -> {} // already handled above
                     is ScheduleItem.BibleVerseItem -> Text(
                         maxLines = 1,
-                        text = item.verseText.take(100) + if (item.verseText.length > 100) "..." else "",
+                        text = scheduleItemDetailText(item).orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                     is ScheduleItem.PictureItem -> Text(
                         maxLines = 1,
-                        text = item.folderPath,
+                        text = scheduleItemDetailText(item).orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                     is ScheduleItem.PresentationItem -> Text(
                         maxLines = 1,
-                        text = "${item.fileType.uppercase()} - ${item.filePath}",
+                        text = scheduleItemDetailText(item).orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                     is ScheduleItem.MediaItem -> Text(
                         maxLines = 1,
-                        text = "${item.mediaType.uppercase()} - ${item.mediaUrl}",
+                        text = scheduleItemDetailText(item).orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
@@ -1066,11 +1035,7 @@ private fun ScheduleItemRow(
                     is ScheduleItem.AnnouncementItem -> {
                         // Duration (count-up) and the live Clock have no fixed h:m:s to preview here —
                         // their live value only exists once the item is triggered, so show nothing.
-                        val timerSubtext = when (item.timerMode) {
-                            "clock" -> "%02d:%02d:%02d".format(item.targetHour, item.targetMinute, item.targetSecond)
-                            "count_up", "clock_display" -> null
-                            else -> "%02d:%02d".format(item.timerMinutes, item.timerSeconds)
-                        }
+                        val timerSubtext = announcementTimerSubtext(item)
                         if (item.isTimer && timerSubtext != null) {
                             Text(
                                 maxLines = 1,
