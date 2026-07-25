@@ -132,7 +132,9 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.utils.DroppedFileAction
 import org.churchpresenter.app.churchpresenter.utils.IMAGE_EXTENSIONS
+import org.churchpresenter.app.churchpresenter.utils.DragItemGeometry
 import org.churchpresenter.app.churchpresenter.utils.classifyDroppedFile
+import org.churchpresenter.app.churchpresenter.utils.dragDropTarget
 import org.churchpresenter.app.churchpresenter.utils.scheduleCanZoomIn
 import org.churchpresenter.app.churchpresenter.utils.scheduleCanZoomOut
 import org.churchpresenter.app.churchpresenter.utils.scheduleShowCardActions
@@ -540,15 +542,17 @@ fun ScheduleTab(
                                     }
                                     dragCursorY += deltaY
                                     // Over the delete zone the card is being removed, not reordered
-                                    isOverDeleteZone = listHeightPx > 0 &&
-                                        dragCursorY >= listHeightPx - deleteZonePx
-                                    if (!isOverDeleteZone) {
-                                        val target = listState.layoutInfo.visibleItemsInfo
-                                            .firstOrNull { info ->
-                                                dragCursorY >= info.offset &&
-                                                dragCursorY <= info.offset + info.size
-                                            }
-                                        if (target != null) dropTargetIndex = target.index
+                                    val hit = dragDropTarget(
+                                        cursorY = dragCursorY,
+                                        listHeightPx = listHeightPx,
+                                        deleteZonePx = deleteZonePx,
+                                        visibleItems = listState.layoutInfo.visibleItemsInfo.map {
+                                            DragItemGeometry(it.index, it.offset, it.size)
+                                        },
+                                    )
+                                    isOverDeleteZone = hit.overDeleteZone
+                                    if (!hit.overDeleteZone) {
+                                        hit.targetIndex?.let { dropTargetIndex = it }
                                     }
                                 }
                             }
