@@ -8,6 +8,8 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onNodeWithText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -160,6 +162,88 @@ class DictionarySettingsTabWordTest {
             pickFont(showing = SENTINEL_FONT, to = target)
             assertEquals(target, get().dictionarySettings.wordFontType, "the picked family must be stored")
             assertEquals("Arial", get().dictionarySettings.referenceFontType, "the reference font must be untouched")
+        }
+    }
+
+    /**
+     * The dropdown's arrow — a 14dp `Icon` with a bare `clickable`, no role and no content
+     * description, so it is reachable only by position. It is the affordance a mouse user actually
+     * uses; [pickFont] takes the other route, typing a filter and committing on the IME action.
+     *
+     * Both what it opens and what picking from it stores are asserted, because the menu item's
+     * `onClick` is a separate path from the keyboard commit and writes the setting itself.
+     */
+    @Test
+    fun `the font dropdown arrow opens the menu and a picked font is stored`() {
+        val installed = mixedCaseInstalledFont()
+        // The field is parked on the lowercased spelling: the filter is case-insensitive, so the
+        // menu offers the properly-cased family, which is a value the field does not already show.
+        val settings = dictionarySettings {
+            copy(wordFontType = installed.lowercase(), referenceFontType = SENTINEL_FONT)
+        }
+        dictionaryTab(initial = settings) { get ->
+            onAllNodesWithText(installed).assertCountEquals(0)
+
+            fontDropdownArrow(group = 0).performScrollTo().performClick()
+            waitForIdle()
+            onAllNodesWithText(installed).assertCountEquals(1) // the menu is open and lists the family
+
+            onAllNodesWithText(installed)[0].performClick()
+            waitForIdle()
+            assertEquals(installed, get().dictionarySettings.wordFontType, "picking from the menu must be stored")
+            assertFontFieldShows(installed, "the word font dropdown")
+            assertEquals(
+                SENTINEL_FONT,
+                get().dictionarySettings.referenceFontType,
+                "the reference font must be untouched",
+            )
+        }
+    }
+
+    /**
+     * Clicking the arrow a second time does **not** close the menu — it stays open.
+     *
+     * The arrow's handler is a toggle (`if (expanded) expanded = false else { requestFocus(); expanded
+     * = true }`), but it never sees `expanded == true`: the click pulls focus off the editor first,
+     * and the editor's `onFocusChanged` has already set `expanded = false` by the time the handler
+     * runs, so it takes the opening branch again. The close branch is therefore unreachable from the
+     * arrow.
+     *
+     * Pinned as the behaviour that actually ships rather than the behaviour the code reads like. It
+     * is in the shared `FontSettingsDropdown`, so it affects every font dropdown in the app, not just
+     * this tab; fixing it will fail this test, which is the point.
+     */
+    @Test
+    fun `clicking the arrow again leaves the menu open`() {
+        val installed = mixedCaseInstalledFont()
+        val parked = installed.lowercase()
+        val settings = dictionarySettings {
+            copy(wordFontType = parked, referenceFontType = SENTINEL_FONT)
+        }
+        dictionaryTab(initial = settings) { get ->
+            fontDropdownArrow(group = 0).performScrollTo().performClick()
+            waitForIdle()
+            onAllNodesWithText(installed).assertCountEquals(1)
+
+            fontDropdownArrow(group = 0).performClick()
+            waitForIdle()
+            onAllNodesWithText(installed).assertCountEquals(1) // still listed: the menu did not close
+            assertEquals(parked, get().dictionarySettings.wordFontType, "and nothing was stored either way")
+        }
+    }
+
+    /**
+     * Typing a filter no family matches leaves the menu with only its "no results" item, which is
+     * disabled — the branch that keeps the dropdown from committing nonsense.
+     */
+    @Test
+    fun `a filter matching no family offers a disabled no-results item`() {
+        dictionaryTab { get ->
+            pickFontFilterOnly(showing = "Arial", filter = SENTINEL_FONT)
+            onNodeWithText("No results found for \"$SENTINEL_FONT\"")
+                .assertExists("the menu must say why it is empty")
+                .assertIsNotEnabled()
+            assertEquals("Arial", get().dictionarySettings.wordFontType, "an unmatched filter stores nothing")
         }
     }
 

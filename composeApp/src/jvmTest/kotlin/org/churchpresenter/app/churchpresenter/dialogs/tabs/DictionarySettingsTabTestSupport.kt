@@ -18,12 +18,14 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.data.settings.DictionarySettings
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -118,6 +120,26 @@ internal fun ComposeUiTest.switches(): SemanticsNodeInteractionCollection =
     onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
 
 internal fun ComposeUiTest.switch(ordinal: Int): SemanticsNodeInteraction = switches()[ordinal]
+
+/**
+ * The expand arrow of the [group]-th `FontSettingsDropdown`.
+ *
+ * `FontSettingsDropdown` draws it as a 14dp `Icon` with a bare `Modifier.clickable` — no role, no
+ * text and `contentDescription = null` — so there is nothing to match on but the shape of the node
+ * itself: clickable, focusable, and carrying none of the three labels. That makes it the only
+ * control on the tab with no accessible name, which is a defect in the shared composable rather than
+ * here; it is addressed this way rather than left untested because it is the affordance a mouse user
+ * reaches for, and it opens a menu whose items write the setting by a different path than the
+ * keyboard commit.
+ */
+internal fun ComposeUiTest.fontDropdownArrow(group: Int): SemanticsNodeInteraction =
+    onAllNodes(
+        hasClickAction() and
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.Text) and
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.EditableText) and
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription) and
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.Role),
+    )[group]
 
 // ── Sliders ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -226,3 +248,13 @@ internal fun ComposeUiTest.assertDurationReads(stored: Float) {
         "the duration readout must follow the stored value",
     )
 }
+
+/**
+ * An installed font family whose name is not already all-lowercase.
+ *
+ * `FontSettingsDropdown` seeds its filter with the value it is currently showing and matches
+ * `ignoreCase = true`, so parking a field on the lowercased spelling makes the menu offer the
+ * properly-cased family — a value the field does not already hold, on any machine's font list.
+ */
+internal fun mixedCaseInstalledFont(): String =
+    Utils.getAvailableSystemFonts().first { it != it.lowercase() }
