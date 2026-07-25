@@ -105,7 +105,14 @@ object TrainingDataLogger {
 
     /**
      * Call when a Bible verse actually goes live on the output screen.
-     * [book] is the canonical 1-based book number (1=Genesis … 66=Revelation).
+     * [book]/[chapter]/[verseStart]/[verseEnd] are **canonical** (Hebrew, `BXXXCXXXVXXX`)
+     * numbering — 1=Genesis … 66=Revelation — the same space the engine's detection log uses, so
+     * the two are directly comparable. That matters beyond book order: a Synodal module follows the
+     * LXX, where the Psalm a Russian congregation sees as 23 is canonical 24, so logging the
+     * displayed number would score every Psalm as a miss. Map with
+     * [org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel.canonicalRefForDisplay].
+     * [displayChapter]/[displayVerseStart]/[displayVerseEnd] are what the operator actually saw on
+     * screen, in the primary Bible's own numbering — kept alongside so a log stays readable by hand.
      * [source] is "manual" (operator button/double-click/Enter), "auto" (auto-follow drove the
      * go-live from an engine detection), or "remote" (companion API).
      * [autoFollow] is whether auto-follow was ENABLED at the time — distinct from [source], so a
@@ -124,6 +131,9 @@ object TrainingDataLogger {
         segmentId: String? = null,
         autoFollow: Boolean = false,
         matchType: String? = null,
+        displayChapter: Int? = null,
+        displayVerseStart: Int? = null,
+        displayVerseEnd: Int? = null,
     ) {
         cleanupOldLogsOnce()
         val p = liveRefPath()
@@ -137,6 +147,13 @@ object TrainingDataLogger {
                 else append(",\"verseStart\":null")
                 if (verseEnd != null) append(",\"verseEnd\":").append(verseEnd)
                 else append(",\"verseEnd\":null")
+                // What was on screen, in the primary Bible's own numbering (null when unmapped).
+                if (displayChapter != null) append(",\"displayChapter\":").append(displayChapter)
+                else append(",\"displayChapter\":null")
+                if (displayVerseStart != null) append(",\"displayVerseStart\":").append(displayVerseStart)
+                else append(",\"displayVerseStart\":null")
+                if (displayVerseEnd != null) append(",\"displayVerseEnd\":").append(displayVerseEnd)
+                else append(",\"displayVerseEnd\":null")
                 // Stable per-service session id — exact join key to the STT db + engine detection-log.
                 if (sessionId != null) append(",\"sessionId\":\"").append(esc(sessionId!!)).append("\"")
                 else append(",\"sessionId\":null")
@@ -157,7 +174,9 @@ object TrainingDataLogger {
 
     /**
      * Call when the operator acts on a suggestion chip shown by the detection engine.
-     * [suggestedBook] is the canonical 1-based book number.
+     * [suggestedBook]/[suggestedChapter]/[suggestedVerse] are canonical numbering, exactly as in
+     * [logLiveReference] — never the chip's display position or the primary Bible's own chapter
+     * number. [displayChapter]/[displayVerse] carry what the chip showed, for readability.
      * [action] is "accepted" (chip clicked), "dismissed" (operator clear), "corrected" (a different
      * verse went live, overriding this suggestion — [correctedRef] holds what was actually shown),
      * "ignored" (the chip scrolled off the list without ever being clicked), or "expired" (the
@@ -173,6 +192,8 @@ object TrainingDataLogger {
         action: String,
         correctedRef: String? = null,
         matchType: String? = null,
+        displayChapter: Int? = null,
+        displayVerse: Int? = null,
     ) {
         cleanupOldLogsOnce()
         val p = outcomePath()
@@ -186,6 +207,10 @@ object TrainingDataLogger {
                 append(",\"suggestedChapter\":").append(suggestedChapter)
                 if (suggestedVerse != null) append(",\"suggestedVerse\":").append(suggestedVerse)
                 else append(",\"suggestedVerse\":null")
+                if (displayChapter != null) append(",\"displayChapter\":").append(displayChapter)
+                else append(",\"displayChapter\":null")
+                if (displayVerse != null) append(",\"displayVerse\":").append(displayVerse)
+                else append(",\"displayVerse\":null")
                 append(",\"action\":\"").append(action).append("\"")
                 if (correctedRef != null) append(",\"correctedRef\":\"").append(correctedRef).append("\"")
                 if (matchType != null) append(",\"matchType\":\"").append(esc(matchType)).append("\"")
@@ -203,9 +228,11 @@ object TrainingDataLogger {
      * (the engine landed on the right book/chapter but the wrong verse, before the sentence
      * finished — a `Stabilizer`/debounce signal, distinct from a parsing bug), or "missed_passage"
      * (the engine detected nothing while a reference was actually being read/cited).
-     * [book]/[chapter]/[verseStart]/[verseEnd] are the flagged reference's canonical numbers —
-     * null for "missed_passage", since there is no detection to anchor to; triage cross-references
-     * the STT db by [ts_ms]/[segmentId] instead, the same way an FN is already found today.
+     * [book]/[chapter]/[verseStart]/[verseEnd] are the flagged reference's canonical numbers (see
+     * [logLiveReference] — the same mapping applies, so a flagged Psalm names the verse the engine
+     * would) — null for "missed_passage", since there is no detection to anchor to; triage
+     * cross-references the STT db by [ts_ms]/[segmentId] instead, the same way an FN is found today.
+     * [displayChapter]/[displayVerseStart]/[displayVerseEnd] are what was on screen when flagged.
      * [matchType] is the flagged detection's engine match type when known (see [logLiveReference]).
      */
     fun logOperatorFlag(
@@ -216,6 +243,9 @@ object TrainingDataLogger {
         verseEnd: Int? = null,
         segmentId: String? = null,
         matchType: String? = null,
+        displayChapter: Int? = null,
+        displayVerseStart: Int? = null,
+        displayVerseEnd: Int? = null,
     ) {
         cleanupOldLogsOnce()
         val p = flagPath()
@@ -230,6 +260,12 @@ object TrainingDataLogger {
                 if (chapter != null) append(",\"chapter\":").append(chapter) else append(",\"chapter\":null")
                 if (verseStart != null) append(",\"verseStart\":").append(verseStart) else append(",\"verseStart\":null")
                 if (verseEnd != null) append(",\"verseEnd\":").append(verseEnd) else append(",\"verseEnd\":null")
+                if (displayChapter != null) append(",\"displayChapter\":").append(displayChapter)
+                else append(",\"displayChapter\":null")
+                if (displayVerseStart != null) append(",\"displayVerseStart\":").append(displayVerseStart)
+                else append(",\"displayVerseStart\":null")
+                if (displayVerseEnd != null) append(",\"displayVerseEnd\":").append(displayVerseEnd)
+                else append(",\"displayVerseEnd\":null")
                 if (segmentId != null) append(",\"segmentId\":\"").append(esc(segmentId)).append("\"")
                 else append(",\"segmentId\":null")
                 if (matchType != null) append(",\"matchType\":\"").append(esc(matchType)).append("\"")

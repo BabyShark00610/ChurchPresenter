@@ -19,9 +19,10 @@ import kotlin.test.assertTrue
  *
  * The rule under test is the **tiering**. `explicit` (the reference was spoken outright) and
  * `continuation` (simply the next verse of the passage being read) go live immediately — that is
- * the ordinary case while following a reading. `chapter-scan`, `chapter-history` and `reverse` are
- * inferred from the text with no reference actually spoken, so they only *stage* the passage in
- * the browse view; a wrong guess must never overwrite what is on screen.
+ * the ordinary case while following a reading. `chapter-scan` joined them on 2026-07-24 — it matches
+ * against the chapter the speaker already announced, and proved the most precise tier on real
+ * services. `reverse` searches the whole Bible with no announced context, so it only *stages* the
+ * passage in the browse view; a wrong guess must never overwrite what is on screen.
  *
  * `autoFollowLiveToken` is the signal that something was pushed live, so these tests distinguish
  * "went live" from "was merely selected" by watching it.
@@ -214,6 +215,19 @@ class BibleViewModelAutoFollowTest {
     }
 
     @Test
+    fun `a chapter-scan match goes live immediately`() {
+        // Promoted 2026-07-24: it scores spoken words against the chapter the speaker already
+        // announced, so it carries announced context — and across eight replayed services it was the
+        // most precise tier (12 of 13 correct) while being the least clicked when merely staged.
+        val token = vm.autoFollowLiveToken.value
+        detect("chapter-scan")
+        assertTrue(
+            settlesTo { vm.autoFollowLiveToken.value > token },
+            "chapter-scan resolves within an announced chapter — it should reach the screen",
+        )
+    }
+
+    @Test
     fun `an instant go-live carries the match type for the training log`() {
         detect("explicit")
         awaitUntil("go-live") { vm.autoFollowLiveMatchType.value != null }
@@ -224,7 +238,7 @@ class BibleViewModelAutoFollowTest {
 
     @Test
     fun `an inferred match is staged, never pushed live`() {
-        for (matchType in listOf("chapter-scan", "chapter-history", "reverse")) {
+        for (matchType in listOf("reverse")) {
             val model = newViewModel(autoFollow = true)
             val token = model.autoFollowLiveToken.value
             val navToken = model.verseSelectionToken.value
