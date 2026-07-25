@@ -120,6 +120,7 @@ import churchpresenter.composeapp.generated.resources.tooltip_open_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_remove
 import churchpresenter.composeapp.generated.resources.tooltip_remove_from_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_save_schedule
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
 import org.churchpresenter.app.churchpresenter.data.settings.PlanningCenterSettings
@@ -142,7 +143,6 @@ import org.churchpresenter.app.churchpresenter.viewmodel.ScheduleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.announcementTimerSubtext
 import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemDetailText
 import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemGlyph
-import kotlin.math.abs
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import java.awt.datatransfer.DataFlavor
@@ -196,7 +196,6 @@ private val DRAG_HANDLE_THRESHOLD = 4.dp
 
 /** Height of the drop-here-to-remove zone at the bottom of the list, shown while dragging. */
 private val DELETE_ZONE_HEIGHT = 56.dp
-
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

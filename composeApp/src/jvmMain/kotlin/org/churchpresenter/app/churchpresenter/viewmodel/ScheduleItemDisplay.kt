@@ -25,9 +25,11 @@ internal fun scheduleItemGlyph(item: ScheduleItem): String = when (item) {
 }
 
 /**
- * The grey secondary line under a schedule row, or null for types that show none (or whose detail is
- * rendered with a string resource in the View, e.g. lower-third pause duration). A long Bible verse
- * is truncated to 100 chars with an ellipsis.
+ * The grey secondary line for the four schedule item types whose detail is a plain formatted string —
+ * Bible verse (truncated to 100 chars with an ellipsis), picture folder, and the `TYPE - path` line
+ * for presentations and media. Returns null for every other type: some show no detail, and others
+ * (e.g. the lower-third pause duration) render theirs with a string resource in the View, so those
+ * branches stay in `ScheduleItemRow` rather than routing through here.
  */
 internal fun scheduleItemDetailText(item: ScheduleItem): String? = when (item) {
     is ScheduleItem.BibleVerseItem ->
