@@ -89,12 +89,19 @@ class SongSettingsTabLookAheadTest {
             get().songSettings.lookAheadLanguageDisplay,
             "picking Secondary must be stored",
         )
+        segmentedButton("Secondary", ModeRow.LOOK_AHEAD).assertIsSelected()
+        segmentedButton("Primary", ModeRow.LOOK_AHEAD).assertIsNotSelected()
     }
 
     @Test
     fun `the look-ahead alignment buttons store left centre and right`() = songTab { get ->
         val group = HAlignGroup.LOOK_AHEAD
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.CENTER),
+            staysUnselected = horizontalAlignButton(group, HAlign.RIGHT),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.lookAheadHorizontalAlignment, "left must be stored")
 
@@ -341,7 +348,12 @@ class SongSettingsTabLookAheadTest {
     @Test
     fun `the lower-third look-ahead alignment buttons store left and right`() = songTab { get ->
         val group = HAlignGroup.LT_LOOK_AHEAD
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.CENTER),
+            staysUnselected = horizontalAlignButton(group, HAlign.RIGHT),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.lowerThirdLookAheadHorizontalAlignment, "left must be stored")
         assertEquals(

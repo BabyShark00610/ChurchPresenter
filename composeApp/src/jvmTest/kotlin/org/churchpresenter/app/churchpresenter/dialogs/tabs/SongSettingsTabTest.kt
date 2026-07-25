@@ -104,6 +104,8 @@ class SongSettingsTabTest {
         chooseShowOption(ShowDropdown.NUMBER_LOWER_THIRD, "Every Page")
         assertEquals(Constants.EVERY_PAGE, get().songSettings.showNumberLowerThird, "the lower-third choice is separate")
         assertEquals(Constants.FIRST_PAGE, get().songSettings.showNumber, "the fullscreen choice must be untouched")
+        showDropdowns()[ShowDropdown.NUMBER_LOWER_THIRD].assertTextContains("Every Page")
+        showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("First Page")
     }
 
     @Test
@@ -132,7 +134,12 @@ class SongSettingsTabTest {
     @Test
     fun `the song-number fullscreen alignment buttons store left centre and right`() = songTab { get ->
         val group = HAlignGroup.SONG_NUMBER_FULLSCREEN
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.RIGHT),
+            staysUnselected = horizontalAlignButton(group, HAlign.CENTER),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.songNumberHorizontalAlignment, "left must be stored")
 
@@ -148,7 +155,12 @@ class SongSettingsTabTest {
     @Test
     fun `the song-number lower-third alignment buttons store left centre and right`() = songTab { get ->
         val group = HAlignGroup.SONG_NUMBER_LOWER_THIRD
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.RIGHT),
+            staysUnselected = horizontalAlignButton(group, HAlign.CENTER),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.songNumberLowerThirdHorizontalAlignment, "left must be stored")
         assertEquals(
@@ -237,6 +249,8 @@ class SongSettingsTabTest {
         chooseShowOption(ShowDropdown.TITLE_LOWER_THIRD, "None")
         assertEquals(Constants.NONE, get().songSettings.titleLowerThirdDisplay, "picking None must be stored")
         assertEquals(Constants.FIRST_PAGE, get().songSettings.titleDisplay, "the fullscreen choice must be untouched")
+        showDropdowns()[ShowDropdown.TITLE_LOWER_THIRD].assertTextContains("None")
+        showDropdowns()[ShowDropdown.TITLE_FULLSCREEN].assertTextContains("First Page")
     }
 
     /**
@@ -507,7 +521,12 @@ class SongSettingsTabTest {
     @Test
     fun `the title fullscreen alignment buttons store left centre and right`() = songTab { get ->
         val group = HAlignGroup.TITLE_FULLSCREEN
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.CENTER),
+            staysUnselected = horizontalAlignButton(group, HAlign.RIGHT),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.titleHorizontalAlignment, "left must be stored")
 
@@ -523,7 +542,12 @@ class SongSettingsTabTest {
     @Test
     fun `the title lower-third alignment buttons store left and right`() = songTab { get ->
         val group = HAlignGroup.TITLE_LOWER_THIRD
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.CENTER),
+            staysUnselected = horizontalAlignButton(group, HAlign.RIGHT),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.titleLowerThirdHorizontalAlignment, "left must be stored")
         assertEquals(
@@ -690,6 +714,10 @@ class SongSettingsTabTest {
         waitForIdle()
         chooseShowOption(ShowDropdown.NUMBER_FULLSCREEN, "Every Page")
         retypeNumberField(showing = 2, to = 5)
+
+        onNodeWithTag("song_titleSlideEnabled").assertIsOn()
+        onNodeWithTag("song_crossfade").assertIsOn()
+        showDropdowns()[ShowDropdown.NUMBER_FULLSCREEN].assertTextContains("Every Page")
 
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         val restored = json.decodeFromString<AppSettings>(json.encodeToString(get()))

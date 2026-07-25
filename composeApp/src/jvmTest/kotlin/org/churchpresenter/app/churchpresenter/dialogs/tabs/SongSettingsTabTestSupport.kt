@@ -33,7 +33,9 @@ import androidx.compose.ui.text.input.ImeAction
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Harness and node locators shared by the `SongSettingsTab` test classes.
@@ -210,33 +212,50 @@ internal fun ComposeUiTest.autoFitButtons(): SemanticsNodeInteractionCollection 
 
 // ── Actions ─────────────────────────────────────────────────────────────────────────────────────
 
-/** Retypes the number field currently displaying [showing]. */
+/**
+ * Retypes the number field currently displaying [showing], and asserts the field then displays what
+ * was typed. That holds even for a value the field rejects: `NumberSettingsTextField` always shows
+ * what you typed and only withholds the `onValueChange` callback when the value is out of range, so
+ * the caller can assert the stored setting separately either way.
+ */
 internal fun ComposeUiTest.retypeNumberField(showing: Int, to: Int) {
     onAllNodes(hasSetTextAction() and hasImeAction(ImeAction.Default) and hasText(showing.toString()))
         .onFirstNode("no number field is showing $showing")
         .performTextReplacement(to.toString())
     waitForIdle()
+    assertNumberFieldShows(to, "the field just retyped")
 }
 
 /**
- * Clicks a control whose only feedback is how it is painted, and asserts it repainted.
+ * Clicks one button of a mutually-exclusive group and proves the group repainted around it: the
+ * button that held the selection must lose its styling, and a button that was unselected before and
+ * after must not move at all. (The two unselected buttons are not compared with each other — they
+ * carry different glyphs and differently rounded corners, so they never match pixel for pixel.)
  *
- * The alignment, position and B/I/U/S buttons publish no `Selected` or `ToggleableState` semantics —
- * a chosen one differs from its neighbours only by border and fill colour. Comparing the node's
- * rendered pixels before and after is therefore the only way to show the UI followed the setting,
- * and it asserts *that* the painting changed rather than what colour it changed to, so it holds
- * across the three target platforms' rendering differences.
- *
- * [node] must be a control the click actually turns on; re-clicking an already-selected button
- * repaints nothing and this would rightly fail.
+ * Deliberately asserts on the buttons that were *not* clicked. A clicked button also takes focus and
+ * press indication, so its own pixels change even when the click re-selects what was already
+ * selected — comparing it against itself would pass whether or not selection is drawn, which is
+ * exactly the vacuous assertion this avoids. `SongSettingsTabRenderingTest` covers the clicked
+ * button's own appearance, from fixtures, with no pointer anywhere near it.
  */
-internal fun ComposeUiTest.clickAndAssertRepaint(node: SemanticsNodeInteraction, what: String) {
-    val before = node.performScrollTo().renderedPixels()
-    node.performClick()
+internal fun ComposeUiTest.selectAndAssertGroupRepaint(
+    click: SemanticsNodeInteraction,
+    losesSelection: SemanticsNodeInteraction,
+    staysUnselected: SemanticsNodeInteraction,
+    what: String,
+) {
+    click.performScrollTo()
+    val loserBefore = losesSelection.renderedPixels()
+    val bystanderBefore = staysUnselected.renderedPixels()
+    click.performClick()
     waitForIdle()
     assertFalse(
-        node.renderedPixels().contentEquals(before),
-        "$what must visibly change once it is the selected option",
+        losesSelection.renderedPixels().contentEquals(loserBefore),
+        "$what: the previously selected button must stop being painted as selected",
+    )
+    assertTrue(
+        staysUnselected.renderedPixels().contentEquals(bystanderBefore),
+        "$what: a button that was unselected throughout must not change",
     )
 }
 
@@ -278,6 +297,7 @@ internal fun ComposeUiTest.pickFont(showing: String, to: String) {
         .onFirstNode("the font dropdown should now hold the typed filter $to")
         .performImeAction()
     waitForIdle()
+    assertFontFieldShows(to, "the font dropdown just committed")
 }
 
 /**
@@ -312,8 +332,15 @@ internal fun ComposeUiTest.confirmColorDialogWith(hex: String) {
 
 /** Opens the colour field showing [fromHex], types [toHex] and confirms — the whole round trip. */
 internal fun ComposeUiTest.recolor(fromHex: String, toHex: String) {
+    fun showingOldColour() = onAllNodes(hasClickAction() and hasText(fromHex, ignoreCase = true))
+        .fetchSemanticsNodes(atLeastOneRootRequired = false).size
+    val before = showingOldColour()
     openColorField(fromHex)
     confirmColorDialogWith(toHex)
+    assertColorFieldShows(toHex, "the colour field just edited")
+    // Counted rather than asserted absent: several blocks share a default colour, and only the one
+    // that was edited should have stopped showing it.
+    assertEquals(before - 1, showingOldColour(), "one fewer field must show $fromHex after the edit")
 }
 
 /**

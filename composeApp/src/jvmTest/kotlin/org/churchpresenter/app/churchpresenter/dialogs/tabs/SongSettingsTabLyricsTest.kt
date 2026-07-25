@@ -168,7 +168,12 @@ class SongSettingsTabLyricsTest {
     @Test
     fun `the lyrics fullscreen alignment buttons store left centre and right`() = songTab { get ->
         val group = HAlignGroup.LYRICS_FULLSCREEN
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.CENTER),
+            staysUnselected = horizontalAlignButton(group, HAlign.RIGHT),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.lyricsHorizontalAlignment, "left must be stored")
 
@@ -308,7 +313,12 @@ class SongSettingsTabLyricsTest {
     @Test
     fun `the lyrics lower-third alignment buttons store left and right`() = songTab { get ->
         val group = HAlignGroup.LYRICS_LOWER_THIRD
-        horizontalAlignButton(group, HAlign.LEFT).performScrollTo().performClick()
+        selectAndAssertGroupRepaint(
+            click = horizontalAlignButton(group, HAlign.LEFT),
+            losesSelection = horizontalAlignButton(group, HAlign.CENTER),
+            staysUnselected = horizontalAlignButton(group, HAlign.RIGHT),
+            what = "the alignment group",
+        )
         waitForIdle()
         assertEquals(Constants.LEFT, get().songSettings.lyricsLowerThirdHorizontalAlignment, "left must be stored")
         assertEquals(
@@ -432,6 +442,7 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             val fitted = get().songSettings.lyricsFontSize
             assertTrue(fitted > 9, "measuring a short line on a 1920x1080 output must grow the size, was $fitted")
+            assertNumberFieldShows(fitted, "the fullscreen lyrics font size")
             assertEquals(28, get().songSettings.lyricsLowerThirdFontSize, "the lower-third size must be untouched")
         }
     }
@@ -446,6 +457,7 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             val fitted = get().songSettings.lyricsLowerThirdFontSize
             assertTrue(fitted > 9, "measuring a short line in the lower-third band must grow the size, was $fitted")
+            assertNumberFieldShows(fitted, "the lower-third lyrics font size")
             assertEquals(70, get().songSettings.lyricsFontSize, "the fullscreen size must be untouched")
         }
     }
@@ -468,6 +480,7 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             fittedWithoutTitle = get().songSettings.lyricsFontSize
             assertTrue(fittedWithoutTitle > 9, "a title-less output must still be measured, was $fittedWithoutTitle")
+            assertNumberFieldShows(fittedWithoutTitle, "the fullscreen lyrics font size")
         }
         songTab(initial = withTitle, presenterManager = liveLyricsManager()) { get ->
             autoFitButtons()[0].performScrollTo().performClick()
@@ -489,6 +502,7 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             val fitted = get().songSettings.lyricsLowerThirdFontSize
             assertTrue(fitted > 9, "a title-less lower third must still be measured, was $fitted")
+            assertNumberFieldShows(fitted, "the lower-third lyrics font size")
         }
     }
 
@@ -516,6 +530,7 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             val fitted = get().songSettings.lyricsFontSize
             assertTrue(fitted > 9, "a bold italic underlined verse must still be measured, was $fitted")
+            assertNumberFieldShows(fitted, "the fullscreen lyrics font size")
         }
     }
 
@@ -538,6 +553,7 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             val fitted = get().songSettings.lyricsLowerThirdFontSize
             assertTrue(fitted > 9, "a bold italic underlined verse must still be measured, was $fitted")
+            assertNumberFieldShows(fitted, "the lower-third lyrics font size")
         }
     }
 
@@ -563,6 +579,8 @@ class SongSettingsTabLyricsTest {
             waitForIdle()
             assertTrue(get().songSettings.lyricsFontSize > 9, "the untitled verse must be measured fullscreen")
             assertTrue(get().songSettings.lyricsLowerThirdFontSize > 9, "and in the lower third")
+            assertNumberFieldShows(get().songSettings.lyricsFontSize, "the fullscreen lyrics font size")
+            assertNumberFieldShows(get().songSettings.lyricsLowerThirdFontSize, "the lower-third lyrics font size")
         }
     }
 
@@ -577,6 +595,7 @@ class SongSettingsTabLyricsTest {
         songTab(initial = outputs(fullscreenOutput), presenterManager = manager) { get ->
             autoFitButtons()[0].performScrollTo().assertIsNotEnabled()
             assertEquals(70, get().songSettings.lyricsFontSize, "nothing must have been measured")
+            assertNumberFieldShows(70, "the untouched fullscreen lyrics font size")
         }
     }
 }
