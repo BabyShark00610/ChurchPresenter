@@ -235,6 +235,45 @@ class ProjectionSettingsTabBrowserSourceTest {
         }
     }
 
+    /**
+     * When an output is protected and the server has a key configured, the overlay URL the operator
+     * copies carries that key — otherwise a Browser Source pointed at it would be refused.
+     */
+    @Test
+    fun `a protected output with a server key renders its row`() {
+        val protectedOutput = AppSettings().let {
+            it.copy(
+                projectionSettings = it.projectionSettings.copy(
+                    browserSourceOutputs = listOf(ScreenAssignment(browserSourceApiKeyRequired = true)),
+                ),
+                serverSettings = it.serverSettings.copy(apiKey = "s3cret"),
+            )
+        }
+        projectionTab(initial = protectedOutput) { get ->
+            apiKeyCheckbox().assertIsOn() // the stored protection is shown
+            assertEquals(true, output(get).browserSourceApiKeyRequired)
+            assertEquals("s3cret", get().serverSettings.apiKey, "and the server key is what gets attached")
+            onNodeWithText("Browser Source 1").assertExists()
+        }
+    }
+
+    /** The same output with no server key configured: nothing to attach, row still renders. */
+    @Test
+    fun `a protected output without a server key still renders`() {
+        val noKey = AppSettings().let {
+            it.copy(
+                projectionSettings = it.projectionSettings.copy(
+                    browserSourceOutputs = listOf(ScreenAssignment(browserSourceApiKeyRequired = true)),
+                ),
+            )
+        }
+        projectionTab(initial = noKey) { get ->
+            apiKeyCheckbox().assertIsOn()
+            assertEquals("", get().serverSettings.apiKey, "no key configured on the server")
+            onNodeWithText("Browser Source 1").assertExists()
+        }
+    }
+
     // ── Removing ────────────────────────────────────────────────────────────────────────────────
 
     @Test

@@ -116,6 +116,30 @@ class ProjectionSettingsTabStructureTest {
 
     // ── The rest of the tab ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * `scenes` feeds the DeckLink input-conflict check and defaults to empty. Passing it explicitly
+     * exercises the supplied-argument path; every other test leaves it to the default.
+     */
+    @Test
+    fun `the tab accepts an explicit scene list`() = androidx.compose.ui.test.runComposeUiTest {
+        setContent {
+            androidx.compose.material3.MaterialTheme {
+                val state = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(AppSettings()) }
+                ProjectionSettingsTab(
+                    settings = state.value,
+                    onSettingsChange = { transform -> state.value = transform(state.value) },
+                    companionServer = org.churchpresenter.app.churchpresenter.server.CompanionServer(),
+                    onIdentifyScreen = {},
+                    onIdentifyBrowserSource = {},
+                    scenes = emptyList(),
+                    detectScreens = { twoExternalScreens() },
+                )
+            }
+        }
+        onNodeWithText("Screen Assignment").assertExists("the tab must render on an explicit scene list")
+        gridButton(Grid.targetDisplay(row = 0)).assertTextEquals("D1 (1280x720)")
+    }
+
     @Test
     fun `the lower third height field is offered once`() = projectionTab { _ ->
         onNodeWithText("Lower Third Height % (for Bible and Songs)").assertExists()
