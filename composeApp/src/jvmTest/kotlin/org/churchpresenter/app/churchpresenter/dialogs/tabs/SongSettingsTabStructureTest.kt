@@ -168,6 +168,8 @@ class SongSettingsTabStructureTest {
             // Each row adds a colour field and two stepper fields to the tab.
             colorFields().assertCountEquals(StyleGroup.COUNT * 2)
             numberFields().assertCountEquals(15 + StyleGroup.COUNT * 2)
+            // Every shadow defaults to black, and each row shows that value in its own colour field.
+            onAllNodesWithText("#000000").assertCountEquals(StyleGroup.COUNT)
         }
     }
 

@@ -192,6 +192,7 @@ class SongSettingsTabTest {
         assertEquals(Constants.BELOW_VERSE, get().songSettings.titlePosition, "the title must have moved below the verse")
         onNodeWithTag("song_songNumberBeforeTitle")
             .assertExists("matching the number's layout to the title's must reveal the ordering checkbox")
+        onNodeWithText("Number before title").assertExists("the checkbox must be captioned")
     }
 
     /**
