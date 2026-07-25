@@ -443,4 +443,37 @@ class STTManagerTest {
         s.highlighting("""{"words":[{"word":"grace"}]}""")
         assertTrue(s.wordHighlightingEnabled.value)
     }
+
+    // ── Help Dev .db capture ────────────────────────────────────────────────────
+    // The periodic snapshot loop dies with the connection, so the archived .db can stop well before
+    // the service does — `2026-07-19_102718.db` ends 5 minutes early, mid-sentence, which made 7
+    // references the engine had detected live look like replay misses. Disconnecting now takes one
+    // last snapshot; the HTTP call itself is unreachable in a test, but the decision to make it is.
+
+    @Test
+    fun `disconnecting pulls a final snapshot when Help Dev is on and a server is known`() {
+        val s = stt()
+        assertTrue(s.shouldCaptureFinalSnapshot(helpDev = true, baseUrl = "http://192.168.2.62"))
+    }
+
+    @Test
+    fun `no final snapshot without Help Dev, or without a server to ask`() {
+        val s = stt()
+        assertFalse(
+            s.shouldCaptureFinalSnapshot(helpDev = false, baseUrl = "http://192.168.2.62"),
+            "ordinary users must not pay for a download nothing will read",
+        )
+        assertFalse(
+            s.shouldCaptureFinalSnapshot(helpDev = true, baseUrl = null),
+            "never connected, so there is nothing to pull from",
+        )
+        assertFalse(s.shouldCaptureFinalSnapshot(helpDev = true, baseUrl = "  "))
+    }
+
+    @Test
+    fun `disconnecting before ever connecting does not throw`() {
+        val s = stt()
+        s.helpDevModeEnabled = true
+        s.disconnect()
+    }
 }

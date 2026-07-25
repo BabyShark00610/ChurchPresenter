@@ -96,10 +96,45 @@ class TrainingDataLoggerTest {
             book = 1, chapter = 1, verseStart = null, verseEnd = null, source = "auto",
         )
         val row = rows("live-references-", s).last()
-        for (key in listOf("verseStart", "verseEnd", "segmentId", "matchType")) {
+        for (key in listOf(
+            "verseStart", "verseEnd", "segmentId", "matchType",
+            "displayChapter", "displayVerseStart", "displayVerseEnd",
+        )) {
             assertTrue(row.containsKey(key), "$key should be present")
             assertTrue(row.isNull(key), "$key should be null")
         }
+    }
+
+    @Test
+    fun `a live reference keeps the displayed numbering beside the canonical one`() {
+        // The two differ in any LXX-numbered module (Synodal Psalm 22 = canonical 23), which is the
+        // whole reason both are recorded: the canonical one scores, the displayed one is what the
+        // operator saw. See BibleViewModelTrainingLogTest for the mapping itself.
+        val s = useSession("live-display-numbering")
+        TrainingDataLogger.logLiveReference(
+            book = 19, chapter = 23, verseStart = 5, verseEnd = 6, source = "manual",
+            displayChapter = 22, displayVerseStart = 5, displayVerseEnd = 6,
+        )
+        val row = rows("live-references-", s).last()
+        assertEquals("23", row.str("chapter"))
+        assertEquals("22", row.str("displayChapter"))
+        assertEquals("5", row.str("displayVerseStart"))
+        assertEquals("6", row.str("displayVerseEnd"))
+    }
+
+    @Test
+    fun `an outcome and a flag carry the displayed numbering too`() {
+        val s = useSession("display-numbering-other-logs")
+        TrainingDataLogger.logSuggestionOutcome(
+            suggestedBook = 19, suggestedChapter = 23, suggestedVerse = 1, action = "accepted",
+            displayChapter = 22, displayVerse = 1,
+        )
+        TrainingDataLogger.logOperatorFlag(
+            kind = "wrong_passage", book = 19, chapter = 23, verseStart = 1,
+            displayChapter = 22, displayVerseStart = 1,
+        )
+        assertEquals("22", rows("suggestion-outcomes-", s).last().str("displayChapter"))
+        assertEquals("22", rows("operator-flags-", s).last().str("displayChapter"))
     }
 
     @Test
