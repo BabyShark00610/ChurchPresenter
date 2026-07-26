@@ -1,5 +1,7 @@
 package org.churchpresenter.app.churchpresenter.viewmodel
 
+import kotlinx.coroutines.Dispatchers
+
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.server.SongCatalogResponse
@@ -10,7 +12,6 @@ import org.churchpresenter.app.churchpresenter.server.SongbookEntry
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
-import javax.swing.SwingUtilities
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -24,8 +25,10 @@ import kotlin.test.assertTrue
  * This is exercised with plain fakes — a real [SongCatalogResponse] and a stand-in `fetchDetail`
  * lambda returning a constructed [SongDetailDto] — driving the real remote code path
  * (`setInstanceLinkSource` → `selectSong` → `fetchRemoteDetailIfNeeded` → `toRawLyrics`). The fetch
- * runs on the ViewModel's `Dispatchers.Main` scope (the Swing EDT under test), so success is awaited
- * on the populated lyrics and the no-op cases are drained with `invokeAndWait` rather than a sleep.
+ * The fetch runs on the ViewModel's `Dispatchers.Main` scope, so every wait here ends on a positive
+ * signal — the populated lyrics, or the fetch counter being bumped from inside the fetch itself.
+ * The cases where nothing is launched at all assert straight away, because `selectSong` returns
+ * before starting any coroutine on those paths.
  */
 class SongsViewModelRemoteFollowerTest {
 
@@ -66,7 +69,7 @@ class SongsViewModelRemoteFollowerTest {
 
     /** A follower whose fetch is [detailFor], counting every call. */
     private fun follower(detailFor: (String, String) -> SongDetailDto?): SongsViewModel {
-        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)))
+        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Default, enableFolderWatcher = false)
         created.add(vm)
         vm.setInstanceLinkSource(
             active = true,
@@ -85,9 +88,6 @@ class SongsViewModelRemoteFollowerTest {
         }
         throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
     }
-
-    /** Drains the EDT so a fetch launched on Dispatchers.Main has run to completion. */
-    private fun drainMain() = SwingUtilities.invokeAndWait {}
 
     // ── The fetch happens and its result is formatted ────────────────────────────
 
@@ -113,10 +113,13 @@ class SongsViewModelRemoteFollowerTest {
         val vm = follower { _, _ -> null }
 
         vm.selectSong(0)
-        drainMain() // let the launched fetch run and take the detail == null branch
+        // Wait on the fetch actually happening rather than on an EDT round trip: the fetch is
+        // launched on Dispatchers.Main and suspends, so draining the EDT once proves nothing about
+        // whether it has run. The counter is bumped inside the fetch itself, so it is the signal.
+        awaitUntil("the fetch to be attempted") { fetchCount.get() == 1 }
 
+        // Nothing sets lyrics on the detail == null path, so once the fetch has run this is settled.
         assertTrue(vm.filteredSongItems.value[0].lyrics.isEmpty(), "no detail means nothing to show")
-        assertEquals(1, fetchCount.get(), "the fetch was attempted")
     }
 
     @Test
@@ -133,13 +136,14 @@ class SongsViewModelRemoteFollowerTest {
 
     @Test
     fun `with no fetch function configured a selection fetches nothing`() {
-        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)))
+        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Default, enableFolderWatcher = false)
         created.add(vm)
         vm.setInstanceLinkSource(active = true, catalog = catalog(), fetchDetail = null)
         awaitUntil("the mirrored catalog") { vm.filteredSongItems.value.isNotEmpty() }
 
+        // selectSong returns before launching anything when there is no fetch function, so there
+        // is nothing to wait for.
         vm.selectSong(0)
-        drainMain()
 
         assertTrue(vm.filteredSongItems.value[0].lyrics.isEmpty())
         assertEquals(0, fetchCount.get(), "there is no fetch function to call")
@@ -149,8 +153,8 @@ class SongsViewModelRemoteFollowerTest {
     fun `selecting an out-of-range index does not fetch`() {
         val vm = follower { _, _ -> detail("0042") }
 
+        // An out-of-range index is rejected before any fetch is launched.
         vm.selectSong(999)
-        drainMain()
 
         assertEquals(0, fetchCount.get(), "there is no song at that index to fetch")
     }

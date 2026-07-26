@@ -127,6 +127,9 @@ import churchpresenter.composeapp.generated.resources.server_host_note
 import churchpresenter.composeapp.generated.resources.server_url_label
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
+import org.churchpresenter.app.churchpresenter.data.settings.ServerSettings
+import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
+import java.net.URLEncoder
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.RemoteClientManager
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
@@ -586,48 +589,24 @@ fun ServerSettingsTab(
                 }
                 val atemConfigured = settings.atemSettings.host.isNotBlank()
 
-                fun apiQuery(extra: String = ""): String {
-                    val params = buildList {
-                        if (extra.isNotEmpty()) add(extra)
-                        if (settings.serverSettings.apiKeyEnabled && settings.serverSettings.apiKey.isNotBlank())
-                            add("apiKey=" + java.net.URLEncoder.encode(settings.serverSettings.apiKey, "UTF-8"))
-                    }
-                    return if (params.isEmpty()) "" else "?" + params.joinToString("&")
-                }
-
                 // Default key target (1-based) for the "+ key" URLs, matching the configured key
                 // type. DSK ignores M/E and uses the DSK number; both carry an explicit keytype so
                 // the copied URL behaves as shown regardless of later setting changes.
-                val useDsk = settings.atemSettings.useDownstreamKey
-                val keyTypeParam = if (useDsk) "keytype=dsk" else "keytype=usk"
-                val keyTarget = if (useDsk)
-                    "keytype=dsk&key=${settings.atemSettings.dskIndex + 1}"
-                else
-                    "keytype=usk&me=${settings.atemSettings.keyMixEffect + 1}&key=${settings.atemSettings.keyIndex + 1}"
+                val keyTypeParam = atemKeyTypeParam(settings.atemSettings)
+                val keyTarget = atemKeyTarget(settings.atemSettings)
+                val apiKeyOrBlank = effectiveApiKey(settings.serverSettings)
 
-                fun triggerUrl(name: String, withKey: Boolean): String {
-                    val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
-                    val params = buildList {
-                        if (!withKey) add("key=0")   // run defaults to keying; key=0 skips it
-                        if (settings.serverSettings.apiKeyEnabled && settings.serverSettings.apiKey.isNotBlank())
-                            add("apiKey=" + java.net.URLEncoder.encode(settings.serverSettings.apiKey, "UTF-8"))
-                    }
-                    val query = if (params.isEmpty()) "" else "?" + params.joinToString("&")
-                    return "$serverUrl/api/lowerthirds/$encoded/run$query"
-                }
+                fun triggerUrl(name: String, withKey: Boolean): String =
+                    lowerThirdTriggerUrl(serverUrl, name, withKey, apiKeyOrBlank)
 
-                fun stillUrl(name: String, withKey: Boolean): String {
-                    val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
-                    return "$serverUrl/api/atem/still/$encoded${apiQuery(if (withKey) keyTarget else "")}"
-                }
+                fun stillUrl(name: String, withKey: Boolean): String =
+                    atemMediaUrl(serverUrl, "still", name, if (withKey) keyTarget else "", apiKeyOrBlank)
 
-                fun clipUrl(name: String, withKey: Boolean): String {
-                    val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
-                    return "$serverUrl/api/atem/clip/$encoded${apiQuery(if (withKey) keyTarget else "")}"
-                }
+                fun clipUrl(name: String, withKey: Boolean): String =
+                    atemMediaUrl(serverUrl, "clip", name, if (withKey) keyTarget else "", apiKeyOrBlank)
 
-                fun keyOnUrl()  = "$serverUrl/api/atem/key/on${apiQuery(keyTypeParam)}"
-                fun keyOffUrl() = "$serverUrl/api/atem/key/off${apiQuery(keyTypeParam)}"
+                fun keyOnUrl() = atemKeyUrl(serverUrl, on = true, keyTypeParam = keyTypeParam, apiKey = apiKeyOrBlank)
+                fun keyOffUrl() = atemKeyUrl(serverUrl, on = false, keyTypeParam = keyTypeParam, apiKey = apiKeyOrBlank)
 
                 SettingsSection(title = stringResource(Res.string.companion_lt_triggers)) {
                     Text(
@@ -785,7 +764,7 @@ fun ServerSettingsTab(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 shape = RoundedCornerShape(6.dp),
-                                onClick = { copyText("$serverUrl/api/lowerthirds/hide${apiQuery()}") },
+                                onClick = { copyText(lowerThirdHideUrl(serverUrl, apiKeyOrBlank)) },
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -794,7 +773,7 @@ fun ServerSettingsTab(
                             ) { Text(stringResource(Res.string.companion_lt_copy_hide), style = MaterialTheme.typography.labelSmall) }
                             Button(
                                 shape = RoundedCornerShape(6.dp),
-                                onClick = { copyText("$serverUrl/api/clear${apiQuery()}") },
+                                onClick = { copyText(clearDisplayUrl(serverUrl, apiKeyOrBlank)) },
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.error,
@@ -953,22 +932,9 @@ private fun ClientRow(
 @Composable
 private fun ConnectionQrDialog(serverUrl: String, apiKey: String?, onDismiss: () -> Unit) {
     // Parse host and port from serverUrl (e.g. "http://192.168.1.50:8765")
-    val (parsedHost, parsedPort) = remember(serverUrl) {
-        try {
-            val u = java.net.URI.create(serverUrl).toURL()
-            val host = u.host ?: serverUrl
-            val port = if (u.port != -1) u.port.toString() else ""
-            host to port
-        } catch (_: Exception) {
-            serverUrl to ""
-        }
-    }
+    val (parsedHost, parsedPort) = remember(serverUrl) { parseServerUrlHostPort(serverUrl) }
 
-    val qrContent = buildString {
-        append("churchpresenter://connect?host=$parsedHost")
-        if (parsedPort.isNotBlank()) append("&port=$parsedPort")
-        if (!apiKey.isNullOrBlank()) append("&apikey=$apiKey")
-    }
+    val qrContent = connectionQrContent(parsedHost, parsedPort, apiKey)
     val qrBitmap = remember(qrContent) {
         try {
             val hints = mapOf(
@@ -1045,3 +1011,106 @@ private fun ConnectionQrDialog(serverUrl: String, apiKey: String?, onDismiss: ()
         }
     }
 }
+
+// ── URL building ────────────────────────────────────────────────────────────────
+// Pulled out of the composables above so the trigger URLs an operator copies into a Stream Deck can
+// be tested directly. They were local functions closing over the settings, reachable only by
+// clicking a Copy button — and that writes to the system clipboard, which throws HeadlessException
+// under the test JVM, so none of this logic could be exercised at all. The composables call these
+// and nothing else builds URLs.
+
+/** The API key to append to companion URLs, or blank when protection is off or no key is set. */
+internal fun effectiveApiKey(server: ServerSettings): String =
+    if (server.apiKeyEnabled && server.apiKey.isNotBlank()) server.apiKey else ""
+
+/**
+ * The `?a=b&c=d` tail shared by the ATEM URLs: [extra] first if present, then the API key if there
+ * is one. Returns an empty string when there is nothing to add, so callers can append it blindly.
+ */
+internal fun apiQueryString(extra: String = "", apiKey: String = ""): String {
+    val params = buildList {
+        if (extra.isNotEmpty()) add(extra)
+        if (apiKey.isNotEmpty()) add("apiKey=" + URLEncoder.encode(apiKey, "UTF-8"))
+    }
+    return if (params.isEmpty()) "" else "?" + params.joinToString("&")
+}
+
+/** A lower-third name as it appears in a URL path — spaces as `%20` rather than `+`. */
+internal fun encodeUrlPathSegment(name: String): String =
+    URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+
+/**
+ * The URL that plays lower third [name]. Running defaults to keying, so the *unkeyed* variant is the
+ * one that carries `key=0`.
+ */
+internal fun lowerThirdTriggerUrl(
+    serverUrl: String,
+    name: String,
+    withKey: Boolean,
+    apiKey: String = "",
+): String {
+    val params = buildList {
+        if (!withKey) add("key=0")
+        if (apiKey.isNotEmpty()) add("apiKey=" + URLEncoder.encode(apiKey, "UTF-8"))
+    }
+    val query = if (params.isEmpty()) "" else "?" + params.joinToString("&")
+    return "$serverUrl/api/lowerthirds/${encodeUrlPathSegment(name)}/run$query"
+}
+
+/** The URL that uploads [name] to the ATEM as a [kind] ("still" or "clip"). */
+internal fun atemMediaUrl(
+    serverUrl: String,
+    kind: String,
+    name: String,
+    keyTarget: String,
+    apiKey: String = "",
+): String = "$serverUrl/api/atem/$kind/${encodeUrlPathSegment(name)}" + apiQueryString(keyTarget, apiKey)
+
+/** `keytype=dsk` or `keytype=usk`, per the configured key type. */
+internal fun atemKeyTypeParam(atem: AtemSettings): String =
+    if (atem.useDownstreamKey) "keytype=dsk" else "keytype=usk"
+
+/**
+ * The default key target for the "+ key" URLs, 1-based to match the switcher's own numbering. A DSK
+ * ignores the M/E and names only the downstream key; an upstream key names both.
+ */
+internal fun atemKeyTarget(atem: AtemSettings): String =
+    if (atem.useDownstreamKey) {
+        "keytype=dsk&key=${atem.dskIndex + 1}"
+    } else {
+        "keytype=usk&me=${atem.keyMixEffect + 1}&key=${atem.keyIndex + 1}"
+    }
+
+/** The `churchpresenter://connect` deep link the connection QR encodes. */
+internal fun connectionQrContent(host: String, port: String, apiKey: String?): String = buildString {
+    append("churchpresenter://connect?host=$host")
+    if (port.isNotBlank()) append("&port=$port")
+    if (!apiKey.isNullOrBlank()) append("&apikey=$apiKey")
+}
+
+/**
+ * Splits a server URL into the host and port the connection QR encodes.
+ *
+ * Anything unparseable falls back to using the whole string as the host and no port, so a hand-typed
+ * host override still produces a scannable code rather than throwing inside the dialog.
+ */
+internal fun parseServerUrlHostPort(serverUrl: String): Pair<String, String> = try {
+    val parsed = java.net.URI.create(serverUrl).toURL()
+    val host = parsed.host ?: serverUrl
+    val port = if (parsed.port != -1) parsed.port.toString() else ""
+    host to port
+} catch (_: Exception) {
+    serverUrl to ""
+}
+
+/** The URL that turns the configured ATEM key on ([on]) or off. */
+internal fun atemKeyUrl(serverUrl: String, on: Boolean, keyTypeParam: String, apiKey: String = ""): String =
+    "$serverUrl/api/atem/key/${if (on) "on" else "off"}" + apiQueryString(keyTypeParam, apiKey)
+
+/** The URL that takes the current lower third down, leaving other output alone. */
+internal fun lowerThirdHideUrl(serverUrl: String, apiKey: String = ""): String =
+    "$serverUrl/api/lowerthirds/hide" + apiQueryString(apiKey = apiKey)
+
+/** The URL that clears every output — Bible, song, lower third and the rest. */
+internal fun clearDisplayUrl(serverUrl: String, apiKey: String = ""): String =
+    "$serverUrl/api/clear" + apiQueryString(apiKey = apiKey)
