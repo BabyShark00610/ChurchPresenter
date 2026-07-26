@@ -164,6 +164,39 @@ fun CCLIReportDialog(
     if (!isVisible) return
 
     val mainWindowState = LocalMainWindowState.current
+
+    DialogWindow(
+        onCloseRequest = onDismiss,
+        state = rememberDialogState(
+            position = centeredOnMainWindow(mainWindowState, 940.dp, 700.dp),
+            width = 940.dp, height = 700.dp
+        ),
+        title = stringResource(Res.string.ccli_report_title),
+        resizable = true
+    ) {
+        CCLIReportContent(
+            theme = theme,
+            statisticsManager = statisticsManager,
+            onDismiss = onDismiss
+        )
+    }
+}
+
+/**
+ * Everything the report window contains: the quick-range presets and date pickers, the tab row
+ * over the three report bodies, the export buttons and the status line they write to.
+ *
+ * Held apart from [CCLIReportDialog] because that function's only other statement is the
+ * `DialogWindow` it opens, which cannot be composed on a headless machine. Keeping the window down
+ * to that one call leaves the report's own behaviour — which range each preset selects, what the
+ * tab counts say, and what is shown when there is no event log at all — reachable from a test.
+ */
+@Composable
+internal fun CCLIReportContent(
+    theme: ThemeMode,
+    statisticsManager: StatisticsManager,
+    onDismiss: () -> Unit
+) {
     val coroutineScope = rememberCoroutineScope()
     val today = remember { LocalDate.now() }
     val zone = remember { ZoneId.systemDefault() }
@@ -228,161 +261,151 @@ fun CCLIReportDialog(
     val xlsChooserTitle = stringResource(Res.string.ccli_file_chooser_xls)
     val xlsFilterDesc = stringResource(Res.string.ccli_file_filter_xls)
 
-    DialogWindow(
-        onCloseRequest = onDismiss,
-        state = rememberDialogState(
-            position = centeredOnMainWindow(mainWindowState, 940.dp, 700.dp),
-            width = 940.dp, height = 700.dp
-        ),
-        title = stringResource(Res.string.ccli_report_title),
-        resizable = true
-    ) {
-        AppThemeWrapper(theme = theme) {
-            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(modifier = Modifier.fillMaxSize()) {
+    AppThemeWrapper(theme = theme) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(modifier = Modifier.fillMaxSize()) {
 
-                    // ── Date range header ────────────────────────────────────
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                // ── Date range header ────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Preset buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PresetButton(stringResource(Res.string.ccli_preset_30d), active = activePreset == 0) {
+                            activePreset = 0; applyPreset(30)
+                        }
+                        PresetButton(stringResource(Res.string.ccli_preset_90d), active = activePreset == 1) {
+                            activePreset = 1; applyPreset(90)
+                        }
+                        PresetButton(stringResource(Res.string.ccli_preset_this_year), active = activePreset == 2) {
+                            activePreset = 2
+                            fromYear = today.year; fromMonth = 1; fromDay = 1
+                            toYear = today.year; toMonth = today.monthValue; toDay = today.dayOfMonth
+                        }
+                        PresetButton(stringResource(Res.string.ccli_preset_last_year), active = activePreset == 3) {
+                            activePreset = 3
+                            fromYear = today.year - 1; fromMonth = 1; fromDay = 1
+                            toYear = today.year - 1; toMonth = 12; toDay = 31
+                        }
+                        PresetButton(stringResource(Res.string.ccli_preset_all_time), active = activePreset == 4) {
+                            activePreset = 4; applyPreset(null)
+                        }
+                    }
+                    // Date pickers
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Preset buttons
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            PresetButton(stringResource(Res.string.ccli_preset_30d), active = activePreset == 0) {
-                                activePreset = 0; applyPreset(30)
-                            }
-                            PresetButton(stringResource(Res.string.ccli_preset_90d), active = activePreset == 1) {
-                                activePreset = 1; applyPreset(90)
-                            }
-                            PresetButton(stringResource(Res.string.ccli_preset_this_year), active = activePreset == 2) {
-                                activePreset = 2
-                                fromYear = today.year; fromMonth = 1; fromDay = 1
-                                toYear = today.year; toMonth = today.monthValue; toDay = today.dayOfMonth
-                            }
-                            PresetButton(stringResource(Res.string.ccli_preset_last_year), active = activePreset == 3) {
-                                activePreset = 3
-                                fromYear = today.year - 1; fromMonth = 1; fromDay = 1
-                                toYear = today.year - 1; toMonth = 12; toDay = 31
-                            }
-                            PresetButton(stringResource(Res.string.ccli_preset_all_time), active = activePreset == 4) {
-                                activePreset = 4; applyPreset(null)
-                            }
-                        }
-                        // Date pickers
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(stringResource(Res.string.ccli_from), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            DatePicker(
-                                year = fromYear, month = fromMonth, day = fromDay,
-                                yearRange = yearRange,
-                                onChanged = { y, m, d -> activePreset = null; fromYear = y; fromMonth = m; fromDay = d }
-                            )
-                            Spacer(Modifier.width(16.dp))
-                            Text(stringResource(Res.string.ccli_to), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            DatePicker(
-                                year = toYear, month = toMonth, day = toDay,
-                                yearRange = yearRange,
-                                onChanged = { y, m, d -> activePreset = null; toYear = y; toMonth = m; toDay = d }
-                            )
-                        }
-                    }
-
-                    HorizontalDivider()
-
-                    if (!hasLog) {
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text(
-                                stringResource(Res.string.ccli_no_events),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(32.dp)
-                            )
-                        }
-                    } else {
-                        // ── Tabs ─────────────────────────────────────────────
-                        PrimaryTabRow(selectedTabIndex = selectedTab) {
-                            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
-                                text = { Text(stringResource(Res.string.ccli_tab_songs) + " (${songs.size})") })
-                            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
-                                text = { Text(stringResource(Res.string.ccli_tab_bible) + " (${verses.size})") })
-                            Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 },
-                                text = { Text(stringResource(Res.string.ccli_tab_activity)) })
-                        }
-
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            when (selectedTab) {
-                                0 -> SongsReportContent(songs)
-                                1 -> BibleReportContent(verses)
-                                2 -> ActivityContent(activity)
-                            }
-                        }
-                    }
-
-                    // ── Status message ───────────────────────────────────────
-                    if (statusMessage != null) {
-                        Text(
-                            text = statusMessage!!,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (statusIsSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                        Text(stringResource(Res.string.ccli_from), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        DatePicker(
+                            year = fromYear, month = fromMonth, day = fromDay,
+                            yearRange = yearRange,
+                            onChanged = { y, m, d -> activePreset = null; fromYear = y; fromMonth = m; fromDay = d }
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(stringResource(Res.string.ccli_to), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        DatePicker(
+                            year = toYear, month = toMonth, day = toDay,
+                            yearRange = yearRange,
+                            onChanged = { y, m, d -> activePreset = null; toYear = y; toMonth = m; toDay = d }
                         )
                     }
+                }
 
-                    // ── Bottom buttons ───────────────────────────────────────
-                    HorizontalDivider()
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = {
-                                coroutineScope.launch {
-                                    val f = fromMs(); val t = toMs()
-                                    val path = FileChooser.platformInstance.save(
-                                        location = null,
-                                        suggestedName = "ccli_report.csv",
-                                        filters = listOf(FileNameExtensionFilter(csvFilterDesc, "csv")),
-                                        title = csvChooserTitle
-                                    )
-                                    if (path != null) {
-                                        val ok = withContext(Dispatchers.IO) { statisticsManager.exportCcliCsv(path.toFile(), f, t) }
-                                        statusIsSuccess = ok; statusMessage = if (ok) successMsg else errorMsg
-                                    }
-                                }
-                            }
-                        ) { Text(stringResource(Res.string.ccli_export_csv)) }
+                HorizontalDivider()
 
-                        OutlinedButton(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = {
-                                coroutineScope.launch {
-                                    val f = fromMs(); val t = toMs()
-                                    val path = FileChooser.platformInstance.save(
-                                        location = null,
-                                        suggestedName = "ccli_report.xls",
-                                        filters = listOf(FileNameExtensionFilter(xlsFilterDesc, "xls")),
-                                        title = xlsChooserTitle
-                                    )
-                                    if (path != null) {
-                                        val ok = withContext(Dispatchers.IO) { statisticsManager.exportFilteredXls(path.toFile(), f, t) }
-                                        statusIsSuccess = ok; statusMessage = if (ok) successMsg else errorMsg
-                                    }
-                                }
-                            }
-                        ) { Text(stringResource(Res.string.ccli_export_xls)) }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) { Text(stringResource(Res.string.close)) }
+                if (!hasLog) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(
+                            stringResource(Res.string.ccli_no_events),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(32.dp)
+                        )
                     }
+                } else {
+                    // ── Tabs ─────────────────────────────────────────────
+                    PrimaryTabRow(selectedTabIndex = selectedTab) {
+                        Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
+                            text = { Text(stringResource(Res.string.ccli_tab_songs) + " (${songs.size})") })
+                        Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
+                            text = { Text(stringResource(Res.string.ccli_tab_bible) + " (${verses.size})") })
+                        Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 },
+                            text = { Text(stringResource(Res.string.ccli_tab_activity)) })
+                    }
+
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        when (selectedTab) {
+                            0 -> SongsReportContent(songs)
+                            1 -> BibleReportContent(verses)
+                            2 -> ActivityContent(activity)
+                        }
+                    }
+                }
+
+                // ── Status message ───────────────────────────────────────
+                if (statusMessage != null) {
+                    Text(
+                        text = statusMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (statusIsSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
+                }
+
+                // ── Bottom buttons ───────────────────────────────────────
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = {
+                            coroutineScope.launch {
+                                val f = fromMs(); val t = toMs()
+                                val path = FileChooser.platformInstance.save(
+                                    location = null,
+                                    suggestedName = "ccli_report.csv",
+                                    filters = listOf(FileNameExtensionFilter(csvFilterDesc, "csv")),
+                                    title = csvChooserTitle
+                                )
+                                if (path != null) {
+                                    val ok = withContext(Dispatchers.IO) { statisticsManager.exportCcliCsv(path.toFile(), f, t) }
+                                    statusIsSuccess = ok; statusMessage = if (ok) successMsg else errorMsg
+                                }
+                            }
+                        }
+                    ) { Text(stringResource(Res.string.ccli_export_csv)) }
+
+                    OutlinedButton(
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = {
+                            coroutineScope.launch {
+                                val f = fromMs(); val t = toMs()
+                                val path = FileChooser.platformInstance.save(
+                                    location = null,
+                                    suggestedName = "ccli_report.xls",
+                                    filters = listOf(FileNameExtensionFilter(xlsFilterDesc, "xls")),
+                                    title = xlsChooserTitle
+                                )
+                                if (path != null) {
+                                    val ok = withContext(Dispatchers.IO) { statisticsManager.exportFilteredXls(path.toFile(), f, t) }
+                                    statusIsSuccess = ok; statusMessage = if (ok) successMsg else errorMsg
+                                }
+                            }
+                        }
+                    ) { Text(stringResource(Res.string.ccli_export_xls)) }
+
+                    Spacer(Modifier.weight(1f))
+
+                    Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) { Text(stringResource(Res.string.close)) }
                 }
             }
         }
