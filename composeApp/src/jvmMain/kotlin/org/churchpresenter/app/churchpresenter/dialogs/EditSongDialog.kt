@@ -98,6 +98,54 @@ fun EditSongDialog(
 ) {
     if (!isVisible || song == null) return
 
+    val mainWindowState = LocalMainWindowState.current
+    DialogWindow(
+        onCloseRequest = onDismiss,
+        state = rememberDialogState(
+            position = centeredOnMainWindow(mainWindowState, 800.dp, 700.dp),
+            width = 800.dp,
+            height = 700.dp
+        ),
+        title = if (isNewSong) stringResource(Res.string.new_song) else stringResource(Res.string.edit_song),
+        resizable = true
+    ) {
+        EditSongContent(
+            song = song,
+            songbooks = songbooks,
+            existingSongs = existingSongs,
+            isNewSong = isNewSong,
+            theme = theme,
+            isVisible = isVisible,
+            onDismiss = onDismiss,
+            onSave = onSave
+        )
+    }
+}
+
+/**
+ * The song editor itself: the identifying fields, the two lyric panes, and the Save that rebuilds
+ * the song from them.
+ *
+ * Held apart from [EditSongDialog] because that function's only other statement is the
+ * `DialogWindow` it opens, which cannot be composed on a headless machine. Keeping the window down
+ * to that one call leaves the editing rules — the digits-only song number, the duplicate check, the
+ * conditions under which Save is offered at all — reachable from a test.
+ *
+ * [isVisible] is taken only because the edit buffers are keyed on it, so that reopening the dialog
+ * over the same song discards an abandoned edit rather than resuming it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun EditSongContent(
+    song: SongItem,
+    songbooks: List<String>,
+    existingSongs: List<SongItem>,
+    isNewSong: Boolean,
+    theme: ThemeMode,
+    isVisible: Boolean = true,
+    onDismiss: () -> Unit,
+    onSave: (SongItem) -> Unit
+) {
     // Filter out non-digits from song number (handles cases like "3.1" -> "3" or "31")
     var editedNumber by remember(isVisible, song) { mutableStateOf(song.number.filter { it.isDigit() }) }
     var editedTitle by remember(isVisible, song) { mutableStateOf(song.title) }
@@ -122,323 +170,312 @@ fun EditSongDialog(
         }
     }
 
-    val mainWindowState = LocalMainWindowState.current
-    DialogWindow(
-        onCloseRequest = onDismiss,
-        state = rememberDialogState(
-            position = centeredOnMainWindow(mainWindowState, 800.dp, 700.dp),
-            width = 800.dp,
-            height = 700.dp
-        ),
-        title = if (isNewSong) stringResource(Res.string.new_song) else stringResource(Res.string.edit_song),
-        resizable = true
-    ) {
-        AppThemeWrapper(theme = theme) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
+
+    AppThemeWrapper(theme = theme) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(16.dp)
             ) {
+                // Content area: fixed-height fields scroll if needed, lyrics fill the rest
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(bottom = 16.dp)
                 ) {
-                    // Content area: fixed-height fields scroll if needed, lyrics fill the rest
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(bottom = 16.dp)
-                    ) {
-                    val separatorColor = MaterialTheme.colorScheme.primary
-                    val separatorBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    val lyricsHighlightTransformation = remember(separatorColor, separatorBg) {
-                        VisualTransformation { text ->
-                            val annotated = buildAnnotatedString {
-                                val lines = text.text.split("\n")
-                                lines.forEachIndexed { i, line ->
-                                    val trimmed = line.trim()
-                                    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-                                        pushStyle(
-                                            SpanStyle(
-                                                color = separatorColor,
-                                                background = separatorBg,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                val separatorColor = MaterialTheme.colorScheme.primary
+                val separatorBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                val lyricsHighlightTransformation = remember(separatorColor, separatorBg) {
+                    VisualTransformation { text ->
+                        val annotated = buildAnnotatedString {
+                            val lines = text.text.split("\n")
+                            lines.forEachIndexed { i, line ->
+                                val trimmed = line.trim()
+                                if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+                                    pushStyle(
+                                        SpanStyle(
+                                            color = separatorColor,
+                                            background = separatorBg,
+                                            fontWeight = FontWeight.Bold
                                         )
-                                        append(line)
-                                        pop()
-                                    } else {
-                                        append(line)
-                                    }
-                                    if (i < lines.size - 1) append("\n")
+                                    )
+                                    append(line)
+                                    pop()
+                                } else {
+                                    append(line)
                                 }
+                                if (i < lines.size - 1) append("\n")
                             }
-                            TransformedText(annotated, OffsetMapping.Identity)
                         }
+                        TransformedText(annotated, OffsetMapping.Identity)
                     }
-                    Column(
-                        modifier = Modifier.verticalScroll(rememberScrollState())
+                }
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    // First row: Song Number, Songbook, Tune
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // First row: Song Number, Songbook, Tune
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                        SettingsTextField(
+                            value = editedNumber,
+                            onValueChange = { newValue ->
+                                // Only allow digits
+                                if (newValue.all { it.isDigit() }) {
+                                    editedNumber = newValue
+                                }
+                            },
+                            modifier = Modifier.weight(0.2f),
+                            label = stringResource(Res.string.song_number),
+                            fillWidth = true,
+                            singleLine = true,
+                        )
+
+                        var songbookExpanded by remember { mutableStateOf(false) }
+                        var isAddingNew by remember(isVisible) { mutableStateOf(false) }
+
+                        if (isAddingNew) {
                             SettingsTextField(
-                                value = editedNumber,
-                                onValueChange = { newValue ->
-                                    // Only allow digits
-                                    if (newValue.all { it.isDigit() }) {
-                                        editedNumber = newValue
-                                    }
-                                },
-                                modifier = Modifier.weight(0.2f),
-                                label = stringResource(Res.string.song_number),
+                                value = editedSongbook,
+                                onValueChange = { editedSongbook = it },
+                                modifier = Modifier.weight(0.5f),
+                                label = stringResource(Res.string.song_book),
                                 fillWidth = true,
                                 singleLine = true,
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = {
+                                            editedSongbook = song.songbook
+                                            isAddingNew = false
+                                        },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    }
+                                }
                             )
-
-                            var songbookExpanded by remember { mutableStateOf(false) }
-                            var isAddingNew by remember(isVisible) { mutableStateOf(false) }
-
-                            if (isAddingNew) {
+                        } else {
+                            ExposedDropdownMenuBox(
+                                expanded = songbookExpanded,
+                                onExpandedChange = { songbookExpanded = it },
+                                modifier = Modifier.weight(0.5f)
+                            ) {
                                 SettingsTextField(
                                     value = editedSongbook,
-                                    onValueChange = { editedSongbook = it },
-                                    modifier = Modifier.weight(0.5f),
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = songbookExpanded) },
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                     label = stringResource(Res.string.song_book),
                                     fillWidth = true,
                                     singleLine = true,
-                                    trailingIcon = {
-                                        IconButton(
-                                            onClick = {
-                                                editedSongbook = song.songbook
-                                                isAddingNew = false
-                                            },
-                                            modifier = Modifier.size(20.dp)
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        }
-                                    }
                                 )
-                            } else {
-                                ExposedDropdownMenuBox(
+                                ExposedDropdownMenu(
                                     expanded = songbookExpanded,
-                                    onExpandedChange = { songbookExpanded = it },
-                                    modifier = Modifier.weight(0.5f)
+                                    onDismissRequest = { songbookExpanded = false }
                                 ) {
-                                    SettingsTextField(
-                                        value = editedSongbook,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = songbookExpanded) },
-                                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                                        label = stringResource(Res.string.song_book),
-                                        fillWidth = true,
-                                        singleLine = true,
-                                    )
-                                    ExposedDropdownMenu(
-                                        expanded = songbookExpanded,
-                                        onDismissRequest = { songbookExpanded = false }
-                                    ) {
-                                        songbooks.forEach { songbook ->
-                                            DropdownMenuItem(
-                                                text = { Text(songbook) },
-                                                onClick = {
-                                                    editedSongbook = songbook
-                                                    songbookExpanded = false
-                                                }
-                                            )
-                                        }
-                                        HorizontalDivider()
+                                    songbooks.forEach { songbook ->
                                         DropdownMenuItem(
-                                            text = { Text(stringResource(Res.string.add_new)) },
+                                            text = { Text(songbook) },
                                             onClick = {
+                                                editedSongbook = songbook
                                                 songbookExpanded = false
-                                                editedSongbook = ""
-                                                isAddingNew = true
                                             }
                                         )
                                     }
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(Res.string.add_new)) },
+                                        onClick = {
+                                            songbookExpanded = false
+                                            editedSongbook = ""
+                                            isAddingNew = true
+                                        }
+                                    )
                                 }
                             }
-
-                            SettingsTextField(
-                                value = editedTune,
-                                onValueChange = { editedTune = it },
-                                modifier = Modifier.weight(0.3f),
-                                label = stringResource(Res.string.tune),
-                                fillWidth = true,
-                                singleLine = true,
-                            )
                         }
 
-                        // Second row: Primary Title and Secondary Title
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            SettingsTextField(
-                                value = editedTitle,
-                                onValueChange = {
-                                    editedTitle = it
-                                    titleManuallyEdited = it.isNotBlank()
-                                },
-                                modifier = Modifier.weight(0.5f),
-                                label = stringResource(Res.string.song_title),
-                                fillWidth = true,
-                                singleLine = true,
-                            )
+                        SettingsTextField(
+                            value = editedTune,
+                            onValueChange = { editedTune = it },
+                            modifier = Modifier.weight(0.3f),
+                            label = stringResource(Res.string.tune),
+                            fillWidth = true,
+                            singleLine = true,
+                        )
+                    }
 
-                            SettingsTextField(
-                                value = editedSecondaryTitle,
-                                onValueChange = { editedSecondaryTitle = it },
-                                modifier = Modifier.weight(0.5f),
-                                label = stringResource(Res.string.secondary_title),
-                                fillWidth = true,
-                                singleLine = true,
-                            )
-                        }
-
-                        if (isDuplicate) {
-                            Text(
-                                text = stringResource(Res.string.duplicate_song_error),
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                        }
-
-                        // Third row: Author and Composer
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            SettingsTextField(
-                                value = editedAuthor,
-                                onValueChange = { editedAuthor = it },
-                                modifier = Modifier.weight(0.4f),
-                                label = stringResource(Res.string.author),
-                                fillWidth = true,
-                                singleLine = true,
-                            )
-
-                            SettingsTextField(
-                                value = editedComposer,
-                                onValueChange = { editedComposer = it },
-                                modifier = Modifier.weight(0.4f),
-                                label = stringResource(Res.string.composer),
-                                fillWidth = true,
-                                singleLine = true,
-                            )
-
-                            SettingsTextField(
-                                value = editedCcli,
-                                onValueChange = { editedCcli = it },
-                                modifier = Modifier.weight(0.2f),
-                                label = stringResource(Res.string.ccli_number),
-                                fillWidth = true,
-                                singleLine = true,
-                            )
-                        }
-
-                        // Lyrics section - side by side
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.lyrics),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f).padding(bottom = 4.dp)
-                            )
-                            Text(
-                                text = stringResource(Res.string.secondary_lyrics),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f).padding(bottom = 4.dp)
-                            )
-                        }
-                    } // end top fields (scrollable if window is shrunk)
-
-                    // Lyrics fields fill the rest of the available height
+                    // Second row: Primary Title and Secondary Title
                     Row(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        LyricsTextField(
-                            value = editedLyrics,
-                            onValueChange = { newLyrics ->
-                                editedLyrics = newLyrics
-                                // Auto-fill title from first non-header, non-blank lyric line
-                                if (isNewSong && !titleManuallyEdited) {
-                                    val firstContentLine = newLyrics.lines().firstOrNull { line ->
-                                        val trimmed = line.trim()
-                                        trimmed.isNotBlank() && !trimmed.startsWith("[")
-                                    }?.trim() ?: ""
-                                    editedTitle = firstContentLine
-                                }
+                        SettingsTextField(
+                            value = editedTitle,
+                            onValueChange = {
+                                editedTitle = it
+                                titleManuallyEdited = it.isNotBlank()
                             },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            placeholder = { Text(stringResource(Res.string.enter_lyrics_here)) },
-                            visualTransformation = lyricsHighlightTransformation
+                            modifier = Modifier.weight(0.5f),
+                            label = stringResource(Res.string.song_title),
+                            fillWidth = true,
+                            singleLine = true,
                         )
-                        LyricsTextField(
-                            value = editedSecondaryLyrics,
-                            onValueChange = { editedSecondaryLyrics = it },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            placeholder = { Text(stringResource(Res.string.enter_secondary_lyrics_here)) },
-                            visualTransformation = lyricsHighlightTransformation
+
+                        SettingsTextField(
+                            value = editedSecondaryTitle,
+                            onValueChange = { editedSecondaryTitle = it },
+                            modifier = Modifier.weight(0.5f),
+                            label = stringResource(Res.string.secondary_title),
+                            fillWidth = true,
+                            singleLine = true,
                         )
                     }
 
-                    // Help text
-                    Text(
-                        text = stringResource(Res.string.lyrics_format_help),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    if (isDuplicate) {
+                        Text(
+                            text = stringResource(Res.string.duplicate_song_error),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
                     }
 
-                    // Action buttons
+                    // Third row: Author and Composer
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SettingsTextField(
+                            value = editedAuthor,
+                            onValueChange = { editedAuthor = it },
+                            modifier = Modifier.weight(0.4f),
+                            label = stringResource(Res.string.author),
+                            fillWidth = true,
+                            singleLine = true,
+                        )
+
+                        SettingsTextField(
+                            value = editedComposer,
+                            onValueChange = { editedComposer = it },
+                            modifier = Modifier.weight(0.4f),
+                            label = stringResource(Res.string.composer),
+                            fillWidth = true,
+                            singleLine = true,
+                        )
+
+                        SettingsTextField(
+                            value = editedCcli,
+                            onValueChange = { editedCcli = it },
+                            modifier = Modifier.weight(0.2f),
+                            label = stringResource(Res.string.ccli_number),
+                            fillWidth = true,
+                            singleLine = true,
+                        )
+                    }
+
+                    // Lyrics section - side by side
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        TextButton(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = onDismiss,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(stringResource(Res.string.cancel))
-                        }
+                        Text(
+                            text = stringResource(Res.string.lyrics),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f).padding(bottom = 4.dp)
+                        )
+                        Text(
+                            text = stringResource(Res.string.secondary_lyrics),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f).padding(bottom = 4.dp)
+                        )
+                    }
+                } // end top fields (scrollable if window is shrunk)
 
-                        Button(
-                            shape = RoundedCornerShape(6.dp),
-                            enabled = !isDuplicate && (!isNewSong || (editedSongbook.isNotBlank() && editedTitle.isNotBlank())),
-                            onClick = {
-                                val updatedSong = SongItem(
-                                    number = editedNumber,
-                                    title = editedTitle,
-                                    songbook = editedSongbook,
-                                    tune = editedTune,
-                                    author = editedAuthor,
-                                    composer = editedComposer,
-                                    lyrics = editedLyrics.split("\n"),
-                                    secondaryTitle = editedSecondaryTitle,
-                                    secondaryLyrics = editedSecondaryLyrics.split("\n").let {
-                                        if (it.all { line -> line.isBlank() || line.trim().startsWith("[") }) emptyList() else it
-                                    },
-                                    sourceFile = song.sourceFile,
-                                    ccliNumber = editedCcli
-                                )
-                                onSave(updatedSong)
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
+                // Lyrics fields fill the rest of the available height
+                Row(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LyricsTextField(
+                        value = editedLyrics,
+                        onValueChange = { newLyrics ->
+                            editedLyrics = newLyrics
+                            // Auto-fill title from first non-header, non-blank lyric line
+                            if (isNewSong && !titleManuallyEdited) {
+                                val firstContentLine = newLyrics.lines().firstOrNull { line ->
+                                    val trimmed = line.trim()
+                                    trimmed.isNotBlank() && !trimmed.startsWith("[")
+                                }?.trim() ?: ""
+                                editedTitle = firstContentLine
+                            }
+                        },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        placeholder = { Text(stringResource(Res.string.enter_lyrics_here)) },
+                        visualTransformation = lyricsHighlightTransformation
+                    )
+                    LyricsTextField(
+                        value = editedSecondaryLyrics,
+                        onValueChange = { editedSecondaryLyrics = it },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        placeholder = { Text(stringResource(Res.string.enter_secondary_lyrics_here)) },
+                        visualTransformation = lyricsHighlightTransformation
+                    )
+                }
+
+                // Help text
+                Text(
+                    text = stringResource(Res.string.lyrics_format_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                }
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = onDismiss,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text(stringResource(Res.string.cancel))
+                    }
+
+                    Button(
+                        shape = RoundedCornerShape(6.dp),
+                        enabled = !isDuplicate && (!isNewSong || (editedSongbook.isNotBlank() && editedTitle.isNotBlank())),
+                        onClick = {
+                            val updatedSong = SongItem(
+                                number = editedNumber,
+                                title = editedTitle,
+                                songbook = editedSongbook,
+                                tune = editedTune,
+                                author = editedAuthor,
+                                composer = editedComposer,
+                                lyrics = editedLyrics.split("\n"),
+                                secondaryTitle = editedSecondaryTitle,
+                                secondaryLyrics = editedSecondaryLyrics.split("\n").let {
+                                    if (it.all { line -> line.isBlank() || line.trim().startsWith("[") }) emptyList() else it
+                                },
+                                sourceFile = song.sourceFile,
+                                ccliNumber = editedCcli
                             )
-                        ) {
-                            Text(stringResource(Res.string.save))
-                        }
+                            onSave(updatedSong)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(stringResource(Res.string.save))
                     }
                 }
             }
