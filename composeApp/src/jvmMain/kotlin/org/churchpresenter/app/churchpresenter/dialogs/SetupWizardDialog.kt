@@ -182,9 +182,6 @@ fun SetupWizardDialog(
     onOpenSettings: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
-    var step by remember { mutableStateOf(0) }
-    var goingForward by remember { mutableStateOf(true) }
-
     val windowState = rememberWindowState(
         width = 700.dp,
         height = 620.dp,
@@ -199,130 +196,161 @@ fun SetupWizardDialog(
         resizable = false,
         alwaysOnTop = alwaysOnTop
     ) {
-        LanguageProvider(language = selectedLanguage) {
-            AppThemeWrapper(theme = theme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
+        SetupWizardContent(
+            theme = theme,
+            selectedLanguage = selectedLanguage,
+            onLanguageSelected = onLanguageSelected,
+            onThemeSelected = onThemeSelected,
+            onOpenSettings = onOpenSettings,
+            onDismiss = onDismiss
+        )
+    }
+}
 
-                        // Step indicator header — seamless dark with a faint accent glow
+/**
+ * Everything the wizard window contains: the step header, the animated step body and the
+ * Skip/Back/Next/Done row, together with the step counter those three read from.
+ *
+ * Held apart from [SetupWizardDialog] because that function's only other statement is the `Window`
+ * it opens, which cannot be composed on a headless machine. Keeping the window down to that one call
+ * leaves the wizard's actual behaviour — which step follows which, and which buttons a step offers —
+ * reachable from a test.
+ */
+@Composable
+internal fun SetupWizardContent(
+    theme: ThemeMode,
+    selectedLanguage: Language,
+    onLanguageSelected: (Language) -> Unit,
+    onThemeSelected: (ThemeMode) -> Unit,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var step by remember { mutableStateOf(0) }
+    var goingForward by remember { mutableStateOf(true) }
+
+    LanguageProvider(language = selectedLanguage) {
+        AppThemeWrapper(theme = theme) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+
+                    // Step indicator header — seamless dark with a faint accent glow
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.setup_wizard_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            StepDots(currentStep = step, totalSteps = TOTAL_STEPS)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(Res.string.setup_wizard_step, step + 1, TOTAL_STEPS),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Step content — animated slide
+                    AnimatedContent(
+                        targetState = step,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        transitionSpec = {
+                            if (goingForward) {
+                                slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
+                            } else {
+                                slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
+                            }
+                        },
+                        label = "wizard_step"
+                    ) { currentStep ->
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                            Color.Transparent
-                                        )
-                                    )
-                                )
-                                .padding(horizontal = 24.dp, vertical = 16.dp)
+                                .fillMaxSize()
+                                .padding(horizontal = 32.dp, vertical = 24.dp),
+                            contentAlignment = Alignment.TopCenter
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = stringResource(Res.string.setup_wizard_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                            when (currentStep) {
+                                0 -> LanguageStep(
+                                    selectedLanguage = selectedLanguage,
+                                    onLanguageSelected = onLanguageSelected
                                 )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                StepDots(currentStep = step, totalSteps = TOTAL_STEPS)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = stringResource(Res.string.setup_wizard_step, step + 1, TOTAL_STEPS),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                1 -> ThemeStep(
+                                    selectedTheme = theme,
+                                    onThemeSelected = onThemeSelected
                                 )
+                                2 -> WelcomeStep()
+                                3 -> BibleStep(onOpenSettings = onOpenSettings)
+                                4 -> SongsStep(onOpenSettings = onOpenSettings)
+                                5 -> ProjectionStep(onOpenSettings = onOpenSettings)
+                                6 -> VlcStep()
+                                7 -> ReadyStep()
                             }
                         }
+                    }
 
-                        // Step content — animated slide
-                        AnimatedContent(
-                            targetState = step,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            transitionSpec = {
-                                if (goingForward) {
-                                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
-                                } else {
-                                    slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
-                                }
-                            },
-                            label = "wizard_step"
-                        ) { currentStep ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 32.dp, vertical = 24.dp),
-                                contentAlignment = Alignment.TopCenter
-                            ) {
-                                when (currentStep) {
-                                    0 -> LanguageStep(
-                                        selectedLanguage = selectedLanguage,
-                                        onLanguageSelected = onLanguageSelected
-                                    )
-                                    1 -> ThemeStep(
-                                        selectedTheme = theme,
-                                        onThemeSelected = onThemeSelected
-                                    )
-                                    2 -> WelcomeStep()
-                                    3 -> BibleStep(onOpenSettings = onOpenSettings)
-                                    4 -> SongsStep(onOpenSettings = onOpenSettings)
-                                    5 -> ProjectionStep(onOpenSettings = onOpenSettings)
-                                    6 -> VlcStep()
-                                    7 -> ReadyStep()
-                                }
+                    HorizontalDivider()
+
+                    // Navigation buttons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 24.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (step < TOTAL_STEPS - 1) {
+                            TextButton(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                                Text(stringResource(Res.string.setup_wizard_skip))
                             }
+                        } else {
+                            Spacer(modifier = Modifier.width(80.dp))
                         }
 
-                        HorizontalDivider()
-
-                        // Navigation buttons
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 24.dp, vertical = 14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (step > 0) {
+                                OutlinedButton(
+                                    shape = RoundedCornerShape(6.dp),
+                                    onClick = {
+                                    goingForward = false
+                                    step--
+                                }) {
+                                    Text(stringResource(Res.string.setup_wizard_back))
+                                }
+                            }
                             if (step < TOTAL_STEPS - 1) {
-                                TextButton(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                                    Text(stringResource(Res.string.setup_wizard_skip))
+                                Button(
+                                    shape = RoundedCornerShape(6.dp),
+                                    onClick = {
+                                    goingForward = true
+                                    step++
+                                }) {
+                                    Text(stringResource(Res.string.setup_wizard_next))
                                 }
                             } else {
-                                Spacer(modifier = Modifier.width(80.dp))
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (step > 0) {
-                                    OutlinedButton(
-                                        shape = RoundedCornerShape(6.dp),
-                                        onClick = {
-                                        goingForward = false
-                                        step--
-                                    }) {
-                                        Text(stringResource(Res.string.setup_wizard_back))
-                                    }
-                                }
-                                if (step < TOTAL_STEPS - 1) {
-                                    Button(
-                                        shape = RoundedCornerShape(6.dp),
-                                        onClick = {
-                                        goingForward = true
-                                        step++
-                                    }) {
-                                        Text(stringResource(Res.string.setup_wizard_next))
-                                    }
-                                } else {
-                                    Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                                        Text(stringResource(Res.string.setup_wizard_done))
-                                    }
+                                Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                                    Text(stringResource(Res.string.setup_wizard_done))
                                 }
                             }
                         }
