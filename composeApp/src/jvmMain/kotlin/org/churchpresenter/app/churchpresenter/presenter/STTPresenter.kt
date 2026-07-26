@@ -15,13 +15,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.Layout
@@ -246,14 +247,11 @@ private fun buildDisplayText(
     showWordHighlighting: Boolean,
     baseColor: Color
 ): AnnotatedString {
+    // Same shaping the drip-feed cursor counts against — see captionText in SttDripFeed.kt.
     val lines = mutableListOf<String>()
-    for (seg in segments) {
-        if (seg.text.isNotBlank()) {
-            lines.add(seg.text.trim().replace(Regex("\\s+"), " "))
-        }
-    }
+    captionText(segments).takeIf { it.isNotEmpty() }?.let { lines.add(it) }
     if (showInProgress && inProgressText.isNotBlank()) {
-        lines.add(inProgressText.trim().replace(Regex("\\s+"), " "))
+        lines.add(normalizeSegmentText(inProgressText))
     }
 
     if (lines.isEmpty()) return AnnotatedString("")
@@ -310,37 +308,43 @@ private fun buildDisplayText(
 }
 
 /**
- * Drip feed: reveals the newest segment letter-by-letter (ChatGPT-style).
- * Returns the segment list with the last segment's text partially revealed.
+ * Drip feed: reveals the caption letter-by-letter (ChatGPT-style) at [delayMs] per character.
+ *
+ * ONE cursor runs over the whole caption rather than over the newest segment, so a segment arriving
+ * mid-reveal extends the text to type out instead of snapping its predecessor to full. The cursor
+ * starts at the end of whatever is already on screen — an output opened mid-service shows the
+ * backlog it inherits, it does not re-type it. Speed changes apply to the reveal in flight, since
+ * the effect is keyed on [delayMs].
+ *
+ * The character arithmetic lives in `SttDripFeed.kt`.
  */
 @Composable
-private fun useDripFeed(segments: List<STTSegment>, enabled: Boolean, delayMs: Long = 40L): List<STTSegment> {
-    if (!enabled || segments.isEmpty()) return segments
+private fun useDripFeed(segments: List<STTSegment>, enabled: Boolean, delayMs: Long): List<STTSegment> {
+    if (!enabled) return segments
 
-    val lastSegment = segments.last()
-    val fullNewText = remember(lastSegment.id, lastSegment.text) {
-        lastSegment.text.trim()
-    }
+    val fullText = captionText(segments)
+    val latestFullText = rememberUpdatedState(fullText)
+    val revealed = remember { mutableIntStateOf(fullText.length) }
 
-    var revealedForSegmentId by remember { mutableIntStateOf(lastSegment.id) }
-    var revealedCharCount by remember { mutableIntStateOf(Int.MAX_VALUE) }
-
-    // If segment changed but LaunchedEffect hasn't fired, show 0 characters
-    val effectiveRevealed = if (revealedForSegmentId != lastSegment.id) 0 else revealedCharCount
-
-    LaunchedEffect(lastSegment.id, lastSegment.text) {
-        revealedForSegmentId = lastSegment.id
-        revealedCharCount = 0
-        for (i in 1..fullNewText.length) {
-            delay(delayMs)
-            revealedCharCount = i
+    LaunchedEffect(delayMs) {
+        var previous = latestFullText.value
+        snapshotFlow { latestFullText.value }.collectLatest { current ->
+            if (current != previous) {
+                revealed.intValue = reanchorCursor(previous, revealed.intValue, current)
+                previous = current
+            }
+            while (revealed.intValue < current.length) {
+                delay(delayMs)
+                revealed.intValue = minOf(
+                    current.length,
+                    revealed.intValue + revealStep(revealed.intValue, current.length)
+                )
+            }
         }
     }
 
-    if (effectiveRevealed >= fullNewText.length) return segments
-
-    val revealedText = fullNewText.take(effectiveRevealed)
-    return segments.dropLast(1) + lastSegment.copy(text = revealedText)
+    if (revealed.intValue >= fullText.length) return segments
+    return applyRevealBudget(segments, revealed.intValue)
 }
 
 private fun sttPositionToAlignment(position: String): Alignment = when (position) {
