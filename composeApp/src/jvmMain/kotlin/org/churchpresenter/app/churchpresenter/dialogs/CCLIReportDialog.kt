@@ -392,7 +392,7 @@ fun CCLIReportDialog(
 // ── Songs tab ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SongsReportContent(songs: List<SongSummary>) {
+internal fun SongsReportContent(songs: List<SongSummary>) {
     val primary = MaterialTheme.colorScheme.primary
     val totalPlays = songs.sumOf { it.count }
 
@@ -430,7 +430,7 @@ private fun SongsReportContent(songs: List<SongSummary>) {
 // ── Bible tab ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun BibleReportContent(verses: List<VerseSummary>) {
+internal fun BibleReportContent(verses: List<VerseSummary>) {
     val secondary = MaterialTheme.colorScheme.tertiary
     val totalPlays = verses.sumOf { it.count }
 
@@ -472,7 +472,7 @@ private fun BibleReportContent(verses: List<VerseSummary>) {
 // ── Activity tab ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun ActivityContent(activity: List<ActivityPoint>) {
+internal fun ActivityContent(activity: List<ActivityPoint>) {
     val primary = MaterialTheme.colorScheme.primary
     val verseColor = VERSE_BAR_COLOR
 
