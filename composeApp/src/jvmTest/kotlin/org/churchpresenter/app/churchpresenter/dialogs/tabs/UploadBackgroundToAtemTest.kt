@@ -54,6 +54,16 @@ class UploadBackgroundToAtemTest {
         )
     }
 
+    /**
+     * A file that is not an image must stop the upload rather than send garbage to the switcher.
+     *
+     * **Which** exception carries that is deliberately not asserted. `ImageIO.read` may either return
+     * null — in which case the upload's own `?: throw Exception("Could not read image file")` fires —
+     * or throw one of its own, and which happens depends on the JDK's installed image readers. This
+     * test originally asserted the message and passed on macOS/JDK 24 while failing elsewhere, where
+     * ImageIO threw first with a null message. What holds everywhere is that it fails, and that it
+     * does not fail as a bare `NullPointerException` from dereferencing a null image.
+     */
     @Test
     fun `a file that is not an image fails the same way`() {
         val notAnImage = File.createTempFile("churchpresenter-background", ".png")
@@ -64,8 +74,8 @@ class UploadBackgroundToAtemTest {
                 runBlocking { upload(atem(), notAnImage.absolutePath, slot = 1) }
             }
             assertTrue(
-                error.message?.contains("Could not read image file") == true,
-                "a non-image must fail with the reader's own message, was \"${error.message}\"",
+                error !is NullPointerException,
+                "a non-image must be rejected deliberately, not by dereferencing a null image",
             )
         } finally {
             notAnImage.delete()
