@@ -1,0 +1,151 @@
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
+package org.churchpresenter.app.churchpresenter.composables
+
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import org.churchpresenter.app.churchpresenter.models.SceneSource
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+/**
+ * The Image source's own controls: the file path field, the Browse button and the Scale dropdown.
+ *
+ * The dropdown is the part worth pinning. It stores `"FIT"`/`"FILL"`/`"STRETCH"`/`"NONE"` but shows
+ * translated labels, and it does the mapping twice — once each way, through two hand-written maps. A
+ * missing entry in either is silent: the panel would show the wrong scale, or write a scale the
+ * renderer does not recognise. Both directions are walked over all four values, and the fallback for
+ * a stored value this build has no label for is pinned too.
+ *
+ * The Browse button opens `FileChooser.platformInstance`, a real native dialog, so it is asserted to
+ * be there and clickable but never clicked.
+ */
+class SourcePropertiesImageTest {
+
+    /** Ordinal of the file path field among the panel's fields — the header owns the first six. */
+    private val filePathField = 6
+
+    private val scaleLabels = listOf("Fit", "Fill", "Stretch", "None")
+
+    // ── What the panel displays ───────────────────────────────────────────────
+
+    @Test
+    fun `the section is headed and every control captioned`() = sourcePanel(Fixture.image()) { _ ->
+        onNodeWithText(Label.IMAGE).assertIsDisplayed()
+        onNodeWithText("FILE PATH").assertIsDisplayed()
+        onNodeWithText("SCALE").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the image panel adds one field to the header's six`() = sourcePanel(Fixture.image()) { _ ->
+        textFields().assertCountEquals(7)
+    }
+
+    @Test
+    fun `the file path field shows the stored path`() = sourcePanel(Fixture.image()) { _ ->
+        assertFieldShows("/tmp/logo.png", "the file path field")
+    }
+
+    @Test
+    fun `the Browse button is on screen and clickable`() = sourcePanel(Fixture.image()) { _ ->
+        // Never clicked: it opens the platform's own file dialog.
+        onNodeWithContentDescription("Browse").assertIsDisplayed().assertHasClickAction()
+    }
+
+    // ── File path ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `typing a path stores it and nothing else`() = sourcePanel(Fixture.image()) { get ->
+        typeField(filePathField, "/media/backdrops/sunrise.jpg")
+
+        val image = get() as SceneSource.ImageSource
+        assertEquals("/media/backdrops/sunrise.jpg", image.filePath, "the field writes the source's path")
+        assertEquals(Fixture.image().copy(filePath = image.filePath), image, "and touches nothing else")
+        assertFieldShows("/media/backdrops/sunrise.jpg", "the file path field after typing")
+    }
+
+    @Test
+    fun `the path can be cleared`() = sourcePanel(Fixture.image()) { get ->
+        typeField(filePathField, "")
+
+        assertEquals("", (get() as SceneSource.ImageSource).filePath, "an empty path is stored as typed")
+    }
+
+    // ── Scale ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `the dropdown names the stored scale`() {
+        listOf("FIT" to "Fit", "FILL" to "Fill", "STRETCH" to "Stretch", "NONE" to "None")
+            .forEach { (stored, shown) ->
+                sourcePanel(Fixture.image().copy(contentScale = stored)) { _ ->
+                    assertEquals(1, countOf(shown), "$stored must read as \"$shown\"")
+                }
+            }
+    }
+
+    @Test
+    fun `a scale this build does not know falls back to Fit`() {
+        sourcePanel(Fixture.image().copy(contentScale = "COVER_EVERYTHING")) { _ ->
+            onNodeWithText("Fit").assertExists("an unrecognised stored scale must name a real option")
+            assertEquals(0, countOf("COVER_EVERYTHING"), "and must not show itself")
+        }
+    }
+
+    @Test
+    fun `the dropdown offers every scale`() = sourcePanel(Fixture.image()) { _ ->
+        openDropdown(showing = "Fit")
+
+        scaleLabels.forEach { option ->
+            // Fit is both the closed selector's text and a menu entry; the others appear once.
+            val expected = if (option == "Fit") 2 else 1
+            assertEquals(expected, countOf(option), "\"$option\" must be offered exactly once")
+        }
+    }
+
+    @Test
+    fun `choosing Fill stores FILL`() = sourcePanel(Fixture.image()) { get ->
+        chooseFromDropdown(showing = "Fit", option = "Fill")
+
+        assertEquals("FILL", (get() as SceneSource.ImageSource).contentScale)
+        assertEquals(1, countOf("Fill"), "and the closed selector now reads Fill")
+    }
+
+    @Test
+    fun `choosing Stretch stores STRETCH`() = sourcePanel(Fixture.image()) { get ->
+        chooseFromDropdown(showing = "Fit", option = "Stretch")
+
+        assertEquals("STRETCH", (get() as SceneSource.ImageSource).contentScale)
+        assertEquals(1, countOf("Stretch"))
+    }
+
+    @Test
+    fun `choosing None stores NONE`() = sourcePanel(Fixture.image()) { get ->
+        chooseFromDropdown(showing = "Fit", option = "None")
+
+        assertEquals("NONE", (get() as SceneSource.ImageSource).contentScale)
+        assertEquals(1, countOf("None"))
+    }
+
+    @Test
+    fun `choosing Fit stores FIT`() {
+        sourcePanel(Fixture.image().copy(contentScale = "FILL")) { get ->
+            chooseFromDropdown(showing = "Fill", option = "Fit")
+
+            assertEquals("FIT", (get() as SceneSource.ImageSource).contentScale)
+            assertEquals(1, countOf("Fit"))
+        }
+    }
+
+    @Test
+    fun `changing the scale leaves the rest of the source alone`() = sourcePanel(Fixture.image()) { get ->
+        chooseFromDropdown(showing = "Fit", option = "Fill")
+
+        assertEquals(
+            Fixture.image().copy(contentScale = "FILL"), get(),
+            "the scale dropdown may write only the scale",
+        )
+    }
+}

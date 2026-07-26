@@ -943,28 +943,14 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
 
     if (devices.isNotEmpty()) {
         val items = devices.map { it.displayName }
-        val selectedDisplay = if (source.isDeckLink) {
-            devices.find { it.isDeckLink && it.deckLinkIndex == source.deckLinkIndex }?.displayName
-                ?: items.first()
-        } else {
-            devices.find { !it.isDeckLink && it.path == source.devicePath }?.displayName
-                ?: if (source.devicePath.isNotEmpty()) source.devicePath else items.first()
-        }
         DropdownSelector(
             label = stringResource(Res.string.canvas_camera_device),
             items = items,
-            selected = selectedDisplay,
+            selected = selectedCameraName(devices, source),
             onSelectedChange = { selected ->
                 val device = devices.find { it.displayName == selected }
                 if (device != null) {
-                    onUpdate(source.copy(
-                        devicePath = device.path,
-                        deviceName = device.name,
-                        videoFormat = "",
-                        videoConnection = 0,
-                        isDeckLink = device.isDeckLink,
-                        deckLinkIndex = device.deckLinkIndex
-                    ))
+                    onUpdate(cameraSourceOn(source, device))
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -1002,12 +988,10 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
             // Video Connection dropdown
             if (connections.isNotEmpty()) {
                 val connItems = connections.map { it.name }
-                val selectedConn = connections.find { it.value == source.videoConnection }?.name
-                    ?: connItems.first()
                 DropdownSelector(
                     label = stringResource(Res.string.canvas_camera_connection),
                     items = connItems,
-                    selected = selectedConn,
+                    selected = selectedConnectionName(connections, source.videoConnection),
                     onSelectedChange = { selected ->
                         val conn = connections.find { it.name == selected }
                         if (conn != null) {
@@ -1021,15 +1005,10 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
             // Mode dropdown
             val autoLabel = stringResource(Res.string.canvas_camera_mode_auto)
             val modeItems = listOf(autoLabel) + modes.map { it.name }
-            val selectedMode = if (source.videoFormat.isEmpty()) {
-                autoLabel
-            } else {
-                modes.find { it.encodedValue == source.videoFormat }?.name ?: autoLabel
-            }
             DropdownSelector(
                 label = stringResource(Res.string.canvas_camera_mode),
                 items = modeItems,
-                selected = selectedMode,
+                selected = selectedModeName(modes, source.videoFormat, autoLabel),
                 onSelectedChange = { selected ->
                     if (selected == autoLabel) {
                         onUpdate(source.copy(videoFormat = ""))
@@ -1053,16 +1032,10 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
 
             val autoLabel = stringResource(Res.string.canvas_camera_format_auto)
             val formatItems = listOf(autoLabel) + formats.map { it.displayName }
-            val selectedFormat = if (source.videoFormat.isEmpty()) {
-                autoLabel
-            } else {
-                formats.find { it.encodedValue == source.videoFormat }?.displayName ?: autoLabel
-            }
-
             DropdownSelector(
                 label = stringResource(Res.string.canvas_camera_format),
                 items = formatItems,
-                selected = selectedFormat,
+                selected = selectedFormatName(formats, source.videoFormat, autoLabel),
                 onSelectedChange = { selected ->
                     if (selected == autoLabel) {
                         onUpdate(source.copy(videoFormat = ""))
@@ -1104,7 +1077,73 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
     }
 }
 
-private data class CameraDevice(
+/**
+ * Which entry the camera dropdown shows as chosen, given the devices this machine can see.
+ *
+ * A DeckLink source is matched on its card index and an ordinary camera on its device path, because
+ * those are what survive a reboot — a display name can change when a driver updates. When the stored
+ * device is not present at all the panel shows the *stored path* rather than silently pretending the
+ * first camera in the list is the one configured, so an operator can see that their camera is
+ * missing; only when there is no stored path either does it fall back to the first entry.
+ *
+ * [devices] must not be empty — the panel offers no dropdown at all in that case.
+ */
+internal fun selectedCameraName(devices: List<CameraDevice>, source: SceneSource.CameraSource): String =
+    if (source.isDeckLink) {
+        devices.find { it.isDeckLink && it.deckLinkIndex == source.deckLinkIndex }?.displayName
+            ?: devices.first().displayName
+    } else {
+        devices.find { !it.isDeckLink && it.path == source.devicePath }?.displayName
+            ?: if (source.devicePath.isNotEmpty()) source.devicePath else devices.first().displayName
+    }
+
+/**
+ * The source re-pointed at [device].
+ *
+ * Format and connection are cleared rather than carried over: they are the *previous* device's
+ * capabilities, and a resolution one camera offers is not one another necessarily does.
+ */
+internal fun cameraSourceOn(
+    source: SceneSource.CameraSource,
+    device: CameraDevice
+): SceneSource.CameraSource = source.copy(
+    devicePath = device.path,
+    deviceName = device.name,
+    videoFormat = "",
+    videoConnection = 0,
+    isDeckLink = device.isDeckLink,
+    deckLinkIndex = device.deckLinkIndex
+)
+
+/** The DeckLink input the connection dropdown shows, falling back to the first the card offers. */
+internal fun selectedConnectionName(
+    connections: List<DeckLinkManager.VideoConnection>,
+    videoConnection: Int
+): String = connections.find { it.value == videoConnection }?.name ?: connections.first().name
+
+/**
+ * The DeckLink mode the dropdown shows: [autoLabel] when none is stored, and also when the stored
+ * one is not among those this card reports — a mode saved against different hardware must not leave
+ * the dropdown naming something the card cannot actually be set to.
+ */
+internal fun selectedModeName(
+    modes: List<DeckLinkManager.InputMode>,
+    videoFormat: String,
+    autoLabel: String
+): String =
+    if (videoFormat.isEmpty()) autoLabel
+    else modes.find { it.encodedValue == videoFormat }?.name ?: autoLabel
+
+/** The camera format the dropdown shows, on the same terms as [selectedModeName]. */
+internal fun selectedFormatName(
+    formats: List<CameraFormat>,
+    videoFormat: String,
+    autoLabel: String
+): String =
+    if (videoFormat.isEmpty()) autoLabel
+    else formats.find { it.encodedValue == videoFormat }?.displayName ?: autoLabel
+
+internal data class CameraDevice(
     val name: String,
     val path: String,
     val displayName: String,
@@ -1140,7 +1179,7 @@ private fun listCameraDevicesWithDeckLink(deckLinkDeviceFormat: String = "DeckLi
     return devices
 }
 
-private data class CameraFormat(
+internal data class CameraFormat(
     val width: Int,
     val height: Int,
     val fps: Int,
@@ -1148,10 +1187,15 @@ private data class CameraFormat(
     val encodedValue: String = "${width}x${height}@${fps}"
 )
 
+/** Largest area first, then highest frame rate — the order the format dropdown offers them in. */
+private fun Set<Triple<Int, Int, Int>>.toSortedFormats(): List<CameraFormat> =
+    sortedWith(compareByDescending<Triple<Int, Int, Int>> { it.first * it.second }.thenByDescending { it.third })
+        .map { (w, h, fps) -> CameraFormat(w, h, fps) }
+
 /** Cache format listings so we don't re-open the device every time the source recomposes. */
 private val cameraFormatCache = mutableMapOf<String, List<CameraFormat>>()
 
-private fun listCameraFormats(devicePath: String, deviceName: String): List<CameraFormat> {
+internal fun listCameraFormats(devicePath: String, deviceName: String): List<CameraFormat> {
     cameraFormatCache[devicePath]?.let { return it }
     val osName = System.getProperty("os.name", "").lowercase()
     val formats = when {
@@ -1167,8 +1211,7 @@ private fun listCameraFormats(devicePath: String, deviceName: String): List<Came
 }
 
 private fun listDshowFormats(deviceName: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    try {
+    return try {
         val name = deviceName.removePrefix(":dshow-vdev=")
         val process = ProcessBuilder("ffmpeg", "-f", "dshow", "-list_options", "true", "-i", "video=$name")
             .redirectErrorStream(true).start()
@@ -1176,106 +1219,140 @@ private fun listDshowFormats(deviceName: String): List<CameraFormat> {
         if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
             process.destroyForcibly()
         }
-        // Match lines like: min s=1920x1080 fps=30 max s=1920x1080 fps=30
-        // or: s=1920x1080 min fps=30 max fps=30
-        val sizePattern = Regex("""s=(\d+)x(\d+)""")
-        val fpsPattern = Regex("""fps=(\d+)""")
-        for (line in output.lines()) {
-            if (!line.contains("s=")) continue
-            val sizeMatch = sizePattern.find(line) ?: continue
-            val fpsMatches = fpsPattern.findAll(line).toList()
-            if (fpsMatches.isEmpty()) continue
-            val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-            val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-            // Use the last fps value (typically the max)
-            for (fm in fpsMatches) {
-                val fps = fm.groupValues[1].toIntOrNull() ?: continue
-                formats.add(Triple(w, h, fps))
-            }
-        }
+        parseDshowFormats(output)
     } catch (e: Exception) {
         System.err.println("[Camera] Error listing dshow formats: ${e.message}")
+        emptyList()
     }
-    return formats
-        .sortedWith(compareByDescending<Triple<Int, Int, Int>> { it.first * it.second }.thenByDescending { it.third })
-        .map { (w, h, fps) -> CameraFormat(w, h, fps) }
+}
+
+/**
+ * Reads the resolutions out of `ffmpeg -f dshow -list_options`.
+ *
+ * Lines look like `min s=1920x1080 fps=30 max s=1920x1080 fps=30`, or
+ * `s=1920x1080 min fps=30 max fps=30` — one size and one or more frame rates, every combination of
+ * which the device supports.
+ */
+internal fun parseDshowFormats(output: String): List<CameraFormat> {
+    val formats = mutableSetOf<Triple<Int, Int, Int>>()
+    val sizePattern = Regex("""s=(\d+)x(\d+)""")
+    val fpsPattern = Regex("""fps=(\d+)""")
+    for (line in output.lines()) {
+        if (!line.contains("s=")) continue
+        val sizeMatch = sizePattern.find(line) ?: continue
+        val fpsMatches = fpsPattern.findAll(line).toList()
+        if (fpsMatches.isEmpty()) continue
+        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
+        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
+        for (fm in fpsMatches) {
+            val fps = fm.groupValues[1].toIntOrNull() ?: continue
+            formats.add(Triple(w, h, fps))
+        }
+    }
+    return formats.toSortedFormats()
 }
 
 private fun listV4l2Formats(device: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    try {
+    val fromFfmpeg = try {
         val process = ProcessBuilder("ffmpeg", "-f", "v4l2", "-list_formats", "all", "-i", device)
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        // Match lines like: 1920x1080 or similar, and fps values
-        val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
-        for (line in output.lines()) {
-            val sizeMatch = sizePattern.find(line) ?: continue
-            val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-            val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-            // v4l2 format lines may include fps info
-            val fpsMatch = Regex("""(\d+(?:\.\d+)?)\s*fps""").find(line)
-            val fps = fpsMatch?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
-            formats.add(Triple(w, h, fps))
-        }
+        parseV4l2Formats(output)
     } catch (e: Exception) {
         System.err.println("[Camera] Error listing v4l2 formats: ${e.message}")
+        emptyList()
     }
+    if (fromFfmpeg.isNotEmpty()) return fromFfmpeg
+
     // Also try v4l2-ctl for more detailed info
-    if (formats.isEmpty()) {
-        try {
-            val process = ProcessBuilder("v4l2-ctl", "--list-formats-ext", "-d", device)
-                .redirectErrorStream(true).start()
-            val output = process.inputStream.bufferedReader().readText()
-            process.waitFor()
-            val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
-            val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
-            var lastW = 0
-            var lastH = 0
-            for (line in output.lines()) {
-                val sizeMatch = sizePattern.find(line)
-                if (sizeMatch != null) {
-                    lastW = sizeMatch.groupValues[1].toIntOrNull() ?: 0
-                    lastH = sizeMatch.groupValues[2].toIntOrNull() ?: 0
-                }
-                val fpsMatch = fpsPattern.find(line)
-                if (fpsMatch != null && lastW > 0 && lastH > 0) {
-                    val fps = fpsMatch.groupValues[1].toDoubleOrNull()?.toInt() ?: 30
-                    formats.add(Triple(lastW, lastH, fps))
-                }
-            }
-        } catch (_: Exception) {}
+    return try {
+        val process = ProcessBuilder("v4l2-ctl", "--list-formats-ext", "-d", device)
+            .redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor()
+        parseV4l2CtlFormats(output)
+    } catch (_: Exception) {
+        emptyList()
     }
-    return formats
-        .sortedWith(compareByDescending<Triple<Int, Int, Int>> { it.first * it.second }.thenByDescending { it.third })
-        .map { (w, h, fps) -> CameraFormat(w, h, fps) }
+}
+
+/**
+ * Reads the resolutions out of `ffmpeg -f v4l2 -list_formats`.
+ *
+ * One size per line, and a frame rate only sometimes — v4l2 will happily report a size with no rate
+ * at all, which is taken as 30fps rather than dropped, since the size is the part that matters.
+ */
+internal fun parseV4l2Formats(output: String): List<CameraFormat> {
+    val formats = mutableSetOf<Triple<Int, Int, Int>>()
+    val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
+    val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
+    for (line in output.lines()) {
+        val sizeMatch = sizePattern.find(line) ?: continue
+        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
+        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
+        val fps = fpsPattern.find(line)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
+        formats.add(Triple(w, h, fps))
+    }
+    return formats.toSortedFormats()
+}
+
+/**
+ * Reads the resolutions out of `v4l2-ctl --list-formats-ext`, whose output is indented rather than
+ * one-line-per-format: a `Size:` line, then the frame rates it supports on their own lines beneath.
+ * So a rate is attributed to the last size seen above it, and a rate before any size is ignored.
+ */
+internal fun parseV4l2CtlFormats(output: String): List<CameraFormat> {
+    val formats = mutableSetOf<Triple<Int, Int, Int>>()
+    val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
+    val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
+    var lastW = 0
+    var lastH = 0
+    for (line in output.lines()) {
+        val sizeMatch = sizePattern.find(line)
+        if (sizeMatch != null) {
+            lastW = sizeMatch.groupValues[1].toIntOrNull() ?: 0
+            lastH = sizeMatch.groupValues[2].toIntOrNull() ?: 0
+        }
+        val fpsMatch = fpsPattern.find(line)
+        if (fpsMatch != null && lastW > 0 && lastH > 0) {
+            val fps = fpsMatch.groupValues[1].toDoubleOrNull()?.toInt() ?: 30
+            formats.add(Triple(lastW, lastH, fps))
+        }
+    }
+    return formats.toSortedFormats()
 }
 
 private fun listAvfoundationFormats(deviceIndex: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    try {
+    return try {
         // avfoundation lists supported formats when opening with -list_formats
         val process = ProcessBuilder("ffmpeg", "-f", "avfoundation", "-list_formats", "all", "-i", "$deviceIndex:none")
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
-        val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
-        for (line in output.lines()) {
-            val sizeMatch = sizePattern.find(line) ?: continue
-            val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-            val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-            val fpsMatch = fpsPattern.find(line)
-            val fps = fpsMatch?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
-            formats.add(Triple(w, h, fps))
-        }
+        parseAvfoundationFormats(output)
     } catch (e: Exception) {
         System.err.println("[Camera] Error listing avfoundation formats: ${e.message}")
+        emptyList()
     }
-    return formats
-        .sortedWith(compareByDescending<Triple<Int, Int, Int>> { it.first * it.second }.thenByDescending { it.third })
-        .map { (w, h, fps) -> CameraFormat(w, h, fps) }
+}
+
+/**
+ * Reads the resolutions out of `ffmpeg -f avfoundation -list_formats`, whose lines carry a size and
+ * usually a frame rate. As with v4l2, a size with no rate is kept at 30fps rather than dropped.
+ */
+internal fun parseAvfoundationFormats(output: String): List<CameraFormat> {
+    val formats = mutableSetOf<Triple<Int, Int, Int>>()
+    val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
+    val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
+    for (line in output.lines()) {
+        val sizeMatch = sizePattern.find(line) ?: continue
+        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
+        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
+        val fps = fpsPattern.find(line)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
+        formats.add(Triple(w, h, fps))
+    }
+    return formats.toSortedFormats()
 }
 
 private fun isFfmpegAvailable(): Boolean {
@@ -1299,14 +1376,22 @@ private fun listCameraDevices(): List<CameraDevice> {
     return devices
 }
 
-private fun listLinuxCameras(): List<CameraDevice> {
+/**
+ * The `/dev/video*` nodes, named from `/sys/class/video4linux/<node>/name` where that exists.
+ *
+ * Both roots are parameters so the listing can be pointed at a fixture: the real ones are the
+ * machine's own hardware, which cannot be arranged from a test. Production always uses the defaults.
+ */
+internal fun listLinuxCameras(
+    devDir: File = File("/dev"),
+    v4l2ClassDir: File = File("/sys/class/video4linux")
+): List<CameraDevice> {
     return try {
-        val videoDir = File("/dev")
-        videoDir.listFiles { f -> f.name.startsWith("video") }
+        devDir.listFiles { f -> f.name.startsWith("video") }
             ?.sorted()
             ?.map { file ->
                 val name = try {
-                    val nameFile = File("/sys/class/video4linux/${file.name}/name")
+                    val nameFile = File(v4l2ClassDir, "${file.name}/name")
                     if (nameFile.exists()) nameFile.readText().trim() else file.name
                 } catch (_: Exception) { file.name }
                 CameraDevice(
@@ -1319,137 +1404,152 @@ private fun listLinuxCameras(): List<CameraDevice> {
 }
 
 private fun listWindowsCameras(): List<CameraDevice> {
-    val devices = mutableListOf<CameraDevice>()
-    val seenNames = mutableSetOf<String>()
-
-    // ffmpeg DirectShow listing is the authoritative source for device names,
-    // since these are the exact names ffmpeg uses to open devices.
-    // This correctly handles capture cards (e.g. Blackmagic) whose DirectShow
-    // names differ from their PnP device names.
-    //
-    // ffmpeg 6.x+ lists per-device types: (video), (none), (audio).
-    // Devices marked (none) are typically USB capture cards whose pins don't
-    // report a specific media type.  We include both (video) and (none) devices
-    // since they can still be valid video sources.
-    try {
+    val dshowOutput = try {
         val process = ProcessBuilder("ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy")
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        val lines = output.lines()
-        val namePattern = Regex("\"(.+?)\"\\s+\\((video|none)\\)")
-        var isVideo = false
-        for (line in lines) {
-            // New ffmpeg format (6.x+): "DeviceName" (video|none|audio)
-            val newMatch = namePattern.find(line)
-            if (newMatch != null) {
-                val name = newMatch.groupValues[1]
-                if (name.lowercase() !in seenNames) {
-                    devices.add(CameraDevice(name = name, path = "dshow://:dshow-vdev=$name", displayName = name))
-                    seenNames.add(name.lowercase())
-                }
-                continue
-            }
-            // Old ffmpeg format: section headers then quoted names
-            if (line.contains("DirectShow video devices")) isVideo = true
-            else if (line.contains("DirectShow audio devices")) isVideo = false
-            else if (isVideo) {
-                val match = Regex("\"(.+?)\"").find(line)
-                if (match != null) {
-                    val name = match.groupValues[1]
-                    if (name.lowercase() !in seenNames) {
-                        devices.add(CameraDevice(name = name, path = "dshow://:dshow-vdev=$name", displayName = name))
-                        seenNames.add(name.lowercase())
-                    }
-                }
-            }
-        }
-    } catch (_: Exception) {}
+        output
+    } catch (_: Exception) { "" }
 
     // Get-CimInstance as fallback for devices not found by ffmpeg
-    try {
+    val pnpOutput = try {
         val process = ProcessBuilder("powershell", "-NoProfile", "-Command",
             "Get-CimInstance Win32_PnPEntity | Where-Object { \$_.PNPClass -eq 'Camera' -or \$_.PNPClass -eq 'Image' } | Select-Object -ExpandProperty Name")
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        output.lines()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .forEach { name ->
-                if (name.lowercase() !in seenNames) {
-                    devices.add(CameraDevice(
-                        name = name,
-                        path = "dshow://:dshow-vdev=$name",
-                        displayName = name
-                    ))
-                    seenNames.add(name.lowercase())
-                }
-            }
-    } catch (_: Exception) {}
+        output
+    } catch (_: Exception) { "" }
+
+    return parseWindowsCameras(dshowOutput, pnpOutput)
+}
+
+/**
+ * Merges what `ffmpeg -list_devices` and PowerShell's PnP query each know about the machine.
+ *
+ * ffmpeg's DirectShow listing is the authoritative source for device *names*, since those are the
+ * exact strings ffmpeg needs back to open the device — capture cards such as Blackmagic's report a
+ * DirectShow name quite unlike their PnP one. Two output shapes have to be read: ffmpeg 6.x+ tags
+ * each line with its type, `"Name" (video|none|audio)`, while older builds print section headers and
+ * then bare quoted names. Devices tagged `(none)` are kept — those are typically USB capture cards
+ * whose pins report no specific media type, and they are still valid video sources.
+ *
+ * The PnP names then fill in anything ffmpeg missed. Matching is case-insensitive throughout, so a
+ * device named by both sources is listed once, under the name ffmpeg gave it.
+ */
+internal fun parseWindowsCameras(dshowOutput: String, pnpOutput: String): List<CameraDevice> {
+    val devices = mutableListOf<CameraDevice>()
+    val seenNames = mutableSetOf<String>()
+
+    fun add(name: String) {
+        if (name.lowercase() !in seenNames) {
+            devices.add(CameraDevice(name = name, path = "dshow://:dshow-vdev=$name", displayName = name))
+            seenNames.add(name.lowercase())
+        }
+    }
+
+    val namePattern = Regex("\"(.+?)\"\\s+\\((video|none)\\)")
+    var isVideo = false
+    for (line in dshowOutput.lines()) {
+        // New ffmpeg format (6.x+): "DeviceName" (video|none|audio)
+        val newMatch = namePattern.find(line)
+        if (newMatch != null) {
+            add(newMatch.groupValues[1])
+            continue
+        }
+        // Old ffmpeg format: section headers then quoted names
+        if (line.contains("DirectShow video devices")) isVideo = true
+        else if (line.contains("DirectShow audio devices")) isVideo = false
+        else if (isVideo) {
+            Regex("\"(.+?)\"").find(line)?.let { add(it.groupValues[1]) }
+        }
+    }
+
+    pnpOutput.lines()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .forEach { add(it) }
 
     return devices
 }
 
 private fun listMacCameras(): List<CameraDevice> {
-    val devices = mutableListOf<CameraDevice>()
-    val seenNames = mutableSetOf<String>()
-
     // system_profiler finds physical cameras
-    try {
+    val profilerOutput = try {
         val process = ProcessBuilder("system_profiler", "SPCameraDataType", "-detailLevel", "mini")
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        output.lines()
-            .filter { it.contains(":") && !it.trim().startsWith("Camera") && it.trim().endsWith(":") }
-            .map { it.trim().removeSuffix(":") }
-            .forEachIndexed { index, name ->
-                devices.add(CameraDevice(
-                    name = name,
-                    path = "avfoundation://$index",
-                    displayName = name
-                ))
-                seenNames.add(name.lowercase())
-            }
-    } catch (_: Exception) {}
+        output
+    } catch (_: Exception) { "" }
 
     // ffmpeg AVFoundation listing finds virtual cameras (OBS, NDI, etc.)
-    try {
+    val ffmpegOutput = try {
         val process = ProcessBuilder("ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", "")
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        var isVideo = false
-        var deviceIndex = devices.size
-        for (line in output.lines()) {
-            // New ffmpeg format (8.x+): "DeviceName" (video)
-            val newMatch = Regex("\"(.+?)\"\\s+\\(video\\)").find(line)
-            if (newMatch != null) {
-                val name = newMatch.groupValues[1]
-                if (name.lowercase() !in seenNames) {
-                    devices.add(CameraDevice(name = name, path = "avfoundation://$deviceIndex", displayName = name))
-                    seenNames.add(name.lowercase())
-                    deviceIndex++
-                }
-                continue
+        output
+    } catch (_: Exception) { "" }
+
+    return parseMacCameras(profilerOutput, ffmpegOutput)
+}
+
+/**
+ * Merges macOS's two camera listings: the physical cameras `system_profiler` reports, then the
+ * virtual ones (OBS, NDI and friends) that only ffmpeg's AVFoundation listing sees.
+ *
+ * `system_profiler` indents each camera as its own `Name:` heading, which is why a line qualifies
+ * only if it ends in a colon — and the literal "Camera" heading above them is skipped. Devices are
+ * addressed by *index*, not by name, so the order here is the order AVFoundation itself uses.
+ *
+ * As on Windows, ffmpeg prints one of two shapes: newer builds tag each line `"Name" (video)`, older
+ * ones print a section header and then `[0] Name`. In the older shape the index ffmpeg itself
+ * printed is used; in the newer one there is none to read, so the running count continues from the
+ * physical cameras already found.
+ */
+internal fun parseMacCameras(systemProfilerOutput: String, ffmpegOutput: String): List<CameraDevice> {
+    val devices = mutableListOf<CameraDevice>()
+    val seenNames = mutableSetOf<String>()
+
+    systemProfilerOutput.lines()
+        .filter { it.contains(":") && !it.trim().startsWith("Camera") && it.trim().endsWith(":") }
+        .map { it.trim().removeSuffix(":") }
+        .forEachIndexed { index, name ->
+            devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
+            seenNames.add(name.lowercase())
+        }
+
+    var isVideo = false
+    var deviceIndex = devices.size
+    for (line in ffmpegOutput.lines()) {
+        // New ffmpeg format (8.x+): "DeviceName" (video)
+        val newMatch = Regex("\"(.+?)\"\\s+\\(video\\)").find(line)
+        if (newMatch != null) {
+            val name = newMatch.groupValues[1]
+            if (name.lowercase() !in seenNames) {
+                devices.add(CameraDevice(name = name, path = "avfoundation://$deviceIndex", displayName = name))
+                seenNames.add(name.lowercase())
+                deviceIndex++
             }
-            // Old ffmpeg format: section headers then [index] name
-            if (line.contains("AVFoundation video devices")) isVideo = true
-            else if (line.contains("AVFoundation audio devices")) isVideo = false
-            else if (isVideo) {
-                val match = Regex("\\[(\\d+)]\\s+(.+)").find(line)
-                if (match != null) {
-                    val index = match.groupValues[1]
-                    val name = match.groupValues[2].trim()
-                    if (name.lowercase() !in seenNames) {
-                        devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
-                        seenNames.add(name.lowercase())
-                    }
+            continue
+        }
+        // Old ffmpeg format: section headers then [index] name
+        if (line.contains("AVFoundation video devices")) isVideo = true
+        else if (line.contains("AVFoundation audio devices")) isVideo = false
+        else if (isVideo) {
+            val match = Regex("\\[(\\d+)]\\s+(.+)").find(line)
+            if (match != null) {
+                val index = match.groupValues[1]
+                val name = match.groupValues[2].trim()
+                if (name.lowercase() !in seenNames) {
+                    devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
+                    seenNames.add(name.lowercase())
                 }
             }
         }
-    } catch (_: Exception) {}
+    }
 
     return devices
 }
@@ -1517,7 +1617,7 @@ private fun ScreenCaptureProperties(source: SceneSource.ScreenCaptureSource, onU
     }
 }
 
-private data class WindowInfo(val title: String, val id: Long)
+internal data class WindowInfo(val title: String, val id: Long)
 
 private fun listOpenWindows(): List<WindowInfo> {
     val osName = System.getProperty("os.name", "").lowercase()
@@ -1536,7 +1636,7 @@ private fun listLinuxWindows(): List<WindowInfo> {
             .redirectErrorStream(true).start()
         val listOutput = listProcess.inputStream.bufferedReader().readText()
         listProcess.waitFor()
-        val windowIds = Regex("0x[0-9a-fA-F]+").findAll(listOutput).map { it.value }.toList()
+        val windowIds = parseXpropWindowIds(listOutput)
         if (windowIds.isNotEmpty()) {
             val windows = windowIds.mapNotNull { wid ->
                 try {
@@ -1544,10 +1644,7 @@ private fun listLinuxWindows(): List<WindowInfo> {
                         .redirectErrorStream(true).start()
                     val nameOutput = nameProcess.inputStream.bufferedReader().readText()
                     nameProcess.waitFor()
-                    val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1)
-                    if (!name.isNullOrBlank()) {
-                        WindowInfo(name, wid.removePrefix("0x").toLongOrNull(16) ?: 0L)
-                    } else null
+                    xpropWindow(wid, nameOutput)
                 } catch (_: Exception) { null }
             }.filter { it.title.isNotBlank() }
             if (windows.isNotEmpty()) return windows
@@ -1561,22 +1658,49 @@ private fun listLinuxWindows(): List<WindowInfo> {
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
         if (process.exitValue() == 0) {
-            val windows = output.lines()
-                .filter { it.isNotBlank() }
-                .mapNotNull { line ->
-                    val parts = line.split(Regex("\\s+"), limit = 5)
-                    if (parts.size >= 5) {
-                        val id = parts[0].removePrefix("0x").toLongOrNull(16) ?: 0L
-                        val title = parts[4]
-                        if (title.isNotBlank()) WindowInfo(title, id) else null
-                    } else null
-                }
+            val windows = parseWmctrlWindows(output)
             if (windows.isNotEmpty()) return windows
         }
     } catch (_: Exception) {}
 
     return emptyList()
 }
+
+/** The window ids in `xprop -root _NET_CLIENT_LIST_STACKING`, which prints them comma-separated. */
+internal fun parseXpropWindowIds(output: String): List<String> =
+    Regex("0x[0-9a-fA-F]+").findAll(output).map { it.value }.toList()
+
+/**
+ * One window from `xprop -id <wid> _NET_WM_NAME`, whose title is the quoted part of its single line.
+ *
+ * Null when the property is missing or empty — an unnamed window is of no use to an operator picking
+ * one from a list. The id is hexadecimal, and a malformed one is kept as window 0 rather than
+ * dropping the window, matching how the wmctrl path treats the same case.
+ */
+internal fun xpropWindow(windowId: String, nameOutput: String): WindowInfo? {
+    val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1)
+    if (name.isNullOrBlank()) return null
+    return WindowInfo(name, windowId.removePrefix("0x").toLongOrNull(16) ?: 0L)
+}
+
+/**
+ * The windows in `wmctrl -l`, whose columns are id, desktop, host, then the title.
+ *
+ * Note: `wmctrl -l` prints *four* columns, so splitting with `limit = 5` and taking `parts[4]` drops
+ * the first word of every title, and drops one-word titles altogether. `SourcePropertiesDeviceListingTest`
+ * pins that behaviour as it stands; changing it changes which windows Linux capture can address.
+ */
+internal fun parseWmctrlWindows(output: String): List<WindowInfo> =
+    output.lines()
+        .filter { it.isNotBlank() }
+        .mapNotNull { line ->
+            val parts = line.split(Regex("\\s+"), limit = 5)
+            if (parts.size >= 5) {
+                val id = parts[0].removePrefix("0x").toLongOrNull(16) ?: 0L
+                val title = parts[4]
+                if (title.isNotBlank()) WindowInfo(title, id) else null
+            } else null
+        }
 
 private fun listWindowsWindows(): List<WindowInfo> {
     return try {
@@ -1601,12 +1725,21 @@ private fun listMacWindows(): List<WindowInfo> {
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         process.waitFor()
-        output.split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { WindowInfo(it, 0L) }
+        parseMacWindowTitles(output)
     } catch (_: Exception) { emptyList() }
 }
+
+/**
+ * The window titles AppleScript returns, which arrive as one comma-separated line.
+ *
+ * There is no window id in that answer — macOS capture matches on the title instead — so every
+ * window is reported as id 0, and the capture panel writes an empty id for it.
+ */
+internal fun parseMacWindowTitles(output: String): List<WindowInfo> =
+    output.split(",")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .map { WindowInfo(it, 0L) }
 
 // --- Helper composables ---
 
