@@ -91,17 +91,7 @@ fun StatisticsDialog(
     if (!isVisible) return
 
     val mainWindowState = LocalMainWindowState.current
-    val coroutineScope = rememberCoroutineScope()
-
-    var topSongsBySongbook by remember { mutableStateOf(statisticsManager.getTopSongsBySongbook()) }
-    var topVersesByBible by remember { mutableStateOf(statisticsManager.getTopVersesByBible()) }
-    var statusMessage by remember { mutableStateOf<String?>(null) }
     var showCCLIReport by remember { mutableStateOf(false) }
-
-    val successMsg = stringResource(Res.string.statistics_exported_success)
-    val errorMsg = stringResource(Res.string.statistics_exported_error)
-    val saveTitle = stringResource(Res.string.file_chooser_save_statistics)
-    val filterDesc = stringResource(Res.string.file_filter_xls)
 
     if (showCCLIReport) {
         CCLIReportDialog(
@@ -122,93 +112,128 @@ fun StatisticsDialog(
         title = stringResource(Res.string.statistics),
         resizable = true
     ) {
-        AppThemeWrapper(theme = theme) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(8.dp)
-                    ) {
-                        val scrollState = rememberScrollState()
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(scrollState)
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                .padding(start = 16.dp, end = 20.dp, top = 14.dp, bottom = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            CcliBanner(onOpen = { showCCLIReport = true })
-                            TopSongsSection(topSongsBySongbook)
-                            TopVersesSection(topVersesByBible)
-                        }
-                        VerticalScrollbar(
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            adapter = rememberScrollbarAdapter(scrollState)
-                        )
-                    }
+        StatisticsContent(
+            theme = theme,
+            statisticsManager = statisticsManager,
+            onOpenCcliReport = { showCCLIReport = true },
+            onDismiss = onDismiss
+        )
+    }
+}
 
-                    if (statusMessage != null) {
-                        Text(
-                            text = statusMessage!!,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (statusMessage == successMsg) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
+/**
+ * Everything the statistics window contains: the CCLI callout, the two ranked sections, and the
+ * export / clear / close row beneath them.
+ *
+ * Held apart from [StatisticsDialog] because that function's remaining statements are the two
+ * windows it can open — its own `DialogWindow` and the nested CCLI report — neither of which can
+ * be composed on a headless machine. Opening the report stays outside as [onOpenCcliReport], so
+ * pressing the callout is reachable from a test without a window being opened by it.
+ */
+@Composable
+internal fun StatisticsContent(
+    theme: ThemeMode,
+    statisticsManager: StatisticsManager,
+    onOpenCcliReport: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
 
-                    HorizontalDivider()
-                    Row(
+    var topSongsBySongbook by remember { mutableStateOf(statisticsManager.getTopSongsBySongbook()) }
+    var topVersesByBible by remember { mutableStateOf(statisticsManager.getTopVersesByBible()) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+
+    val successMsg = stringResource(Res.string.statistics_exported_success)
+    val errorMsg = stringResource(Res.string.statistics_exported_error)
+    val saveTitle = stringResource(Res.string.file_chooser_save_statistics)
+    val filterDesc = stringResource(Res.string.file_filter_xls)
+
+    AppThemeWrapper(theme = theme) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(8.dp)
+                ) {
+                    val scrollState = rememberScrollState()
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(start = 16.dp, end = 20.dp, top = 14.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        OutlinedButton(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = {
-                                coroutineScope.launch {
-                                    val path = FileChooser.platformInstance.save(
-                                        location = null,
-                                        suggestedName = "statistics.xls",
-                                        filters = listOf(FileNameExtensionFilter(filterDesc, "xls")),
-                                        title = saveTitle
-                                    )
-                                    if (path != null) {
-                                        val ok = withContext(Dispatchers.IO) { statisticsManager.exportStatisticsToXls(path.toFile()) }
-                                        statusMessage = if (ok) successMsg else errorMsg
-                                    }
+                        CcliBanner(onOpen = onOpenCcliReport)
+                        TopSongsSection(topSongsBySongbook)
+                        TopVersesSection(topVersesByBible)
+                    }
+                    VerticalScrollbar(
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        adapter = rememberScrollbarAdapter(scrollState)
+                    )
+                }
+
+                if (statusMessage != null) {
+                    Text(
+                        text = statusMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (statusMessage == successMsg) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = {
+                            coroutineScope.launch {
+                                val path = FileChooser.platformInstance.save(
+                                    location = null,
+                                    suggestedName = "statistics.xls",
+                                    filters = listOf(FileNameExtensionFilter(filterDesc, "xls")),
+                                    title = saveTitle
+                                )
+                                if (path != null) {
+                                    val ok = withContext(Dispatchers.IO) { statisticsManager.exportStatisticsToXls(path.toFile()) }
+                                    statusMessage = if (ok) successMsg else errorMsg
                                 }
                             }
-                        ) { Text(stringResource(Res.string.export_to_xls)) }
+                        }
+                    ) { Text(stringResource(Res.string.export_to_xls)) }
 
-                        Button(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = {
-                                statisticsManager.clearStatistics()
-                                topSongsBySongbook = statisticsManager.getTopSongsBySongbook()
-                                topVersesByBible = statisticsManager.getTopVersesByBible()
-                                statusMessage = null
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError
-                            )
-                        ) { Text(stringResource(Res.string.clear_statistics)) }
+                    Button(
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = {
+                            statisticsManager.clearStatistics()
+                            topSongsBySongbook = statisticsManager.getTopSongsBySongbook()
+                            topVersesByBible = statisticsManager.getTopVersesByBible()
+                            statusMessage = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) { Text(stringResource(Res.string.clear_statistics)) }
 
-                        Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.weight(1f))
 
-                        Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) { Text(stringResource(Res.string.close)) }
-                    }
+                    Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) { Text(stringResource(Res.string.close)) }
                 }
             }
         }
