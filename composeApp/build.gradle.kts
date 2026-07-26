@@ -597,7 +597,7 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
 // conventional `test`/`main` pair for the plugin's default report to attach to. Hence an explicit
 // task pointing at the jvm compilation's own output.
 jacoco {
-    toolVersion = "0.8.13" // 0.8.12+ is required for JDK 21 class files
+    toolVersion = "0.8.15" // 0.8.12+ is required for JDK 21 class files
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {
