@@ -9,18 +9,24 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import java.awt.GraphicsDevice
 import java.awt.GraphicsEnvironment
+import java.awt.HeadlessException
 import java.awt.Rectangle
+
+/** Empty on a headless JVM (CI, or a genuinely displayless deployment) instead of throwing. */
+private fun safeScreenDevices(): Array<GraphicsDevice> = try {
+    GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+} catch (_: HeadlessException) {
+    emptyArray()
+}
 
 /** Polls for screen devices every 2 seconds so hot-plugged displays trigger recomposition. */
 @Composable
 fun rememberScreenDevices(): Array<GraphicsDevice> {
-    var devices by remember {
-        mutableStateOf(GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices)
-    }
+    var devices by remember { mutableStateOf(safeScreenDevices()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(2000)
-            val current = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+            val current = safeScreenDevices()
             if (current.size != devices.size) {
                 devices = current
             }
@@ -29,10 +35,17 @@ fun rememberScreenDevices(): Array<GraphicsDevice> {
     return devices
 }
 
+/** The 1080p bounds [ScaledPresenterContent][org.churchpresenter.app.churchpresenter.composables.ScaledPresenterContent] assumes when no real display exists to ask (headless). */
+private val HEADLESS_PRESENTER_BOUNDS = Rectangle(0, 0, 1920, 1080)
+
 /** Returns the presenter screen bounds (first non-primary screen if available, else primary). */
 fun presenterScreenBounds(): Rectangle {
     val ge = GraphicsEnvironment.getLocalGraphicsEnvironment()
-    return presenterBoundsOf(ge.screenDevices, ge.defaultScreenDevice)
+    return try {
+        presenterBoundsOf(ge.screenDevices, ge.defaultScreenDevice)
+    } catch (_: HeadlessException) {
+        HEADLESS_PRESENTER_BOUNDS
+    }
 }
 
 internal fun presenterBoundsOf(screens: Array<GraphicsDevice>, primary: GraphicsDevice): Rectangle =
