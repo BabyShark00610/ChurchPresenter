@@ -72,7 +72,18 @@ class FileManager {
     }
 
     /**
-     * Get list of Bible files (*.spb) from a directory
+     * Get Bible files (*.spb) from a directory **and its subfolders**, as paths relative to
+     * [directory] with `/` separators (e.g. `ENG/King James/kjv.spb`).
+     *
+     * Bible collections ship as nested folders — one directory per language, often one per
+     * translation under that — so a flat listing finds nothing but whatever happens to sit at the
+     * top level. Relative rather than bare names because a collection can easily carry two files of
+     * the same name in different folders, and the returned string is the identity everything else
+     * keys on ([org.churchpresenter.app.churchpresenter.data.settings.BibleSettings.primaryBible],
+     * the display-name map, the engine's file list).
+     *
+     * Callers resolve with `File(storageDirectory, value)`, which handles the embedded separators on
+     * every platform — so previously stored bare filenames keep resolving unchanged.
      */
     fun getBibleFilesInDirectory(directory: String): List<String> {
         if (directory.isEmpty()) return emptyList()
@@ -80,9 +91,12 @@ class FileManager {
         val dir = File(directory)
         if (!dir.exists() || !dir.isDirectory) return emptyList()
 
-        return dir.listFiles { file ->
-            file.extension.lowercase() == Constants.EXTENSION_SPB
-        }?.map { it.name }?.sorted() ?: emptyList()
+        // Bounded depth so a symlink cycle or a stray deep tree can't hang the settings dialog.
+        return dir.walkTopDown().maxDepth(MAX_BIBLE_SCAN_DEPTH)
+            .filter { it.isFile && it.extension.lowercase() == Constants.EXTENSION_SPB }
+            .map { it.toRelativeString(dir).replace('\\', '/') }
+            .sorted()
+            .toList()
     }
 
     /**
@@ -225,5 +239,10 @@ class FileManager {
             title,
             JOptionPane.ERROR_MESSAGE
         )
+    }
+
+    companion object {
+        /** Folder depth searched for Bible files — deep enough for language/publisher/edition nesting. */
+        const val MAX_BIBLE_SCAN_DEPTH = 6
     }
 }

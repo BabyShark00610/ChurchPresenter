@@ -116,6 +116,24 @@ class BibleSettingsViewModelTest {
     }
 
     @Test
+    fun `two bibles sharing a title are told apart by their folder`() {
+        // The picker reverse-maps the chosen display name back to a file, so duplicate display names
+        // would make one of the two unselectable. Collections nest a folder per translation and
+        // routinely carry several editions with the same ##Title:.
+        File(dir, "ENG").mkdirs(); File(dir, "RUS").mkdirs()
+        File(dir, "ENG/a.spb").writeText("##Title:Holy Bible")
+        File(dir, "RUS/b.spb").writeText("##Title:Holy Bible")
+        File(dir, "unique.spb").writeText("##Title:Only One")
+        vm.setDirectory(dir.path)
+
+        val names = vm.fileDisplayNames(vm.filesInDirectory())
+        assertEquals(names.values.toSet().size, names.size, "display names must stay unique: $names")
+        assertEquals("Only One", names["unique.spb"], "an unambiguous title is left alone")
+        assertTrue(names.getValue("ENG/a.spb").contains("ENG"))
+        assertTrue(names.getValue("RUS/b.spb").contains("RUS"))
+    }
+
+    @Test
     fun `changing the directory clears the selection and bumps the trigger`() {
         vm.setDirectory(dir.path)
         vm.selectFile("kjv.spb")

@@ -22,11 +22,24 @@ class BibleSettingsViewModel {
     fun filesInDirectory(): List<String> =
         fileManager.getBibleFilesInDirectory(_storageDirectory.value)
 
+    /**
+     * Maps each Bible file to the name shown in the pickers.
+     *
+     * The picker reverse-maps the chosen display name back to its file, so these must be UNIQUE.
+     * Two files can carry the same `##Title:` — a collection nests one folder per translation and
+     * commonly holds several editions of one version — so a repeated title is qualified with the
+     * folder it came from, which is what distinguishes them to the user as well.
+     */
     fun fileDisplayNames(files: List<String>): Map<String, String> {
         val dir = _storageDirectory.value
         if (dir.isEmpty()) return emptyMap()
-        return files.associateWith { fileName ->
-            extractBibleTitle(File(dir, fileName).absolutePath)
+        val titles = files.associateWith { extractBibleTitle(File(dir, it).absolutePath) }
+        val duplicated = titles.values.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+        return titles.mapValues { (path, title) ->
+            if (title !in duplicated) return@mapValues title
+            val folder = path.substringBeforeLast('/', "")
+            // Two files sharing a title AND a folder can only be told apart by their file names.
+            if (folder.isEmpty()) "$title  ($path)" else "$title  ($folder)"
         }
     }
 

@@ -207,10 +207,14 @@ class DictionaryViewModel {
             val dir = File(directory)
             if (!dir.exists() || !dir.isDirectory) { availableDictBibles = emptyList(); return@launch }
             availableDictBibles = withContext(Dispatchers.IO) {
-                dir.listFiles { f -> f.extension.lowercase() == "spb" }
-                    ?.sortedBy { it.name }
-                    ?.map { f -> f.absolutePath to extractBibleTitle(f) }
-                    ?: emptyList()
+                // Subfolders included: collections nest a folder per language and translation, so a
+                // flat listing sees only whatever happens to sit at the top level. This one keys on
+                // absolute paths already, so nesting needs no other change.
+                dir.walkTopDown().maxDepth(FileManager.MAX_BIBLE_SCAN_DEPTH)
+                    .filter { it.isFile && it.extension.lowercase() == "spb" }
+                    .sortedBy { it.absolutePath }
+                    .map { f -> f.absolutePath to extractBibleTitle(f) }
+                    .toList()
             }
         }
     }
