@@ -2082,4 +2082,17 @@
     <string name="content_outputs_done">Klaar</string>
     <string name="content_outputs_preview">Deze uitvoer toont</string>
     <string name="content_outputs_preview_empty">Niets ingeschakeld — deze uitvoer blijft leeg</string>
+    <string name="bible_translation">Vertaling %1$d</string>
+    <string name="add_bible_translation">Vertaling toevoegen</string>
+    <string name="bible_translation_mode">Vertaalmodus</string>
+    <string name="bible_translation_mode_legacy">Klassiek</string>
+    <string name="bible_translation_mode_multi">Meerdere vertalingen</string>
+    <string name="bible_reference">Bijbelverwijzing</string>
+    <string name="bible_translation_order">Volgorde van vertalingen</string>
+    <string name="bible_multi_layout">Indeling van vertalingen</string>
+    <string name="bible_translation_spacing">Ruimte tussen vertalingen</string>
+    <string name="bible_translation_divider">Scheiding tussen vertalingen tonen</string>
+    <string name="pixels_short">px</string>
+    <string name="move_translation_up">Vertaling omhoog verplaatsen</string>
+    <string name="move_translation_down">Vertaling omlaag verplaatsen</string>
 </resources>

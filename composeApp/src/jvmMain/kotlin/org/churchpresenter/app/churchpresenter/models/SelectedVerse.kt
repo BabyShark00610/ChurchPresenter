@@ -1,6 +1,8 @@
 package org.churchpresenter.app.churchpresenter.models
 
 data class SelectedVerse(
+    /** Persisted Bible module file name; keeps verse content tied to its own style profile. */
+    val translationFileName: String = "",
     val bibleAbbreviation: String = "",
     val bibleName: String = "",
     val bookName: String = "",

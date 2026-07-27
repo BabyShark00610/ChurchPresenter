@@ -230,6 +230,77 @@ class BibleSettingsSwapTest {
     }
 }
 
+class BibleTranslationListTest {
+
+    @Test
+    fun `legacy primary and secondary settings become an ordered translation list`() {
+        val settings = BibleSettings(
+            primaryBible = "first.spb",
+            secondaryBible = "second.spb",
+            primaryBibleColor = "#111111",
+            secondaryBibleColor = "#222222",
+        )
+
+        val translations = settings.translationList()
+
+        assertEquals(listOf("first.spb", "second.spb"), translations.map { it.fileName })
+        assertEquals(listOf("#111111", "#222222"), translations.map { it.textColor })
+    }
+
+    @Test
+    fun `multi mode starts from legacy selection and keeps style while moving`() {
+        val settings = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
+            .withMultiTranslationMode(true)
+            .addTranslation("third.spb")
+            .updateTranslation(2) { it.copy(textColor = "#333333", textFontType = "Georgia") }
+            .moveTranslation(2, -1)
+
+        assertEquals(listOf("first.spb", "third.spb", "second.spb"), settings.translationList().map { it.fileName })
+        assertEquals("#333333", settings.translationList()[1].textColor)
+        assertEquals("Georgia", settings.translationList()[1].textFontType)
+        assertEquals("first.spb", settings.primaryBible)
+        assertEquals("second.spb", settings.secondaryBible)
+    }
+
+    @Test
+    fun `a translation cannot be selected twice`() {
+        val settings = BibleSettings(primaryBible = "first.spb")
+            .withMultiTranslationMode(true)
+            .addTranslation("first.spb")
+
+        assertEquals(listOf("first.spb"), settings.translationList().map { it.fileName })
+    }
+
+    @Test
+    fun `editing multi translations preserves the legacy selection`() {
+        val settings = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
+            .withMultiTranslationMode(true)
+            .addTranslation("third.spb")
+            .removeTranslation(0)
+
+        assertEquals(listOf("second.spb", "third.spb"), settings.translationList().map { it.fileName })
+        assertEquals("first.spb", settings.primaryBible)
+        assertEquals("second.spb", settings.secondaryBible)
+        assertEquals(
+            listOf("first.spb", "second.spb"),
+            settings.withMultiTranslationMode(false).translationList().map { it.fileName },
+        )
+    }
+
+    @Test
+    fun `adding a multi translation changes the module reload key`() {
+        val before = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
+            .withMultiTranslationMode(true)
+        val after = before.addTranslation("third.spb")
+
+        assertTrue(before.translationSelectionKey() != after.translationSelectionKey())
+        assertEquals(
+            true to listOf("first.spb", "second.spb", "third.spb"),
+            after.translationSelectionKey(),
+        )
+    }
+}
+
 /**
  * The stage monitor's layout defaults.
  *

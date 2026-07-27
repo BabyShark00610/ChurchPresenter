@@ -26,7 +26,10 @@
 
 ## Bible & Scripture
 - **Instant verse display** — browse any of the 66 books and put a verse on screen in seconds.
-- **Dual translations** — show a primary and secondary Bible together, and swap them with one click.
+- **Legacy and multi-translation modes** — keep the original primary/secondary workflow (including
+  lower-third styling), or switch to an independent ordered stack of any number of translations.
+  Multi-translation mode uses one full-screen typography profile per translation and has no
+  lower-third-specific settings.
 - **Multi-verse ranges** — select and present several verses at once with Ctrl/Shift click.
 - **Search the whole Bible** — search across the entire text or just the current book.
 - **History** — jump back to recently shown passages instantly.

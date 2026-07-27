@@ -2055,4 +2055,17 @@
     <string name="content_outputs_done">Дайын</string>
     <string name="content_outputs_preview">Бұл шығыс көрсетеді</string>
     <string name="content_outputs_preview_empty">Ештеңе қосылмаған — бұл шығыс бос қалады</string>
+    <string name="bible_translation">Аударма %1$d</string>
+    <string name="add_bible_translation">Аударма қосу</string>
+    <string name="bible_translation_mode">Аударма режимі</string>
+    <string name="bible_translation_mode_legacy">Классикалық</string>
+    <string name="bible_translation_mode_multi">Бірнеше аударма</string>
+    <string name="bible_reference">Киелі кітап сілтемесі</string>
+    <string name="bible_translation_order">Аудармалар реті</string>
+    <string name="bible_multi_layout">Аудармаларды орналастыру</string>
+    <string name="bible_translation_spacing">Аудармалар арасындағы аралық</string>
+    <string name="bible_translation_divider">Аудармалар арасында бөлгішті көрсету</string>
+    <string name="pixels_short">пкс</string>
+    <string name="move_translation_up">Аударманы жоғары жылжыту</string>
+    <string name="move_translation_down">Аударманы төмен жылжыту</string>
 </resources>

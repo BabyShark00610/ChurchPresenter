@@ -196,7 +196,10 @@ import churchpresenter.composeapp.generated.resources.bible_search_mode_auto
 import churchpresenter.composeapp.generated.resources.bible_search_mode_reference
 import churchpresenter.composeapp.generated.resources.bible_search_mode_text
 import churchpresenter.composeapp.generated.resources.bible_search_mode_tooltip
+import churchpresenter.composeapp.generated.resources.bible_translation_order
 import churchpresenter.composeapp.generated.resources.hold_live
+import churchpresenter.composeapp.generated.resources.move_translation_down
+import churchpresenter.composeapp.generated.resources.move_translation_up
 import churchpresenter.composeapp.generated.resources.swap_bibles
 import churchpresenter.composeapp.generated.resources.swap_bibles_hint
 import churchpresenter.composeapp.generated.resources.verse
@@ -262,12 +265,14 @@ fun BibleTab(
     bibleEngineClient: BibleEngineClient? = null,
     dialogDismissSignal: Int = 0,
 ) {
-    // Update settings when bible paths change
+    // Reload the Bible modules whenever the active mode or its ordered file list changes.
+    // Multi mode deliberately leaves legacy primary/secondary fields untouched, so those fields
+    // cannot be used as the only effect keys.
     val isFirstComposition = remember { mutableStateOf(true) }
+    val translationSelectionKey = appSettings.bibleSettings.translationSelectionKey()
     LaunchedEffect(
         appSettings.bibleSettings.storageDirectory,
-        appSettings.bibleSettings.primaryBible,
-        appSettings.bibleSettings.secondaryBible
+        translationSelectionKey,
     ) {
         if (isFirstComposition.value) {
             isFirstComposition.value = false
@@ -1389,6 +1394,7 @@ fun BibleTab(
         } else {
             val holdLiveStr = stringResource(Res.string.hold_live)
             val swapBiblesStr = stringResource(Res.string.swap_bibles)
+            val translationOrderStr = stringResource(Res.string.bible_translation_order)
             val goLiveStr = stringResource(Res.string.go_live)
             val addScheduleStr = stringResource(Res.string.add_to_schedule)
 
@@ -1525,8 +1531,75 @@ fun BibleTab(
                             contentColor = if (sttConnected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    // Swap Bibles (blue) — hidden when there's no secondary Bible to swap with
-                    if (appSettings.bibleSettings.secondaryBible.isNotEmpty()) {
+                    if (appSettings.bibleSettings.multiTranslationMode &&
+                        appSettings.bibleSettings.translationList().size > 1
+                    ) {
+                        val translations = appSettings.bibleSettings.translationList()
+                        DropdownSelector(
+                            label = translationOrderStr,
+                            value = translations.first().fileName,
+                            options = translations.mapIndexed { index, translation ->
+                                translation.fileName to
+                                    "${index + 1}. ${translation.fileName.substringBeforeLast('.')}"
+                            },
+                            onValueChange = { fileName ->
+                                val index = translations.indexOfFirst { it.fileName == fileName }
+                                if (index > 0) {
+                                    onSettingsChange { app ->
+                                        app.copy(
+                                            bibleSettings = app.bibleSettings
+                                                .moveTranslation(index, -index),
+                                        )
+                                    }
+                                }
+                                focusRequester.requestFocus()
+                            },
+                            modifier = Modifier
+                                .widthIn(min = 132.dp, max = 190.dp),
+                            compact = true,
+                            itemTrailingContent = { _, index ->
+                                IconButton(
+                                    onClick = {
+                                        onSettingsChange { app ->
+                                            app.copy(
+                                                bibleSettings = app.bibleSettings
+                                                    .moveTranslation(index, -1),
+                                            )
+                                        }
+                                    },
+                                    enabled = index > 0,
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(Res.drawable.ic_arrow_up),
+                                        contentDescription = stringResource(Res.string.move_translation_up),
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        onSettingsChange { app ->
+                                            app.copy(
+                                                bibleSettings = app.bibleSettings
+                                                    .moveTranslation(index, 1),
+                                            )
+                                        }
+                                    },
+                                    enabled = index < translations.lastIndex,
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(Res.drawable.ic_arrow_down),
+                                        contentDescription = stringResource(Res.string.move_translation_down),
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            },
+                        )
+                    } else if (!appSettings.bibleSettings.multiTranslationMode &&
+                        appSettings.bibleSettings.secondaryBible.isNotEmpty()
+                    ) {
+                        // Legacy mode keeps the original primary/secondary swap control.
                         ActionIconButton(
                             onClick = {
                                 onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.swapped()) }

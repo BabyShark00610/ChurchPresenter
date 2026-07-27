@@ -37,6 +37,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import java.io.File
 import java.nio.file.Files
@@ -136,6 +137,42 @@ class BibleSettingsTabTest {
         ).forEach { title ->
             onAllNodesWithText(title).onFirst().assertExists("the \"$title\" section must render")
         }
+    }
+
+    @Test
+    fun `translation mode can be switched without changing legacy selection`() = runComposeUiTest {
+        val harness = showBibleTab(
+            BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb"),
+        )
+
+        onNodeWithText("Multi-translation").performClick()
+        waitForIdle()
+
+        assertTrue(harness.current.bibleSettings.multiTranslationMode)
+        assertEquals("first.spb", harness.current.bibleSettings.primaryBible)
+        assertEquals("second.spb", harness.current.bibleSettings.secondaryBible)
+    }
+
+    @Test
+    fun `multi mode exposes no lower-third translation settings`() = runComposeUiTest {
+        showBibleTab(
+            BibleSettings().withTranslations(
+                listOf(
+                    BibleTranslationSettings(fileName = "first.spb"),
+                    BibleTranslationSettings(fileName = "second.spb"),
+                ),
+            ),
+        )
+
+        onAllNodesWithText("Lower Third", substring = true).assertCountEquals(0)
+        onNodeWithText("Show in Lower Third").assertDoesNotExist()
+        onNodeWithText("Primary Bible").assertDoesNotExist()
+        onNodeWithText("Secondary Bible").assertDoesNotExist()
+        onNodeWithText("Translation 1").assertExists()
+        onNodeWithText("Translation 2").assertExists()
+        onNodeWithText("Multi-translation layout").assertExists()
+        onNodeWithText("Space between translations").assertExists()
+        onNodeWithText("Show divider between translations").assertExists()
     }
 
     @Test

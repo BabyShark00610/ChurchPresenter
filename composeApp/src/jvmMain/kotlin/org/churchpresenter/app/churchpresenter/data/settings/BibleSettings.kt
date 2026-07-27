@@ -3,6 +3,66 @@ package org.churchpresenter.app.churchpresenter.data.settings
 import kotlinx.serialization.Serializable
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
+/**
+ * One independently configurable translation in the parallel Bible stack.
+ *
+ * Multi-translation appearance profile. Lower-third fields remain readable for settings files
+ * written by development builds that briefly exposed them, but multi mode intentionally ignores
+ * those fields.
+ */
+@Serializable
+data class BibleTranslationSettings(
+    val fileName: String = "",
+    val textColor: String = "#FFFFFF",
+    val textFontType: String = "Arial",
+    val textFontSize: Int = 70,
+    val lowerThirdTextFontSize: Int = 28,
+    val textHorizontalAlignment: String = Constants.LEFT,
+    val lowerThirdTextHorizontalAlignment: String = Constants.LEFT,
+    val lowerThirdEnabled: Boolean = true,
+    val textBold: Boolean = false,
+    val textItalic: Boolean = false,
+    val textUnderline: Boolean = false,
+    val textShadow: Boolean = false,
+    val lowerThirdTextColor: String = "#FFFFFF",
+    val lowerThirdTextFontType: String = "Arial",
+    val lowerThirdTextBold: Boolean = false,
+    val lowerThirdTextItalic: Boolean = false,
+    val lowerThirdTextUnderline: Boolean = false,
+    val lowerThirdTextShadow: Boolean = false,
+    val referenceColor: String = "#FFFFFF",
+    val referenceFontType: String = "Arial",
+    val referenceFontSize: Int = 70,
+    val lowerThirdReferenceFontSize: Int = 24,
+    val referencePosition: String = "Below",
+    val lowerThirdReferencePosition: String = "Below",
+    val referenceHorizontalAlignment: String = Constants.RIGHT,
+    val lowerThirdReferenceHorizontalAlignment: String = Constants.RIGHT,
+    val showAbbreviation: Boolean = false,
+    val referenceBold: Boolean = false,
+    val referenceItalic: Boolean = false,
+    val referenceUnderline: Boolean = false,
+    val referenceShadow: Boolean = false,
+    val lowerThirdReferenceColor: String = "#FFFFFF",
+    val lowerThirdReferenceFontType: String = "Arial",
+    val lowerThirdReferenceBold: Boolean = false,
+    val lowerThirdReferenceItalic: Boolean = false,
+    val lowerThirdReferenceUnderline: Boolean = false,
+    val lowerThirdReferenceShadow: Boolean = false,
+    val textShadowColor: String = "#000000",
+    val textShadowSize: Int = 100,
+    val textShadowOpacity: Int = 90,
+    val lowerThirdTextShadowColor: String = "#000000",
+    val lowerThirdTextShadowSize: Int = 100,
+    val lowerThirdTextShadowOpacity: Int = 90,
+    val referenceShadowColor: String = "#000000",
+    val referenceShadowSize: Int = 100,
+    val referenceShadowOpacity: Int = 90,
+    val lowerThirdReferenceShadowColor: String = "#000000",
+    val lowerThirdReferenceShadowSize: Int = 100,
+    val lowerThirdReferenceShadowOpacity: Int = 90,
+)
+
 @Serializable
 data class BibleSettings(
     // Bible file management
@@ -12,6 +72,11 @@ data class BibleSettings(
     // Bible selection
     val primaryBible: String = "",
     val secondaryBible: String = "",
+    /** Multi-mode source of truth, stored separately from the legacy primary/secondary fields. */
+    val translations: List<BibleTranslationSettings> = emptyList(),
+    val multiTranslationMode: Boolean = false,
+    val multiTranslationSpacing: Int = 24,
+    val multiTranslationDivider: Boolean = false,
 
     // Bible tab column widths (dp); 0 = use default
     val bibleColWidthBook: Int = 200,
@@ -145,8 +210,141 @@ data class BibleSettings(
     val splitBrowseMode: Boolean = false,
     val splitLivePanelWidth: Int = 300,
 ) {
+    /** Returns the translations used by the currently selected presentation mode. */
+    fun translationList(): List<BibleTranslationSettings> =
+        if (multiTranslationMode) multiTranslationList() else legacyTranslationList()
+
+    /** Stable key used by the Bible UI to detect when its loaded module set must be refreshed. */
+    fun translationSelectionKey(): Pair<Boolean, List<String>> =
+        multiTranslationMode to translationList().map { it.fileName }
+
+    fun withMultiTranslationMode(enabled: Boolean): BibleSettings = copy(
+        multiTranslationMode = enabled,
+        translations = if (enabled && translations.isEmpty()) legacyTranslationList() else translations,
+    )
+
+    private fun legacyTranslationList(): List<BibleTranslationSettings> =
+        buildList {
+            if (primaryBible.isNotEmpty()) add(primaryTranslation())
+            if (secondaryBible.isNotEmpty()) add(secondaryTranslation())
+        }
+
+    private fun multiTranslationList(): List<BibleTranslationSettings> = translations
+
+    fun withTranslations(value: List<BibleTranslationSettings>): BibleSettings {
+        val cleaned = value.filter { it.fileName.isNotBlank() }.distinctBy { it.fileName }
+        return copy(translations = cleaned, multiTranslationMode = true)
+    }
+
+    fun updateTranslation(index: Int, transform: (BibleTranslationSettings) -> BibleTranslationSettings): BibleSettings {
+        val current = multiTranslationList()
+        if (index !in current.indices) return this
+        return withTranslations(current.toMutableList().also { it[index] = transform(it[index]) })
+    }
+
+    fun addTranslation(fileName: String): BibleSettings {
+        if (fileName.isBlank() || multiTranslationList().any { it.fileName == fileName }) return this
+        return withTranslations(multiTranslationList() + BibleTranslationSettings(fileName = fileName))
+    }
+
+    fun removeTranslation(index: Int): BibleSettings =
+        withTranslations(multiTranslationList().filterIndexed { itemIndex, _ -> itemIndex != index })
+
+    fun moveTranslation(index: Int, offset: Int): BibleSettings {
+        val target = index + offset
+        val current = multiTranslationList()
+        if (index !in current.indices || target !in current.indices) return this
+        return withTranslations(current.toMutableList().also {
+            val item = it.removeAt(index)
+            it.add(target, item)
+        })
+    }
+
+    private fun primaryTranslation() = BibleTranslationSettings(
+        fileName = primaryBible,
+        textColor = primaryBibleColor, textFontType = primaryBibleFontType,
+        textFontSize = primaryBibleFontSize, lowerThirdTextFontSize = primaryBibleLowerThirdFontSize,
+        textHorizontalAlignment = primaryBibleHorizontalAlignment,
+        lowerThirdTextHorizontalAlignment = primaryBibleLowerThirdHorizontalAlignment,
+        textBold = primaryBibleBold, textItalic = primaryBibleItalic,
+        textUnderline = primaryBibleUnderline, textShadow = primaryBibleShadow,
+        lowerThirdTextColor = primaryBibleLowerThirdColor,
+        lowerThirdTextFontType = primaryBibleLowerThirdFontType,
+        lowerThirdTextBold = primaryBibleLowerThirdBold, lowerThirdTextItalic = primaryBibleLowerThirdItalic,
+        lowerThirdTextUnderline = primaryBibleLowerThirdUnderline, lowerThirdTextShadow = primaryBibleLowerThirdShadow,
+        referenceColor = primaryReferenceColor, referenceFontType = primaryReferenceFontType,
+        referenceFontSize = primaryReferenceFontSize,
+        lowerThirdReferenceFontSize = primaryReferenceLowerThirdFontSize,
+        referencePosition = primaryReferencePosition,
+        lowerThirdReferencePosition = primaryReferenceLowerThirdPosition,
+        referenceHorizontalAlignment = primaryReferenceHorizontalAlignment,
+        lowerThirdReferenceHorizontalAlignment = primaryReferenceLowerThirdHorizontalAlignment,
+        showAbbreviation = primaryShowAbbreviation,
+        referenceBold = primaryReferenceBold, referenceItalic = primaryReferenceItalic,
+        referenceUnderline = primaryReferenceUnderline, referenceShadow = primaryReferenceShadow,
+        lowerThirdReferenceColor = primaryReferenceLowerThirdColor,
+        lowerThirdReferenceFontType = primaryReferenceLowerThirdFontType,
+        lowerThirdReferenceBold = primaryReferenceLowerThirdBold,
+        lowerThirdReferenceItalic = primaryReferenceLowerThirdItalic,
+        lowerThirdReferenceUnderline = primaryReferenceLowerThirdUnderline,
+        lowerThirdReferenceShadow = primaryReferenceLowerThirdShadow,
+        textShadowColor = primaryBibleShadowColor, textShadowSize = primaryBibleShadowSize,
+        textShadowOpacity = primaryBibleShadowOpacity,
+        lowerThirdTextShadowColor = primaryBibleLowerThirdShadowColor,
+        lowerThirdTextShadowSize = primaryBibleLowerThirdShadowSize,
+        lowerThirdTextShadowOpacity = primaryBibleLowerThirdShadowOpacity,
+        referenceShadowColor = primaryReferenceShadowColor,
+        referenceShadowSize = primaryReferenceShadowSize, referenceShadowOpacity = primaryReferenceShadowOpacity,
+        lowerThirdReferenceShadowColor = primaryReferenceLowerThirdShadowColor,
+        lowerThirdReferenceShadowSize = primaryReferenceLowerThirdShadowSize,
+        lowerThirdReferenceShadowOpacity = primaryReferenceLowerThirdShadowOpacity,
+    )
+
+    private fun secondaryTranslation() = BibleTranslationSettings(
+        fileName = secondaryBible,
+        textColor = secondaryBibleColor, textFontType = secondaryBibleFontType,
+        textFontSize = secondaryBibleFontSize, lowerThirdTextFontSize = secondaryBibleLowerThirdFontSize,
+        textHorizontalAlignment = secondaryBibleHorizontalAlignment,
+        lowerThirdTextHorizontalAlignment = secondaryBibleLowerThirdHorizontalAlignment,
+        lowerThirdEnabled = secondaryBibleLowerThirdEnabled,
+        textBold = secondaryBibleBold, textItalic = secondaryBibleItalic,
+        textUnderline = secondaryBibleUnderline, textShadow = secondaryBibleShadow,
+        lowerThirdTextColor = secondaryBibleLowerThirdColor,
+        lowerThirdTextFontType = secondaryBibleLowerThirdFontType,
+        lowerThirdTextBold = secondaryBibleLowerThirdBold, lowerThirdTextItalic = secondaryBibleLowerThirdItalic,
+        lowerThirdTextUnderline = secondaryBibleLowerThirdUnderline, lowerThirdTextShadow = secondaryBibleLowerThirdShadow,
+        referenceColor = secondaryReferenceColor, referenceFontType = secondaryReferenceFontType,
+        referenceFontSize = secondaryReferenceFontSize,
+        lowerThirdReferenceFontSize = secondaryReferenceLowerThirdFontSize,
+        referencePosition = secondaryReferencePosition,
+        lowerThirdReferencePosition = secondaryReferenceLowerThirdPosition,
+        referenceHorizontalAlignment = secondaryReferenceHorizontalAlignment,
+        lowerThirdReferenceHorizontalAlignment = secondaryReferenceLowerThirdHorizontalAlignment,
+        showAbbreviation = secondaryShowAbbreviation,
+        referenceBold = secondaryReferenceBold, referenceItalic = secondaryReferenceItalic,
+        referenceUnderline = secondaryReferenceUnderline, referenceShadow = secondaryReferenceShadow,
+        lowerThirdReferenceColor = secondaryReferenceLowerThirdColor,
+        lowerThirdReferenceFontType = secondaryReferenceLowerThirdFontType,
+        lowerThirdReferenceBold = secondaryReferenceLowerThirdBold,
+        lowerThirdReferenceItalic = secondaryReferenceLowerThirdItalic,
+        lowerThirdReferenceUnderline = secondaryReferenceLowerThirdUnderline,
+        lowerThirdReferenceShadow = secondaryReferenceLowerThirdShadow,
+        textShadowColor = secondaryBibleShadowColor, textShadowSize = secondaryBibleShadowSize,
+        textShadowOpacity = secondaryBibleShadowOpacity,
+        lowerThirdTextShadowColor = secondaryBibleLowerThirdShadowColor,
+        lowerThirdTextShadowSize = secondaryBibleLowerThirdShadowSize,
+        lowerThirdTextShadowOpacity = secondaryBibleLowerThirdShadowOpacity,
+        referenceShadowColor = secondaryReferenceShadowColor,
+        referenceShadowSize = secondaryReferenceShadowSize, referenceShadowOpacity = secondaryReferenceShadowOpacity,
+        lowerThirdReferenceShadowColor = secondaryReferenceLowerThirdShadowColor,
+        lowerThirdReferenceShadowSize = secondaryReferenceLowerThirdShadowSize,
+        lowerThirdReferenceShadowOpacity = secondaryReferenceLowerThirdShadowOpacity,
+    )
+
     /** Returns a copy with primary and secondary bible settings swapped. */
-    fun swapped() = copy(
+    fun swapped() = if (multiTranslationMode) {
+        moveTranslation(0, 1)
+    } else copy(
         primaryBible = secondaryBible,
         secondaryBible = primaryBible,
         primaryBibleColor = secondaryBibleColor,

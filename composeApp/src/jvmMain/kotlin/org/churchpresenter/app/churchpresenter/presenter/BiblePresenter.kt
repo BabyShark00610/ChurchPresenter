@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.Text
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +48,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.composables.LoopingVideoBackground
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -501,9 +505,132 @@ fun BiblePresenter(
                 val secondary = verses.getOrNull(1)
                 val primaryVerseRef = if (primary.verseRange.isNotEmpty()) primary.verseRange else primary.verseNumber.toString()
                 val secondaryVerseRef = secondary?.let { if (it.verseRange.isNotEmpty()) it.verseRange else it.verseNumber.toString() } ?: ""
-                val isParallelIntended = appSettings.bibleSettings.secondaryBible.isNotEmpty()
+                val isParallelIntended = appSettings.bibleSettings.secondaryBible.isNotEmpty() ||
+                    appSettings.bibleSettings.translationList().size > 1
                 val showParallelLayout = isParallelIntended && secondary != null && (!isLowerThird || appSettings.bibleSettings.secondaryBibleLowerThirdEnabled)
                 val showSecondary = secondary != null && showParallelLayout
+
+                // Three or more translations always use the ordered vertical stack. Each line reads
+                // its own style profile; a shared fit scale keeps the complete stack on screen.
+                if (bs.multiTranslationMode) {
+                    val configured = bs.translationList()
+                    val visible = verses.mapIndexedNotNull { index, verse ->
+                        val style = configured.firstOrNull { it.fileName == verse.translationFileName }
+                            ?: configured.getOrNull(index)
+                            ?: BibleTranslationSettings(fileName = verse.translationFileName)
+                        verse to style
+                    }
+                    BoxWithConstraints(modifier = innerModifier) {
+                        val widthConstraint = Constraints(maxWidth = constraints.maxWidth)
+                        fun alignment(value: String) = when (value) {
+                            Constants.LEFT -> TextAlign.Start
+                            Constants.RIGHT -> TextAlign.End
+                            else -> TextAlign.Center
+                        }
+                        fun textStyle(item: BibleTranslationSettings): TextStyle {
+                            val shadowEnabled = item.textShadow
+                            val shadow = if (shadowEnabled) scaleElementShadow(
+                                item.textShadowColor,
+                                item.textShadowSize,
+                                item.textShadowOpacity,
+                            ) else null
+                            return TextStyle(
+                                fontWeight = if (item.textBold) FontWeight.Bold else FontWeight.Normal,
+                                fontStyle = if (item.textItalic) FontStyle.Italic else FontStyle.Normal,
+                                textDecoration = if (item.textUnderline) TextDecoration.Underline else TextDecoration.None,
+                                shadow = shadow,
+                            )
+                        }
+                        fun referenceStyle(item: BibleTranslationSettings): TextStyle {
+                            val shadowEnabled = item.referenceShadow
+                            val shadow = if (shadowEnabled) scaleElementShadow(
+                                item.referenceShadowColor,
+                                item.referenceShadowSize,
+                                item.referenceShadowOpacity,
+                            ) else null
+                            return TextStyle(
+                                fontWeight = if (item.referenceBold) FontWeight.Bold else FontWeight.Normal,
+                                fontStyle = if (item.referenceItalic) FontStyle.Italic else FontStyle.Normal,
+                                textDecoration = if (item.referenceUnderline) TextDecoration.Underline else TextDecoration.None,
+                                shadow = shadow,
+                            )
+                        }
+                        fun totalHeight(scale: Float): Int {
+                            val contentHeight = visible.sumOf { (verse, item) ->
+                                val textSize = (item.textFontSize * scaleFactor * scale).sp
+                                val refSize = (item.referenceFontSize * scaleFactor * scale).sp
+                                val textFont = systemFontFamilyOrDefault(item.textFontType)
+                                val refFont = systemFontFamilyOrDefault(item.referenceFontType)
+                                textMeasurer.measure(verse.verseText, textStyle(item).copy(fontFamily = textFont, fontSize = textSize), constraints = widthConstraint).size.height +
+                                    textMeasurer.measure(buildRefText(verse, item.showAbbreviation), referenceStyle(item).copy(fontFamily = refFont, fontSize = refSize), constraints = widthConstraint).size.height
+                            }
+                            val gapCount = (visible.size - 1).coerceAtLeast(0)
+                            val gapHeight = with(density) {
+                                (bs.multiTranslationSpacing * scale).dp.roundToPx()
+                            }
+                            val dividerHeight = if (bs.multiTranslationDivider) {
+                                with(density) { 1.dp.roundToPx() }
+                            } else {
+                                0
+                            }
+                            return contentHeight + gapCount * (gapHeight + dividerHeight)
+                        }
+                        val fitScale = if (totalHeight(1f) > constraints.maxHeight) {
+                            // A fixed 15% floor was enough for two translations but could leave the
+                            // fourth block below the clip boundary. Parallel stacks prioritise
+                            // keeping every configured translation on screen.
+                            binarySearchFitScale(minScale = 0.03f, iterations = 10) { scale ->
+                                totalHeight(scale) <= constraints.maxHeight
+                            }
+                        } else 1f
+                        Column(
+                            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                            verticalArrangement = Arrangement.Top,
+                        ) {
+                            visible.forEachIndexed { index, (verse, item) ->
+                                val textSize = (item.textFontSize * scaleFactor * fitScale).sp
+                                val refSize = (item.referenceFontSize * scaleFactor * fitScale).sp
+                                val textFont = systemFontFamilyOrDefault(item.textFontType)
+                                val refFont = systemFontFamilyOrDefault(item.referenceFontType)
+                                val textColor = if (isKey) Color.White else parseHexColor(item.textColor)
+                                val refColor = if (isKey) Color.White else parseHexColor(item.referenceColor)
+                                val textAlign = alignment(item.textHorizontalAlignment)
+                                val refAlign = alignment(item.referenceHorizontalAlignment)
+                                val refPosition = item.referencePosition
+                                if (refPosition == Constants.POSITION_ABOVE) {
+                                    Text(buildRefText(verse, item.showAbbreviation), Modifier.fillMaxWidth(), color = refColor, fontFamily = refFont, fontSize = refSize, textAlign = refAlign, style = referenceStyle(item))
+                                }
+                                Text(verse.verseText, Modifier.fillMaxWidth(), color = textColor, fontFamily = textFont, fontSize = textSize, textAlign = textAlign, style = textStyle(item))
+                                if (refPosition == Constants.POSITION_BELOW) {
+                                    Text(buildRefText(verse, item.showAbbreviation), Modifier.fillMaxWidth(), color = refColor, fontFamily = refFont, fontSize = refSize, textAlign = refAlign, style = referenceStyle(item))
+                                }
+                                if (index < visible.lastIndex) {
+                                    Spacer(
+                                        modifier = Modifier.height(
+                                            (bs.multiTranslationSpacing * fitScale / 2f).dp,
+                                        ),
+                                    )
+                                    if (bs.multiTranslationDivider) {
+                                        HorizontalDivider(
+                                            color = if (isKey) {
+                                                Color.White
+                                            } else {
+                                                Color.White.copy(alpha = 0.45f)
+                                            },
+                                            thickness = 1.dp,
+                                        )
+                                    }
+                                    Spacer(
+                                        modifier = Modifier.height(
+                                            (bs.multiTranslationSpacing * fitScale / 2f).dp,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    return
+                }
 
                 // isLowerThirdVertical forces bilingual/parallel content to stack (one below the
                 // other) instead of the side-by-side Row split below — same band/geometry as

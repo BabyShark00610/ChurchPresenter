@@ -9,8 +9,10 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Two verse layouts the full-screen single-verse tests in [PresenterRenderTest] don't reach:
@@ -36,7 +38,9 @@ class BiblePresenterLayoutRenderTest {
         book: String = "John",
         chapter: Int = 3,
         abbreviation: String = "KJV",
+        fileName: String = "",
     ) = SelectedVerse(
+        translationFileName = fileName,
         bibleAbbreviation = abbreviation,
         bibleName = abbreviation,
         bookName = book,
@@ -78,5 +82,125 @@ class BiblePresenterLayoutRenderTest {
         onNodeWithText("For God so loved the world", substring = true).assertExists("the band must carry the primary translation")
         onNodeWithText("Ибо так возлюбил Бог мир", substring = true)
             .assertExists("the lower-third secondary-translation style path must render the second language too")
+    }
+
+    @Test
+    fun `full screen composes every translation in a parallel stack`() = runComposeUiTest {
+        val settings = AppSettings(
+            bibleSettings = BibleSettings().withTranslations(
+                listOf("kjv.spb", "rst.spb", "lut.spb").map {
+                    BibleTranslationSettings(fileName = it)
+                },
+            ),
+        )
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = listOf(
+                        verse("For God so loved the world", 16, fileName = "kjv.spb"),
+                        verse("Ибо так возлюбил Бог мир", 16, abbreviation = "RST", fileName = "rst.spb"),
+                        verse("Denn also hat Gott die Welt geliebt", 16, abbreviation = "LUT", fileName = "lut.spb"),
+                    ),
+                    appSettings = settings,
+                )
+            }
+        }
+
+        onNodeWithText("For God so loved the world", substring = true).assertExists()
+        onNodeWithText("Ибо так возлюбил Бог мир", substring = true).assertExists()
+        onNodeWithText("Denn also hat Gott die Welt geliebt", substring = true).assertExists()
+    }
+
+    @Test
+    fun `missing middle verse still renders the later translation`() = runComposeUiTest {
+        val settings = AppSettings(
+            bibleSettings = BibleSettings().withTranslations(
+                listOf("kjv.spb", "missing.spb", "lut.spb").map {
+                    BibleTranslationSettings(fileName = it)
+                },
+            ),
+        )
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = listOf(
+                        verse("For God so loved the world", 16, fileName = "kjv.spb"),
+                        verse("Denn also hat Gott die Welt geliebt", 16, fileName = "lut.spb"),
+                    ),
+                    appSettings = settings,
+                )
+            }
+        }
+
+        onNodeWithText("For God so loved the world", substring = true).assertExists()
+        onNodeWithText("Denn also hat Gott die Welt geliebt", substring = true).assertExists()
+    }
+
+    @Test
+    fun `four long translations stay inside the output bounds`() = runComposeUiTest {
+        val files = listOf("one.spb", "two.spb", "three.spb", "four.spb")
+        val settings = AppSettings(
+            bibleSettings = BibleSettings().withTranslations(
+                files.map { BibleTranslationSettings(fileName = it, textFontSize = 100, referenceFontSize = 70) },
+            ),
+        )
+        val markers = listOf("FIRST", "SECOND", "THIRD", "FOURTH")
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = markers.mapIndexed { index, marker ->
+                        verse(
+                            text = "$marker ${"long verse text ".repeat(45)}",
+                            number = 16,
+                            fileName = files[index],
+                        )
+                    },
+                    appSettings = settings,
+                )
+            }
+        }
+
+        markers.forEach { marker ->
+            val bounds = onNodeWithText(marker, substring = true).fetchSemanticsNode().boundsInRoot
+            assertTrue(bounds.top >= 0f, "$marker starts above the output: $bounds")
+            assertTrue(bounds.bottom <= 1080f, "$marker is clipped below the output: $bounds")
+        }
+    }
+
+    @Test
+    fun `multi translation spacing separates adjacent blocks`() = runComposeUiTest {
+        val settings = AppSettings(
+            bibleSettings = BibleSettings(
+                multiTranslationSpacing = 80,
+                multiTranslationDivider = true,
+            ).withTranslations(
+                listOf("one.spb", "two.spb").map {
+                    BibleTranslationSettings(
+                        fileName = it,
+                        textFontSize = 40,
+                        referenceFontSize = 24,
+                        showAbbreviation = true,
+                    )
+                },
+            ),
+        )
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = listOf(
+                        verse("FIRST TEXT", 16, abbreviation = "ONE", fileName = "one.spb"),
+                        verse("SECOND TEXT", 16, abbreviation = "TWO", fileName = "two.spb"),
+                    ),
+                    appSettings = settings,
+                )
+            }
+        }
+
+        val firstReferenceBottom = onNodeWithText("ONE John 3:16").fetchSemanticsNode().boundsInRoot.bottom
+        val secondTextTop = onNodeWithText("SECOND TEXT").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            secondTextTop - firstReferenceBottom >= 75f,
+            "configured spacing must remain visible between translation blocks",
+        )
     }
 }

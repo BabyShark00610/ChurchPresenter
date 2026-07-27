@@ -2087,4 +2087,17 @@
     <string name="content_outputs_done">Valmis</string>
     <string name="content_outputs_preview">See väljund kuvab</string>
     <string name="content_outputs_preview_empty">Midagi pole lubatud — see väljund jääb tühjaks</string>
+    <string name="bible_translation">Tõlge %1$d</string>
+    <string name="add_bible_translation">Lisa tõlge</string>
+    <string name="bible_translation_mode">Tõlkerežiim</string>
+    <string name="bible_translation_mode_legacy">Klassikaline</string>
+    <string name="bible_translation_mode_multi">Mitu tõlget</string>
+    <string name="bible_reference">Piibliviide</string>
+    <string name="bible_translation_order">Tõlgete järjekord</string>
+    <string name="bible_multi_layout">Tõlgete paigutus</string>
+    <string name="bible_translation_spacing">Tõlgete vahe</string>
+    <string name="bible_translation_divider">Näita tõlgete vahel eraldajat</string>
+    <string name="pixels_short">px</string>
+    <string name="move_translation_up">Liiguta tõlge üles</string>
+    <string name="move_translation_down">Liiguta tõlge alla</string>
 </resources>

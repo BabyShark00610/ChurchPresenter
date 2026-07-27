@@ -1775,7 +1775,9 @@ fun main() {
                                     instanceLinkFetchBibleFile = { instanceLinkViewModel.fetchBibleFile() },
                                     instanceLinkBibleSyncMode = appSettings.instanceLink.bibleSyncMode,
                                     instanceLinkFetchSecondaryBibleFile = { instanceLinkViewModel.fetchSecondaryBibleFile() },
+                                    instanceLinkFetchBibleTranslations = { instanceLinkViewModel.fetchBibleTranslations() },
                                     instanceLinkOnSecondaryBibleFilePathChanged = { path -> companionServer.updateSecondaryBibleFilePath(path) },
+                                    instanceLinkOnBibleFilePathsChanged = { paths -> companionServer.updateBibleFilePaths(paths) },
                                     instanceLinkSendAddToSchedule = if (appSettings.instanceLink.allowPushToSchedule) {
                                         { item -> instanceLinkViewModel.sendAddToSchedule(item) }
                                     } else null,

@@ -2057,4 +2057,17 @@
     <string name="content_outputs_done">Готово</string>
     <string name="content_outputs_preview">Этот выход показывает</string>
     <string name="content_outputs_preview_empty">Ничего не включено — выход останется пустым</string>
+    <string name="bible_translation">Перевод %1$d</string>
+    <string name="add_bible_translation">Добавить перевод</string>
+    <string name="bible_translation_mode">Режим переводов</string>
+    <string name="bible_translation_mode_legacy">Классический</string>
+    <string name="bible_translation_mode_multi">Несколько переводов</string>
+    <string name="bible_reference">Библейская ссылка</string>
+    <string name="bible_translation_order">Порядок переводов</string>
+    <string name="bible_multi_layout">Размещение переводов</string>
+    <string name="bible_translation_spacing">Расстояние между переводами</string>
+    <string name="bible_translation_divider">Показывать разделитель между переводами</string>
+    <string name="pixels_short">пкс</string>
+    <string name="move_translation_up">Переместить перевод вверх</string>
+    <string name="move_translation_down">Переместить перевод вниз</string>
 </resources>

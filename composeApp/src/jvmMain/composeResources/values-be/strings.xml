@@ -2054,4 +2054,17 @@
     <string name="content_outputs_done">Гатова</string>
     <string name="content_outputs_preview">Гэты выхад паказвае</string>
     <string name="content_outputs_preview_empty">Нічога не ўключана — выхад застанецца пустым</string>
+    <string name="bible_translation">Пераклад %1$d</string>
+    <string name="add_bible_translation">Дадаць пераклад</string>
+    <string name="bible_translation_mode">Рэжым перакладаў</string>
+    <string name="bible_translation_mode_legacy">Класічны</string>
+    <string name="bible_translation_mode_multi">Некалькі перакладаў</string>
+    <string name="bible_reference">Біблейская спасылка</string>
+    <string name="bible_translation_order">Парадак перакладаў</string>
+    <string name="bible_multi_layout">Размяшчэнне перакладаў</string>
+    <string name="bible_translation_spacing">Адлегласць паміж перакладамі</string>
+    <string name="bible_translation_divider">Паказваць раздзяляльнік паміж перакладамі</string>
+    <string name="pixels_short">пкс</string>
+    <string name="move_translation_up">Перамясціць пераклад уверх</string>
+    <string name="move_translation_down">Перамясціць пераклад уніз</string>
 </resources>

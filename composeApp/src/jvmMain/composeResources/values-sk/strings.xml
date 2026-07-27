@@ -2084,4 +2084,17 @@
     <string name="content_outputs_done">Hotovo</string>
     <string name="content_outputs_preview">Tento výstup zobrazuje</string>
     <string name="content_outputs_preview_empty">Nič nie je zapnuté — tento výstup zostane prázdny</string>
+    <string name="bible_translation">Preklad %1$d</string>
+    <string name="add_bible_translation">Pridať preklad</string>
+    <string name="bible_translation_mode">Režim prekladov</string>
+    <string name="bible_translation_mode_legacy">Klasický</string>
+    <string name="bible_translation_mode_multi">Viac prekladov</string>
+    <string name="bible_reference">Biblický odkaz</string>
+    <string name="bible_translation_order">Poradie prekladov</string>
+    <string name="bible_multi_layout">Rozloženie viacerých prekladov</string>
+    <string name="bible_translation_spacing">Medzera medzi prekladmi</string>
+    <string name="bible_translation_divider">Zobraziť oddeľovač medzi prekladmi</string>
+    <string name="pixels_short">px</string>
+    <string name="move_translation_up">Posunúť preklad nahor</string>
+    <string name="move_translation_down">Posunúť preklad nadol</string>
 </resources>

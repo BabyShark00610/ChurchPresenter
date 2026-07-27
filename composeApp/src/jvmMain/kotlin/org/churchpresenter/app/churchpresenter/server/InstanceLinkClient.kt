@@ -599,6 +599,30 @@ class InstanceLinkClient(
         }.onFailure { e -> logFetch("secondary_bible_file", success = false, reason = e.message) }.getOrNull()
     }
 
+    /** Downloads every Bible module advertised by the primary, preserving manifest order. */
+    suspend fun fetchBibleTranslations(): List<Pair<String, ByteArray>> {
+        if (currentHost.isEmpty()) return emptyList()
+        return runCatching {
+            val manifestResponse = httpClient.get(
+                "http://$currentHost:$currentPort${Constants.ENDPOINT_BIBLE_FILE}/translations"
+            ) {
+                if (currentApiKey.isNotEmpty()) header(Constants.HEADER_API_KEY, currentApiKey)
+            }
+            if (!manifestResponse.status.isSuccess()) return emptyList()
+            val names = Json.decodeFromString<List<String>>(manifestResponse.bodyAsText())
+            names.mapIndexedNotNull { index, name ->
+                val response = httpClient.get(
+                    "http://$currentHost:$currentPort${Constants.ENDPOINT_BIBLE_FILE}/translation/$index"
+                ) {
+                    if (currentApiKey.isNotEmpty()) header(Constants.HEADER_API_KEY, currentApiKey)
+                }
+                if (response.status.isSuccess()) name to response.readRawBytes() else null
+            }
+        }.onFailure { error ->
+            logFetch("bible_translations", success = false, reason = error.message)
+        }.getOrDefault(emptyList())
+    }
+
     /** Fetches one lower-third preset's raw Lottie JSON by name — see [Constants.ENDPOINT_LOWER_THIRDS]. */
     suspend fun fetchLowerThirdJson(name: String): ByteArray? {
         if (currentHost.isEmpty()) {

@@ -2082,4 +2082,17 @@
     <string name="content_outputs_done">Terminé</string>
     <string name="content_outputs_preview">Cette sortie affiche</string>
     <string name="content_outputs_preview_empty">Rien d'activé — cette sortie restera vide</string>
+    <string name="bible_translation">Traduction %1$d</string>
+    <string name="add_bible_translation">Ajouter une traduction</string>
+    <string name="bible_translation_mode">Mode de traduction</string>
+    <string name="bible_translation_mode_legacy">Classique</string>
+    <string name="bible_translation_mode_multi">Plusieurs traductions</string>
+    <string name="bible_reference">Référence biblique</string>
+    <string name="bible_translation_order">Ordre des traductions</string>
+    <string name="bible_multi_layout">Disposition des traductions</string>
+    <string name="bible_translation_spacing">Espacement entre les traductions</string>
+    <string name="bible_translation_divider">Afficher un séparateur entre les traductions</string>
+    <string name="pixels_short">px</string>
+    <string name="move_translation_up">Déplacer la traduction vers le haut</string>
+    <string name="move_translation_down">Déplacer la traduction vers le bas</string>
 </resources>
