@@ -53,19 +53,23 @@ class SongsViewModelEditDeleteTest {
     }
 
     private fun viewModel(): SongsViewModel {
-        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Default, enableFolderWatcher = false)
+        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false)
         created.add(vm)
         awaitUntil("songs") { vm.filteredSongItems.value.size >= 3 }
         return vm
     }
 
-    private fun awaitUntil(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-            Thread.sleep(20)
-        }
-        throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
+    /**
+     * Asserts [what] has already happened.
+     *
+     * The view model is built on an immediate dispatcher for both its scope and its file reads, so a
+     * load is complete by the time the constructor or the call returns — there is nothing to wait
+     * for. This used to poll a wall clock for up to 5s, which is what made these tests fail on a
+     * loaded CI runner (issue #56): the condition was right, the coroutine just had not been
+     * scheduled yet. Nothing here now depends on timing.
+     */
+    private fun awaitUntil(what: String, condition: () -> Boolean) {
+        if (!condition()) throw AssertionError("expected $what to have completed synchronously")
     }
 
     private fun SongsViewModel.songTitled(title: String): SongItem =

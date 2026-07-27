@@ -32,9 +32,14 @@ class SongsViewModel(
     //  - [dispatcher] backs the view-model scope. It is Dispatchers.Main in the app so state updates
     //    land on the UI thread; tests pass Dispatchers.Default so many view models loading at once
     //    don't all queue behind each other on the single Swing event thread and time out.
+    //  - [ioDispatcher] runs the file reads. Tests pass an immediate dispatcher so a load completes
+    //    synchronously instead of queueing on a shared pool — with Dispatchers.IO hardcoded here the
+    //    tests had no way to control the part that does the work, and had to poll a wall clock for
+    //    it, which times out on a loaded CI runner (issue #56).
     //  - [enableFolderWatcher] starts the directory watcher that reloads on file changes. Tests turn
     //    it off so a blocking watch loop and its self-triggered reloads don't race the assertions.
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val enableFolderWatcher: Boolean = true,
 ) {
     private val _songsData = mutableStateOf(Songs())
@@ -220,7 +225,7 @@ class SongsViewModel(
             try {
                 // Phase 1: Try loading from cache for instant display
                 if (storageDir.isNotEmpty()) {
-                    val cached = withContext(Dispatchers.IO) {
+                    val cached = withContext(ioDispatcher) {
                         SongFileParser.loadSongCache(storageDir)
                     }
                     if (cached != null && cached.isNotEmpty()) {
@@ -230,7 +235,7 @@ class SongsViewModel(
                 }
 
                 // Phase 2: Load from disk incrementally (only re-parse changed files)
-                val result = withContext(Dispatchers.IO) {
+                val result = withContext(ioDispatcher) {
                     val s = Songs()
                     var cachedSongsList: List<CachedSong> = emptyList()
                     if (storageDir.isNotEmpty()) {
@@ -263,7 +268,7 @@ class SongsViewModel(
 
                 // Save cache for next launch
                 if (storageDir.isNotEmpty() && cachedSongsList.isNotEmpty()) {
-                    withContext(Dispatchers.IO) {
+                    withContext(ioDispatcher) {
                         SongFileParser.saveSongCache(storageDir, cachedSongsList)
                     }
                 }
