@@ -88,15 +88,35 @@ class SongsTabSearchTest {
     }
 
     @Test
-    fun `whitespace in the query is significant — a stray space finds nothing`() = songsTab { _, _ ->
-        // Current behaviour, pinned rather than endorsed: the query is matched raw, so a leading or
-        // trailing space makes the search miss. Reported separately; changing it is a product
-        // decision, not something to smuggle in under a test.
+    fun `a stray space around the query does not lose the song`() = songsTab { _, _ ->
+        // Was issue #70: the query was matched raw, so a query pasted from a service plan or an
+        // email came back empty with nothing on screen to explain why. Only the ends are trimmed.
         search("  Amazing Grace  ")
-        assertEquals(emptyList(), listedTitles(), "the untrimmed query matches nothing")
+        assertTrue(shows("Amazing Grace"), "a leading and trailing space must not lose the match")
 
-        search("Amazing Grace")
-        assertTrue(shows("Amazing Grace"), "and the same query trimmed finds it")
+        search("Amazing Grace  ")
+        assertTrue(shows("Amazing Grace"), "nor a trailing one alone")
+
+        search("  Amazing")
+        assertEquals(
+            listOf("Amazing Grace", "Amazing Love"),
+            listedTitles(),
+            "a leading space must not change which songs match either",
+        )
+    }
+
+    @Test
+    fun `whitespace inside a query is still significant`() = songsTab { _, _ ->
+        // Only the ends are trimmed. A doubled space in the middle is a different query, so this
+        // still finds nothing — trimming must not quietly become "normalise all whitespace".
+        search("Amazing  Grace")
+        assertEquals(emptyList(), listedTitles(), "the inner double space is part of what was asked for")
+    }
+
+    @Test
+    fun `a query of nothing but spaces lists everything, as an empty box does`() = songsTab { _, _ ->
+        search("     ")
+        assertEquals(4, listedTitles().size, "whitespace alone is not a search")
     }
 
     // ── What the tab shows around the list ──────────────────────────────────────
