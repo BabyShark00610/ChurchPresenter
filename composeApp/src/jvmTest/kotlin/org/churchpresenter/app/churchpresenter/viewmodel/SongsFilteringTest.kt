@@ -144,6 +144,63 @@ class SongsFilteringTest {
         assertEquals(listOf("Amazing Grace", "Great Is Thy Faithfulness", "Amazing Love"), vm.titles)
     }
 
+    // ── Whitespace around the query (issue #70) ─────────────────────────────────
+
+    @Test
+    fun `contains ignores space around the query`() {
+        // A query pasted from a service plan or an email routinely carries one. Matching it raw
+        // returned nothing, with nothing on screen to say why — mid-service, that reads as "the
+        // song is missing".
+        val vm = vmWith(*defaultCatalog)
+        vm.updateFilterType(Constants.CONTAINS)
+        vm.updateSearchQuery("  amazing  ")
+        assertEquals(listOf("Amazing Grace", "Amazing Love"), vm.titles)
+    }
+
+    @Test
+    fun `starts-with ignores space around the query`() {
+        val vm = vmWith(*defaultCatalog)
+        vm.updateFilterType(Constants.STARTS_WITH)
+        vm.updateSearchQuery(" Great ")
+        assertEquals(listOf("Great Is Thy Faithfulness"), vm.titles, "still anchored, just not by the space")
+    }
+
+    @Test
+    fun `exact match ignores space around the query`() {
+        val vm = vmWith(*defaultCatalog)
+        vm.updateFilterType(Constants.EXACT_MATCH)
+        vm.updateSearchQuery("  Amazing Grace  ")
+        assertEquals(listOf("Amazing Grace"), vm.titles)
+    }
+
+    @Test
+    fun `exact match still reaches a title stored with its own stray space`() {
+        // The objection to trimming was that a title carrying real leading or trailing whitespace
+        // would become unreachable under exact match. Both sides are trimmed, so it stays findable
+        // — which is the behaviour an operator would expect, since the space is invisible on screen.
+        val vm = vmWith("Hymnal" to listOf("1" to "Amazing Grace "))
+        vm.updateFilterType(Constants.EXACT_MATCH)
+        vm.updateSearchQuery("Amazing Grace")
+        assertEquals(listOf("Amazing Grace "), vm.titles)
+    }
+
+    @Test
+    fun `space inside the query is still part of it`() {
+        // Only the ends are trimmed; this must not become "normalise all whitespace".
+        val vm = vmWith(*defaultCatalog)
+        vm.updateFilterType(Constants.CONTAINS)
+        vm.updateSearchQuery("Amazing  Grace")
+        assertEquals(emptyList(), vm.titles, "the doubled inner space is part of what was asked for")
+    }
+
+    @Test
+    fun `a query of only spaces is the same as an empty box`() {
+        val vm = vmWith(*defaultCatalog)
+        vm.updateFilterType(Constants.CONTAINS)
+        vm.updateSearchQuery("   ")
+        assertEquals(5, vm.filteredSongItems.value.size, "whitespace alone is not a search")
+    }
+
     // ── Exact match ─────────────────────────────────────────────────────────────
 
     @Test
