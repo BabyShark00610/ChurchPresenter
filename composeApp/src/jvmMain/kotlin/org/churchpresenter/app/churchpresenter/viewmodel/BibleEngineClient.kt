@@ -67,8 +67,7 @@ data class EngineScripture(
  * Client for the Bible Lookup Engine (BLE) microservice. Replaces in-app detection: it (optionally)
  * starts the engine in-process when STT connects, opens a WebSocket to `/bible-engine`, and forwards
  * `scripture.*` events to [onScripture]. The level chip is pushed to the engine via [setLevel].
- */
-/**
+ *
  * @param onVersion the translation the engine believes is being read aloud, or null when it has no
  *   answer. Arrives on its own, not attached to a scripture event: the engine settles this
  *   asynchronously and usually a verse or two after the detection that first hinted at it, so it
