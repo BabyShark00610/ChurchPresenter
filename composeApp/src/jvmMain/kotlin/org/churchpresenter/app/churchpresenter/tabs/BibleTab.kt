@@ -1335,7 +1335,10 @@ fun BibleTab(
                     val listState = rememberLazyListState()
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(end = 8.dp)) {
                         itemsIndexed(searchResults) { _, result ->
-                            val resultText = "${result.book} ${result.chapter}:${result.verse} - ${result.verseText}"
+                            // `verseText` already begins with "Book Chapter:Verse " (Bible.addSearchResult
+                            // builds it that way so a result line reads on its own) — prefixing the
+                            // reference again here printed it twice on every row.
+                            val resultText = result.verseText
                             val highlightedText = buildAnnotatedString {
                                 var lastIndex = 0
                                 // Match against the same trimmed query that produced the results.
