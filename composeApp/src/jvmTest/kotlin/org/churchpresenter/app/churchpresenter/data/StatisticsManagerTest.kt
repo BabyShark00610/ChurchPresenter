@@ -309,18 +309,21 @@ class StatisticsManagerTest {
     fun `a year-long range is bucketed by month`() {
         val stats = StatisticsManager()
         stats.sing("Amazing Grace")
+        stats.read("John")
         val now = System.currentTimeMillis()
 
         val points = stats.getActivityByPeriod(now - 365L * 86_400_000, now)
 
         assertTrue(points.size in 12..14, "expected one column per month, got ${points.size}")
         assertEquals(1, points.sumOf { it.songCount })
+        assertEquals(1, points.sumOf { it.verseCount })
     }
 
     @Test
     fun `a multi-year range is bucketed by year`() {
         val stats = StatisticsManager()
         stats.sing("Amazing Grace")
+        stats.read("John")
         val now = System.currentTimeMillis()
 
         val points = stats.getActivityByPeriod(now - 4L * 365 * 86_400_000, now)
@@ -328,6 +331,20 @@ class StatisticsManagerTest {
         assertTrue(points.size in 4..6, "expected one column per year, got ${points.size}")
         assertTrue(points.all { it.label.toIntOrNull() != null }, "yearly columns are labelled with the year")
         assertEquals(1, points.sumOf { it.songCount })
+        assertEquals(1, points.sumOf { it.verseCount })
+    }
+
+    @Test
+    fun `an event outside the requested range is not counted in any bucket`() {
+        val stats = StatisticsManager()
+        stats.sing("Amazing Grace")
+        stats.read("John")
+        val at = assertNotNull(stats.getEarliestEventTime())
+
+        val points = stats.getActivityByPeriod(0L, at - 1)
+
+        assertEquals(0, points.sumOf { it.songCount }, "the event happened after this range, not inside it")
+        assertEquals(0, points.sumOf { it.verseCount })
     }
 
     // ── The CCLI export ─────────────────────────────────────────────────────────

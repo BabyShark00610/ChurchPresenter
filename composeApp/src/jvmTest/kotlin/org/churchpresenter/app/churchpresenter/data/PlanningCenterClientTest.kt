@@ -22,8 +22,9 @@ import kotlin.test.assertTrue
  * rejected as a redirect mismatch.
  *
  * The rest of this client (token exchange, the Services API, downloads) talks to
- * `api.planningcenteronline.com` through a private Ktor client with hard-coded URLs, so it cannot
- * be pointed anywhere else from a test; the import flow that consumes it is covered by
+ * `api.planningcenteronline.com` with hard-coded URLs, so it is exercised here through
+ * [PlanningCenterClient.httpOverride] instead — see [PlanningCenterClientNetworkTest] and
+ * [PlanningCenterDownloadTest]. The import flow that consumes all of it end to end is covered by
  * [org.churchpresenter.app.churchpresenter.viewmodel.PlanningCenterImportViewModelTest].
  */
 class PlanningCenterClientTest {

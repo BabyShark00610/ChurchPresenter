@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.data
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -406,5 +407,160 @@ class CrosswordDataTest {
 
         assertEquals(4, built.level)
         assertEquals("Fruit of the Spirit", built.title)
+    }
+
+    // ── isValid, directly ────────────────────────────────────────────────────────
+    //
+    // The auto-placement algorithm only ever calls isValid with whatever candidate positions the
+    // words it is given happen to produce, so some of its rejection paths (a genuine letter clash,
+    // a word running flush against another with no shared letter) are only reachable by handing it
+    // a grid directly rather than by fishing for the right pair of words to reproduce them.
+
+    @Test
+    fun `a word cannot start where the cell before it is already taken`() {
+        val grid = mapOf((0 to 4) to 'X')
+
+        assertFalse(CrosswordLayoutEngine.isValid(grid, "CAT", 0, 5, CrosswordDirection.ACROSS))
+    }
+
+    @Test
+    fun `a word cannot end where the cell after it is already taken`() {
+        val grid = mapOf((0 to 3) to 'X')
+
+        assertFalse(CrosswordLayoutEngine.isValid(grid, "CAT", 0, 0, CrosswordDirection.ACROSS))
+    }
+
+    @Test
+    fun `the same rule applies running down instead of across`() {
+        assertFalse(
+            CrosswordLayoutEngine.isValid(mapOf((4 to 0) to 'X'), "CAT", 5, 0, CrosswordDirection.DOWN),
+            "cell above",
+        )
+        assertFalse(
+            CrosswordLayoutEngine.isValid(mapOf((3 to 0) to 'X'), "CAT", 0, 0, CrosswordDirection.DOWN),
+            "cell below",
+        )
+    }
+
+    @Test
+    fun `a candidate that lands on a different letter than what is already there is rejected`() {
+        val grid = mapOf((0 to 1) to 'X') // CAT's middle letter is A, not X
+
+        assertFalse(CrosswordLayoutEngine.isValid(grid, "CAT", 0, 0, CrosswordDirection.ACROSS))
+    }
+
+    @Test
+    fun `a candidate that lands on the same letter that is already there is accepted`() {
+        val grid = mapOf((0 to 1) to 'A')
+
+        assertTrue(CrosswordLayoutEngine.isValid(grid, "CAT", 0, 0, CrosswordDirection.ACROSS))
+    }
+
+    @Test
+    fun `a word with nothing to intersect at all is rejected`() {
+        // Every cell it would occupy is free, so nothing ties it to the rest of the puzzle.
+        assertFalse(CrosswordLayoutEngine.isValid(emptyMap(), "CAT", 0, 0, CrosswordDirection.ACROSS))
+    }
+
+    @Test
+    fun `a word cannot run flush alongside another with no shared letter`() {
+        // CAT placed across row 1 would put every one of its non-intersecting letters directly
+        // above or below XXX, which a real crossword never allows -- they would visually merge.
+        val grid = mapOf((0 to 0) to 'X', (0 to 1) to 'X', (0 to 2) to 'X')
+
+        assertFalse(CrosswordLayoutEngine.isValid(grid, "CAT", 1, 0, CrosswordDirection.ACROSS))
+    }
+
+    @Test
+    fun `the adjacency rule is checked on both sides, running down too`() {
+        assertFalse(
+            CrosswordLayoutEngine.isValid(mapOf((0 to 0) to 'X'), "CAT", 0, 1, CrosswordDirection.DOWN),
+            "a neighbour to the left",
+        )
+        assertFalse(
+            CrosswordLayoutEngine.isValid(mapOf((0 to 2) to 'X'), "CAT", 0, 1, CrosswordDirection.DOWN),
+            "a neighbour to the right",
+        )
+    }
+
+    // ── findPlacement, directly ─────────────────────────────────────────────────
+
+    private fun placed(number: Int, answer: String, row: Int, col: Int, dir: CrosswordDirection) =
+        PlacedEntry(number, answer, row, col, dir)
+
+    private fun gridFor(vararg entries: PlacedEntry): Map<Pair<Int, Int>, Char> =
+        entries.fold(mutableMapOf<Pair<Int, Int>, Char>()) { acc, pe ->
+            pe.answer.forEachIndexed { i, ch ->
+                val pos = if (pe.direction == CrosswordDirection.ACROSS) pe.row to pe.col + i else pe.row + i to pe.col
+                acc[pos] = ch
+            }
+            acc
+        }
+
+    @Test
+    fun `a placement is found in the clue's own direction when one exists`() {
+        // TAB shares its T with CAT's own T -- a valid DOWN placement on the very first try,
+        // so this never needs the opposite-direction fallback below.
+        val cat = placed(1, "CAT", 0, 0, CrosswordDirection.ACROSS)
+        val tab = clue(2, "TAB", CrosswordDirection.DOWN)
+
+        val result = assertNotNull(CrosswordLayoutEngine.findPlacement(gridFor(cat), listOf(cat), tab))
+
+        assertEquals(Triple(0, 2, CrosswordDirection.DOWN), result)
+    }
+
+    @Test
+    fun `a placement falls back to the opposite direction when the requested one has none`() {
+        // TIN is declared DOWN and does share a T with CAT -- but that candidate lands squarely
+        // on the blocker, so DOWN has nowhere to go. Only PEN, crossed the other way round via
+        // TIN's N, gives it anywhere legal to land.
+        val cat = placed(1, "CAT", 0, 0, CrosswordDirection.ACROSS)
+        val blocker = placed(9, "Z", 3, 2, CrosswordDirection.ACROSS)
+        val pen = placed(3, "PEN", 0, 5, CrosswordDirection.DOWN)
+        val tin = clue(2, "TIN", CrosswordDirection.DOWN)
+
+        val result = assertNotNull(CrosswordLayoutEngine.findPlacement(gridFor(cat, blocker, pen), listOf(cat, blocker, pen), tin))
+
+        assertEquals(
+            CrosswordDirection.ACROSS,
+            result.third,
+            "DOWN's only candidate was blocked, so ACROSS was used instead",
+        )
+    }
+
+    @Test
+    fun `a word running in the same direction as the candidate is skipped as a crossing partner`() {
+        // PEN and TIN share an N, but PEN is DOWN and so is this DOWN-direction pass -- parallel
+        // words are not a legal crossing, so it must be ignored here even though the letter fits,
+        // and only found once the pass flips to ACROSS.
+        val pen = placed(3, "PEN", 0, 5, CrosswordDirection.DOWN)
+        val tin = clue(2, "TIN", CrosswordDirection.DOWN)
+
+        val result = assertNotNull(CrosswordLayoutEngine.findPlacement(gridFor(pen), listOf(pen), tin))
+
+        assertEquals(CrosswordDirection.ACROSS, result.third, "PEN was only usable once the pass was no longer DOWN")
+    }
+
+    @Test
+    fun `nothing crossable at all comes back null rather than throwing`() {
+        val cat = placed(1, "CAT", 0, 0, CrosswordDirection.ACROSS)
+        val xyz = clue(2, "XYZ", CrosswordDirection.DOWN)
+
+        assertEquals(null, CrosswordLayoutEngine.findPlacement(gridFor(cat), listOf(cat), xyz))
+    }
+
+    // ── renderGrid, directly ─────────────────────────────────────────────────────
+
+    @Test
+    fun `a placed entry with no matching clue is left out of the down list too`() {
+        // The ACROSS half of this gap is covered by "a clue missing from the placement is left
+        // out rather than misplaced"; DOWN goes through the identical mapNotNull independently.
+        val cat = placed(1, "CAT", 0, 0, CrosswordDirection.ACROSS)
+        val orphan = placed(99, "AT", 0, 0, CrosswordDirection.DOWN) // number 99 has no clue below
+
+        val built = CrosswordLayoutEngine.renderGrid(1, "t", listOf(cat, orphan), gridFor(cat, orphan), listOf(clue(1, "CAT", CrosswordDirection.ACROSS)))
+
+        assertTrue(built.downClues.isEmpty(), "the grid can still show the letters even with no clue text to list")
+        assertEquals(listOf(1 to "Clue 1"), built.acrossClues)
     }
 }

@@ -134,6 +134,23 @@ class BibleSearchAndNumberingTest {
     }
 
     @Test
+    fun `a chapter with no match returns nothing even though the book matches`() {
+        val bible = plainBible()
+
+        assertTrue(bible.searchBible(false, Regex("shepherd", RegexOption.IGNORE_CASE), book = 19, chapter = 1).isEmpty())
+    }
+
+    @Test
+    fun `requiring every word still respects a book and chapter filter`() {
+        val bible = plainBible()
+        val either = Regex("\\b(heaven|earth)\\b", RegexOption.IGNORE_CASE)
+
+        val filtered = bible.searchBible(true, either, book = 1, chapter = 1)
+
+        assertEquals("1", filtered.single().verse, "only verse 1 carries both heaven and earth")
+    }
+
+    @Test
     fun `requiring every word finds only verses carrying all of them`() {
         val bible = plainBible()
         val either = Regex("\\b(heaven|earth)\\b", RegexOption.IGNORE_CASE)
