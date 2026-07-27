@@ -84,7 +84,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.system.exitProcess
 
-private sealed class DownloadState {
+internal sealed class DownloadState {
     object Idle : DownloadState()
     data class Downloading(val progress: Float) : DownloadState() // -1f = indeterminate
     data class Done(val file: File) : DownloadState()
@@ -279,237 +279,282 @@ fun UpdateAvailableDialog(
         title = dialogTitle,
         resizable = false
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+        UpdateAvailableContent(
+            result = result,
+            isManualCheck = isManualCheck,
+            participateInPrereleases = participateInPrereleases,
+            onParticipateInPrereleasesChange = onParticipateInPrereleasesChange,
+            updateCheckInterval = updateCheckInterval,
+            onUpdateCheckIntervalChange = onUpdateCheckIntervalChange,
+            downloadState = downloadState,
+            onDownload = startDownload,
+            onInstall = { file ->
+                try {
+                    launchInstaller(file)
+                    exitProcess(0)
+                } catch (e: Exception) {
+                    downloadState = DownloadState.Error(e.message ?: "Failed to launch installer")
+                }
+            },
+            onOpenReleasePage = { Desktop.getDesktop().browse(URI(it)) },
+            onDismiss = onDismiss
+        )
+    }
+}
+
+/**
+ * Everything the update window shows: the version and its release notes, the check-interval and
+ * pre-release controls, the download progress area, and the one button whose label depends on how
+ * far the download has got.
+ *
+ * Held apart from [UpdateAvailableDialog] because that function's other statements all reach the
+ * machine — the `DialogWindow` it opens, the HTTP download, launching the installer and quitting,
+ * and handing a URL to the desktop browser. None of those can run under the headless suite, and
+ * two of them would be actively destructive in one.
+ *
+ * [downloadState] is passed in rather than owned here so a test can put the dialog into each stage
+ * of a download — mid-progress, finished, failed — without one taking place. That state machine is
+ * the point of the dialog: it decides whether the operator is offered Download, a disabled
+ * Downloading, Install Now, or a fallback link to the release page.
+ */
+@Composable
+internal fun UpdateAvailableContent(
+    result: UpdateCheckResult,
+    isManualCheck: Boolean,
+    participateInPrereleases: Boolean,
+    onParticipateInPrereleasesChange: (Boolean) -> Unit,
+    updateCheckInterval: UpdateCheckInterval,
+    onUpdateCheckIntervalChange: (UpdateCheckInterval) -> Unit,
+    downloadState: DownloadState,
+    onDownload: () -> Unit,
+    onInstall: (File) -> Unit,
+    onOpenReleasePage: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val updateInfo = (result as? UpdateCheckResult.Available)?.info
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (updateInfo != null) {
-                    HeroIcon(
-                        icon = Icons.Default.Download,
-                        circleColor = MaterialTheme.colorScheme.primary,
-                        iconColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+            if (updateInfo != null) {
+                HeroIcon(
+                    icon = Icons.Default.Download,
+                    circleColor = MaterialTheme.colorScheme.primary,
+                    iconColor = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(Res.string.update_dialog_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(Res.string.update_dialog_message, updateInfo.latestVersion),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = if (updateInfo.isPrerelease)
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    else
+                        MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(4.dp)
+                ) {
                     Text(
-                        text = stringResource(Res.string.update_dialog_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(Res.string.update_dialog_message, updateInfo.latestVersion),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        color = if (updateInfo.isPrerelease)
-                            MaterialTheme.colorScheme.tertiaryContainer
+                        text = if (updateInfo.isPrerelease)
+                            stringResource(Res.string.update_dialog_channel_prerelease)
                         else
-                            MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(4.dp)
+                            stringResource(Res.string.update_dialog_channel_stable),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (updateInfo.isPrerelease)
+                            MaterialTheme.colorScheme.onTertiaryContainer
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                if (updateInfo.releaseNotes.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(Res.string.update_dialog_release_notes),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small
                     ) {
                         Text(
-                            text = if (updateInfo.isPrerelease)
-                                stringResource(Res.string.update_dialog_channel_prerelease)
-                            else
-                                stringResource(Res.string.update_dialog_channel_stable),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (updateInfo.isPrerelease)
-                                MaterialTheme.colorScheme.onTertiaryContainer
-                            else
-                                MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            text = updateInfo.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .verticalScroll(rememberScrollState())
                         )
                     }
-                    if (updateInfo.releaseNotes.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(Res.string.update_dialog_release_notes),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
-                                text = updateInfo.releaseNotes,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .padding(8.dp)
-                                    .verticalScroll(rememberScrollState())
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                    } else {
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    // Progress area
-                    when (val state = downloadState) {
-                        is DownloadState.Downloading -> {
-                            val progressText = if (state.progress >= 0f)
-                                "${(state.progress * 100).toInt()}%"
-                            else
-                                stringResource(Res.string.update_dialog_downloading)
-                            Text(
-                                text = progressText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            if (state.progress >= 0f) {
-                                LinearProgressIndicator(
-                                    progress = { state.progress },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            } else {
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        is DownloadState.Error -> {
-                            Text(
-                                text = state.message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                        else -> {}
-                    }
+                    Spacer(modifier = Modifier.height(12.dp))
                 } else {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HeroIcon(
-                        icon = Icons.Default.Check,
-                        circleColor = MaterialTheme.colorScheme.inverseSurface,
-                        iconColor = MaterialTheme.colorScheme.inverseOnSurface
-                    )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(Res.string.update_dialog_up_to_date_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(Res.string.update_already_latest),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
                 }
 
+                // Progress area
+                when (val state = downloadState) {
+                    is DownloadState.Downloading -> {
+                        val progressText = if (state.progress >= 0f)
+                            "${(state.progress * 100).toInt()}%"
+                        else
+                            stringResource(Res.string.update_dialog_downloading)
+                        Text(
+                            text = progressText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        if (state.progress >= 0f) {
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    is DownloadState.Error -> {
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    else -> {}
+                }
+            } else {
                 Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider()
+                HeroIcon(
+                    icon = Icons.Default.Check,
+                    circleColor = MaterialTheme.colorScheme.inverseSurface,
+                    iconColor = MaterialTheme.colorScheme.inverseOnSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(Res.string.update_dialog_up_to_date_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(Res.string.update_already_latest),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(Res.string.participate_in_prereleases),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = participateInPrereleases,
+                    onCheckedChange = onParticipateInPrereleasesChange
+                )
+            }
+            if (isManualCheck) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(Res.string.participate_in_prereleases),
+                        text = stringResource(Res.string.update_dialog_check_interval),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    Switch(
-                        checked = participateInPrereleases,
-                        onCheckedChange = onParticipateInPrereleasesChange
+                    UpdateIntervalDropdown(
+                        selected = updateCheckInterval,
+                        onSelected = onUpdateCheckIntervalChange
                     )
                 }
-                if (isManualCheck) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(Res.string.update_dialog_check_interval),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        UpdateIntervalDropdown(
-                            selected = updateCheckInterval,
-                            onSelected = onUpdateCheckIntervalChange
-                        )
+            }
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (updateInfo != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                        Text(stringResource(Res.string.update_dialog_dismiss))
+                    }
+                    when {
+                        downloadState is DownloadState.Done -> {
+                            Button(
+                                shape = RoundedCornerShape(6.dp),
+                                onClick = { onInstall((downloadState as DownloadState.Done).file) }
+                            ) {
+                                Text(stringResource(Res.string.update_dialog_install_now))
+                            }
+                        }
+                        downloadState is DownloadState.Downloading -> {
+                            Button(shape = RoundedCornerShape(6.dp), onClick = {}, enabled = false) {
+                                Text(stringResource(Res.string.update_dialog_downloading))
+                            }
+                        }
+                        downloadState is DownloadState.Error || updateInfo.downloadUrl == null -> {
+                            Button(
+                                shape = RoundedCornerShape(6.dp),
+                                onClick = {
+                                    onOpenReleasePage(updateInfo.releaseUrl)
+                                    onDismiss()
+                                }
+                            ) {
+                                Text(stringResource(Res.string.update_dialog_open_page))
+                            }
+                        }
+                        else -> {
+                            Button(shape = RoundedCornerShape(6.dp), onClick = onDownload) {
+                                Text(stringResource(Res.string.update_dialog_download_install))
+                            }
+                        }
                     }
                 }
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (updateInfo != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = {
+                            Desktop.getDesktop().browse(URI(UpdateChecker.RELEASES_URL))
+                            onDismiss()
+                        }
                     ) {
-                        OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                            Text(stringResource(Res.string.update_dialog_dismiss))
-                        }
-                        when {
-                            downloadState is DownloadState.Done -> {
-                                Button(
-                                    shape = RoundedCornerShape(6.dp),
-                                    onClick = {
-                                    val file = (downloadState as DownloadState.Done).file
-                                    try {
-                                        launchInstaller(file)
-                                        exitProcess(0)
-                                    } catch (e: Exception) {
-                                        downloadState = DownloadState.Error(
-                                            e.message ?: "Failed to launch installer"
-                                        )
-                                    }
-                                }) {
-                                    Text(stringResource(Res.string.update_dialog_install_now))
-                                }
-                            }
-                            downloadState is DownloadState.Downloading -> {
-                                Button(shape = RoundedCornerShape(6.dp), onClick = {}, enabled = false) {
-                                    Text(stringResource(Res.string.update_dialog_downloading))
-                                }
-                            }
-                            downloadState is DownloadState.Error || updateInfo.downloadUrl == null -> {
-                                Button(
-                                    shape = RoundedCornerShape(6.dp),
-                                    onClick = {
-                                    Desktop.getDesktop().browse(URI(updateInfo.releaseUrl))
-                                    onDismiss()
-                                }) {
-                                    Text(stringResource(Res.string.update_dialog_open_page))
-                                }
-                            }
-                            else -> {
-                                Button(shape = RoundedCornerShape(6.dp), onClick = startDownload) {
-                                    Text(stringResource(Res.string.update_dialog_download_install))
-                                }
-                            }
-                        }
+                        Text(stringResource(Res.string.update_dialog_view_on_github))
                     }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = {
-                                Desktop.getDesktop().browse(URI(UpdateChecker.RELEASES_URL))
-                                onDismiss()
-                            }
-                        ) {
-                            Text(stringResource(Res.string.update_dialog_view_on_github))
-                        }
-                        Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                            Text(stringResource(Res.string.ok))
-                        }
+                    Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                        Text(stringResource(Res.string.ok))
                     }
                 }
             }
