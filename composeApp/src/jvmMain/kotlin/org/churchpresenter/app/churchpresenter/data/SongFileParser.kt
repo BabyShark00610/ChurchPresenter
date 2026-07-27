@@ -12,7 +12,17 @@ import java.nio.file.Paths
 @Serializable
 data class CachedSong(
     val song: SongItem,
-    val lastModified: Long = 0L
+    val lastModified: Long = 0L,
+    /**
+     * File size, checked alongside [lastModified] to decide whether a cached parse is still good.
+     *
+     * Timestamp alone is not enough: `File.lastModified()` has millisecond resolution at best and a
+     * whole second on some filesystems, so a song edited within the same tick as the cache entry
+     * looks unchanged and the edit is silently dropped on the next load. Size catches that for any
+     * edit that changes the length, which is nearly all of them. Defaults to 0 so caches written by
+     * an older build still deserialize — those entries simply miss once and get re-parsed.
+     */
+    val fileSize: Long = 0L,
 )
 
 @Serializable
@@ -231,16 +241,17 @@ class SongFileParser {
         for (songFile in songFiles.sortedBy { it.name }) {
             val path = songFile.absolutePath
             val lastMod = songFile.lastModified()
+            val size = songFile.length()
             val cached = cache[path]
 
-            if (cached != null && cached.lastModified == lastMod) {
+            if (cached != null && cached.lastModified == lastMod && cached.fileSize == size) {
                 // File unchanged — reuse cached parse result
                 results.add(cached)
             } else {
                 // File new or modified — parse it
                 val song = parseSongFile(path, songbook)
                 if (song != null) {
-                    results.add(CachedSong(song = song, lastModified = lastMod))
+                    results.add(CachedSong(song = song, lastModified = lastMod, fileSize = size))
                 }
             }
         }
