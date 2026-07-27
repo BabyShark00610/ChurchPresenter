@@ -176,6 +176,73 @@ class STTManagerParsingTest {
         assertTrue(stt.highlightedWords.isEmpty(), "each update replaces the previous word list")
     }
 
+    // ── JSON null is absence, never the string "null" ────────────────────────────
+    // org.json's optString returns "null" for a JSON null instead of the supplied default, so a
+    // server sending an explicit null used to put the literal word on screen.
+
+    @Test
+    fun `a null caption text does not put the word null on screen`() {
+        val stt = manager()
+
+        stt.transcription("""{"segments":[{"id":1,"text":null,"timestamp":null}]}""")
+
+        val seg = stt.segments.single()
+        assertEquals("", seg.text, "a null text must read as empty, not as \"null\"")
+        assertEquals("", seg.timestamp)
+    }
+
+    @Test
+    fun `a null translated_text falls back to the original text`() {
+        // Doubly broken before: "null" is not blank, so ifBlank never reached the fallback AND
+        // the word "null" was shown in place of the translation.
+        val stt = manager()
+
+        stt.translation("""{"segments":[{"id":1,"translated_text":null,"text":"original"}]}""")
+
+        assertEquals("original", stt.translationSegments.single().text)
+    }
+
+    @Test
+    fun `a null in-progress translation is empty`() {
+        val stt = manager()
+
+        stt.translation("""{"in_progress":{"translated_text":null}}""")
+
+        assertEquals("", stt.inProgressTranslation.value)
+    }
+
+    @Test
+    fun `a null target language reads as unset`() {
+        val stt = manager()
+
+        stt.translation("""{"target_language_name":null}""")
+
+        assertEquals("", stt.translationLanguage.value)
+    }
+
+    @Test
+    fun `a null highlighted word and colour do not become the string null`() {
+        val stt = manager()
+
+        stt.highlighting("""{"words":[{"word":null,"color":null}]}""")
+
+        val w = stt.highlightedWords.single()
+        assertEquals("", w.word, "a null word must not highlight every occurrence of \"null\"")
+        assertEquals("#ffff00", w.color, "a null colour falls back to the default, not to \"null\"")
+    }
+
+    @Test
+    fun `a null colour is not silently disabled by a null entry in disabled_colors`() {
+        // Both nulls used to collapse to the same string "null", so the word matched the disabled
+        // set and vanished from the captions entirely — a dropped highlight, not just a cosmetic one.
+        val stt = manager()
+
+        stt.highlighting("""{"words":[{"word":"grace","color":null}],"disabled_colors":[null]}""")
+
+        assertEquals(listOf("grace"), stt.highlightedWords.map { it.word }, "the word must survive")
+        assertEquals("#ffff00", stt.highlightedWords.single().color)
+    }
+
     // ── Trivial state ────────────────────────────────────────────────────────────
 
     @Test
