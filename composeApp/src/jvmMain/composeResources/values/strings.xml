@@ -1396,11 +1396,11 @@
     <!-- System Settings - Song Samples and File Conversion -->
     <string name="song_samples">Song Samples</string>
     <string name="folder_already_exists">Folder Already Exists</string>
-    <string name="song_samples_overwrite_confirm">\"Song Samples\" folder already exists. This will overwrite existing files.\nContinue?</string>
-    <string name="song_samples_copied">Copied %1$d sample songs to \"Song Samples\" folder.</string>
+    <string name="song_samples_overwrite_confirm">"Song Samples" folder already exists. This will overwrite existing files.\nContinue?</string>
+    <string name="song_samples_copied">Copied %1$d sample songs to "Song Samples" folder.</string>
     <string name="add_song_samples">Add Song Samples</string>
     <string name="sps_file_not_supported">%1$s (not supported)</string>
-    <string name="folder_overwrite_confirm">Folder \"%1$s\" already exists. This will overwrite existing song files.\nContinue?</string>
+    <string name="folder_overwrite_confirm">Folder "%1$s" already exists. This will overwrite existing song files.\nContinue?</string>
 
 
     <!-- Bible Settings - Download Bibles (catalog browser) -->
@@ -1416,14 +1416,13 @@
     <string name="bible_catalog_download">Download</string>
     <string name="bible_catalog_redownload">Re-download</string>
     <string name="bible_catalog_size_mb">%1$s MB</string>
-    <string name="bible_catalog_overwrite_title">Already installed</string>
-    <string name="bible_catalog_overwrite_confirm">\"%1$s\" is already in your Bible folder.\nDownload it again and overwrite the existing file?</string>
+    <string name="bible_catalog_overwrite_confirm">"%1$s" is already in your Bible folder.\nDownload it again and overwrite the existing file?</string>
     <string name="bible_catalog_stale_notice">Showing the Bible list from your last visit — you appear to be offline.</string>
-    <string name="bible_catalog_attribution">Bibles come from the Zefania XML archive. Each translation carries its own copyright — check it before using one publicly.</string>
+    <string name="bible_catalog_attribution">Each translation carries its own copyright — check it before showing one publicly.</string>
     <string name="bible_catalog_no_directory">Choose a Bible storage folder in Appearance settings first.</string>
-    <string name="bible_catalog_error_network">Couldn\'t reach the Bible archive — check your connection</string>
+    <string name="bible_catalog_error_network">Couldn't reach the Bible archive — check your connection</string>
     <string name="bible_catalog_error_rate_limited">GitHub is limiting requests right now. Please try again in a few minutes.</string>
-    <string name="bible_catalog_error_generic">Couldn\'t load the list of Bibles. Please try again.</string>
+    <string name="bible_catalog_error_generic">Couldn't load the list of Bibles. Please try again.</string>
     <string name="bible_catalog_phase_downloading">Downloading…</string>
     <string name="bible_catalog_phase_extracting">Extracting…</string>
     <string name="bible_catalog_phase_converting">Converting…</string>
@@ -1431,13 +1430,19 @@
     <string name="bible_catalog_download_error_network">Download failed — check your connection</string>
     <string name="bible_catalog_download_error_incomplete">The download was incomplete and was discarded. Please try again.</string>
     <string name="bible_catalog_download_error_archive">The downloaded file was damaged and was discarded. Please try again.</string>
-    <string name="bible_catalog_download_error_convert">This Bible couldn\'t be converted and was not installed.</string>
-    <string name="bible_catalog_download_error_write">Couldn\'t write to your Bible folder — check it still exists and has space.</string>
+    <string name="bible_catalog_download_error_convert">This Bible couldn't be converted and was not installed.</string>
+    <string name="bible_catalog_download_error_write">Couldn't write to your Bible folder — check it still exists and has space.</string>
     <string name="bible_catalog_download_error_generic">Download failed. Please try again.</string>
-    <string name="bible_catalog_installed_summary">Installed \"%1$s\" — %2$d books.</string>
+    <string name="bible_catalog_installed_summary">Installed "%1$s" — %2$d books.</string>
     <string name="bible_catalog_rights">Copyright: %1$s</string>
     <string name="bible_catalog_source_ebible">eBible.org</string>
     <string name="bible_catalog_source_zefania">Zefania Archive</string>
+    <string name="bible_catalog_license_title">Copyright and licensing</string>
+    <string name="bible_catalog_license_body">Bible translations are protected by copyright. Some are public domain, others allow personal or congregational use only, and some require a licence before they may be shown publicly, streamed or broadcast.\n\nBy downloading you confirm that you are permitted to use this translation in your setting, and that you accept the publisher's terms.</string>
+    <string name="bible_catalog_license_unknown">This archive states no copyright for this translation.</string>
+    <string name="bible_catalog_license_source_ebible">eBible.org lists this translation as redistributable and publishes the copyright shown above.</string>
+    <string name="bible_catalog_license_source_zefania">The Zefania archive publishes no licence details, so this translation’s copyright only becomes visible once it is installed. Its modules are community-contributed and have not been checked.</string>
+    <string name="bible_catalog_license_accept">I understand — Download</string>
 
     <string name="conversion_complete">Conversion Complete</string>
     <string name="conversion_complete_message">Converted %1$d songs to folder: %2$s</string>
@@ -1868,11 +1873,12 @@
     <string name="setup_step2_step1">1. Open Settings using the ⚙ button in the toolbar</string>
     <string name="setup_step2_step2">2. Go to the System tab</string>
     <string name="setup_step2_step3">3. Click "Browse…" next to Bible Storage Directory</string>
-    <string name="setup_step2_step4">4. Select a folder containing your Bible files (.db3)</string>
-    <string name="setup_step2_step5">5. Go to the Bible tab and choose a Primary Bible</string>
-    <string name="setup_step2_download_hint">Don\'t have any Bible files yet? Once a storage folder is set, Settings → Bible → \"Download Bibles…\" lets you browse and install translations from the Zefania XML archive.</string>
-    <string name="setup_step2_tip">Search the internet for a Bible XML file in your language.</string>
-    <string name="setup_step2_tip2">Once you have an XML file, use the Conversion Tool (Help → Converter) to convert it to the required format.</string>
+    <string name="setup_step2_step4">4. Choose a folder to keep your Bible files in</string>
+    <string name="setup_step2_step5">5. Click "Download Bibles…" and install the translations you need</string>
+    <string name="setup_step2_step6">6. Go to the Bible tab and choose a Primary Bible</string>
+    <string name="setup_step2_download_hint">Over 1,500 translations in more than 1,000 languages are available from eBible.org and the Zefania archive. Each one shows its copyright before you install it.</string>
+    <string name="setup_step2_tip">Already have Bible files? Point the folder at them instead and they will be picked up automatically.</string>
+    <string name="setup_step2_tip2">Have a Bible in another format? The Conversion Tool (Help → Converter) can convert it.</string>
     <string name="setup_step3_title">Add Song Books</string>
     <string name="setup_step3_subtitle">Point the app to your song library folder</string>
     <string name="setup_step3_step1">1. Open Settings using the ⚙ button in the toolbar</string>

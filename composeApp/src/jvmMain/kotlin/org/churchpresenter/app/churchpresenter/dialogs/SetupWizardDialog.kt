@@ -101,6 +101,7 @@ import churchpresenter.composeapp.generated.resources.setup_step2_step2
 import churchpresenter.composeapp.generated.resources.setup_step2_step3
 import churchpresenter.composeapp.generated.resources.setup_step2_step4
 import churchpresenter.composeapp.generated.resources.setup_step2_step5
+import churchpresenter.composeapp.generated.resources.setup_step2_step6
 import churchpresenter.composeapp.generated.resources.setup_step2_subtitle
 import churchpresenter.composeapp.generated.resources.setup_step2_tip
 import churchpresenter.composeapp.generated.resources.setup_step2_download_hint
@@ -649,6 +650,11 @@ private fun BibleStep(onOpenSettings: () -> Unit) {
                 )
                 Text(
                     text = stringResource(Res.string.setup_step2_step5),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+                )
+                Text(
+                    text = stringResource(Res.string.setup_step2_step6),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                 )
