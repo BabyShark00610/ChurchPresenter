@@ -119,6 +119,33 @@ class BibleTest {
         assertEquals(0, b.getVerseCount())
     }
 
+    // ── Loading from the classpath ─────────────────────────────────────────────
+
+    /**
+     * Every other test in this suite loads from a real file on disk — [Files.exists] is only ever
+     * reached once [Thread.currentThread].contextClassLoader.getResourceAsStream returns null. The
+     * bundled sample Bibles ship as classpath resources, not loose files, so that first branch needs
+     * its own coverage: `bible-fixtures/classpath-sample.spb` is a real resource under
+     * `jvmTest/resources`, not a generated fixture.
+     */
+    @Test
+    fun `a module bundled on the classpath loads without touching the filesystem`() {
+        val b = Bible().also { it.loadFromSpb("bible-fixtures/classpath-sample.spb") }
+
+        assertEquals("Classpath Fixture", b.getBibleTitle())
+        assertEquals(listOf("Genesis"), b.getBooks())
+        assertEquals(2, b.getVerseCount())
+        assertEquals("Now the earth was formless and void.", b.getVerseDetails(1, 1, 2)?.second)
+    }
+
+    @Test
+    fun `the book list can be read from a classpath module without loading its verses`() {
+        val b = Bible().also { it.loadBooksOnly("bible-fixtures/classpath-sample.spb") }
+
+        assertEquals(listOf("Genesis"), b.getBooks())
+        assertEquals(0, b.getVerseCount(), "loadBooksOnly must not read past the header on this path either")
+    }
+
     // ── Verse lookup ────────────────────────────────────────────────────────────
 
     @Test

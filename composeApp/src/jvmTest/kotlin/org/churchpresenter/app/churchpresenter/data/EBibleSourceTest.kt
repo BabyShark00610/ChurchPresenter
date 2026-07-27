@@ -80,6 +80,47 @@ class EBibleSourceTest {
 
     private fun modulesOf(body: String) = EBibleSource.parseCatalog(body)
 
+    @Test
+    fun `the source identifies itself as eBible`() {
+        assertEquals(BibleSourceId.EBIBLE, EBibleSource.sourceId)
+    }
+
+    // --- the staging override ---
+
+    private val stagingProperty = "churchpresenter.ebibleCatalogUrl"
+
+    /** [System] properties are process-wide, so every test that touches this one restores it. */
+    private fun withStagingProperty(value: String?, block: () -> Unit) {
+        val original = System.getProperty(stagingProperty)
+        try {
+            if (value == null) System.clearProperty(stagingProperty) else System.setProperty(stagingProperty, value)
+            block()
+        } finally {
+            if (original == null) System.clearProperty(stagingProperty) else System.setProperty(stagingProperty, original)
+        }
+    }
+
+    @Test
+    fun `the default catalogue url is used when no staging override is set`() {
+        withStagingProperty(null) {
+            assertEquals("https://ebible.org/Scriptures/translations.csv", EBibleSource.catalogUrl())
+        }
+    }
+
+    @Test
+    fun `a staging override replaces the default catalogue url`() {
+        withStagingProperty("https://staging.invalid/translations.csv") {
+            assertEquals("https://staging.invalid/translations.csv", EBibleSource.catalogUrl())
+        }
+    }
+
+    @Test
+    fun `a blank staging override is treated as unset`() {
+        withStagingProperty("") {
+            assertEquals("https://ebible.org/Scriptures/translations.csv", EBibleSource.catalogUrl())
+        }
+    }
+
     // --- the licensing filter ---
 
     @Test
@@ -149,6 +190,27 @@ class EBibleSourceTest {
     @Test
     fun `a body that is not the expected catalogue yields nothing`() {
         assertTrue(modulesOf("<html><body>404</body></html>").isEmpty())
+    }
+
+    @Test
+    fun `a completely empty response yields nothing`() {
+        assertTrue(modulesOf("").isEmpty())
+    }
+
+    @Test
+    fun `a header missing the translation id column yields nothing`() {
+        val body = "languageCode,shortTitle,title,Copyright,Redistributable,downloadable,UpdateDate\n" +
+            "eng,Berean,,public domain,True,True,2024-01-01"
+
+        assertTrue(modulesOf(body).isEmpty())
+    }
+
+    @Test
+    fun `a header missing the language column yields nothing`() {
+        val body = "translationId,shortTitle,title,Copyright,Redistributable,downloadable,UpdateDate\n" +
+            "engbsb,Berean,,public domain,True,True,2024-01-01"
+
+        assertTrue(modulesOf(body).isEmpty())
     }
 
     // --- naming ---
@@ -235,6 +297,49 @@ class EBibleSourceTest {
             BibleCatalogOutcome.Failure,
             fetch(httpServing("nope", status = HttpStatusCode.InternalServerError)),
         )
+    }
+
+    @Test
+    fun `a cache file that parses to no translations is treated as no cache at all`() {
+        // Only the header row, no data — a corrupt or truncated write from a previous run.
+        cacheFile.parentFile.mkdirs()
+        cacheFile.writeText(header)
+        File(cacheFile.parentFile, cacheFile.name + ".meta").writeText("1000")
+
+        val offline = fetch(httpFailing(), now = 1_000L)
+
+        assertEquals(BibleCatalogOutcome.NetworkError, offline, "an empty cache must not be reported as a stale success")
+    }
+
+    @Test
+    fun `a meta file with unreadable content is treated as never fetched`() {
+        fetch(httpServing(csv("eng,engbsb,Berean,,public domain,True,True,2024-01-01")), now = 1_000L)
+        EBibleSource.clearMemoryCache()
+        File(cacheFile.parentFile, cacheFile.name + ".meta").writeText("not a timestamp")
+        val muchLater = 1_000L + 30L * 24 * 60 * 60 * 1000
+
+        // The fallback age is 0L — "just fetched" relative to a small clock reading, but far in the
+        // past relative to a realistic one — so this has to land outside the cache window and reach
+        // the network rather than silently trusting a cache whose age it could not read.
+        val outcome = assertIs<BibleCatalogOutcome.Success>(
+            fetch(httpServing(csv("eng,engnet,NET,,public domain,True,True,2024-01-01")), now = muchLater),
+        )
+
+        assertEquals("engnet", outcome.modules.single().identifier, "a stale age must not serve the old cache unrefreshed")
+    }
+
+    @Test
+    fun `catalog() reaches the same mapping as fetchCatalog()`() {
+        // catalog() always asks at its own default URL, so it cannot be pointed at a MockEngine
+        // directly — seeding the process-wide memory cache through fetchCatalog() first, at the
+        // same timestamp, lets catalog() read that cache instead of ever reaching the network,
+        // since the cache check only compares timestamps and is not keyed by URL.
+        fetch(httpServing(csv("eng,engbsb,Berean,,public domain,True,True,2024-01-01")), now = 5_000L)
+
+        val outcome = runBlocking { EBibleSource.catalog(nowMillis = 5_000L) }
+
+        val success = assertIs<BibleCatalogOutcome.Success>(outcome)
+        assertEquals("engbsb", success.modules.single().identifier)
     }
 
     // --- installing, end to end ---

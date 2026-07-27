@@ -105,6 +105,67 @@ class ZefaniaRepositoryIndexTest {
     private fun modulesOf(body: String) =
         assertIs<ZefaniaRepositoryIndex.IndexOutcome.Success>(ZefaniaRepositoryIndex.parseIndex(body)).index.modules
 
+    // --- the staging override ---
+
+    /** [System] properties are process-wide, so every test that touches one restores it. */
+    private fun withProperty(name: String, value: String?, block: () -> Unit) {
+        val original = System.getProperty(name)
+        try {
+            if (value == null) System.clearProperty(name) else System.setProperty(name, value)
+            block()
+        } finally {
+            if (original == null) System.clearProperty(name) else System.setProperty(name, original)
+        }
+    }
+
+    @Test
+    fun `the default tree url is used when no staging override is set`() {
+        withProperty("churchpresenter.zefaniaTreeUrl", null) {
+            assertEquals(
+                "https://api.github.com/repos/ChurchPresenter/Zefania-XML-Preservation/git/trees/main?recursive=1",
+                ZefaniaRepositoryIndex.treeUrl(),
+            )
+        }
+    }
+
+    @Test
+    fun `a staging override replaces the default tree url`() {
+        withProperty("churchpresenter.zefaniaTreeUrl", "https://staging.invalid/tree") {
+            assertEquals("https://staging.invalid/tree", ZefaniaRepositoryIndex.treeUrl())
+        }
+    }
+
+    @Test
+    fun `a blank tree url override is treated as unset`() {
+        withProperty("churchpresenter.zefaniaTreeUrl", "") {
+            assertTrue(ZefaniaRepositoryIndex.treeUrl().startsWith("https://api.github.com/"))
+        }
+    }
+
+    @Test
+    fun `the default raw base is used when no staging override is set`() {
+        withProperty("churchpresenter.zefaniaRawBase", null) {
+            assertEquals(
+                "https://raw.githubusercontent.com/ChurchPresenter/Zefania-XML-Preservation/main",
+                ZefaniaRepositoryIndex.rawBase(),
+            )
+        }
+    }
+
+    @Test
+    fun `a staging override replaces the default raw base`() {
+        withProperty("churchpresenter.zefaniaRawBase", "https://staging.invalid/raw") {
+            assertEquals("https://staging.invalid/raw", ZefaniaRepositoryIndex.rawBase())
+        }
+    }
+
+    @Test
+    fun `a blank raw base override is treated as unset`() {
+        withProperty("churchpresenter.zefaniaRawBase", "") {
+            assertTrue(ZefaniaRepositoryIndex.rawBase().startsWith("https://raw.githubusercontent.com/"))
+        }
+    }
+
     // --- parsing ---
 
     @Test
@@ -185,6 +246,15 @@ class ZefaniaRepositoryIndexTest {
             byLanguage.getValue("GER").any { it.displayName.contains("LUTHER 1545") },
             "the language is taken from the directory, so an odd language token is harmless",
         )
+    }
+
+    @Test
+    fun `a zip directly under the Bibles prefix with no language folder is dropped`() {
+        // parseEntry reads the language from the first path segment after the prefix; a path with
+        // no subdirectory at all has nothing there rather than something wrong there.
+        val body = tree(blob(prefix + "loose-file-with-no-language-folder.zip", 10, "shaZ"))
+
+        assertTrue(modulesOf(body).isEmpty(), "a module with no language directory must not crash the listing")
     }
 
     @Test
@@ -280,6 +350,45 @@ class ZefaniaRepositoryIndexTest {
         cacheFile.writeText("{ this is not json")
 
         assertEquals(ZefaniaRepositoryIndex.IndexOutcome.NetworkError, fetch(httpFailing()))
+    }
+
+    @Test
+    fun `a cache file that parsed as a truncated listing is treated as no cache at all`() {
+        // Valid JSON, unlike the test above — it fails to become a usable Index for a different
+        // reason, by parsing successfully to Failure rather than throwing.
+        cacheFile.parentFile.mkdirs()
+        cacheFile.writeText(tree(blob(prefix + "ENG/X/SF_2009-01-20_ENG_ACV_(A).zip"), truncated = true))
+
+        assertEquals(ZefaniaRepositoryIndex.IndexOutcome.NetworkError, fetch(httpFailing()))
+    }
+
+    @Test
+    fun `a meta file with unreadable content is treated as never fetched`() {
+        fetch(httpServing(realisticTree), now = 1_000L)
+        ZefaniaRepositoryIndex.clearMemoryCache()
+        File(cacheFile.parentFile, cacheFile.name + ".meta").writeText("not a timestamp")
+        val muchLater = 1_000L + 30L * 24 * 60 * 60 * 1000
+
+        // The fallback age is 0L — recent relative to a small clock reading, but far in the past
+        // relative to a realistic one — so this has to land outside the cache window and reach the
+        // network rather than silently trusting a cache whose age it could not read.
+        val fresh = tree(blob(prefix + "ENG/Y/SF_2009-01-20_ENG_KJV_(KING JAMES).zip", 1, "shaY"))
+        val outcome = assertIs<ZefaniaRepositoryIndex.IndexOutcome.Success>(
+            fetch(httpServing(fresh), now = muchLater),
+        )
+
+        assertEquals("KJV", outcome.index.modules.single().identifier, "a stale age must not serve the old cache unrefreshed")
+    }
+
+    @Test
+    fun `a truncated listing served fresh over the network is a failure, not cached`() {
+        // Distinct from parseIndex's own truncation test: this drives it through fetch() itself, on
+        // the branch where the HTTP call actually succeeds but what comes back cannot be trusted —
+        // and confirms nothing gets written to disk for a later call to serve back as if good.
+        val outcome = fetch(httpServing(tree(blob(prefix + "ENG/X/SF_2009-01-20_ENG_ACV_(A).zip"), truncated = true)))
+
+        assertEquals(ZefaniaRepositoryIndex.IndexOutcome.Failure, outcome)
+        assertFalse(cacheFile.isFile, "a listing that failed to parse must not be cached as if it succeeded")
     }
 
     @Test
