@@ -56,7 +56,7 @@ import androidx.compose.runtime.mutableStateListOf
 import kotlin.math.abs
 
 /** Stores recently used colors across all color picker instances, persisted to disk. */
-private object RecentColors {
+internal object RecentColors {
     private const val MAX = 12
     private val file = java.io.File(System.getProperty("user.home"), ".churchpresenter/recent_colors.json")
     val colors = mutableStateListOf<String>()
@@ -71,7 +71,7 @@ private object RecentColors {
         save()
     }
 
-    private fun load() {
+    internal fun load() {
         try {
             if (file.exists()) {
                 val json = Json { ignoreUnknownKeys = true }
