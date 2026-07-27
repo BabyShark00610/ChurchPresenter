@@ -1,5 +1,6 @@
 package org.churchpresenter.app.churchpresenter.data
 
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -7,9 +8,11 @@ import kotlin.test.assertNull
 /**
  * [BibleBookAbbreviations] turns typed-in reference prefixes ("Gen", "1 Cor", "1cor.") into a
  * canonical book id so Planning Center plan text can be matched against the loaded Bible. The
- * resource-backed loading needs Compose string resources (headless-bound), but the parsing and
- * matching helpers underneath are pure, and they carry the tricky rules: a trailing period is
- * ignored, case and inner whitespace don't matter, and "1cor" must match a "1 Cor" variant.
+ * resource-backed loading normally needs Compose's string-resource environment, which throws
+ * `HeadlessException` in this suite — see [ComposeResourceEnvironmentTestSupport], which the
+ * end-to-end tests below run under. The parsing and matching helpers underneath are pure and
+ * don't need it; they carry the tricky rules: a trailing period is ignored, case and inner
+ * whitespace don't matter, and "1cor" must match a "1 Cor" variant.
  */
 class BibleBookAbbreviationsTest {
 
@@ -81,5 +84,28 @@ class BibleBookAbbreviationsTest {
     @Test
     fun `findBookId returns null against an empty table`() {
         assertNull(BibleBookAbbreviations.findBookId(emptyMap(), "gen", "gen"))
+    }
+
+    // ── Resolving an abbreviation end to end, against the real strings.xml table ────
+
+    private fun resolveEndToEnd(text: String) = ComposeResourceEnvironmentTestSupport.withFixedEnvironment {
+        runBlocking { BibleBookAbbreviations.resolveBookId(text) }
+    }
+
+    @Test
+    fun `a plain-text abbreviation resolves to its book's canonical id`() {
+        assertEquals(1, resolveEndToEnd("Gen"), "book 1 is Genesis")
+        assertEquals(43, resolveEndToEnd("Jn"), "book 43 is John")
+    }
+
+    @Test
+    fun `the end-to-end lookup is case and punctuation insensitive too`() {
+        assertEquals(43, resolveEndToEnd("john."))
+        assertEquals(43, resolveEndToEnd("JHN"))
+    }
+
+    @Test
+    fun `an abbreviation belonging to no book resolves to nothing`() {
+        assertNull(resolveEndToEnd("Xyz"))
     }
 }

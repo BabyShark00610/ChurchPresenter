@@ -73,25 +73,25 @@ object StockMediaClient {
     // --- Pexels DTOs ---
 
     @Serializable
-    private data class PexelsPhotoSrc(val original: String, val large2x: String)
+    internal data class PexelsPhotoSrc(val original: String, val large2x: String)
 
     @Serializable
-    private data class PexelsPhoto(val id: Long, val src: PexelsPhotoSrc)
+    internal data class PexelsPhoto(val id: Long, val src: PexelsPhotoSrc)
 
     @Serializable
-    private data class PexelsPhotoResponse(
+    internal data class PexelsPhotoResponse(
         val photos: List<PexelsPhoto> = emptyList(),
         val next_page: String? = null
     )
 
     @Serializable
-    private data class PexelsVideoFile(val link: String, val quality: String? = null, val file_type: String? = null, val width: Int? = null)
+    internal data class PexelsVideoFile(val link: String, val quality: String? = null, val file_type: String? = null, val width: Int? = null)
 
     @Serializable
-    private data class PexelsVideo(val id: Long, val image: String, val video_files: List<PexelsVideoFile> = emptyList())
+    internal data class PexelsVideo(val id: Long, val image: String, val video_files: List<PexelsVideoFile> = emptyList())
 
     @Serializable
-    private data class PexelsVideoResponse(
+    internal data class PexelsVideoResponse(
         val videos: List<PexelsVideo> = emptyList(),
         val next_page: String? = null
     )
@@ -99,19 +99,19 @@ object StockMediaClient {
     // --- Pixabay DTOs ---
 
     @Serializable
-    private data class PixabayPhoto(val id: Long, val previewURL: String, val largeImageURL: String)
+    internal data class PixabayPhoto(val id: Long, val previewURL: String, val largeImageURL: String)
 
     @Serializable
-    private data class PixabayPhotoResponse(
+    internal data class PixabayPhotoResponse(
         val hits: List<PixabayPhoto> = emptyList(),
         val totalHits: Int = 0
     )
 
     @Serializable
-    private data class PixabayVideoFile(val url: String, val thumbnail: String? = null)
+    internal data class PixabayVideoFile(val url: String, val thumbnail: String? = null)
 
     @Serializable
-    private data class PixabayVideoFiles(
+    internal data class PixabayVideoFiles(
         val large: PixabayVideoFile? = null,
         val medium: PixabayVideoFile? = null,
         val small: PixabayVideoFile? = null,
@@ -119,10 +119,10 @@ object StockMediaClient {
     )
 
     @Serializable
-    private data class PixabayVideo(val id: Long, val videos: PixabayVideoFiles, val picture_id: String? = null)
+    internal data class PixabayVideo(val id: Long, val videos: PixabayVideoFiles, val picture_id: String? = null)
 
     @Serializable
-    private data class PixabayVideoResponse(
+    internal data class PixabayVideoResponse(
         val hits: List<PixabayVideo> = emptyList(),
         val totalHits: Int = 0
     )

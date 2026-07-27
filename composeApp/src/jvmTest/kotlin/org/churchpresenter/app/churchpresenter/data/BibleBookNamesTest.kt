@@ -1,7 +1,9 @@
 package org.churchpresenter.app.churchpresenter.data
 
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The table of Bible book names, checked as a table rather than as text.
@@ -12,10 +14,10 @@ import kotlin.test.assertEquals
  * every one of the fifteen languages at once, and nothing about that is visible until someone opens
  * the Bible tab and reads it.
  *
- * Only the list itself is reachable here: resolving a resource to its text goes through Compose's
- * resource environment, which needs a graphics environment this suite does not have (see the note
- * on string resources in AGENT.md). So `getEnglishBookNames` and `getBookNameMapping`, which both
- * resolve, are out of scope — what is testable is that the table they read from is well formed.
+ * Resolving a resource to its text normally goes through Compose's resource environment, which
+ * needs a real display's DPI and throws `HeadlessException` in this suite — see
+ * [ComposeResourceEnvironmentTestSupport]. The lookup tests below run under a fixed environment it
+ * installs; everything else here needs only the table itself.
  */
 class BibleBookNamesTest {
 
@@ -49,5 +51,29 @@ class BibleBookNamesTest {
         // Callers address a book as `getBookResourceIds()[bookId - 1]`, so both ends must exist.
         assertEquals(books.first(), books[0], "book 1 is the first entry")
         assertEquals(books.last(), books[65], "book 66 is the last")
+    }
+
+    // ── Resolving the names themselves ──────────────────────────────────────────
+
+    @Test
+    fun `the english names come back in canonical order`() {
+        val names = ComposeResourceEnvironmentTestSupport.withFixedEnvironment {
+            runBlocking { BibleBookNames.getEnglishBookNames() }
+        }
+
+        assertEquals(66, names.size)
+        assertEquals("Genesis", names.first())
+        assertEquals("Revelation", names.last())
+    }
+
+    @Test
+    fun `the book name mapping is keyed by the lowercased english name`() {
+        val mapping = ComposeResourceEnvironmentTestSupport.withFixedEnvironment {
+            runBlocking { BibleBookNames.getBookNameMapping() }
+        }
+
+        assertEquals(66, mapping.size)
+        assertEquals("Genesis", mapping["genesis"], "case is normalised away on the key side")
+        assertTrue("Genesis" !in mapping, "the un-lowercased form must not also work, or a caller could rely on it by accident")
     }
 }
