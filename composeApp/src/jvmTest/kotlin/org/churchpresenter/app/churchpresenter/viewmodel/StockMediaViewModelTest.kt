@@ -89,12 +89,12 @@ class StockMediaViewModelTest {
 
     /** Every search returns [outcome]. */
     private fun searchReturns(outcome: StockMediaClient.SearchOutcome) {
-        coEvery { StockMediaClient.search(any(), any(), any(), any(), any()) } returns outcome
+        coEvery { StockMediaClient.search(any(), any(), any(), any(), any(), any()) } returns outcome
     }
 
     /** Searches for page [page] return [outcome]. */
     private fun searchPageReturns(page: Int, outcome: StockMediaClient.SearchOutcome) {
-        coEvery { StockMediaClient.search(any(), any(), any(), any(), page) } returns outcome
+        coEvery { StockMediaClient.search(any(), any(), any(), any(), page, any()) } returns outcome
     }
 
     /** Runs a search that lands, so the view model has results and a known page. */
@@ -129,14 +129,14 @@ class StockMediaViewModelTest {
         vm.search("")
 
         assertFalse(vm.isLoading, "the spinner must not start for a request that will never be made")
-        coVerify(exactly = 0) { StockMediaClient.search(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { StockMediaClient.search(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
     fun `an empty search box is not searched for`() {
         val vm = vm()
         vm.search("api-key")
-        coVerify(exactly = 0) { StockMediaClient.search(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { StockMediaClient.search(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -153,7 +153,7 @@ class StockMediaViewModelTest {
                 StockMediaClient.StockMediaType.VIDEO,
                 "sunrise",
                 1,
-            )
+            any())
         }
     }
 
@@ -253,7 +253,7 @@ class StockMediaViewModelTest {
         vm.searchFor("rivers")
 
         assertEquals(listOf("a"), vm.items.map { it.id }, "a new query must not keep the old query's pages")
-        coVerify(exactly = 2) { StockMediaClient.search(any(), any(), any(), any(), 1) }
+        coVerify(exactly = 2) { StockMediaClient.search(any(), any(), any(), any(), 1, any()) }
     }
 
     // ── Paging ──────────────────────────────────────────────────────────────────
@@ -296,7 +296,7 @@ class StockMediaViewModelTest {
         settle()
 
         assertEquals(listOf("a", "b", "c"), vm.items.map { it.id })
-        coVerify(exactly = 1) { StockMediaClient.search(any(), any(), any(), any(), 3) }
+        coVerify(exactly = 1) { StockMediaClient.search(any(), any(), any(), any(), 3, any()) }
     }
 
     @Test
@@ -306,7 +306,7 @@ class StockMediaViewModelTest {
 
         vm.loadMore("api-key")
 
-        coVerify(exactly = 1) { StockMediaClient.search(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { StockMediaClient.search(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -318,7 +318,7 @@ class StockMediaViewModelTest {
         vm.query = ""
         vm.loadMore("api-key")
 
-        coVerify(exactly = 1) { StockMediaClient.search(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { StockMediaClient.search(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -343,12 +343,12 @@ class StockMediaViewModelTest {
         // assume. "mountains" hangs until released; "rivers" answers at once.
         val slowSearchStarted = CompletableDeferred<Unit>()
         val releaseSlowSearch = CompletableDeferred<Unit>()
-        coEvery { StockMediaClient.search(any(), any(), any(), "mountains", any()) } coAnswers {
+        coEvery { StockMediaClient.search(any(), any(), any(), "mountains", any(), any()) } coAnswers {
             slowSearchStarted.complete(Unit)
             releaseSlowSearch.await()
             success("stale")
         }
-        coEvery { StockMediaClient.search(any(), any(), any(), "rivers", any()) } returns success("fresh")
+        coEvery { StockMediaClient.search(any(), any(), any(), "rivers", any(), any()) } returns success("fresh")
         val vm = vm()
 
         vm.query = "mountains"
@@ -375,7 +375,7 @@ class StockMediaViewModelTest {
     @Test
     fun `downloading hands back the saved file`() {
         val saved = File(dir, "sunrise.jpg").also { it.writeText("x") }
-        coEvery { StockMediaClient.download(any()) } returns StockMediaClient.DownloadOutcome.Success(saved)
+        coEvery { StockMediaClient.download(any(), any(), any()) } returns StockMediaClient.DownloadOutcome.Success(saved)
         val vm = vm()
         var handedBack: String? = null
 
@@ -394,7 +394,7 @@ class StockMediaViewModelTest {
             StockMediaClient.DownloadOutcome.Failure to StockDownloadError.FAILURE,
         )
         cases.forEach { (outcome, expected) ->
-            coEvery { StockMediaClient.download(any()) } returns outcome
+            coEvery { StockMediaClient.download(any(), any(), any()) } returns outcome
             val vm = vm()
             var handedBack: String? = null
 
@@ -411,7 +411,7 @@ class StockMediaViewModelTest {
     fun `the tile being downloaded is marked while it runs`() {
         val parked = CompletableDeferred<Unit>()
         val saved = File(dir, "sunrise.jpg").also { it.writeText("x") }
-        coEvery { StockMediaClient.download(any()) } coAnswers {
+        coEvery { StockMediaClient.download(any(), any(), any()) } coAnswers {
             parked.await()
             StockMediaClient.DownloadOutcome.Success(saved)
         }
@@ -426,13 +426,13 @@ class StockMediaViewModelTest {
 
     @Test
     fun `a retry clears the previous download failure`() {
-        coEvery { StockMediaClient.download(any()) } returns StockMediaClient.DownloadOutcome.NetworkError
+        coEvery { StockMediaClient.download(any(), any(), any()) } returns StockMediaClient.DownloadOutcome.NetworkError
         val vm = vm()
         vm.download(item("a")) { }
         settle()
 
         val saved = File(dir, "sunrise.jpg").also { it.writeText("x") }
-        coEvery { StockMediaClient.download(any()) } returns StockMediaClient.DownloadOutcome.Success(saved)
+        coEvery { StockMediaClient.download(any(), any(), any()) } returns StockMediaClient.DownloadOutcome.Success(saved)
         var handedBack: String? = null
         vm.download(item("a")) { handedBack = it }
 
@@ -443,7 +443,7 @@ class StockMediaViewModelTest {
     @Test
     fun `searching and downloading do not report each other's errors`() {
         searchReturns(StockMediaClient.SearchOutcome.RateLimited)
-        coEvery { StockMediaClient.download(any()) } returns StockMediaClient.DownloadOutcome.Failure
+        coEvery { StockMediaClient.download(any(), any(), any()) } returns StockMediaClient.DownloadOutcome.Failure
         val vm = vm().searchFor("mountains")
 
         vm.download(item("a")) { }

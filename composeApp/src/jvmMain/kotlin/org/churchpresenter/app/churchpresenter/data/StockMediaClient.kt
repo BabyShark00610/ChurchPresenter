@@ -58,17 +58,7 @@ object StockMediaClient {
         }
     }
 
-    /** Test seam: when set, requests go here instead of the real network client. Null in production. */
-    internal var httpOverride: HttpClient? = null
-
-    private val http: HttpClient get() = httpOverride ?: defaultHttp
-
     private val defaultDownloadDir = File(System.getProperty("user.home"), ".churchpresenter/stock-backgrounds")
-
-    /** Test seam: when set, downloads land here instead of under the user's home. Null in production. */
-    internal var downloadDirOverride: File? = null
-
-    private val downloadDir: File get() = downloadDirOverride ?: defaultDownloadDir
 
     // --- Pexels DTOs ---
 
@@ -132,7 +122,8 @@ object StockMediaClient {
         apiKey: String,
         mediaType: StockMediaType,
         query: String,
-        page: Int
+        page: Int,
+        http: HttpClient = defaultHttp,
     ): SearchOutcome = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) return@withContext SearchOutcome.InvalidKey
         try {
@@ -288,7 +279,7 @@ object StockMediaClient {
     }
 
     /** Fetches raw bytes for a thumbnail preview; returns null on any failure. */
-    suspend fun fetchThumbnailBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun fetchThumbnailBytes(url: String, http: HttpClient = defaultHttp): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val response = http.get(url)
             if (response.status.value in 200..299) response.body() else null
@@ -297,7 +288,11 @@ object StockMediaClient {
         }
     }
 
-    suspend fun download(item: StockMediaItem): DownloadOutcome = withContext(Dispatchers.IO) {
+    suspend fun download(
+        item: StockMediaItem,
+        http: HttpClient = defaultHttp,
+        downloadDir: File = defaultDownloadDir,
+    ): DownloadOutcome = withContext(Dispatchers.IO) {
         try {
             val response = http.get(item.downloadUrl)
             if (response.status.value !in 200..299) {

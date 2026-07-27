@@ -66,7 +66,7 @@ class PlanningCenterScriptureImportTest {
         )
 
         mockkObject(PlanningCenterClient)
-        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
             PlanningCenterClient.AttachmentsOutcome.Success(emptyList())
 
     }
@@ -102,7 +102,7 @@ class PlanningCenterScriptureImportTest {
         )
 
     private fun loadPlan(vm: PlanningCenterImportViewModel, items: List<PlanningCenterClient.PlanItem>) {
-        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
             PlanningCenterClient.PlanItemsOutcome.Success(items)
         vm.selectPlan("plan-1")
         awaitUntil("plan items") { !vm.isLoadingItems && vm.planItems.isNotEmpty() }
@@ -241,7 +241,7 @@ class PlanningCenterScriptureImportTest {
 
     @Test
     fun `an arrangement's lyrics win over the description`() = runBlocking {
-        coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any(), any()) } returns
             PlanningCenterClient.ArrangementOutcome.Success(
                 PlanningCenterClient.ArrangementDetail(chordChart = "G C D", lyrics = "Arrangement lyrics"),
             )
@@ -256,7 +256,7 @@ class PlanningCenterScriptureImportTest {
     fun `a blank arrangement falls back to the description`() {
         // PCO returns an arrangement record with no lyrics when nobody filled it in.
         runBlocking {
-            coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any()) } returns
+            coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any(), any()) } returns
                 PlanningCenterClient.ArrangementOutcome.Success(
                     PlanningCenterClient.ArrangementDetail(chordChart = "", lyrics = "   "),
                 )
@@ -269,7 +269,7 @@ class PlanningCenterScriptureImportTest {
 
     @Test
     fun `a failed arrangement request falls back to the description`() = runBlocking {
-        coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any(), any()) } returns
             PlanningCenterClient.ArrangementOutcome.NetworkError
         val detail = viewModel().fetchArrangementForAddSong(
             songItem(description = "Description lyrics", songId = "song-1", arrangementId = "arr-1"),
