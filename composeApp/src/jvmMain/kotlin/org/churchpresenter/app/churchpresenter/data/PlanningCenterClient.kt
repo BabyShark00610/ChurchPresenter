@@ -75,11 +75,6 @@ object PlanningCenterClient {
         }
     }
 
-    /** Test seam: when set, requests go here instead of the real network client. Null in production. */
-    internal var httpOverride: HttpClient? = null
-
-    private val http: HttpClient get() = httpOverride ?: defaultHttp
-
     fun redirectUri(): String = "http://127.0.0.1:${Constants.PLANNING_CENTER_OAUTH_PORT}/callback"
 
     fun buildAuthorizationUrl(clientId: String): String {
@@ -95,7 +90,12 @@ object PlanningCenterClient {
         val expires_in: Long = 0L
     )
 
-    suspend fun exchangeCodeForToken(clientId: String, clientSecret: String, code: String): TokenOutcome =
+    suspend fun exchangeCodeForToken(
+        clientId: String,
+        clientSecret: String,
+        code: String,
+        http: HttpClient = defaultHttp,
+    ): TokenOutcome =
         requestToken(
             clientId = clientId,
             clientSecret = clientSecret,
@@ -103,17 +103,24 @@ object PlanningCenterClient {
                 "grant_type" to "authorization_code",
                 "code" to code,
                 "redirect_uri" to redirectUri()
-            )
+            ),
+            http = http,
         )
 
-    suspend fun refreshAccessToken(clientId: String, clientSecret: String, refreshToken: String): TokenOutcome =
+    suspend fun refreshAccessToken(
+        clientId: String,
+        clientSecret: String,
+        refreshToken: String,
+        http: HttpClient = defaultHttp,
+    ): TokenOutcome =
         requestToken(
             clientId = clientId,
             clientSecret = clientSecret,
             formParams = mapOf(
                 "grant_type" to "refresh_token",
                 "refresh_token" to refreshToken
-            )
+            ),
+            http = http,
         )
 
     /**
@@ -123,7 +130,12 @@ object PlanningCenterClient {
      * includes client_id/secret as body params for servers that only check there — belt and
      * braces, since a mismatch here surfaces as an opaque "unknown client" error either way.
      */
-    private suspend fun requestToken(clientId: String, clientSecret: String, formParams: Map<String, String>): TokenOutcome = withContext(Dispatchers.IO) {
+    private suspend fun requestToken(
+        clientId: String,
+        clientSecret: String,
+        formParams: Map<String, String>,
+        http: HttpClient,
+    ): TokenOutcome = withContext(Dispatchers.IO) {
         try {
             val bodyParams = formParams + mapOf("client_id" to clientId, "client_secret" to clientSecret)
             val body = bodyParams.entries.joinToString("&") { (k, v) -> "$k=${v.encodeURLParameter()}" }
@@ -175,7 +187,7 @@ object PlanningCenterClient {
     @Serializable
     internal data class PersonResponse(val data: PersonData = PersonData())
 
-    suspend fun getCurrentPerson(accessToken: String): PersonOutcome = withContext(Dispatchers.IO) {
+    suspend fun getCurrentPerson(accessToken: String, http: HttpClient = defaultHttp): PersonOutcome = withContext(Dispatchers.IO) {
         try {
             val response = http.get(ME_URL) {
                 header("Authorization", "Bearer $accessToken")
@@ -262,7 +274,7 @@ object PlanningCenterClient {
         data object Failure : ArrangementOutcome
     }
 
-    suspend fun listServiceTypes(accessToken: String): ServiceTypesOutcome = withContext(Dispatchers.IO) {
+    suspend fun listServiceTypes(accessToken: String, http: HttpClient = defaultHttp): ServiceTypesOutcome = withContext(Dispatchers.IO) {
         try {
             val response = http.get("$SERVICES_BASE_URL/service_types") {
                 header("Authorization", "Bearer $accessToken")
@@ -297,7 +309,11 @@ object PlanningCenterClient {
         }
     }
 
-    suspend fun listUpcomingPlans(accessToken: String, serviceTypeId: String): PlansOutcome = withContext(Dispatchers.IO) {
+    suspend fun listUpcomingPlans(
+        accessToken: String,
+        serviceTypeId: String,
+        http: HttpClient = defaultHttp,
+    ): PlansOutcome = withContext(Dispatchers.IO) {
         try {
             val response = http.get("$SERVICES_BASE_URL/service_types/$serviceTypeId/plans") {
                 header("Authorization", "Bearer $accessToken")
@@ -339,7 +355,12 @@ object PlanningCenterClient {
         }
     }
 
-    suspend fun getPlanItems(accessToken: String, serviceTypeId: String, planId: String): PlanItemsOutcome =
+    suspend fun getPlanItems(
+        accessToken: String,
+        serviceTypeId: String,
+        planId: String,
+        http: HttpClient = defaultHttp,
+    ): PlanItemsOutcome =
         withContext(Dispatchers.IO) {
             try {
                 val response = http.get("$SERVICES_BASE_URL/service_types/$serviceTypeId/plans/$planId/items") {
@@ -402,7 +423,12 @@ object PlanningCenterClient {
             }
         }
 
-    suspend fun getArrangementDetail(accessToken: String, songId: String, arrangementId: String): ArrangementOutcome =
+    suspend fun getArrangementDetail(
+        accessToken: String,
+        songId: String,
+        arrangementId: String,
+        http: HttpClient = defaultHttp,
+    ): ArrangementOutcome =
         withContext(Dispatchers.IO) {
             try {
                 val response = http.get("$SERVICES_BASE_URL/songs/$songId/arrangements/$arrangementId") {
@@ -476,7 +502,8 @@ object PlanningCenterClient {
         accessToken: String,
         serviceTypeId: String,
         planId: String,
-        itemId: String
+        itemId: String,
+        http: HttpClient = defaultHttp,
     ): AttachmentsOutcome = withContext(Dispatchers.IO) {
         try {
             val response = http.get(
@@ -523,7 +550,11 @@ object PlanningCenterClient {
      * event on the account as an audit-trail entry, same as any legitimate download — not a
      * destructive or content-modifying call.
      */
-    suspend fun resolveAttachmentDownloadUrl(accessToken: String, attachmentId: String): AttachmentUrlOutcome =
+    suspend fun resolveAttachmentDownloadUrl(
+        accessToken: String,
+        attachmentId: String,
+        http: HttpClient = defaultHttp,
+    ): AttachmentUrlOutcome =
         withContext(Dispatchers.IO) {
             try {
                 val response = http.post("$SERVICES_BASE_URL/attachments/$attachmentId/open") {
@@ -555,7 +586,11 @@ object PlanningCenterClient {
         }
 
     /** Downloads a file's bytes from an already-resolved URL (a pre-signed S3 link — no auth header needed or wanted). */
-    suspend fun downloadFile(url: String, destination: File): FileDownloadOutcome = withContext(Dispatchers.IO) {
+    suspend fun downloadFile(
+        url: String,
+        destination: File,
+        http: HttpClient = defaultHttp,
+    ): FileDownloadOutcome = withContext(Dispatchers.IO) {
         try {
             val response = http.get(url)
             if (response.status.value !in 200..299) {
@@ -580,7 +615,7 @@ object PlanningCenterClient {
     }
 
     /** Fetches raw bytes for an attachment thumbnail preview (public S3 URL, no auth); null on any failure. */
-    suspend fun fetchThumbnailBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun fetchThumbnailBytes(url: String, http: HttpClient = defaultHttp): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val response = http.get(url)
             if (response.status.value in 200..299) response.body() else null

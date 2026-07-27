@@ -32,33 +32,32 @@ import kotlin.test.assertTrue
  * only tell someone to check their key, wait for the quota, or check the network if these three
  * come back distinguishable rather than as one generic failure.
  *
- * Every request here is served by a `MockEngine` swapped in through
- * [StockMediaClient.httpOverride], so nothing in this class touches the network. Downloads are
- * redirected into a temp directory the same way. Both are reset after each test —
- * `StockMediaClient` is a JVM-wide object.
+ * Every request here is served by a `MockEngine` passed to the call under test, so nothing in this
+ * class touches the network, and downloads are directed into a per-test temp directory the same way.
+ * Both are ordinary instance fields: JUnit builds a new instance of this class per test method, so
+ * there is nothing global to reset and no ordering between tests to get wrong.
  */
 class StockMediaClientTest {
 
     private lateinit var dir: File
+    private lateinit var downloadDir: File
+    private lateinit var http: HttpClient
     private val requests = mutableListOf<HttpRequestData>()
 
     @BeforeTest
     fun createDir() {
         dir = Files.createTempDirectory("cp-stock-media-test").toFile()
-        StockMediaClient.downloadDirOverride = File(dir, "stock-backgrounds")
+        downloadDir = File(dir, "stock-backgrounds")
     }
 
     @AfterTest
-    fun resetClient() {
-        StockMediaClient.httpOverride = null
-        StockMediaClient.downloadDirOverride = null
-        requests.clear()
+    fun cleanUp() {
         dir.deleteRecursively()
     }
 
     /** Serves [body] as JSON for every request, recording what was asked for. */
     private fun respondWith(body: String, status: HttpStatusCode = HttpStatusCode.OK) {
-        StockMediaClient.httpOverride = HttpClient(
+        http = HttpClient(
             MockEngine { request ->
                 requests.add(request)
                 respond(
@@ -72,7 +71,7 @@ class StockMediaClientTest {
 
     /** Serves [bytes] as a file body — what a download or a thumbnail fetch gets back. */
     private fun respondWithBytes(bytes: ByteArray, status: HttpStatusCode = HttpStatusCode.OK) {
-        StockMediaClient.httpOverride = HttpClient(
+        http = HttpClient(
             MockEngine { request ->
                 requests.add(request)
                 respond(content = bytes, status = status)
@@ -82,7 +81,7 @@ class StockMediaClientTest {
 
     /** Fails every request the way an unplugged network cable does. */
     private fun failToConnect() {
-        StockMediaClient.httpOverride = HttpClient(
+        http = HttpClient(
             MockEngine { throw java.io.IOException("no route to host") },
         )
     }
@@ -93,7 +92,7 @@ class StockMediaClientTest {
         key: String = "test-key",
         query: String = "mountains",
         page: Int = 1,
-    ) = runBlocking { StockMediaClient.search(source, key, mediaType, query, page) }
+    ) = runBlocking { StockMediaClient.search(source, key, mediaType, query, page, http = http) }
 
     private fun items(outcome: StockMediaClient.SearchOutcome): List<StockMediaClient.StockMediaItem> =
         assertIs<StockMediaClient.SearchOutcome.Success>(outcome, "expected a successful search, got $outcome").items
@@ -393,7 +392,7 @@ class StockMediaClientTest {
     fun `a downloaded photo is written where the app can find it again`() {
         respondWithBytes("jpeg-bytes".toByteArray())
 
-        val outcome = runBlocking { StockMediaClient.download(item()) }
+        val outcome = runBlocking { StockMediaClient.download(item(), http = http, downloadDir = downloadDir) }
 
         val file = assertIs<StockMediaClient.DownloadOutcome.Success>(outcome).file
         assertEquals("pexels_12345.jpg", file.name, "the name has to say where it came from, so two ids never collide")
@@ -405,7 +404,7 @@ class StockMediaClientTest {
     fun `a downloaded video is named as one`() {
         respondWithBytes("mp4-bytes".toByteArray())
 
-        val outcome = runBlocking { StockMediaClient.download(item(id = "77", source = pixabay, isVideo = true, url = "https://v/hd.mp4")) }
+        val outcome = runBlocking { StockMediaClient.download(item(id = "77", source = pixabay, isVideo = true, url = "https://v/hd.mp4"), http = http, downloadDir = downloadDir) }
 
         assertEquals(
             "pixabay_77.mp4",
@@ -416,38 +415,38 @@ class StockMediaClientTest {
 
     @Test
     fun `the download folder is created the first time something is saved`() {
-        StockMediaClient.downloadDirOverride = File(dir, "not/created/yet")
+        downloadDir = File(dir, "not/created/yet")
         respondWithBytes("bytes".toByteArray())
 
-        val outcome = runBlocking { StockMediaClient.download(item()) }
+        val outcome = runBlocking { StockMediaClient.download(item(), http = http, downloadDir = downloadDir) }
 
         assertTrue(assertIs<StockMediaClient.DownloadOutcome.Success>(outcome).file.exists())
     }
 
     @Test
     fun `a refused download is reported as a failure`() {
-        StockMediaClient.httpOverride = HttpClient(MockEngine { respondError(HttpStatusCode.NotFound) })
+        http = HttpClient(MockEngine { respondError(HttpStatusCode.NotFound) })
 
-        assertEquals(StockMediaClient.DownloadOutcome.Failure, runBlocking { StockMediaClient.download(item()) })
+        assertEquals(StockMediaClient.DownloadOutcome.Failure, runBlocking { StockMediaClient.download(item(), http = http, downloadDir = downloadDir) })
     }
 
     @Test
     fun `a download that never connects is told apart from one that was refused`() {
         failToConnect()
 
-        assertEquals(StockMediaClient.DownloadOutcome.NetworkError, runBlocking { StockMediaClient.download(item()) })
+        assertEquals(StockMediaClient.DownloadOutcome.NetworkError, runBlocking { StockMediaClient.download(item(), http = http, downloadDir = downloadDir) })
     }
 
     @Test
     fun `downloading the same picture twice does not leave two copies`() {
         respondWithBytes("bytes".toByteArray())
 
-        runBlocking { StockMediaClient.download(item()) }
-        runBlocking { StockMediaClient.download(item()) }
+        runBlocking { StockMediaClient.download(item(), http = http, downloadDir = downloadDir) }
+        runBlocking { StockMediaClient.download(item(), http = http, downloadDir = downloadDir) }
 
         assertEquals(
             1,
-            StockMediaClient.downloadDirOverride?.listFiles()?.size,
+            downloadDir.listFiles()?.size,
             "the id names the file, so re-downloading overwrites rather than piling up",
         )
     }
@@ -458,19 +457,19 @@ class StockMediaClientTest {
     fun `a thumbnail comes back as bytes`() {
         respondWithBytes("png-bytes".toByteArray())
 
-        val bytes = runBlocking { StockMediaClient.fetchThumbnailBytes("https://img/thumb.jpg") }
+        val bytes = runBlocking { StockMediaClient.fetchThumbnailBytes("https://img/thumb.jpg", http = http) }
 
         assertEquals("png-bytes", bytes?.decodeToString())
     }
 
     @Test
     fun `a thumbnail that cannot be fetched leaves a blank tile rather than failing the grid`() {
-        StockMediaClient.httpOverride = HttpClient(MockEngine { respondError(HttpStatusCode.NotFound) })
-        assertNull(runBlocking { StockMediaClient.fetchThumbnailBytes("https://img/gone.jpg") })
+        http = HttpClient(MockEngine { respondError(HttpStatusCode.NotFound) })
+        assertNull(runBlocking { StockMediaClient.fetchThumbnailBytes("https://img/gone.jpg", http = http) })
 
         failToConnect()
         assertNull(
-            runBlocking { StockMediaClient.fetchThumbnailBytes("https://img/thumb.jpg") },
+            runBlocking { StockMediaClient.fetchThumbnailBytes("https://img/thumb.jpg", http = http) },
             "one unreachable thumbnail must not take the whole search result down",
         )
     }

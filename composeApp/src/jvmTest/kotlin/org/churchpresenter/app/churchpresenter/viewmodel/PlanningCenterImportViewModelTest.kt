@@ -116,9 +116,9 @@ class PlanningCenterImportViewModelTest {
 
     /** Stubs the plan-items call and loads them into [vm]. */
     private fun loadItems(vm: PlanningCenterImportViewModel, items: List<PlanningCenterClient.PlanItem>) {
-        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
             PlanningCenterClient.PlanItemsOutcome.Success(items)
-        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
             PlanningCenterClient.AttachmentsOutcome.Success(emptyList())
         vm.selectPlan("plan-1")
         awaitUntil("plan items") { !vm.isLoadingItems && vm.planItems.isNotEmpty() }
@@ -128,7 +128,7 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `service types load`() {
-        coEvery { PlanningCenterClient.listServiceTypes(any()) } returns
+        coEvery { PlanningCenterClient.listServiceTypes(any(), any()) } returns
             PlanningCenterClient.ServiceTypesOutcome.Success(
                 listOf(PlanningCenterClient.ServiceType("st-1", "Sunday Morning")),
             )
@@ -142,7 +142,7 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `an expired session surfaces a reconnect message`() {
-        coEvery { PlanningCenterClient.listServiceTypes(any()) } returns
+        coEvery { PlanningCenterClient.listServiceTypes(any(), any()) } returns
             PlanningCenterClient.ServiceTypesOutcome.Unauthorized
         val vm = viewModel()
         vm.loadServiceTypes()
@@ -152,7 +152,7 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `a network failure surfaces an error rather than an empty list`() {
-        coEvery { PlanningCenterClient.listServiceTypes(any()) } returns
+        coEvery { PlanningCenterClient.listServiceTypes(any(), any()) } returns
             PlanningCenterClient.ServiceTypesOutcome.NetworkError
         val vm = viewModel()
         vm.loadServiceTypes()
@@ -162,7 +162,7 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `selecting a service type loads its plans`() {
-        coEvery { PlanningCenterClient.listUpcomingPlans(any(), any()) } returns
+        coEvery { PlanningCenterClient.listUpcomingPlans(any(), any(), any()) } returns
             PlanningCenterClient.PlansOutcome.Success(
                 listOf(PlanningCenterClient.Plan("plan-1", "Sunday", "21 July 2026")),
             )
@@ -178,11 +178,11 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `an expiring token is refreshed before the request`() {
-        coEvery { PlanningCenterClient.refreshAccessToken(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.refreshAccessToken(any(), any(), any(), any()) } returns
             PlanningCenterClient.TokenOutcome.Success(
                 PlanningCenterClient.TokenSet("new-access", "new-refresh", System.currentTimeMillis() + 7_200_000),
             )
-        coEvery { PlanningCenterClient.listServiceTypes(any()) } returns
+        coEvery { PlanningCenterClient.listServiceTypes(any(), any()) } returns
             PlanningCenterClient.ServiceTypesOutcome.Success(emptyList())
 
         // Already inside the 60-second refresh window.
@@ -196,7 +196,7 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `a failed refresh abandons the request`() {
-        coEvery { PlanningCenterClient.refreshAccessToken(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.refreshAccessToken(any(), any(), any(), any()) } returns
             PlanningCenterClient.TokenOutcome.Failure
         val vm = viewModel(expiresInMs = 30_000)
         vm.loadServiceTypes()
@@ -216,7 +216,7 @@ class PlanningCenterImportViewModelTest {
 
     @Test
     fun `a valid token is not refreshed`() {
-        coEvery { PlanningCenterClient.listServiceTypes(any()) } returns
+        coEvery { PlanningCenterClient.listServiceTypes(any(), any()) } returns
             PlanningCenterClient.ServiceTypesOutcome.Success(emptyList())
         val vm = viewModel(expiresInMs = 3_600_000)
         vm.loadServiceTypes()
@@ -339,9 +339,9 @@ class PlanningCenterImportViewModelTest {
     @Test
     fun `attachments load and start selected`() {
         val vm = viewModel()
-        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
             PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Notices", itemType = "item")))
-        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
             PlanningCenterClient.AttachmentsOutcome.Success(
                 listOf(
                     PlanningCenterClient.PlanAttachment("a1", "slides.pptx"),
@@ -359,9 +359,9 @@ class PlanningCenterImportViewModelTest {
         // The row checkbox is the master for its files; leaving them checked would import files
         // for an item the operator just excluded.
         val vm = viewModel()
-        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
             PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Notices", itemType = "item")))
-        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
             PlanningCenterClient.AttachmentsOutcome.Success(
                 listOf(PlanningCenterClient.PlanAttachment("a1", "slides.pptx")),
             )
@@ -378,9 +378,9 @@ class PlanningCenterImportViewModelTest {
     @Test
     fun `an individual attachment can be toggled`() {
         val vm = viewModel()
-        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
             PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Notices", itemType = "item")))
-        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any()) } returns
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
             PlanningCenterClient.AttachmentsOutcome.Success(
                 listOf(
                     PlanningCenterClient.PlanAttachment("a1", "one.pptx"),

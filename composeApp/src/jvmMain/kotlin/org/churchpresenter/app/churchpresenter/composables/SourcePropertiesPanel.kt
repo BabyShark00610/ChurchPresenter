@@ -1686,18 +1686,19 @@ internal fun xpropWindow(windowId: String, nameOutput: String): WindowInfo? {
 /**
  * The windows in `wmctrl -l`, whose columns are id, desktop, host, then the title.
  *
- * Note: `wmctrl -l` prints *four* columns, so splitting with `limit = 5` and taking `parts[4]` drops
- * the first word of every title, and drops one-word titles altogether. `SourcePropertiesDeviceListingTest`
- * pins that behaviour as it stands; changing it changes which windows Linux capture can address.
+ * The title is the **fourth** column and holds the rest of the line, spaces and all — so the split
+ * is capped at four parts. It previously asked for five, which silently spent one part on the first
+ * word of every title ("Mozilla Firefox" listed as "Firefox") and dropped one-word titles such as
+ * "Terminal" entirely, because those lines then had only four parts and failed the size guard.
  */
 internal fun parseWmctrlWindows(output: String): List<WindowInfo> =
     output.lines()
         .filter { it.isNotBlank() }
         .mapNotNull { line ->
-            val parts = line.split(Regex("\\s+"), limit = 5)
-            if (parts.size >= 5) {
+            val parts = line.split(Regex("\\s+"), limit = 4)
+            if (parts.size >= 4) {
                 val id = parts[0].removePrefix("0x").toLongOrNull(16) ?: 0L
-                val title = parts[4]
+                val title = parts[3]
                 if (title.isNotBlank()) WindowInfo(title, id) else null
             } else null
         }

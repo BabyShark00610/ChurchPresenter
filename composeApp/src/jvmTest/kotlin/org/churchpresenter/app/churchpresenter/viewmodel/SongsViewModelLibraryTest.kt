@@ -66,19 +66,23 @@ class SongsViewModelLibraryTest {
     }
 
     private fun viewModel(): SongsViewModel {
-        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Default, enableFolderWatcher = false)
+        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false)
         created.add(vm)
         awaitUntil("songs to load") { vm.filteredSongItems.value.isNotEmpty() }
         return vm
     }
 
-    private fun awaitUntil(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-            Thread.sleep(20)
-        }
-        throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
+    /**
+     * Asserts [what] has already happened.
+     *
+     * The view model is built on an immediate dispatcher for both its scope and its file reads, so a
+     * load is complete by the time the constructor or the call returns — there is nothing to wait
+     * for. This used to poll a wall clock for up to 5s, which is what made these tests fail on a
+     * loaded CI runner (issue #56): the condition was right, the coroutine just had not been
+     * scheduled yet. Nothing here now depends on timing.
+     */
+    private fun awaitUntil(what: String, condition: () -> Boolean) {
+        if (!condition()) throw AssertionError("expected $what to have completed synchronously")
     }
 
     private fun SongsViewModel.selectByTitle(title: String) {
@@ -107,7 +111,7 @@ class SongsViewModelLibraryTest {
 
     @Test
     fun `an empty storage directory yields no songs`() {
-        val vm = SongsViewModel(AppSettings(), dispatcher = Dispatchers.Default, enableFolderWatcher = false).also { created.add(it) }
+        val vm = SongsViewModel(AppSettings(), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false).also { created.add(it) }
         awaitUntil("the load to finish") { !vm.isLoading.value }
         assertTrue(vm.filteredSongItems.value.isEmpty())
     }
@@ -261,7 +265,7 @@ class SongsViewModelLibraryTest {
         val vm = viewModel()
         assertFalse(vm.createSong(SongItem(number = "1", title = "No Book", songbook = "", lyrics = listOf("l"))))
 
-        val unconfigured = SongsViewModel(AppSettings(), dispatcher = Dispatchers.Default, enableFolderWatcher = false).also { created.add(it) }
+        val unconfigured = SongsViewModel(AppSettings(), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false).also { created.add(it) }
         assertFalse(unconfigured.createSong(SongItem(number = "1", title = "T", songbook = "Hymnal", lyrics = listOf("l"))))
     }
 
@@ -362,7 +366,7 @@ class SongsViewModelLibraryTest {
 
     @Test
     fun `adding to the schedule with nothing selected reports failure`() {
-        val vm = SongsViewModel(AppSettings(), dispatcher = Dispatchers.Default, enableFolderWatcher = false).also { created.add(it) }
+        val vm = SongsViewModel(AppSettings(), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false).also { created.add(it) }
         var called = false
         assertFalse(vm.addCurrentSongToSchedule { _, _, _, _ -> called = true })
         assertFalse(called)
