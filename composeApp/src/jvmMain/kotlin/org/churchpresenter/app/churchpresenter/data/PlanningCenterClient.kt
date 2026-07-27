@@ -66,7 +66,7 @@ object PlanningCenterClient {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val http by lazy {
+    private val defaultHttp by lazy {
         HttpClient(CIO) {
             install(HttpTimeout) {
                 requestTimeoutMillis = 20_000
@@ -74,6 +74,11 @@ object PlanningCenterClient {
             }
         }
     }
+
+    /** Test seam: when set, requests go here instead of the real network client. Null in production. */
+    internal var httpOverride: HttpClient? = null
+
+    private val http: HttpClient get() = httpOverride ?: defaultHttp
 
     fun redirectUri(): String = "http://127.0.0.1:${Constants.PLANNING_CENTER_OAUTH_PORT}/callback"
 
@@ -84,7 +89,7 @@ object PlanningCenterClient {
     }
 
     @Serializable
-    private data class TokenResponse(
+    internal data class TokenResponse(
         val access_token: String = "",
         val refresh_token: String = "",
         val expires_in: Long = 0L
@@ -158,17 +163,17 @@ object PlanningCenterClient {
     }
 
     @Serializable
-    private data class PersonAttributes(
+    internal data class PersonAttributes(
         val name: String? = null,
         val first_name: String? = null,
         val last_name: String? = null
     )
 
     @Serializable
-    private data class PersonData(val id: String = "", val attributes: PersonAttributes = PersonAttributes())
+    internal data class PersonData(val id: String = "", val attributes: PersonAttributes = PersonAttributes())
 
     @Serializable
-    private data class PersonResponse(val data: PersonData = PersonData())
+    internal data class PersonResponse(val data: PersonData = PersonData())
 
     suspend fun getCurrentPerson(accessToken: String): PersonOutcome = withContext(Dispatchers.IO) {
         try {
