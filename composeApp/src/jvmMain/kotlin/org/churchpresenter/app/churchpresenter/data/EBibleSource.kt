@@ -1,0 +1,319 @@
+package org.churchpresenter.app.churchpresenter.data
+
+import converter.BibleCatalogNaming
+import converter.UsfxToSpbConverter
+import converter.XmlToSpbConverter
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import java.io.File
+
+/**
+ * eBible.org — the primary archive: around 1,300 translations across a thousand languages.
+ *
+ * Two things make it the better source. Its catalogue publishes a `Redistributable` flag and a
+ * copyright string per translation, so the list can say what a translation is licensed for
+ * **before** anything is downloaded, and only translations the publisher has marked redistributable
+ * are ever offered. And each download ships a `BookNames.xml` giving book names in the
+ * translation's own language, which removes the guesswork the Zefania path needs curated tables for.
+ *
+ * Downloads are USFX; see [UsfxToSpbConverter].
+ */
+object EBibleSource : BibleSource {
+
+    override val sourceId = BibleSourceId.EBIBLE
+
+    private const val CATALOG_URL = "https://ebible.org/Scriptures/translations.csv"
+    private const val DOWNLOAD_BASE = "https://ebible.org/Scriptures"
+
+    /** The archive is revised in batches, not continuously; a week keeps traffic negligible. */
+    private const val CACHE_TTL_MILLIS = 7L * 24 * 60 * 60 * 1000
+
+    private val defaultCacheFile = File(System.getProperty("user.home"), ".churchpresenter/cache/ebible-catalog.csv")
+
+    @Volatile
+    private var memoryCache: Pair<Long, List<BibleModule>>? = null
+
+    /** `-Dchurchpresenter.ebibleCatalogUrl=` points at a staging catalogue. For testing only. */
+    internal fun catalogUrl(): String =
+        System.getProperty("churchpresenter.ebibleCatalogUrl")?.takeIf { it.isNotBlank() } ?: CATALOG_URL
+
+    internal fun downloadUrlFor(translationId: String): String = "$DOWNLOAD_BASE/${translationId}_usfx.zip"
+
+    internal fun clearMemoryCache() {
+        memoryCache = null
+    }
+
+    override suspend fun catalog(nowMillis: Long): BibleCatalogOutcome =
+        fetchCatalog(nowMillis = nowMillis)
+
+    internal suspend fun fetchCatalog(
+        url: String = catalogUrl(),
+        http: HttpClient = BibleInstallSupport.defaultHttp,
+        cacheFile: File = defaultCacheFile,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): BibleCatalogOutcome = withContext(Dispatchers.IO) {
+        memoryCache?.let { (fetchedAt, modules) ->
+            if (nowMillis - fetchedAt < CACHE_TTL_MILLIS) return@withContext BibleCatalogOutcome.Success(modules)
+        }
+
+        val cached = readCache(cacheFile)
+        if (cached != null && nowMillis - readFetchedAt(cacheFile) < CACHE_TTL_MILLIS) {
+            memoryCache = nowMillis to cached
+            return@withContext BibleCatalogOutcome.Success(cached)
+        }
+
+        try {
+            val response = http.get(url) { header("User-Agent", "ChurchPresenter") }
+            if (response.status.value !in 200..299) {
+                CrashReporter.reportWarning(
+                    "eBible catalogue returned HTTP ${response.status.value}",
+                    tags = mapOf("subsystem" to "ebible_catalog")
+                )
+                return@withContext cached?.let { BibleCatalogOutcome.Success(it, stale = true) }
+                    ?: BibleCatalogOutcome.Failure
+            }
+            val body = response.body<String>()
+            val modules = parseCatalog(body)
+            if (modules.isEmpty()) {
+                CrashReporter.reportWarning(
+                    "eBible catalogue parsed to nothing",
+                    tags = mapOf("subsystem" to "ebible_catalog")
+                )
+                return@withContext cached?.let { BibleCatalogOutcome.Success(it, stale = true) }
+                    ?: BibleCatalogOutcome.Failure
+            }
+            memoryCache = nowMillis to modules
+            runCatching {
+                cacheFile.parentFile?.mkdirs()
+                cacheFile.writeText(body)
+                File(cacheFile.parentFile, cacheFile.name + ".meta").writeText(nowMillis.toString())
+            }
+            BibleCatalogOutcome.Success(modules)
+        } catch (e: Exception) {
+            CrashReporter.reportWarning(
+                "eBible catalogue fetch failed",
+                throwable = e,
+                tags = mapOf("subsystem" to "ebible_catalog")
+            )
+            cached?.let { BibleCatalogOutcome.Success(it, stale = true) } ?: BibleCatalogOutcome.NetworkError
+        }
+    }
+
+    /**
+     * Reads the published CSV into browse rows.
+     *
+     * Only rows the publisher marks redistributable *and* downloadable are returned — the archive
+     * catalogues translations it is not permitted to hand out, and offering those would put the app
+     * in the position of distributing them.
+     */
+    internal fun parseCatalog(body: String): List<BibleModule> {
+        val rows = Csv.parse(body)
+        if (rows.isEmpty()) return emptyList()
+        val header = rows.first().map { it.trim().trim('﻿') }
+        fun index(name: String) = header.indexOfFirst { it.equals(name, ignoreCase = true) }
+
+        val idIndex = index("translationId")
+        val languageIndex = index("languageCode")
+        if (idIndex < 0 || languageIndex < 0) return emptyList()
+        val titleIndex = index("shortTitle")
+        val longTitleIndex = index("title")
+        val copyrightIndex = index("Copyright")
+        val redistributableIndex = index("Redistributable")
+        val downloadableIndex = index("downloadable")
+        val updateIndex = index("UpdateDate")
+
+        val taken = mutableSetOf<String>()
+        return rows.drop(1)
+            .mapNotNull { row ->
+                fun cell(i: Int) = row.getOrNull(i)?.trim().orEmpty()
+                val translationId = cell(idIndex)
+                if (translationId.isEmpty()) return@mapNotNull null
+                if (!cell(redistributableIndex).isTrue() || !cell(downloadableIndex).isTrue()) return@mapNotNull null
+
+                val language = cell(languageIndex).uppercase()
+                val title = cell(titleIndex).ifBlank { cell(longTitleIndex) }.ifBlank { translationId }
+                BibleModule(
+                    sourceId = BibleSourceId.EBIBLE,
+                    downloadKey = translationId,
+                    sizeBytes = 0,
+                    language = language,
+                    identifier = translationId,
+                    displayName = title,
+                    copyright = cell(copyrightIndex),
+                    releaseDate = cell(updateIndex),
+                    fileStem = BibleCatalogNaming.fileStem(language, translationId)
+                )
+            }
+            // Deduplicated in catalogue order, so every machine derives the same installed names.
+            .map { module ->
+                val stem = BibleCatalogNaming.deduplicate(module.fileStem, taken)
+                taken.add(stem)
+                module.copy(fileStem = stem)
+            }
+    }
+
+    private fun String.isTrue(): Boolean = lowercase() in setOf("true", "yes", "1")
+
+    private fun readCache(cacheFile: File): List<BibleModule>? {
+        if (!cacheFile.isFile) return null
+        val body = runCatching { cacheFile.readText() }.getOrNull() ?: return null
+        return parseCatalog(body).takeIf { it.isNotEmpty() }
+    }
+
+    private fun readFetchedAt(cacheFile: File): Long =
+        runCatching { File(cacheFile.parentFile, cacheFile.name + ".meta").readText().trim().toLong() }
+            .getOrDefault(0L)
+
+    override suspend fun install(
+        module: BibleModule,
+        targetDir: File,
+        onProgress: (InstallProgress) -> Unit,
+    ): BibleInstallOutcome = installEBible(module, targetDir, BibleInstallSupport.defaultHttp, onProgress)
+
+    internal suspend fun installEBible(
+        module: BibleModule,
+        targetDir: File,
+        http: HttpClient,
+        onProgress: (InstallProgress) -> Unit,
+    ): BibleInstallOutcome = withContext(Dispatchers.IO) {
+        if (!BibleInstallSupport.usableDirectory(targetDir)) return@withContext BibleInstallOutcome.NoDirectory
+
+        val scratch = BibleInstallSupport.scratchIn(targetDir)
+        try {
+            scratch.deleteRecursively()
+            scratch.mkdirs()
+            val zipFile = File(scratch, "module.zip")
+            val spbPart = File(scratch, module.fileName)
+
+            val result = try {
+                BibleInstallSupport.downloadTo(
+                    url = downloadUrlFor(module.downloadKey),
+                    destination = zipFile,
+                    http = http,
+                    expectedBytes = module.sizeBytes,
+                ) { onProgress(InstallProgress(InstallPhase.DOWNLOADING, it)) }
+            } catch (e: Exception) {
+                CrashReporter.reportWarning(
+                    "eBible download failed (${module.fileStem})",
+                    throwable = e,
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return@withContext BibleInstallOutcome.NetworkError
+            }
+
+            if (result.status !in 200..299) {
+                CrashReporter.reportWarning(
+                    "eBible download returned HTTP ${result.status} (${module.fileStem})",
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return@withContext BibleInstallOutcome.HttpError(result.status)
+            }
+
+            onProgress(InstallProgress(InstallPhase.EXTRACTING, BibleInstallSupport.DOWNLOAD_END))
+            // The scripture and the book-name list are separate entries in the same archive.
+            val entries = BibleInstallSupport.extractEntries(zipFile, scratch) {
+                it.endsWith("_usfx.xml", ignoreCase = true) || it.equals("BookNames.xml", ignoreCase = true)
+            }
+            val usfx = entries.entries.firstOrNull { it.key.endsWith("_usfx.xml", ignoreCase = true) }?.value
+                ?: return@withContext BibleInstallOutcome.CorruptArchive
+            val bookNames = entries.entries.firstOrNull { it.key.equals("BookNames.xml", ignoreCase = true) }?.value
+            onProgress(InstallProgress(InstallPhase.EXTRACTING, BibleInstallSupport.EXTRACT_END))
+
+            val parsed = try {
+                UsfxToSpbConverter.parse(
+                    usfxFile = usfx,
+                    bookNamesFile = bookNames,
+                    name = module.displayName,
+                    language = module.language,
+                    rights = module.copyright,
+                    source = downloadUrlFor(module.downloadKey)
+                )
+            } catch (e: Exception) {
+                CrashReporter.reportWarning(
+                    "eBible module could not be parsed (${module.fileStem})",
+                    throwable = e,
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return@withContext BibleInstallOutcome.ConversionFailed
+            }
+            if (parsed.books.isEmpty() || parsed.books.sumOf { b -> b.chapters.sumOf { it.verses.size } } == 0) {
+                return@withContext BibleInstallOutcome.ConversionFailed
+            }
+
+            XmlToSpbConverter.write(parsed, spbPart) { fraction ->
+                onProgress(
+                    InstallProgress(
+                        InstallPhase.CONVERTING,
+                        BibleInstallSupport.EXTRACT_END +
+                            (BibleInstallSupport.CONVERT_END - BibleInstallSupport.EXTRACT_END) * fraction
+                    )
+                )
+            }
+            if (!BibleInstallSupport.looksLikeModule(spbPart)) return@withContext BibleInstallOutcome.ConversionFailed
+
+            onProgress(InstallProgress(InstallPhase.INSTALLING, BibleInstallSupport.CONVERT_END))
+            val destination = File(targetDir, module.fileName)
+            try {
+                BibleInstallSupport.moveIntoPlace(spbPart, destination)
+            } catch (e: Exception) {
+                CrashReporter.reportWarning(
+                    "Could not write Bible into place (${module.fileStem})",
+                    throwable = e,
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return@withContext BibleInstallOutcome.WriteFailed
+            }
+            onProgress(InstallProgress(InstallPhase.INSTALLING, 1f))
+            BibleInstallOutcome.Success(destination, parsed.name, parsed.books.size, parsed.rights)
+        } finally {
+            scratch.deleteRecursively()
+        }
+    }
+}
+
+/**
+ * Just enough CSV for the eBible catalogue: quoted fields, embedded commas, doubled quotes.
+ *
+ * A dependency would be overkill for one file, but hand-splitting on commas is not an option —
+ * copyright strings in this catalogue routinely contain both commas and quotes.
+ */
+internal object Csv {
+    fun parse(body: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        val row = mutableListOf<String>()
+        val field = StringBuilder()
+        var quoted = false
+        var index = 0
+        while (index < body.length) {
+            val char = body[index]
+            when {
+                quoted && char == '"' && body.getOrNull(index + 1) == '"' -> {
+                    field.append('"'); index++
+                }
+                char == '"' -> quoted = !quoted
+                !quoted && char == ',' -> {
+                    row.add(field.toString()); field.setLength(0)
+                }
+                !quoted && (char == '\n' || char == '\r') -> {
+                    if (field.isNotEmpty() || row.isNotEmpty()) {
+                        row.add(field.toString()); field.setLength(0)
+                        rows.add(row.toList()); row.clear()
+                    }
+                    if (char == '\r' && body.getOrNull(index + 1) == '\n') index++
+                }
+                else -> field.append(char)
+            }
+            index++
+        }
+        if (field.isNotEmpty() || row.isNotEmpty()) {
+            row.add(field.toString())
+            rows.add(row.toList())
+        }
+        return rows
+    }
+}

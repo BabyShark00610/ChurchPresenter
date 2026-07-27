@@ -229,7 +229,7 @@ fun main() {
     // out of the box without requiring the user to pick a Bible folder first.
     if (startupSettings.bibleSettings.storageDirectory.isEmpty() && startupSettings.bibleSettings.primaryBible.isEmpty()) {
         try {
-            val defaultBibleDir = File(System.getProperty("user.home"), ".churchpresenter/Bibles")
+            val defaultBibleDir = File(System.getProperty("user.home"), Constants.DEFAULT_BIBLES_DIR)
             defaultBibleDir.mkdirs()
             val targetFile = File(defaultBibleDir, "kjv1769.spb")
             if (!targetFile.exists()) {

@@ -732,33 +732,49 @@ class SystemSettingsTabTest {
         assertTrue(written.toString() in told.single(), "the report names how many were copied: ${told.single()}")
     }
 
+    /**
+     * The bundled-KJV button this replaced is gone: the download browser offers nine King James
+     * editions among 264 translations, so copying one sample out of app resources had no purpose.
+     *
+     * Only the button's presence is asserted. Clicking it opens a real `DialogWindow` and would
+     * reach the Zefania archive over the network — the browser's own behaviour is covered by
+     * `ZefaniaRepositoryIndexTest`, `ZefaniaInstallerTest` and `BibleCatalogViewModelTest` instead.
+     */
     @Test
-    fun `Add Bible Samples writes the KJV and makes it the primary bible`() = runComposeUiTest {
+    fun `the bible section offers the download browser`() = runComposeUiTest {
         val dir = tempDir()
-        stubSwingDialogs()
-        var current by mutableStateOf(
-            AppSettings(bibleSettings = AppSettings().bibleSettings.copy(storageDirectory = dir.path))
-        )
         setContent {
             MaterialTheme {
                 SystemSettingsTab(
                     currentTheme = ThemeMode.SYSTEM,
                     onThemeChange = {},
-                    settings = current,
-                    onSettingsChange = { transform -> current = transform(current) },
+                    settings = AppSettings(
+                        bibleSettings = AppSettings().bibleSettings.copy(storageDirectory = dir.path)
+                    ),
                 )
             }
         }
 
-        onAllNodesWithText("Add Bible Samples (KJV)").onFirst().performScrollTo().performClick()
-        waitUntil(timeoutMillis = 10_000) { told.isNotEmpty() }
-
-        assertTrue(File(dir, "kjv1769.spb").length() > 0, "the sample bible is written into the chosen folder")
-        assertEquals(
-            "kjv1769.spb",
-            current.bibleSettings.primaryBible,
-            "a freshly copied sample bible is selected as the primary"
+        onAllNodesWithText("Download Bibles…").onFirst().performScrollTo().assertExists(
+            "the Bible folder section is where someone with no Bibles goes, so the downloader lives there"
         )
+    }
+
+    @Test
+    fun `the download browser is not offered until a bible folder exists`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                SystemSettingsTab(
+                    currentTheme = ThemeMode.SYSTEM,
+                    onThemeChange = {},
+                    settings = AppSettings(),
+                )
+            }
+        }
+
+        // A download is written to disk the moment it finishes, so it must never be startable
+        // while there is any doubt about which folder it would land in.
+        onAllNodesWithText("Download Bibles…").assertCountEquals(0)
     }
 
     @Test
@@ -789,31 +805,6 @@ class SystemSettingsTabTest {
             "declining copies nothing into the existing folder"
         )
         assertTrue(told.isEmpty(), "and reports no copy that never happened")
-    }
-
-    @Test
-    fun `Add Bible Samples asks before overwriting an existing bible and honours a no`() = runComposeUiTest {
-        val dir = tempDir()
-        val existing = File(dir, "kjv1769.spb").apply { writeText("my own copy") }
-        stubSwingDialogs(confirmAnswer = JOptionPane.NO_OPTION)
-        setContent {
-            MaterialTheme {
-                SystemSettingsTab(
-                    currentTheme = ThemeMode.SYSTEM,
-                    onThemeChange = {},
-                    settings = AppSettings(
-                        bibleSettings = AppSettings().bibleSettings.copy(storageDirectory = dir.path)
-                    ),
-                )
-            }
-        }
-
-        onAllNodesWithText("Add Bible Samples (KJV)").onFirst().performScrollTo().performClick()
-        waitUntil { asked.isNotEmpty() }
-
-        assertTrue("Bible" in asked.single(), "the question warns about the existing bible: ${asked.single()}")
-        assertEquals("my own copy", existing.readText(), "declining leaves the operator's own file in place")
-        assertTrue(told.isEmpty())
     }
 
     // ── Convert: the songs library's legacy .sps import ───────────────────────

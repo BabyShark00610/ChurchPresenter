@@ -45,11 +45,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.add_song_samples
-import churchpresenter.composeapp.generated.resources.add_bible_samples
 import churchpresenter.composeapp.generated.resources.analytics_reporting
-import churchpresenter.composeapp.generated.resources.bible_samples
-import churchpresenter.composeapp.generated.resources.bible_samples_copied
-import churchpresenter.composeapp.generated.resources.bible_samples_overwrite_confirm
+import churchpresenter.composeapp.generated.resources.bible_catalog_button
 import churchpresenter.composeapp.generated.resources.bible_storage_directory
 import churchpresenter.composeapp.generated.resources.browse_directory
 import churchpresenter.composeapp.generated.resources.clear_lottie_cache_confirm
@@ -101,6 +98,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.SettingsManager
 import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.data.SpsConverter
+import org.churchpresenter.app.churchpresenter.dialogs.BibleCatalogBrowserDialog
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
@@ -137,9 +135,6 @@ fun SystemSettingsTab(
     val songSamplesTitle = stringResource(Res.string.song_samples)
     val songSamplesOverwriteMsg = stringResource(Res.string.song_samples_overwrite_confirm)
     val songSamplesCopiedFmt = stringResource(Res.string.song_samples_copied)
-    val bibleSamplesTitle = stringResource(Res.string.bible_samples)
-    val bibleSamplesOverwriteMsg = stringResource(Res.string.bible_samples_overwrite_confirm)
-    val bibleSamplesCopiedFmt = stringResource(Res.string.bible_samples_copied)
     val folderOverwriteConfirmFmt = stringResource(Res.string.folder_overwrite_confirm)
     val conversionCompleteTitle = stringResource(Res.string.conversion_complete)
     val conversionCompleteMsgFmt = stringResource(Res.string.conversion_complete_message)
@@ -198,55 +193,39 @@ fun SystemSettingsTab(
             detectedLabel = stringResource(Res.string.detected_files_label),
             noFilesText = stringResource(Res.string.no_files_detected)
         )
-        if (settings.bibleSettings.storageDirectory.isNotEmpty()) {
-            val bibleSampleScope = rememberCoroutineScope()
-            var copyingBibleSamples by remember { mutableStateOf(false) }
+        // Sits beside the folder picker because that is where someone with no Bibles ends up.
+        // Offered only once a real folder is in place: downloads are written the moment they
+        // finish, so there must be no doubt about where they are going.
+        val bibleDir = settings.bibleSettings.storageDirectory
+        if (bibleDir.isNotEmpty() && java.io.File(bibleDir).isDirectory) {
+            var showBibleCatalog by remember(bibleDir) { mutableStateOf(false) }
             Row(
                 modifier = Modifier.padding(top = 2.dp, start = 2.dp).height(24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
                     shape = RoundedCornerShape(6.dp),
-                    onClick = {
-                        val targetFile = java.io.File(settings.bibleSettings.storageDirectory, "kjv1769.spb")
-                        val proceed = if (targetFile.exists()) {
-                            JOptionPane.showConfirmDialog(
-                                null,
-                                bibleSamplesOverwriteMsg,
-                                folderAlreadyExistsTitle,
-                                JOptionPane.YES_NO_OPTION,
-                                JOptionPane.WARNING_MESSAGE
-                            ) == JOptionPane.YES_OPTION
-                        } else true
-                        if (proceed) {
-                            copyingBibleSamples = true
-                            bibleSampleScope.launch {
-                                val count = withContext(Dispatchers.IO) {
-                                    copyBibleSamples(settings.bibleSettings.storageDirectory)
-                                }
-                                copyingBibleSamples = false
-                                if (count > 0) {
-                                    onSettingsChange { s ->
-                                        s.copy(bibleSettings = s.bibleSettings.copy(primaryBible = "kjv1769.spb"))
-                                    }
-                                }
-                                JOptionPane.showMessageDialog(
-                                    null,
-                                    String.format(bibleSamplesCopiedFmt, count),
-                                    bibleSamplesTitle,
-                                    JOptionPane.INFORMATION_MESSAGE
-                                )
-                            }
-                        }
-                    },
-                    enabled = !copyingBibleSamples,
+                    onClick = { showBibleCatalog = true },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Text(stringResource(Res.string.add_bible_samples), style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(Res.string.bible_catalog_button), style = MaterialTheme.typography.labelSmall)
                 }
-                if (copyingBibleSamples) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                }
+            }
+            if (showBibleCatalog) {
+                BibleCatalogBrowserDialog(
+                    storageDirectory = bibleDir,
+                    onDismiss = { showBibleCatalog = false },
+                    onBibleInstalled = { fileName ->
+                        onSettingsChange { s ->
+                            s.copy(
+                                bibleSettings = s.bibleSettings.copy(
+                                    primaryBible = s.bibleSettings.primaryBible.ifEmpty { fileName }
+                                )
+                            )
+                        }
+                        bibleFiles = bibleFiles + fileName
+                    }
+                )
             }
         }
         } // end Bible SettingsSection
@@ -953,23 +932,3 @@ private suspend fun copySongSamples(storageDirectory: String): Int {
     return count
 }
 
-private suspend fun copyBibleSamples(storageDirectory: String): Int {
-    val targetDir = java.io.File(storageDirectory)
-    if (!targetDir.exists()) targetDir.mkdirs()
-
-    val indexBytes = Res.readBytes("files/bible_samples/index.txt")
-    val filenames = indexBytes.toString(Charsets.UTF_8).lines().filter { it.isNotBlank() }
-
-    var count = 0
-    for (filename in filenames) {
-        try {
-            val bibleBytes = Res.readBytes("files/bible_samples/$filename")
-            val targetFile = java.io.File(targetDir, filename)
-            targetFile.writeBytes(bibleBytes)
-            count++
-        } catch (_: Exception) {
-            // Skip files that can't be read
-        }
-    }
-    return count
-}
