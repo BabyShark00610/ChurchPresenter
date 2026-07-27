@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.swing.SwingUtilities
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
+import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -89,18 +90,24 @@ class BibleCatalogViewModelTest {
     }
 
     private fun vm(source: BibleSource, storageDirectory: String = dir.absolutePath) =
-        BibleCatalogViewModel(source, storageDirectory).also { created.add(it) }
+        BibleCatalogViewModel(source, storageDirectory, dispatcher = Dispatchers.Unconfined).also { created.add(it) }
 
     /** Drains the Swing event queue, which is where the view model's coroutines run. */
     private fun settle() = repeat(2) { SwingUtilities.invokeAndWait { } }
 
-    private fun awaitUntil(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-            Thread.sleep(5)
-        }
-        throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
+    /**
+     * Asserts [what] has already happened.
+     *
+     * The view model runs on an immediate dispatcher here, so a load or an install completes before
+     * the call that started it returns — there is nothing to wait for. Where a test needs to observe
+     * the in-flight state, it parks the source on a `CompletableDeferred` and completes it when
+     * ready, so the signal is the work itself rather than elapsed time.
+     *
+     * This replaced a 5s `Thread.sleep` poll. That shape is what produced #24 and then #56: the
+     * deadline expires under suite load and the failure names a timeout instead of a cause.
+     */
+    private fun awaitUntil(what: String, condition: () -> Boolean) {
+        if (!condition()) throw AssertionError("expected $what to have happened synchronously")
     }
 
     private fun module(

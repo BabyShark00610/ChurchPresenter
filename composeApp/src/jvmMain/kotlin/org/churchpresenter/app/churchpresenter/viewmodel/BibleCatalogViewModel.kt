@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,10 +33,20 @@ data class InstalledBible(val fileName: String, val title: String, val books: In
  */
 class BibleCatalogViewModel(
     private val source: BibleSource,
-    private val storageDirectory: String
+    private val storageDirectory: String,
+    /**
+     * Backs the view-model scope. `Dispatchers.Main` in the app, so state lands on the UI thread;
+     * tests pass an immediate dispatcher so a load or install finishes before the call returns and
+     * they can assert directly instead of polling a clock for it.
+     *
+     * Not decoration: this is the shape that produced issues #24 and #56 twice over. With the
+     * dispatcher fixed, the work queues on the single Swing event thread, a loaded suite misses the
+     * deadline, and the test fails by timeout expiry — which `AGENT.md` rules out explicitly.
+     */
+    dispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) {
 
-    private val viewModelScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val viewModelScope = CoroutineScope(dispatcher + SupervisorJob())
 
     /** One entry per language present in the catalogue, for the filter dropdown. */
     data class LanguageOption(val code: String, val count: Int)
