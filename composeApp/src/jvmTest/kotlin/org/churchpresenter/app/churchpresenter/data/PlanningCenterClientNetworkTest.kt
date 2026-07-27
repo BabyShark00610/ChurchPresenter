@@ -24,22 +24,17 @@ import kotlin.test.assertTrue
  * separately by [PlanningCenterDownloadTest]): the OAuth token exchange, `/people/v2/me`, and the
  * Services API for service types, plans, plan items, arrangement lyrics and attachment metadata.
  *
- * Every request here is served by a `MockEngine` swapped in through [PlanningCenterClient.httpOverride],
- * so nothing in this class touches the real Planning Center API. It is reset after every test —
- * [PlanningCenterClient] is a JVM-wide object.
+ * Every request here is served by a `MockEngine` passed to the call under test, so nothing in this
+ * class touches the real Planning Center API. The client is an ordinary instance field: JUnit builds
+ * a new instance of this class per test method, so there is nothing global to reset.
  */
 class PlanningCenterClientNetworkTest {
 
     private val requests = mutableListOf<HttpRequestData>()
-
-    @AfterTest
-    fun resetClient() {
-        PlanningCenterClient.httpOverride = null
-        requests.clear()
-    }
+    private lateinit var http: HttpClient
 
     private fun respondWith(body: String, status: HttpStatusCode = HttpStatusCode.OK) {
-        PlanningCenterClient.httpOverride = HttpClient(
+        http = HttpClient(
             MockEngine { request ->
                 requests.add(request)
                 respond(
@@ -52,7 +47,7 @@ class PlanningCenterClientNetworkTest {
     }
 
     private fun failToConnect() {
-        PlanningCenterClient.httpOverride = HttpClient(
+        http = HttpClient(
             MockEngine { throw java.io.IOException("no route to host") },
         )
     }
@@ -63,7 +58,7 @@ class PlanningCenterClientNetworkTest {
     fun `an authorization code is exchanged for a token set`() {
         respondWith("""{"access_token":"tok-abc","refresh_token":"ref-abc","expires_in":7200}""")
 
-        val outcome = runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "the-code") }
+        val outcome = runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "the-code", http = http) }
 
         val tokens = assertIs<PlanningCenterClient.TokenOutcome.Success>(outcome, "got $outcome").tokens
         assertEquals("tok-abc", tokens.accessToken)
@@ -78,7 +73,7 @@ class PlanningCenterClientNetworkTest {
     fun `the code exchange authenticates with http basic and sends the redirect uri`() {
         respondWith("""{"access_token":"t","refresh_token":"r","expires_in":100}""")
 
-        runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "the-code") }
+        runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "the-code", http = http) }
 
         val request = requests.single()
         val expectedBasic = "Basic " + Base64.getEncoder().encodeToString("cid:csecret".toByteArray())
@@ -95,7 +90,7 @@ class PlanningCenterClientNetworkTest {
     fun `a refresh token is exchanged with the refresh grant instead of a code`() {
         respondWith("""{"access_token":"t2","refresh_token":"r2","expires_in":100}""")
 
-        runBlocking { PlanningCenterClient.refreshAccessToken("cid", "csecret", "old-refresh") }
+        runBlocking { PlanningCenterClient.refreshAccessToken("cid", "csecret", "old-refresh", http = http) }
 
         val body = String((requests.single().body as OutgoingContent.ByteArrayContent).bytes())
         assertTrue(body.contains("grant_type=refresh_token"))
@@ -108,13 +103,13 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"error":"invalid_client"}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.TokenOutcome.InvalidCredentials,
-            runBlocking { PlanningCenterClient.exchangeCodeForToken("bad", "bad", "code") },
+            runBlocking { PlanningCenterClient.exchangeCodeForToken("bad", "bad", "code", http = http) },
         )
 
         respondWith("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest)
         assertEquals(
             PlanningCenterClient.TokenOutcome.InvalidCredentials,
-            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "stale-code") },
+            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "stale-code", http = http) },
             "a reused or expired code is the same operator-facing problem as a bad credential",
         )
     }
@@ -125,7 +120,7 @@ class PlanningCenterClientNetworkTest {
 
         assertEquals(
             PlanningCenterClient.TokenOutcome.InvalidCredentials,
-            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "code") },
+            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "code", http = http) },
         )
     }
 
@@ -135,7 +130,7 @@ class PlanningCenterClientNetworkTest {
 
         assertEquals(
             PlanningCenterClient.TokenOutcome.Failure,
-            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "code") },
+            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "code", http = http) },
         )
     }
 
@@ -145,7 +140,7 @@ class PlanningCenterClientNetworkTest {
 
         assertEquals(
             PlanningCenterClient.TokenOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "code") },
+            runBlocking { PlanningCenterClient.exchangeCodeForToken("cid", "csecret", "code", http = http) },
         )
     }
 
@@ -155,7 +150,7 @@ class PlanningCenterClientNetworkTest {
     fun `the connected person's name comes from the name attribute when present`() {
         respondWith("""{"data":{"id":"1","attributes":{"name":"Pat Ringer","first_name":"Pat","last_name":"Ringer"}}}""")
 
-        val outcome = runBlocking { PlanningCenterClient.getCurrentPerson("tok") }
+        val outcome = runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) }
 
         assertEquals("Pat Ringer", assertIs<PlanningCenterClient.PersonOutcome.Success>(outcome).person.displayName)
     }
@@ -164,7 +159,7 @@ class PlanningCenterClientNetworkTest {
     fun `the connected person falls back to first and last name when name is absent`() {
         respondWith("""{"data":{"id":"1","attributes":{"first_name":"Pat","last_name":"Ringer"}}}""")
 
-        val outcome = runBlocking { PlanningCenterClient.getCurrentPerson("tok") }
+        val outcome = runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) }
 
         assertEquals("Pat Ringer", assertIs<PlanningCenterClient.PersonOutcome.Success>(outcome).person.displayName)
     }
@@ -173,7 +168,7 @@ class PlanningCenterClientNetworkTest {
     fun `the connected person falls back to a generic label when no name field is present at all`() {
         respondWith("""{"data":{"id":"1","attributes":{}}}""")
 
-        val outcome = runBlocking { PlanningCenterClient.getCurrentPerson("tok") }
+        val outcome = runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) }
 
         assertEquals(
             "Connected",
@@ -186,7 +181,7 @@ class PlanningCenterClientNetworkTest {
     fun `the access token travels as a bearer header`() {
         respondWith("""{"data":{"id":"1","attributes":{"name":"Pat"}}}""")
 
-        runBlocking { PlanningCenterClient.getCurrentPerson("secret-token") }
+        runBlocking { PlanningCenterClient.getCurrentPerson("secret-token", http = http) }
 
         assertEquals("Bearer secret-token", requests.single().headers[HttpHeaders.Authorization])
     }
@@ -196,13 +191,13 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.PersonOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.getCurrentPerson("tok") },
+            runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) },
         )
 
         respondWith("""{}""", HttpStatusCode.Forbidden)
         assertEquals(
             PlanningCenterClient.PersonOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.getCurrentPerson("tok") },
+            runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) },
         )
     }
 
@@ -211,7 +206,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.PersonOutcome.Failure,
-            runBlocking { PlanningCenterClient.getCurrentPerson("tok") },
+            runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) },
         )
     }
 
@@ -220,7 +215,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.PersonOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.getCurrentPerson("tok") },
+            runBlocking { PlanningCenterClient.getCurrentPerson("tok", http = http) },
         )
     }
 
@@ -234,7 +229,7 @@ class PlanningCenterClientNetworkTest {
                 {"id":"2","attributes":{"name":"Youth Service"}}]}""",
         )
 
-        val outcome = runBlocking { PlanningCenterClient.listServiceTypes("tok") }
+        val outcome = runBlocking { PlanningCenterClient.listServiceTypes("tok", http = http) }
 
         assertEquals(
             listOf(
@@ -251,7 +246,7 @@ class PlanningCenterClientNetworkTest {
 
         assertTrue(
             assertIs<PlanningCenterClient.ServiceTypesOutcome.Success>(
-                runBlocking { PlanningCenterClient.listServiceTypes("tok") },
+                runBlocking { PlanningCenterClient.listServiceTypes("tok", http = http) },
             ).serviceTypes.isEmpty(),
         )
     }
@@ -261,7 +256,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.ServiceTypesOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.listServiceTypes("tok") },
+            runBlocking { PlanningCenterClient.listServiceTypes("tok", http = http) },
         )
     }
 
@@ -270,7 +265,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.ServiceTypesOutcome.Failure,
-            runBlocking { PlanningCenterClient.listServiceTypes("tok") },
+            runBlocking { PlanningCenterClient.listServiceTypes("tok", http = http) },
         )
     }
 
@@ -279,7 +274,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.ServiceTypesOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.listServiceTypes("tok") },
+            runBlocking { PlanningCenterClient.listServiceTypes("tok", http = http) },
         )
     }
 
@@ -290,7 +285,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":[{"id":"9","attributes":{"title":"Easter Sunday","dates":"April 12, 2026","series_title":"Easter"}}]}""")
 
         val plans = assertIs<PlanningCenterClient.PlansOutcome.Success>(
-            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1") },
+            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1", http = http) },
         ).plans
 
         assertEquals(PlanningCenterClient.Plan("9", "Easter Sunday", "April 12, 2026"), plans.single())
@@ -301,7 +296,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":[{"id":"9","attributes":{"title":"","series_title":"Easter","dates":""}}]}""")
 
         val plan = assertIs<PlanningCenterClient.PlansOutcome.Success>(
-            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1") },
+            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1", http = http) },
         ).plans.single()
 
         assertEquals("Easter", plan.title, "a blank per-plan title is common; the series still names it")
@@ -312,7 +307,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":[{"id":"9","attributes":{}}]}""")
 
         val plan = assertIs<PlanningCenterClient.PlansOutcome.Success>(
-            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1") },
+            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1", http = http) },
         ).plans.single()
 
         assertEquals("Untitled Plan", plan.title)
@@ -323,7 +318,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.PlansOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1") },
+            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1", http = http) },
         )
     }
 
@@ -332,7 +327,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.PlansOutcome.Failure,
-            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1") },
+            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1", http = http) },
         )
     }
 
@@ -341,7 +336,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.PlansOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1") },
+            runBlocking { PlanningCenterClient.listUpcomingPlans("tok", "svc-1", http = http) },
         )
     }
 
@@ -367,7 +362,7 @@ class PlanningCenterClientNetworkTest {
         )
 
         val item = assertIs<PlanningCenterClient.PlanItemsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         ).items.single()
 
         assertEquals("item-1", item.id)
@@ -393,7 +388,7 @@ class PlanningCenterClientNetworkTest {
         )
 
         val items = assertIs<PlanningCenterClient.PlanItemsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         ).items
 
         assertEquals(listOf("a", "b"), items.map { it.id })
@@ -404,7 +399,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":[{"id":"h1","attributes":{"title":"Welcome"}}],"included":[]}""")
 
         val item = assertIs<PlanningCenterClient.PlanItemsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         ).items.single()
 
         assertEquals("item", item.itemType, "PCO omits item_type for generic items")
@@ -424,7 +419,7 @@ class PlanningCenterClientNetworkTest {
         )
 
         val item = assertIs<PlanningCenterClient.PlanItemsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         ).items.single()
 
         assertEquals("song-missing", item.songId, "the relationship itself is still recorded")
@@ -436,7 +431,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.PlanItemsOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         )
     }
 
@@ -445,7 +440,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.PlanItemsOutcome.Failure,
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         )
     }
 
@@ -454,7 +449,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.PlanItemsOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1") },
+            runBlocking { PlanningCenterClient.getPlanItems("tok", "svc-1", "plan-1", http = http) },
         )
     }
 
@@ -467,7 +462,7 @@ class PlanningCenterClientNetworkTest {
         )
 
         val detail = assertIs<PlanningCenterClient.ArrangementOutcome.Success>(
-            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1") },
+            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1", http = http) },
         ).detail
 
         assertEquals("[G]Amazing [C]grace", detail.chordChart)
@@ -479,7 +474,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":{"attributes":{"chord_chart":"[G]Amazing [C]grace","lyrics":""}}}""")
 
         val detail = assertIs<PlanningCenterClient.ArrangementOutcome.Success>(
-            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1") },
+            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1", http = http) },
         ).detail
 
         assertEquals(PlanningCenterLyricsFormatter.stripChords("[G]Amazing [C]grace"), detail.lyrics)
@@ -490,7 +485,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":{"attributes":{"chord_chart":"[G]Amazing [C]grace"}}}""")
 
         val detail = assertIs<PlanningCenterClient.ArrangementOutcome.Success>(
-            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1") },
+            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1", http = http) },
         ).detail
 
         assertEquals("Amazing grace", detail.lyrics)
@@ -501,7 +496,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.ArrangementOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1") },
+            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1", http = http) },
         )
     }
 
@@ -510,7 +505,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.ArrangementOutcome.Failure,
-            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1") },
+            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1", http = http) },
         )
     }
 
@@ -519,7 +514,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.ArrangementOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1") },
+            runBlocking { PlanningCenterClient.getArrangementDetail("tok", "song-1", "arr-1", http = http) },
         )
     }
 
@@ -532,7 +527,7 @@ class PlanningCenterClientNetworkTest {
         )
 
         val attachment = assertIs<PlanningCenterClient.AttachmentsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1") },
+            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1", http = http) },
         ).attachments.single()
 
         assertEquals(PlanningCenterClient.PlanAttachment("att-1", "slides.pdf", "https://s3/thumb.jpg"), attachment)
@@ -543,7 +538,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{"data":[{"id":"att-1","attributes":{"filename":"slides.pdf"}}]}""")
 
         val attachment = assertIs<PlanningCenterClient.AttachmentsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1") },
+            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1", http = http) },
         ).attachments.single()
 
         assertNull(attachment.thumbnailUrl)
@@ -558,7 +553,7 @@ class PlanningCenterClientNetworkTest {
         )
 
         val attachments = assertIs<PlanningCenterClient.AttachmentsOutcome.Success>(
-            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1") },
+            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1", http = http) },
         ).attachments
 
         assertEquals(listOf("att-2"), attachments.map { it.id })
@@ -569,7 +564,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.AttachmentsOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1") },
+            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1", http = http) },
         )
     }
 
@@ -578,7 +573,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.AttachmentsOutcome.Failure,
-            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1") },
+            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1", http = http) },
         )
     }
 
@@ -587,7 +582,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.AttachmentsOutcome.NetworkError,
-            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1") },
+            runBlocking { PlanningCenterClient.getItemAttachments("tok", "svc-1", "plan-1", "item-1", http = http) },
         )
     }
 
@@ -597,7 +592,7 @@ class PlanningCenterClientNetworkTest {
     fun `an attachment open resolves to its download url`() {
         respondWith("""{"data":{"attributes":{"attachment_url":"https://s3/signed-link"}}}""")
 
-        val outcome = runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1") }
+        val outcome = runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1", http = http) }
 
         assertEquals("https://s3/signed-link", assertIs<PlanningCenterClient.AttachmentUrlOutcome.Success>(outcome).url)
     }
@@ -608,7 +603,7 @@ class PlanningCenterClientNetworkTest {
 
         assertEquals(
             PlanningCenterClient.AttachmentUrlOutcome.Failure,
-            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1") },
+            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1", http = http) },
         )
     }
 
@@ -617,7 +612,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.Unauthorized)
         assertEquals(
             PlanningCenterClient.AttachmentUrlOutcome.Unauthorized,
-            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1") },
+            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1", http = http) },
         )
     }
 
@@ -626,7 +621,7 @@ class PlanningCenterClientNetworkTest {
         respondWith("""{}""", HttpStatusCode.InternalServerError)
         assertEquals(
             PlanningCenterClient.AttachmentUrlOutcome.Failure,
-            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1") },
+            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1", http = http) },
         )
     }
 
@@ -637,7 +632,7 @@ class PlanningCenterClientNetworkTest {
         failToConnect()
         assertEquals(
             PlanningCenterClient.AttachmentUrlOutcome.Failure,
-            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1") },
+            runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1", http = http) },
         )
     }
 
@@ -645,7 +640,7 @@ class PlanningCenterClientNetworkTest {
     fun `opening an attachment is a post, not a get`() {
         respondWith("""{"data":{"attributes":{"attachment_url":"https://s3/link"}}}""")
 
-        runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1") }
+        runBlocking { PlanningCenterClient.resolveAttachmentDownloadUrl("tok", "att-1", http = http) }
 
         assertEquals(HttpMethod.Post, requests.single().method)
     }

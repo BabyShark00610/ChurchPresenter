@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  *
  * The rest of this client (token exchange, the Services API, downloads) talks to
  * `api.planningcenteronline.com` with hard-coded URLs, so it is exercised here through
- * [PlanningCenterClient.httpOverride] instead — see [PlanningCenterClientNetworkTest] and
+ * a `MockEngine` passed to the call instead — see [PlanningCenterClientNetworkTest] and
  * [PlanningCenterDownloadTest]. The import flow that consumes all of it end to end is covered by
  * [org.churchpresenter.app.churchpresenter.viewmodel.PlanningCenterImportViewModelTest].
  */
