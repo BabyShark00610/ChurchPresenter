@@ -1,0 +1,148 @@
+package org.churchpresenter.app.churchpresenter.data
+
+import converter.XmlToSpbConverter
+import io.ktor.client.HttpClient
+import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import java.io.File
+
+/**
+ * The Zefania XML archive: a preservation mirror of the SourceForge Zefania project.
+ *
+ * Smaller and less consistently licensed than [EBibleSource], but it carries translations eBible
+ * doesn't, so it stays on offer as a second tab. Each module is one XML file inside a zip, and the
+ * copyright is only visible once that file has been parsed — which is why it is reported after the
+ * install rather than in the list.
+ */
+object ZefaniaSource : BibleSource {
+
+    override val sourceId = BibleSourceId.ZEFANIA
+
+    override suspend fun catalog(nowMillis: Long): BibleCatalogOutcome =
+        when (val outcome = ZefaniaRepositoryIndex.fetch(nowMillis = nowMillis)) {
+            is ZefaniaRepositoryIndex.IndexOutcome.Success ->
+                BibleCatalogOutcome.Success(outcome.index.modules.map { it.toBibleModule() }, outcome.stale)
+            is ZefaniaRepositoryIndex.IndexOutcome.RateLimited ->
+                BibleCatalogOutcome.RateLimited(outcome.resetEpochSeconds)
+            ZefaniaRepositoryIndex.IndexOutcome.NetworkError -> BibleCatalogOutcome.NetworkError
+            ZefaniaRepositoryIndex.IndexOutcome.Failure -> BibleCatalogOutcome.Failure
+        }
+
+    private fun ZefaniaRepositoryIndex.Module.toBibleModule() = BibleModule(
+        sourceId = BibleSourceId.ZEFANIA,
+        downloadKey = path,
+        checksum = blobSha,
+        sizeBytes = sizeBytes,
+        language = language,
+        identifier = identifier,
+        displayName = displayName,
+        releaseDate = releaseDate,
+        fileStem = fileStem
+    )
+
+    override suspend fun install(
+        module: BibleModule,
+        targetDir: File,
+        onProgress: (InstallProgress) -> Unit,
+    ): BibleInstallOutcome = installZefania(module, targetDir, BibleInstallSupport.defaultHttp, onProgress)
+
+    internal suspend fun installZefania(
+        module: BibleModule,
+        targetDir: File,
+        http: HttpClient,
+        onProgress: (InstallProgress) -> Unit,
+    ): BibleInstallOutcome {
+        if (!BibleInstallSupport.usableDirectory(targetDir)) return BibleInstallOutcome.NoDirectory
+
+        val scratch = BibleInstallSupport.scratchIn(targetDir)
+        try {
+            scratch.deleteRecursively()
+            scratch.mkdirs()
+            val zipFile = File(scratch, "module.zip")
+            val spbPart = File(scratch, module.fileName)
+
+            val result = try {
+                BibleInstallSupport.downloadTo(
+                    url = ZefaniaRepositoryIndex.rawUrlFor(module.downloadKey),
+                    destination = zipFile,
+                    http = http,
+                    expectedBytes = module.sizeBytes,
+                ) { onProgress(InstallProgress(InstallPhase.DOWNLOADING, it)) }
+            } catch (e: Exception) {
+                CrashReporter.reportWarning(
+                    "Zefania download failed (${module.fileStem})",
+                    throwable = e,
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return BibleInstallOutcome.NetworkError
+            }
+
+            if (result.status !in 200..299) {
+                CrashReporter.reportWarning(
+                    "Zefania download returned HTTP ${result.status} (${module.fileStem})",
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return BibleInstallOutcome.HttpError(result.status)
+            }
+            if (module.sizeBytes > 0 && result.bytesWritten != module.sizeBytes) {
+                return BibleInstallOutcome.ChecksumMismatch
+            }
+            // The git blob hash comes free with the tree listing, so integrity is checked end to
+            // end without the archive publishing a checksum of its own. It also rejects the two
+            // bodies a file host hands back instead of a module — a 404 page and an LFS pointer.
+            if (module.checksum.isNotBlank() &&
+                !BibleInstallSupport.gitBlobSha1(zipFile).equals(module.checksum, ignoreCase = true)
+            ) {
+                return BibleInstallOutcome.ChecksumMismatch
+            }
+
+            onProgress(InstallProgress(InstallPhase.EXTRACTING, BibleInstallSupport.DOWNLOAD_END))
+            val xmlFile = BibleInstallSupport
+                .extractEntries(zipFile, scratch) { it.endsWith(".xml", ignoreCase = true) }
+                .values.maxByOrNull { it.length() }
+                ?: return BibleInstallOutcome.CorruptArchive
+            onProgress(InstallProgress(InstallPhase.EXTRACTING, BibleInstallSupport.EXTRACT_END))
+
+            val parsed = try {
+                XmlToSpbConverter.parse(xmlFile)
+            } catch (e: Exception) {
+                CrashReporter.reportWarning(
+                    "Zefania module could not be parsed (${module.fileStem})",
+                    throwable = e,
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return BibleInstallOutcome.ConversionFailed
+            }
+            if (parsed.books.isEmpty() || parsed.books.sumOf { b -> b.chapters.sumOf { it.verses.size } } == 0) {
+                return BibleInstallOutcome.ConversionFailed
+            }
+
+            XmlToSpbConverter.write(parsed, spbPart) { fraction ->
+                onProgress(
+                    InstallProgress(
+                        InstallPhase.CONVERTING,
+                        BibleInstallSupport.EXTRACT_END +
+                            (BibleInstallSupport.CONVERT_END - BibleInstallSupport.EXTRACT_END) * fraction
+                    )
+                )
+            }
+            if (!BibleInstallSupport.looksLikeModule(spbPart)) return BibleInstallOutcome.ConversionFailed
+
+            onProgress(InstallProgress(InstallPhase.INSTALLING, BibleInstallSupport.CONVERT_END))
+            val destination = File(targetDir, module.fileName)
+            try {
+                BibleInstallSupport.moveIntoPlace(spbPart, destination)
+            } catch (e: Exception) {
+                CrashReporter.reportWarning(
+                    "Could not write Bible into place (${module.fileStem})",
+                    throwable = e,
+                    tags = mapOf("subsystem" to "bible_install", "module" to module.fileStem)
+                )
+                return BibleInstallOutcome.WriteFailed
+            }
+            onProgress(InstallProgress(InstallPhase.INSTALLING, 1f))
+            return BibleInstallOutcome.Success(destination, parsed.name, parsed.books.size, parsed.rights)
+        } finally {
+            scratch.deleteRecursively()
+        }
+    }
+}

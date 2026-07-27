@@ -161,6 +161,10 @@ object Constants {
     const val LANGUAGE_INTERFACE = "Interface"
     const val LANGUAGE_DATABASE = "Database"
 
+    // Default Bible storage folder, relative to the user's home directory. Seeded on first run
+    // and used as the fallback target when a download is started before a folder has been picked.
+    const val DEFAULT_BIBLES_DIR = ".churchpresenter/Bibles"
+
     // File Extensions
     const val EXTENSION_SPS = "sps"
     const val EXTENSION_SPB = "spb"

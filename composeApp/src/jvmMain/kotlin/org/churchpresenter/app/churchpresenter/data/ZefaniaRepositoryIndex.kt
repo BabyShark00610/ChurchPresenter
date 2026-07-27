@@ -1,0 +1,327 @@
+package org.churchpresenter.app.churchpresenter.data
+
+import converter.BibleCatalogNaming
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import java.io.File
+import java.net.URLEncoder
+
+/**
+ * Lists the Bible modules available in the Zefania XML archive.
+ *
+ * The archive stores each translation as a zip whose name carries everything the browse list needs
+ * — `SF_<date>_<LANG>_<IDENTIFIER>_(<Display Name>).zip` — so a single call to the repository's git
+ * tree yields the entire catalogue, with sizes, and **nothing is downloaded until the user picks a
+ * translation**. There is deliberately no manifest to maintain: the repository's own tree is the
+ * source of truth, which is what keeps this from drifting the way a hand-curated index would.
+ */
+object ZefaniaRepositoryIndex {
+
+    const val OWNER = "ChurchPresenter"
+    const val REPO = "Zefania-XML-Preservation"
+    const val BRANCH = "main"
+
+    /** Bible modules live here; the sibling `Dictionaries/` tree is a different format and is excluded. */
+    const val BIBLES_PREFIX = "zefania-sharp-sourceforge-backup/Bibles/"
+
+    /** One row of the browse list, derived entirely from the tree listing. */
+    data class Module(
+        val path: String,
+        val blobSha: String,
+        val sizeBytes: Long,
+        val language: String,
+        val identifier: String,
+        val displayName: String,
+        /**
+         * When this conversion was published. Shown only where it disambiguates: the archive
+         * carries a dozen or so translations twice under the same name, an older and a newer
+         * conversion of the same text.
+         */
+        val releaseDate: String,
+        val fileStem: String
+    ) {
+        val fileName: String get() = "$fileStem.${Constants.EXTENSION_SPB}"
+    }
+
+    data class Index(val modules: List<Module>, val etag: String = "")
+
+    sealed interface IndexOutcome {
+        /** [stale] means this came from the on-disk copy because the archive was unreachable. */
+        data class Success(val index: Index, val stale: Boolean = false) : IndexOutcome
+        /** GitHub is refusing unauthenticated requests for now; [resetEpochSeconds] says until when. */
+        data class RateLimited(val resetEpochSeconds: Long?) : IndexOutcome
+        data object NetworkError : IndexOutcome
+        data object Failure : IndexOutcome
+    }
+
+    // --- tree DTOs ---
+
+    @Serializable
+    internal data class TreeEntry(
+        val path: String = "",
+        val type: String = "",
+        val sha: String = "",
+        val size: Long = 0
+    )
+
+    @Serializable
+    internal data class TreeResponse(
+        val tree: List<TreeEntry> = emptyList(),
+        val truncated: Boolean = false
+    )
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private val defaultHttp by lazy {
+        HttpClient(CIO) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30_000
+                connectTimeoutMillis = 8_000
+            }
+        }
+    }
+
+    private val defaultCacheFile = File(System.getProperty("user.home"), ".churchpresenter/cache/zefania-index.json")
+
+    /**
+     * The archive is a preservation project, not a feed — it changes a few times a year. A long TTL
+     * is what keeps a church's shared IP inside GitHub's 60-requests-per-hour unauthenticated limit.
+     */
+    private const val CACHE_TTL_MILLIS = 7L * 24 * 60 * 60 * 1000
+
+    /**
+     * `SF_2009-01-20_ENG_ACV_(A CONSERVATIVE VERSION).zip` and its many near-misses.
+     *
+     * Deliberately loose, because the archive's names are not as regular as they first look: dates
+     * are occasionally underscore-separated, the language token is sometimes a whole word
+     * (`DEUTSCH`), a few modules have no parenthesised title at all, and non-ASCII characters have
+     * been replaced by underscores in the file names themselves (`ČSP` survives only as `_SP`) —
+     * so the identifier cannot be "everything up to the first underscore". As written this matches
+     * all 264 modules currently published; anything it still misses falls through to the lenient
+     * path rather than disappearing from the list.
+     */
+    private val NAME_REGEX = Regex(
+        """^SF_(\d{4}[-_]\d{2}[-_]\d{2})_([A-Za-z]{2,8})_(.+?)(?:_\((.*)\))?\.zip$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    @Volatile
+    private var memoryCache: Pair<Long, Index>? = null
+
+    /** `-Dchurchpresenter.zefaniaTreeUrl=` points at a staging archive. For testing, not a setting. */
+    internal fun treeUrl(): String =
+        System.getProperty("churchpresenter.zefaniaTreeUrl")?.takeIf { it.isNotBlank() }
+            ?: "https://api.github.com/repos/$OWNER/$REPO/git/trees/$BRANCH?recursive=1"
+
+    internal fun rawBase(): String =
+        System.getProperty("churchpresenter.zefaniaRawBase")?.takeIf { it.isNotBlank() }
+            ?: "https://raw.githubusercontent.com/$OWNER/$REPO/$BRANCH"
+
+    fun rawUrlFor(path: String): String = rawBase().trimEnd('/') + "/" + encodePath(path)
+
+    /** Percent-encodes each segment; the archive's paths are full of spaces and parentheses. */
+    internal fun encodePath(path: String): String =
+        path.split("/").joinToString("/") { segment ->
+            URLEncoder.encode(segment, "UTF-8").replace("+", "%20")
+        }
+
+    internal fun clearMemoryCache() {
+        memoryCache = null
+    }
+
+    suspend fun fetch(
+        url: String = treeUrl(),
+        http: HttpClient = defaultHttp,
+        cacheFile: File = defaultCacheFile,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): IndexOutcome = withContext(Dispatchers.IO) {
+        memoryCache?.let { (fetchedAt, index) ->
+            if (nowMillis - fetchedAt < CACHE_TTL_MILLIS) return@withContext IndexOutcome.Success(index)
+        }
+
+        val cached = readCache(cacheFile)
+        val cachedAt = readMeta(cacheFile).first
+        if (cached != null && nowMillis - cachedAt < CACHE_TTL_MILLIS) {
+            memoryCache = nowMillis to cached
+            return@withContext IndexOutcome.Success(cached)
+        }
+
+        try {
+            val response = http.get(url) {
+                header("Accept", "application/vnd.github+json")
+                header("X-GitHub-Api-Version", "2022-11-28")
+                header("User-Agent", "ChurchPresenter")
+                // A 304 does not count against the rate limit, so a returning user spends no quota.
+                if (cached != null && cached.etag.isNotBlank()) header("If-None-Match", cached.etag)
+            }
+
+            if (response.status.value == 304 && cached != null) {
+                writeMeta(cacheFile, nowMillis, cached.etag)
+                memoryCache = nowMillis to cached
+                return@withContext IndexOutcome.Success(cached)
+            }
+
+            if (response.status.value == 403 && response.headers["x-ratelimit-remaining"] == "0") {
+                val reset = response.headers["x-ratelimit-reset"]?.toLongOrNull()
+                return@withContext cached
+                    ?.let { IndexOutcome.Success(it, stale = true) }
+                    ?: IndexOutcome.RateLimited(reset)
+            }
+
+            if (response.status.value !in 200..299) {
+                CrashReporter.reportWarning(
+                    "Zefania index fetch returned HTTP ${response.status.value}",
+                    tags = mapOf("subsystem" to "zefania_index")
+                )
+                return@withContext cached?.let { IndexOutcome.Success(it, stale = true) } ?: IndexOutcome.Failure
+            }
+
+            val body = response.body<String>()
+            val etag = response.headers["ETag"].orEmpty()
+            when (val parsed = parseIndex(body, etag)) {
+                is IndexOutcome.Success -> {
+                    memoryCache = nowMillis to parsed.index
+                    runCatching {
+                        cacheFile.parentFile?.mkdirs()
+                        cacheFile.writeText(body)
+                        writeMeta(cacheFile, nowMillis, etag)
+                    }
+                    parsed
+                }
+                else -> parsed
+            }
+        } catch (e: Exception) {
+            CrashReporter.reportWarning(
+                "Zefania index fetch failed",
+                throwable = e,
+                tags = mapOf("subsystem" to "zefania_index")
+            )
+            // An offline hall still sees the list it saw last time; the failure then surfaces on the
+            // install, which is far more useful than an empty dialog.
+            cached?.let { IndexOutcome.Success(it, stale = true) } ?: IndexOutcome.NetworkError
+        }
+    }
+
+    /** Parses a git-tree response body. Pure — this is where nearly all the behaviour lives. */
+    internal fun parseIndex(body: String, etag: String = ""): IndexOutcome = try {
+        val response = json.decodeFromString(TreeResponse.serializer(), body)
+        if (response.truncated) {
+            // A partial list rendered as if complete would silently hide translations.
+            CrashReporter.reportWarning(
+                "Zefania index was truncated by the API",
+                tags = mapOf("subsystem" to "zefania_index")
+            )
+            IndexOutcome.Failure
+        } else {
+            IndexOutcome.Success(Index(parseTree(response.tree), etag))
+        }
+    } catch (e: Exception) {
+        CrashReporter.reportWarning(
+            "Zefania index could not be parsed",
+            throwable = e,
+            tags = mapOf("subsystem" to "zefania_index")
+        )
+        IndexOutcome.Failure
+    }
+
+    /**
+     * Turns tree entries into browse rows.
+     *
+     * Sorted by path and deduplicated in that fixed order, so every machine derives the same stem
+     * for the same module. That determinism is what lets the dialog show "Installed" by comparing
+     * against the files on disk, with nothing pinned anywhere.
+     */
+    internal fun parseTree(entries: List<TreeEntry>): List<Module> {
+        val taken = mutableSetOf<String>()
+        return entries
+            .asSequence()
+            .filter { it.type == "blob" && it.path.startsWith(BIBLES_PREFIX) && it.path.endsWith(".zip", ignoreCase = true) }
+            .sortedBy { it.path }
+            .mapNotNull { entry ->
+                val module = parseEntry(entry) ?: return@mapNotNull null
+                val stem = BibleCatalogNaming.deduplicate(module.fileStem, taken)
+                taken.add(stem)
+                module.copy(fileStem = stem)
+            }
+            .toList()
+    }
+
+    /**
+     * Language comes from the **directory**, not the file name: the directory is how the archive is
+     * curated, and a handful of modules disagree with their own file name.
+     */
+    internal fun parseEntry(entry: TreeEntry): Module? {
+        val relative = entry.path.removePrefix(BIBLES_PREFIX)
+        val language = relative.substringBefore('/', "").trim().uppercase()
+        if (language.isEmpty() || !relative.contains('/')) return null
+
+        val fileName = entry.path.substringAfterLast('/')
+        val match = NAME_REGEX.matchEntire(fileName)
+
+        val identifier: String
+        val displayName: String
+        val releaseDate: String
+        if (match != null) {
+            // A few are underscore-separated; normalise so the two shapes render alike.
+            releaseDate = match.groupValues[1].replace('_', '-')
+            identifier = match.groupValues[3]
+            // A handful of modules carry no parenthesised title; the identifier is all there is.
+            displayName = match.groupValues[4].ifBlank { identifier }.replace('_', ' ').trim()
+        } else {
+            // Never drop a module just because its name doesn't follow the convention — fall back
+            // to something usable rather than making a translation invisible.
+            releaseDate = ""
+            identifier = fileName.removeSuffix(".zip").substringAfterLast('_')
+            displayName = fileName.removeSuffix(".zip").replace('_', ' ').trim()
+        }
+
+        return Module(
+            path = entry.path,
+            blobSha = entry.sha,
+            sizeBytes = entry.size,
+            language = language,
+            identifier = identifier,
+            displayName = displayName.ifBlank { fileName.removeSuffix(".zip") },
+            releaseDate = releaseDate,
+            fileStem = BibleCatalogNaming.fileStem(language, identifier)
+        )
+    }
+
+    private fun readCache(cacheFile: File): Index? {
+        if (!cacheFile.isFile) return null
+        val body = runCatching { cacheFile.readText() }.getOrNull() ?: return null
+        return (parseIndex(body, readMeta(cacheFile).second) as? IndexOutcome.Success)?.index
+    }
+
+    private fun metaFile(cacheFile: File) = File(cacheFile.parentFile, cacheFile.name + ".meta")
+
+    /**
+     * When the listing was fetched, and its ETag.
+     *
+     * Kept beside the cache rather than read from the file's timestamp: a copied user profile, a
+     * restored backup or a sync tool all rewrite mtimes, and any of those would silently make a
+     * years-old listing look current.
+     */
+    private fun readMeta(cacheFile: File): Pair<Long, String> {
+        val text = runCatching { metaFile(cacheFile).readText() }.getOrNull() ?: return 0L to ""
+        val fetchedAt = text.substringBefore('\n').trim().toLongOrNull() ?: 0L
+        return fetchedAt to text.substringAfter('\n', "").trim()
+    }
+
+    private fun writeMeta(cacheFile: File, fetchedAt: Long, etag: String) {
+        runCatching {
+            cacheFile.parentFile?.mkdirs()
+            metaFile(cacheFile).writeText("$fetchedAt\n$etag")
+        }
+    }
+}

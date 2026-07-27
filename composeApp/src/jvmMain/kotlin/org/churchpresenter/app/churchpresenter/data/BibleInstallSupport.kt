@@ -1,0 +1,167 @@
+package org.churchpresenter.app.churchpresenter.data
+
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.readAvailable
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+
+/**
+ * The mechanics every Bible source shares: fetch an archive, prove it arrived intact, unpack it,
+ * and put the finished module in place without ever endangering the one already installed.
+ *
+ * All of it runs in-JVM — the archives are zips and the converters are on our own classpath, so
+ * nothing shells out to an external tool.
+ */
+internal object BibleInstallSupport {
+
+    const val COPY_BUFFER_BYTES = 64 * 1024
+    private const val MAX_ARCHIVE_ENTRIES = 64
+    private const val MAX_EXTRACTED_BYTES = 256L * 1024 * 1024
+
+    // Phase boundaries, chosen so the bar's movement roughly matches where the time actually goes.
+    const val DOWNLOAD_END = 0.55f
+    const val EXTRACT_END = 0.60f
+    const val CONVERT_END = 0.97f
+
+    val defaultHttp: HttpClient by lazy {
+        HttpClient(CIO) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 300_000
+                connectTimeoutMillis = 8_000
+                socketTimeoutMillis = 60_000
+            }
+        }
+    }
+
+    /**
+     * A scratch directory inside the Bible folder — deliberately not the system temp dir, because
+     * the finishing move must be an atomic rename, which only works within one filesystem, and
+     * Bible folders are routinely on network shares or external drives.
+     */
+    fun scratchIn(targetDir: File): File = File(targetDir, ".cp-install")
+
+    fun usableDirectory(targetDir: File): Boolean =
+        (targetDir.exists() || targetDir.mkdirs()) && targetDir.isDirectory
+
+    /** Streams [url] to [destination], reporting 0..[DOWNLOAD_END]. Returns the HTTP status. */
+    suspend fun downloadTo(
+        url: String,
+        destination: File,
+        http: HttpClient,
+        expectedBytes: Long,
+        onProgress: (Float) -> Unit,
+    ): DownloadResult {
+        var written = 0L
+        // Announced before the first byte so the row names the phase even when the size is unknown
+        // — eBible's catalogue carries no size, so a server that omits Content-Length would
+        // otherwise leave the longest phase of the install completely silent.
+        onProgress(0f)
+        val status = http.prepareGet(url).execute { response ->
+            if (response.status.value !in 200..299) return@execute response.status.value
+            val expected = response.headers["Content-Length"]?.toLongOrNull()
+                ?: expectedBytes.takeIf { it > 0 }
+                ?: -1L
+            val channel = response.bodyAsChannel()
+            val buffer = ByteArray(COPY_BUFFER_BYTES)
+            FileOutputStream(destination).use { out ->
+                while (true) {
+                    val read = channel.readAvailable(buffer, 0, buffer.size)
+                    if (read <= 0) {
+                        if (read == -1) break else continue
+                    }
+                    out.write(buffer, 0, read)
+                    written += read
+                    if (expected > 0) onProgress((written.toFloat() / expected).coerceIn(0f, 1f) * DOWNLOAD_END)
+                }
+            }
+            response.status.value
+        }
+        return DownloadResult(status, written)
+    }
+
+    data class DownloadResult(val status: Int, val bytesWritten: Long)
+
+    /**
+     * Unpacks the entries [wanted] accepts into [into], keyed by entry name.
+     *
+     * Entry names are never used as paths — each file is written under a name derived from its
+     * position — so a crafted archive cannot write outside [into]. Entry count and total
+     * decompressed size are capped so a zip bomb fails instead of filling the disk.
+     */
+    fun extractEntries(zip: File, into: File, wanted: (String) -> Boolean): Map<String, File> = try {
+        ZipFile(zip).use { archive ->
+            val entries = archive.entries().asSequence().toList()
+            if (entries.size > MAX_ARCHIVE_ENTRIES) return emptyMap()
+            val result = mutableMapOf<String, File>()
+            var total = 0L
+            entries.filter { !it.isDirectory && wanted(it.name.substringAfterLast('/')) }
+                .forEachIndexed { index, entry ->
+                    val destination = File(into, "entry$index")
+                    archive.getInputStream(entry).use { input ->
+                        FileOutputStream(destination).use { out ->
+                            val buffer = ByteArray(COPY_BUFFER_BYTES)
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read <= 0) break
+                                total += read
+                                if (total > MAX_EXTRACTED_BYTES) return emptyMap()
+                                out.write(buffer, 0, read)
+                            }
+                        }
+                    }
+                    result[entry.name.substringAfterLast('/')] = destination
+                }
+            result
+        }
+    } catch (_: Exception) {
+        emptyMap()
+    }
+
+    /**
+     * Git's own object hash: `SHA1("blob <size>\0<content>")`, as the tree listing publishes it.
+     *
+     * The NUL is written as the escape `\u0000` below, never as a raw byte. A literal 0x00 in the
+     * source makes git treat this whole file as binary: no diff in review, no blame, no line-level
+     * merge, and `grep` skips it silently.
+     */
+    fun gitBlobSha1(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-1")
+        digest.update("blob ${file.length()}\u0000".toByteArray(Charsets.UTF_8))
+        file.inputStream().use { input ->
+            val buffer = ByteArray(COPY_BUFFER_BYTES)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** Every `.spb` opens with a `##` header line. */
+    fun looksLikeModule(file: File): Boolean = runCatching {
+        file.bufferedReader(Charsets.UTF_8).use { it.readLine() }?.startsWith("##") == true
+    }.getOrDefault(false)
+
+    fun moveIntoPlace(source: File, destination: File) {
+        try {
+            Files.move(
+                source.toPath(),
+                destination.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE
+            )
+        } catch (_: Exception) {
+            // Atomic moves aren't supported on every filesystem, notably some network shares.
+            Files.move(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+}
