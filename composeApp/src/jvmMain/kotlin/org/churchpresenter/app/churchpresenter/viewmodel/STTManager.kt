@@ -13,6 +13,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.churchpresenter.app.churchpresenter.utils.TrainingDataLogger
+import org.churchpresenter.app.churchpresenter.utils.stringOr
+import org.churchpresenter.app.churchpresenter.utils.stringOrNull
 import org.json.JSONObject
 import java.io.File
 import java.net.URI
@@ -242,8 +244,8 @@ class STTManager {
                 _segments.add(
                     STTSegment(
                         id = seg.optInt("id", i),
-                        timestamp = seg.optString("timestamp", ""),
-                        text = seg.optString("text", ""),
+                        timestamp = seg.stringOr("timestamp"),
+                        text = seg.stringOr("text"),
                         start = seg.optDouble("start", 0.0),
                         end = seg.optDouble("end", 0.0),
                         completed = seg.optBoolean("completed", true)
@@ -267,13 +269,13 @@ class STTManager {
             for (i in 0 until segmentsArray.length()) {
                 val seg = segmentsArray.getJSONObject(i)
                 // STT app sends "translated_text" for translation segments
-                val text = seg.optString("translated_text", "").ifBlank {
-                    seg.optString("text", "")
+                val text = seg.stringOr("translated_text").ifBlank {
+                    seg.stringOr("text")
                 }
                 _translationSegments.add(
                     STTSegment(
                         id = seg.optInt("id", i),
-                        timestamp = seg.optString("timestamp", ""),
+                        timestamp = seg.stringOr("timestamp"),
                         text = text,
                         start = seg.optDouble("start", 0.0),
                         end = seg.optDouble("end", 0.0),
@@ -286,13 +288,13 @@ class STTManager {
         // in_progress can be a string or a JSON object with "translated_text"
         val inProgress = data.opt("in_progress")
         _inProgressTranslation.value = when (inProgress) {
-            is JSONObject -> inProgress.optString("translated_text", "")
+            is JSONObject -> inProgress.stringOr("translated_text")
             is String -> inProgress
             null, JSONObject.NULL -> ""
             else -> inProgress.toString()
         }
 
-        _translationLanguage.value = data.optString("target_language_name", "")
+        _translationLanguage.value = data.stringOr("target_language_name")
     }
 
     private fun handleWordHighlightingUpdate(data: JSONObject) {
@@ -302,7 +304,7 @@ class STTManager {
         val disabledArray = data.optJSONArray("disabled_colors")
         if (disabledArray != null) {
             for (i in 0 until disabledArray.length()) {
-                disabledColors.add(disabledArray.optString(i, ""))
+                disabledColors.add(disabledArray.stringOr(i))
             }
         }
 
@@ -311,11 +313,11 @@ class STTManager {
         if (wordsArray != null) {
             for (i in 0 until wordsArray.length()) {
                 val w = wordsArray.getJSONObject(i)
-                val color = w.optString("color", "#ffff00")
+                val color = w.stringOr("color", "#ffff00")
                 if (color in disabledColors) continue
                 _highlightedWords.add(
                     HighlightedWord(
-                        word = w.optString("word", ""),
+                        word = w.stringOr("word"),
                         color = color,
                         caseSensitive = w.optBoolean("case_sensitive", false),
                         isRegex = w.optBoolean("is_regex", false)
@@ -341,7 +343,7 @@ class STTManager {
                     val disabledArray = json.optJSONArray("disabled_colors")
                     if (disabledArray != null) {
                         for (i in 0 until disabledArray.length()) {
-                            disabledColors.add(disabledArray.optString(i, ""))
+                            disabledColors.add(disabledArray.stringOr(i))
                         }
                     }
 
@@ -352,12 +354,12 @@ class STTManager {
                         if (wordsArray != null) {
                             for (i in 0 until wordsArray.length()) {
                                 val w = wordsArray.getJSONObject(i)
-                                val color = w.optString("color", "#ffff00")
+                                val color = w.stringOr("color", "#ffff00")
                                 // Skip words whose color group is disabled
                                 if (color in disabledColors) continue
                                 _highlightedWords.add(
                                     HighlightedWord(
-                                        word = w.optString("word", ""),
+                                        word = w.stringOr("word"),
                                         color = color,
                                         caseSensitive = w.optBoolean("case_sensitive", false),
                                         isRegex = w.optBoolean("is_regex", false)
@@ -406,7 +408,7 @@ class STTManager {
         val statusResponse = client.send(statusRequest, HttpResponse.BodyHandlers.ofString())
         if (statusResponse.statusCode() != 200) return
         val state = JSONObject(statusResponse.body()).optJSONObject("state") ?: return
-        val dbName = state.optString("db_name", "").takeIf { it.isNotBlank() } ?: return
+        val dbName = state.stringOrNull("db_name") ?: return
 
         val encodedPath = URLEncoder.encode(dbName, "UTF-8")
         val downloadRequest = HttpRequest.newBuilder()
