@@ -2017,6 +2017,8 @@
     <string name="bible_stt_src_chapter_history">Matched an earlier chapter</string>
     <string name="bible_stt_track_transcription">Heard in transcription</string>
     <string name="bible_stt_track_translation">Heard in translation</string>
+    <string name="bible_stt_detected_version_tooltip">The translation the speaker appears to be reading from, matched against every Bible in your folder. Informational only — the verse text shown still comes from your own Bible.</string>
+    <string name="bible_stt_flag_needs_live">Available once a verse is live — this flag describes the passage on screen</string>
     <string name="bible_stt_match_label">Text match</string>
     <string name="bible_stt_text_match_hint">Also affects overall detection confidence and how long a spoken book/chapter stays active — not just quoted-text matches</string>
     <string name="bible_stt_level_off">Off</string>

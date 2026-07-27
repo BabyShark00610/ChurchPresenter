@@ -550,7 +550,24 @@ fun MainDesktop(
     // Bible Lookup Engine client — feeds detected scripture into the Bible tab and forwards the
     // reverse-lookup level to the engine.
     val bibleEngineClient = remember {
-        BibleEngineClient(onScripture = bibleViewModel::onEngineScripture).also { client ->
+        BibleEngineClient(onScripture = { e ->
+            bibleViewModel.onEngineScripture(
+                bookId = e.bookId,
+                chapter = e.chapter,
+                verseStart = e.verseStart,
+                verseEnd = e.verseEnd,
+                verseText = e.verseText,
+                matchType = e.matchType,
+                canonicalCodeStart = e.canonicalCodeStart,
+                canonicalCodeEnd = e.canonicalCodeEnd,
+                segmentId = e.segmentId,
+                sessionId = e.sessionId,
+                tracks = e.tracks,
+                detectedVersion = e.detectedVersion,
+            )
+        }, onVersion = { version ->
+            bibleViewModel.onEngineVersion(version)
+        }).also { client ->
             bibleViewModel.onTextMatchLevelChanged = { level -> client.setLevel(level.name.lowercase()) }
             bibleViewModel.onContinuationSpeedChanged = { speed -> client.setContinuationSpeed(speed.name.lowercase()) }
         }

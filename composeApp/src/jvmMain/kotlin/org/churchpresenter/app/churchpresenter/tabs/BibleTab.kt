@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -161,6 +162,7 @@ import churchpresenter.composeapp.generated.resources.bible_stt_src_chapter_hist
 import churchpresenter.composeapp.generated.resources.bible_stt_text_match_hint
 import churchpresenter.composeapp.generated.resources.bible_stt_track_transcription
 import churchpresenter.composeapp.generated.resources.bible_stt_track_translation
+import churchpresenter.composeapp.generated.resources.bible_stt_detected_version_tooltip
 import churchpresenter.composeapp.generated.resources.bible_stt_match_label
 import churchpresenter.composeapp.generated.resources.bible_stt_level_off
 import churchpresenter.composeapp.generated.resources.bible_stt_level_conservative
@@ -177,6 +179,7 @@ import churchpresenter.composeapp.generated.resources.bible_stt_flag_premature
 import churchpresenter.composeapp.generated.resources.bible_stt_flag_premature_hint
 import churchpresenter.composeapp.generated.resources.bible_stt_flag_missed
 import churchpresenter.composeapp.generated.resources.bible_stt_flag_missed_hint
+import churchpresenter.composeapp.generated.resources.bible_stt_flag_needs_live
 import churchpresenter.composeapp.generated.resources.ic_close
 import churchpresenter.composeapp.generated.resources.ic_pause
 import churchpresenter.composeapp.generated.resources.ic_search
@@ -1039,6 +1042,11 @@ fun BibleTab(
                         icon = Icons.Filled.Flag,
                         label = stringResource(Res.string.bible_stt_flag_wrong),
                         tooltip = stringResource(Res.string.bible_stt_flag_wrong_hint),
+                        tint = MaterialTheme.colorScheme.error,
+                        // Both of these describe what went LIVE, so they mean nothing with an empty
+                        // output — and they used to swallow the click silently in that state.
+                        enabled = displayedVerses.isNotEmpty(),
+                        disabledTooltip = stringResource(Res.string.bible_stt_flag_needs_live),
                         onClick = {
                             val live = displayedVerses
                             if (live.isNotEmpty()) {
@@ -1057,6 +1065,9 @@ fun BibleTab(
                         icon = Icons.Filled.FastForward,
                         label = stringResource(Res.string.bible_stt_flag_premature),
                         tooltip = stringResource(Res.string.bible_stt_flag_premature_hint),
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        enabled = displayedVerses.isNotEmpty(),
+                        disabledTooltip = stringResource(Res.string.bible_stt_flag_needs_live),
                         onClick = {
                             val live = displayedVerses
                             if (live.isNotEmpty()) {
@@ -1075,6 +1086,8 @@ fun BibleTab(
                         icon = Icons.Filled.SearchOff,
                         label = stringResource(Res.string.bible_stt_flag_missed),
                         tooltip = stringResource(Res.string.bible_stt_flag_missed_hint),
+                        // Reports that the engine found nothing, so it needs nothing on screen.
+                        tint = MaterialTheme.colorScheme.secondary,
                         onClick = {
                             viewModel.logOperatorFlag(kind = "missed_passage")
                         }
@@ -1212,6 +1225,31 @@ fun BibleTab(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+                    // The translation the speaker appears to be READING, when the engine could tell.
+                    // Kept to the right, past the verse text, for two reasons: it arrives later than
+                    // the row (the engine needs a verse or two of reading to decide, then backfills),
+                    // and it is usually NOT one of the loaded Bibles — so it must not sit next to the
+                    // reference where it would read as the source of the text shown. The verse text
+                    // simply truncates a little earlier to make room.
+                    ref.detectedVersion?.let { version ->
+                        Spacer(Modifier.width(6.dp))
+                        TooltipArea(tooltip = {
+                            Surface(shadowElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Text(
+                                    text = stringResource(Res.string.bible_stt_detected_version_tooltip),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }) {
+                            Text(
+                                text = version,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
                 }
                 }
@@ -1873,26 +1911,74 @@ private fun LiveChapterPanel(
     }
 }
 
-/** Small flat pill button matching the auto-follow/text-match pills in the status row above. */
+/**
+ * Small flat pill button matching the auto-follow/text-match pills in the status row above.
+ *
+ * Coloured rather than muted, and it flashes when pressed, because pressing one has no other visible
+ * effect at all — it appends a line to a training log. Drawn in the muted palette with no press
+ * feedback, a working button was indistinguishable from a dead one, and an operator logged the same
+ * flag seven times in under two seconds trying to make it respond.
+ *
+ * [enabled] false keeps that muted look, drops the click, and lets the tooltip explain why — so grey
+ * means "not available right now" instead of being how every one of these buttons looks.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FlagPillButton(
     icon: ImageVector,
     label: String,
     tooltip: String,
+    tint: Color,
     onClick: () -> Unit,
+    enabled: Boolean = true,
+    disabledTooltip: String? = null,
 ) {
+    // Cleared by the LaunchedEffect below; a plain flag rather than a timestamp so nothing here
+    // depends on the wall clock.
+    var flashing by remember { mutableStateOf(false) }
+    LaunchedEffect(flashing) {
+        if (flashing) {
+            delay(FLAG_FLASH_MS)
+            flashing = false
+        }
+    }
+
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    val contentColor = when {
+        !enabled -> muted
+        flashing -> MaterialTheme.colorScheme.surface
+        else -> tint
+    }
+    val background = when {
+        flashing -> tint
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val borderColor = if (enabled) tint.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
+
     TooltipArea(tooltip = {
         Surface(shadowElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceVariant) {
-            Text(text = tooltip, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+            Text(
+                text = if (enabled) tooltip else (disabledTooltip ?: tooltip),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(8.dp)
+            )
         }
     }) {
         Box(
             modifier = Modifier
                 .height(27.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onClick)
+                .background(background, RoundedCornerShape(6.dp))
+                .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+                .then(
+                    if (!enabled) Modifier
+                    else Modifier.clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) {
+                        flashing = true
+                        onClick()
+                    }
+                )
                 .padding(horizontal = 8.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1901,12 +1987,12 @@ private fun FlagPillButton(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(11.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    tint = contentColor
                 )
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1914,6 +2000,9 @@ private fun FlagPillButton(
         }
     }
 }
+
+/** How long a flag pill stays filled after a click — long enough to notice, short enough not to nag. */
+private const val FLAG_FLASH_MS = 600L
 
 @Composable
 private fun BibleSearchField(

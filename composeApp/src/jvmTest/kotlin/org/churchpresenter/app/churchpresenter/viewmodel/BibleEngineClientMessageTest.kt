@@ -21,22 +21,8 @@ import kotlin.test.assertTrue
  */
 class BibleEngineClientMessageTest {
 
-    /** One [BibleEngineClient.onScripture] call, captured. */
-    private data class Detection(
-        val bookId: Int,
-        val chapter: Int,
-        val verseStart: Int,
-        val verseEnd: Int?,
-        val verseText: String,
-        val matchType: String,
-        val codeStart: String?,
-        val codeEnd: String?,
-        val segmentId: String?,
-        val sessionId: String?,
-        val tracks: List<String>,
-    )
-
-    private val detections = mutableListOf<Detection>()
+    private val detections = mutableListOf<EngineScripture>()
+    private val versions = mutableListOf<String?>()
     private val created = mutableListOf<BibleEngineClient>()
 
     @AfterTest
@@ -44,12 +30,14 @@ class BibleEngineClientMessageTest {
         created.forEach { runCatching { it.dispose() } }
         created.clear()
         detections.clear()
+        versions.clear()
     }
 
     private fun client(): BibleEngineClient =
-        BibleEngineClient { book, chapter, start, end, text, match, codeStart, codeEnd, segment, session, tracks ->
-            detections.add(Detection(book, chapter, start, end, text, match, codeStart, codeEnd, segment, session, tracks))
-        }.also { created.add(it) }
+        BibleEngineClient(
+            onScripture = { detections.add(it) },
+            onVersion = { versions.add(it) },
+        ).also { created.add(it) }
 
     /** Feeds [raw] through the private WebSocket message handler. */
     private fun BibleEngineClient.receive(raw: String) {
@@ -87,8 +75,8 @@ class BibleEngineClientMessageTest {
         assertEquals(18, d.verseEnd)
         assertEquals("For God so loved the world", d.verseText)
         assertEquals("explicit", d.matchType)
-        assertEquals("B043C003V016", d.codeStart)
-        assertEquals("B043C003V018", d.codeEnd)
+        assertEquals("B043C003V016", d.canonicalCodeStart)
+        assertEquals("B043C003V018", d.canonicalCodeEnd)
         assertEquals("seg-9", d.segmentId)
         assertEquals("service-2026-07-22", d.sessionId)
         assertEquals(listOf("transcription", "translation"), d.tracks)
@@ -210,16 +198,16 @@ class BibleEngineClientMessageTest {
     fun `missing canonical codes come through as null, not as empty strings`() {
         val c = client()
         c.receive(detection())
-        assertNull(detections.single().codeStart, "an empty code would be mistaken for a real one downstream")
-        assertNull(detections.single().codeEnd)
+        assertNull(detections.single().canonicalCodeStart, "an empty code would be mistaken for a real one downstream")
+        assertNull(detections.single().canonicalCodeEnd)
     }
 
     @Test
     fun `an empty canonical code is normalised to null`() {
         val c = client()
         c.receive(detection(reference = """{"bookId":43,"chapter":3,"verseStart":16,"canonicalCodeStart":"","canonicalCodeEnd":""}"""))
-        assertNull(detections.single().codeStart)
-        assertNull(detections.single().codeEnd)
+        assertNull(detections.single().canonicalCodeStart)
+        assertNull(detections.single().canonicalCodeEnd)
     }
 
     @Test
@@ -228,8 +216,8 @@ class BibleEngineClientMessageTest {
         c.receive(
             detection(reference = """{"bookId":43,"chapter":3,"verseStart":16,"canonicalCodeStart":"B043C003V016","canonicalCodeEnd":null}""")
         )
-        assertEquals("B043C003V016", detections.single().codeStart)
-        assertNull(detections.single().codeEnd)
+        assertEquals("B043C003V016", detections.single().canonicalCodeStart)
+        assertNull(detections.single().canonicalCodeEnd)
     }
 
     @Test
@@ -270,6 +258,68 @@ class BibleEngineClientMessageTest {
         val c = client()
         c.receive(detection(extra = """"tracks":[]"""))
         assertEquals(emptyList(), detections.single().tracks)
+    }
+
+    // ── Detected Bible version ──────────────────────────────────────────────────
+
+    @Test
+    fun `the version the speaker is reading is forwarded when the engine names one`() {
+        val c = client()
+        c.receive(detection(extra = """"detectedVersion":"NASB","detectedVersionId":"ENG_NASB","detectedVersionConfidence":0.72"""))
+        assertEquals("NASB", detections.single().detectedVersion)
+    }
+
+    @Test
+    fun `a detection from an older engine has no version fields`() {
+        // The engine ships separately; a build predating version detection sends none of these.
+        val c = client()
+        c.receive(detection())
+        assertNull(detections.single().detectedVersion)
+    }
+
+    @Test
+    fun `an undecided version comes through as null rather than an empty label`() {
+        // The engine reports nothing rather than guessing when the wording doesn't separate the
+        // candidates — that must not surface as a blank tag on the row.
+        val c = client()
+        c.receive(detection(extra = """"detectedVersion":null,"detectedVersionId":null,"detectedVersionConfidence":null"""))
+        c.receive(detection(type = "scripture.continuation", extra = "\"detectedVersion\":\"\",\"detectedVersionId\":\"\""))
+        assertEquals(2, detections.size)
+        assertTrue(detections.all { it.detectedVersion == null })
+    }
+
+    // ── The version being read (its own message) ────────────────────────────────
+
+    @Test
+    fun `the version being read arrives on its own message`() {
+        // Not carried on a scripture event: the engine settles it a verse or two into the reading,
+        // by which time the rows it describes are already on screen.
+        val c = client()
+        c.receive("""{"type":"version_detected","version":"NASB","versionId":"ENG_NASB","confidence":0.84}""")
+        assertEquals(listOf<String?>("NASB"), versions.toList())
+        assertTrue(detections.isEmpty(), "a version message is not a detection")
+    }
+
+    @Test
+    fun `an explicitly null version clears the answer`() {
+        val c = client()
+        c.receive("""{"type":"version_detected","version":"NASB","versionId":"ENG_NASB","confidence":0.84}""")
+        c.receive("""{"type":"version_detected","version":null,"versionId":null,"confidence":null}""")
+        assertEquals(listOf<String?>("NASB", null), versions.toList())
+    }
+
+    @Test
+    fun `an empty version reads as no answer`() {
+        val c = client()
+        c.receive("""{"type":"version_detected","version":""}""")
+        assertEquals(listOf<String?>(null), versions.toList(), "an empty label must not render as a blank tag")
+    }
+
+    @Test
+    fun `a version message with nothing in it is not mistaken for an answer`() {
+        val c = client()
+        c.receive("""{"type":"version_detected"}""")
+        assertEquals(listOf<String?>(null), versions.toList())
     }
 
     // ── Engine status ───────────────────────────────────────────────────────────

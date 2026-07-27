@@ -70,6 +70,10 @@ data class DetectedReference(
     val sources: Set<DetectionSource> = emptySet(),
     val tracks: Set<DetectionTrack> = emptySet(),   // STT track(s) corroborating — confidence markers
     val verseText: String? = null,   // verse text shown History-style on the row
+    // Which translation the engine believes is being READ ALOUD, scored across every bible in the
+    // folder — informational only. Deliberately NOT part of [key]: the verdict firms up mid-passage,
+    // and folding it into the identity would spawn a duplicate row for the same verse.
+    val detectedVersion: String? = null,
 )
 
 /** Label matching the engine's own matchType strings ("explicit"/"continuation"/"chapter-scan"/
@@ -1734,6 +1738,9 @@ class BibleViewModel(
      * Bible is primary or which language was spoken. Adds a row (de-duped, merging markers on repeats)
      * and, when auto-follow is on, navigates to a newly-added one. Safe to call from the engine
      * WebSocket coroutine.
+     *
+     * [detectedVersion] is which translation the engine believes is being *read aloud* — informational
+     * only; it never selects the Bible the text is taken from.
      */
     fun onEngineScripture(
         bookId: Int,
@@ -1747,6 +1754,7 @@ class BibleViewModel(
         segmentId: String? = null,
         sessionId: String? = null,
         tracks: List<String> = emptyList(),
+        detectedVersion: String? = null,
     ) {
         // Remember the STT segment behind the most recent detection so a subsequent go-live can stamp
         // it onto the live-references log — clock-free correlation back to the transcript + detection.
@@ -1803,6 +1811,7 @@ class BibleViewModel(
                 tracks = trackSet,
                 // Prefer the app's own primary-Bible text; fall back to the engine's matched text.
                 verseText = verseTextFor(bookIndex, dispChapter, dispVerseStart) ?: verseText.ifBlank { null },
+                detectedVersion = detectedVersion,
             )
         )
         if (added && _autoFollowEnabled.value) {
@@ -1856,9 +1865,16 @@ class BibleViewModel(
             // translation catches up to the transcript on the same reference.
             val mergedTracks = list[idx].tracks + ref.tracks
             val verseText = list[idx].verseText ?: ref.verseText
-            if (merged != list[idx].sources || mergedTracks != list[idx].tracks || verseText != list[idx].verseText) {
+            // Latest non-null wins, unlike verseText above: the version verdict only sharpens as more
+            // of the passage is read, so a later answer supersedes an earlier one.
+            val version = ref.detectedVersion ?: list[idx].detectedVersion
+            if (merged != list[idx].sources || mergedTracks != list[idx].tracks ||
+                verseText != list[idx].verseText || version != list[idx].detectedVersion) {
                 _detectedReferences.value = list.toMutableList().also {
-                    it[idx] = list[idx].copy(sources = merged, tracks = mergedTracks, verseText = verseText)
+                    it[idx] = list[idx].copy(
+                        sources = merged, tracks = mergedTracks,
+                        verseText = verseText, detectedVersion = version,
+                    )
                 }
             }
             return false
@@ -1946,6 +1962,24 @@ class BibleViewModel(
         if (_detectedReferences.value.isNotEmpty()) _detectedReferences.value = emptyList()
         recentDetectionKeys.clear()
         actedDetectionKeys.clear()
+    }
+
+    /**
+     * Applies the translation the engine says is being read aloud to the rows already listed.
+     *
+     * The backfill is the whole point: the answer takes a verse or two of reading to establish, so
+     * by the time it arrives the rows it describes are already on screen. Rows that carry a version
+     * of their own are left alone — those were stamped by the engine at the moment they fired.
+     *
+     * Nothing is held session-level, because nothing displays it: the answer lives on the rows.
+     */
+    fun onEngineVersion(version: String?) {
+        if (version == null) return
+        val list = _detectedReferences.value
+        if (list.none { it.detectedVersion == null }) return
+        _detectedReferences.value = list.map {
+            if (it.detectedVersion == null) it.copy(detectedVersion = version) else it
+        }
     }
 
     /** Verse text for the detection row (History-style display). Null for chapter-only references. */
