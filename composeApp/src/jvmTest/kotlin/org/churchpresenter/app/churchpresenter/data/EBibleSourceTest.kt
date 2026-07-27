@@ -156,6 +156,23 @@ class EBibleSourceTest {
     // --- CSV handling ---
 
     @Test
+    fun `a CRLF line ending is treated as a single line break`() {
+        // The catalogue is fetched over HTTP, not authored by hand, so a Windows-exported CSV
+        // reaching this parser is a real possibility, not a hypothetical.
+        assertEquals(listOf(listOf("a", "b"), listOf("1", "2")), Csv.parse("a,b\r\n1,2\r\n"))
+    }
+
+    @Test
+    fun `a bare carriage return is also treated as a line break`() {
+        assertEquals(listOf(listOf("a", "b"), listOf("1", "2")), Csv.parse("a,b\r1,2\r"))
+    }
+
+    @Test
+    fun `a blank line does not become an empty row`() {
+        assertEquals(listOf(listOf("a", "b"), listOf("1", "2")), Csv.parse("a,b\n\n1,2\n"))
+    }
+
+    @Test
     fun `a copyright containing commas and quotes survives parsing`() {
         // A quoted field, with commas inside it and an escaped quote — all of which appear in the
         // real catalogue, and any of which would derail a split on commas.
