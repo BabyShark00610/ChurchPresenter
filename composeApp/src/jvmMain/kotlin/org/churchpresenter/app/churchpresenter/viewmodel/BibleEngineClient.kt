@@ -29,22 +29,58 @@ import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import org.json.JSONObject
 
 /**
+ * One `scripture.*` event from the Bible Lookup Engine, decoded.
+ *
+ * A data class rather than a positional parameter list because the payload carries several adjacent
+ * nullable strings the compiler cannot tell apart — [canonicalCodeStart], [canonicalCodeEnd],
+ * [segmentId], [sessionId], [detectedVersion]. A transposition among them would compile cleanly and
+ * silently corrupt the training-log join keys.
+ *
+ * [canonicalCodeStart]/[canonicalCodeEnd] are the engine's numbering-independent internal codes
+ * (`BXXXCXXXVXXX`), forwarded so the CP side can land the reference in the primary Bible's own
+ * display numbering (book order + Psalm numbering). [segmentId] is the STT segment that triggered the
+ * detection (clock-free correlation key), or null when the STT stream didn't provide one. [sessionId]
+ * is the stable per-service session id from STT — the exact join key that ties the STT db, the engine
+ * detection-log and the CP live-references log, and keys the live-references filename. [tracks] is
+ * the subset of {"transcription","translation"} that corroborated the detection.
+ *
+ * [detectedVersion] is which translation the engine believes is being *read aloud* (a label such as
+ * "NASB", scored across every bible in the folder) — informational only, frequently not one of the
+ * two bibles CP has loaded, and never the source of [verseText].
+ */
+data class EngineScripture(
+    val bookId: Int,
+    val chapter: Int,
+    val verseStart: Int,
+    val verseEnd: Int?,
+    val verseText: String,
+    val matchType: String,
+    val canonicalCodeStart: String? = null,
+    val canonicalCodeEnd: String? = null,
+    val segmentId: String? = null,
+    val sessionId: String? = null,
+    val tracks: List<String> = emptyList(),
+    val detectedVersion: String? = null,
+)
+
+/**
  * Client for the Bible Lookup Engine (BLE) microservice. Replaces in-app detection: it (optionally)
  * starts the engine in-process when STT connects, opens a WebSocket to `/bible-engine`, and forwards
  * `scripture.*` events to [onScripture]. The level chip is pushed to the engine via [setLevel].
+ */
+/**
+ * @param onVersion the translation the engine believes is being read aloud, or null when it has no
+ *   answer. Arrives on its own, not attached to a scripture event: the engine settles this
+ *   asynchronously and usually a verse or two after the detection that first hinted at it, so it
+ *   routinely lands *after* the rows it applies to are already on screen. Re-sent on connect.
  *
- * @param onScripture (bookId, chapter, verseStart, verseEnd, verseText, matchType,
- *   canonicalCodeStart, canonicalCodeEnd, segmentId, sessionId, tracks) for each event.
- *   [canonicalCodeStart]/[canonicalCodeEnd] are the engine's numbering-independent internal codes
- *   (`BXXXCXXXVXXX`), forwarded so the CP side can land the reference in the primary Bible's own
- *   display numbering (book order + Psalm numbering). [segmentId] is the STT segment that triggered the
- *   detection (clock-free correlation key), or null when the STT stream didn't provide one. [sessionId]
- *   is the stable per-service session id from STT — the exact join key that ties the STT db, the engine
- *   detection-log and the CP live-references log, and keys the live-references filename. [tracks] is
- *   the subset of {"transcription","translation"} that corroborated the detection.
+ * Both callbacks are required and neither is the trailing one by convention — pass them by name.
+ * A defaulted trailing lambda here would silently bind `BibleEngineClient { … }` to the wrong
+ * callback.
  */
 class BibleEngineClient(
-    private val onScripture: (Int, Int, Int, Int?, String, String, String?, String?, String?, String?, List<String>) -> Unit,
+    private val onScripture: (EngineScripture) -> Unit,
+    private val onVersion: (String?) -> Unit,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val httpClient = HttpClient(CIO) {
@@ -165,28 +201,46 @@ class BibleEngineClient(
             _engineSttConnected.value = if (!configured) true else obj.optBoolean("sttConnected", false)
             return
         }
+        if (type == "version_detected") {
+            onVersion(
+                if (obj.isNull("version")) null
+                else obj.optString("version").takeIf { it.isNotEmpty() }
+            )
+            return
+        }
         if (!type.startsWith("scripture.")) return
         val ref = obj.optJSONObject("reference") ?: return
         val bookId = ref.optInt("bookId", -1)
         if (bookId < 0) return
-        val codeStart = ref.optString("canonicalCodeStart", "").takeIf { it.isNotEmpty() }
+        // isNull() first everywhere: org.json's optString turns a JSON null into the STRING "null",
+        // which would sail past an isNotEmpty check and become a bogus verse code.
+        val codeStart = if (ref.isNull("canonicalCodeStart")) null
+                        else ref.optString("canonicalCodeStart", "").takeIf { it.isNotEmpty() }
         val codeEnd = if (ref.isNull("canonicalCodeEnd")) null
                       else ref.optString("canonicalCodeEnd").takeIf { it.isNotEmpty() }
         val tracksArr = obj.optJSONArray("tracks")
         val tracks = if (tracksArr == null) emptyList()
                      else (0 until tracksArr.length()).mapNotNull { tracksArr.optString(it).takeIf { s -> s.isNotEmpty() } }
         onScripture(
-            bookId,
-            ref.optInt("chapter", 0),
-            ref.optInt("verseStart", 0),
-            if (ref.isNull("verseEnd")) null else ref.optInt("verseEnd"),
-            obj.optString("verseText", ""),
-            obj.optString("matchType", "reverse"),
-            codeStart,
-            codeEnd,
-            if (obj.isNull("segmentId")) null else obj.optString("segmentId").takeIf { it.isNotEmpty() },
-            if (obj.isNull("sessionId")) null else obj.optString("sessionId").takeIf { it.isNotEmpty() },
-            tracks,
+            EngineScripture(
+                bookId = bookId,
+                chapter = ref.optInt("chapter", 0),
+                verseStart = ref.optInt("verseStart", 0),
+                verseEnd = if (ref.isNull("verseEnd")) null else ref.optInt("verseEnd"),
+                verseText = obj.optString("verseText", ""),
+                matchType = obj.optString("matchType", "reverse"),
+                canonicalCodeStart = codeStart,
+                canonicalCodeEnd = codeEnd,
+                segmentId = if (obj.isNull("segmentId")) null
+                            else obj.optString("segmentId").takeIf { it.isNotEmpty() },
+                sessionId = if (obj.isNull("sessionId")) null
+                            else obj.optString("sessionId").takeIf { it.isNotEmpty() },
+                tracks = tracks,
+                // The id and confidence the engine also sends are deliberately not parsed: they exist
+                // for the engine's own training log, and nothing on this side consumes them.
+                detectedVersion = if (obj.isNull("detectedVersion")) null
+                                  else obj.optString("detectedVersion").takeIf { it.isNotEmpty() },
+            )
         )
     }
 
