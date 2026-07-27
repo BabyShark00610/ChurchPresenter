@@ -522,8 +522,13 @@ private fun ThemeStep(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
         Spacer(modifier = Modifier.height(4.dp))
+        // Scrolls for the same reason the language step does: ten pills wrap to more rows than the
+        // fixed 700x620 window leaves room for, and the window is not resizable — without this the
+        // lower themes cannot be reached at all.
         FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {

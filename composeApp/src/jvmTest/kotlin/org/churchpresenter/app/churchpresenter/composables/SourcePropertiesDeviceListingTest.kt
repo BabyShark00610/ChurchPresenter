@@ -473,7 +473,7 @@ class SourcePropertiesDeviceListingTest {
      * the maintainer; nothing else in this file is a characterisation test.
      */
     @Test
-    fun `wmctrl titles lose their first word — known defect`() {
+    fun `a wmctrl title keeps every word, including a one-word one`() {
         val windows = parseWmctrlWindows(
             """
             0x02200003  0 hostname Mozilla Firefox — Church Presenter
@@ -482,9 +482,9 @@ class SourcePropertiesDeviceListingTest {
         )
 
         assertEquals(
-            listOf("Firefox — Church Presenter"),
+            listOf("Mozilla Firefox — Church Presenter", "Terminal"),
             windows.map { it.title },
-            "\"Mozilla\" is eaten as if it were a column, and one-word \"Terminal\" vanishes entirely",
+            "the title is the fourth column and runs to end of line; a one-word title is still a window",
         )
         assertEquals(0x02200003L, windows.first().id, "the id is still read correctly")
     }
