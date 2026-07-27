@@ -81,6 +81,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import java.awt.Cursor
 import java.awt.Window as AwtWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -2062,7 +2063,11 @@ private fun BibleSearchField(
             )
         }
         if (value.isNotEmpty()) {
-            IconButton(onClick = onClear, modifier = Modifier.size(30.dp)) {
+            IconButton(
+                onClick = onClear,
+                // Tagged for tests: the icon is decorative, so there is no label to address it by.
+                modifier = Modifier.size(30.dp).testTag("bible_searchClear")
+            ) {
                 Icon(painter = painterResource(Res.drawable.ic_close), contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
