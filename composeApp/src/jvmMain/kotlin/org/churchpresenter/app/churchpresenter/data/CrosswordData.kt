@@ -27,7 +27,7 @@ data class RenderedCrossword(
     val downClues: List<Pair<Int, String>>
 )
 
-private data class PlacedEntry(
+internal data class PlacedEntry(
     val number: Int,
     val answer: String,
     val row: Int,
@@ -195,7 +195,7 @@ object CrosswordLayoutEngine {
     /** Returns (startRow, startCol, direction) of the best valid placement, or null.
      *  Tries the clue's specified direction first; falls back to the opposite direction
      *  if no valid placement is found, mirroring the admin tool's tryPlace() logic. */
-    private fun findPlacement(
+    internal fun findPlacement(
         grid: Map<Pair<Int, Int>, Char>,
         placed: List<PlacedEntry>,
         clue: CrosswordClue
@@ -227,7 +227,7 @@ object CrosswordLayoutEngine {
         return null
     }
 
-    private fun isValid(
+    internal fun isValid(
         grid: Map<Pair<Int, Int>, Char>,
         word: String, row: Int, col: Int,
         dir: CrosswordDirection
@@ -254,7 +254,7 @@ object CrosswordLayoutEngine {
         return hasIntersection  // must share at least one letter with an existing word
     }
 
-    private fun renderGrid(
+    internal fun renderGrid(
         level: Int, title: String,
         placed: List<PlacedEntry>,
         grid: Map<Pair<Int, Int>, Char>,

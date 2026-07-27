@@ -278,6 +278,17 @@ class SpsConverterTest {
     }
 
     @Test
+    fun `the target folder for an unnamed songbook is worked out from the file name too`() {
+        val sps = spsFile(name = "Grace Hymns.sps", songbook = "", songs = arrayOf(song("1", "Amazing Grace")))
+
+        assertEquals(
+            "Grace Hymns",
+            converter.getTargetFolderName(sps.absolutePath, output.absolutePath),
+            "the overwrite prompt must name the same folder the conversion will actually use",
+        )
+    }
+
+    @Test
     fun `a file with nothing in it has no target folder`() {
         val sps = spsFile(name = "empty.sps", songs = arrayOf())
 

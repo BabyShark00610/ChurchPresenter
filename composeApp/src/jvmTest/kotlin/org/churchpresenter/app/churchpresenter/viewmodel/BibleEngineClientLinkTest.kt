@@ -89,9 +89,10 @@ class BibleEngineClientLinkTest {
     private fun freePort(): Int = ServerSocket(0).use { it.localPort }
 
     private fun client(): BibleEngineClient =
-        BibleEngineClient { book, chapter, start, _, text, _, _, _, _, _, _ ->
-            detections.add(Detection(book, chapter, start, text))
-        }.also { created.add(it) }
+        BibleEngineClient(
+            onScripture = { e -> detections.add(Detection(e.bookId, e.chapter, e.verseStart, e.verseText)) },
+            onVersion = {},
+        ).also { created.add(it) }
 
     /** Connects [this] to the fake engine (no in-process engine) and waits for the link to come up. */
     private fun BibleEngineClient.connect(level: String = "balanced", speed: String = "balanced") {

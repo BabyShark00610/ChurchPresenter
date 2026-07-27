@@ -106,6 +106,47 @@ class BibleViewModelAutoFollowTest {
         tracks = tracks,
     )
 
+    // ── The version being read ──────────────────────────────────────────────────
+
+    @Test
+    fun `the version fills in on rows that were already listed`() {
+        // The whole reason it is delivered separately: the engine needs a verse or two of reading
+        // before it can tell, so the answer routinely arrives after its rows are on screen.
+        detect("explicit", verseStart = 16)
+        detect("continuation", verseStart = 17)
+        assertTrue(vm.detectedReferences.value.all { it.detectedVersion == null })
+
+        vm.onEngineVersion("NASB")
+
+        assertTrue(
+            vm.detectedReferences.value.all { it.detectedVersion == "NASB" },
+            "rows listed before the answer arrived must pick it up",
+        )
+    }
+
+    @Test
+    fun `a row that already names a version is left alone`() {
+        // A row stamped by the engine at the moment it fired knows better than the running answer.
+        vm.onEngineScripture(
+            bookId = 43, chapter = 3, verseStart = 16, verseEnd = null,
+            verseText = "For God so loved the world.", matchType = "explicit",
+            detectedVersion = "KJV",
+        )
+        vm.onEngineVersion("NASB")
+        assertEquals("KJV", vm.detectedReferences.value.single().detectedVersion)
+    }
+
+    @Test
+    fun `losing the answer does not rewrite rows that already showed one`() {
+        detect("explicit")
+        vm.onEngineVersion("NASB")
+        vm.onEngineVersion(null)
+        assertEquals(
+            "NASB", vm.detectedReferences.value.single().detectedVersion,
+            "history already shown must not be rewritten",
+        )
+    }
+
     // ── Detection list ──────────────────────────────────────────────────────────
 
     @Test
