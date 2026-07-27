@@ -93,4 +93,22 @@ class SerializationDtoConstructionTest {
         val response = PlanningCenterClient.PersonResponse(data = data)
         assertEquals(data, response.data)
     }
+
+    @Test
+    fun `dtos with an omitted field fall back to their default`() {
+        assertEquals(PlanningCenterClient.PersonData(), PlanningCenterClient.PersonResponse().data)
+        assertEquals("", PlanningCenterClient.PersonData().id)
+        assertEquals(null, PlanningCenterClient.PersonAttributes().name)
+        assertEquals("", PlanningCenterClient.TokenResponse().access_token)
+
+        assertEquals(null, StockMediaClient.PixabayVideoFile(url = "u").thumbnail)
+        assertEquals(null, StockMediaClient.PixabayVideoFiles().large)
+        assertEquals(null, StockMediaClient.PixabayVideo(id = 1L, videos = StockMediaClient.PixabayVideoFiles()).picture_id)
+        assertEquals(null, StockMediaClient.PexelsVideoFile(link = "l").quality)
+        assertEquals(emptyList(), StockMediaClient.PexelsVideo(id = 1L, image = "i").video_files)
+        assertEquals(emptyList(), StockMediaClient.PexelsPhotoResponse().photos)
+        assertEquals(emptyList(), StockMediaClient.PexelsVideoResponse().videos)
+        assertEquals(0, StockMediaClient.PixabayPhotoResponse().totalHits)
+        assertEquals(0, StockMediaClient.PixabayVideoResponse().totalHits)
+    }
 }
