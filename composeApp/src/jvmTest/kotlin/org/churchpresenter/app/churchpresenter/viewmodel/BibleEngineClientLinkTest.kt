@@ -11,7 +11,6 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.runBlocking
-import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -45,13 +44,24 @@ class BibleEngineClientLinkTest {
     private val created = mutableListOf<BibleEngineClient>()
     private lateinit var engine: FakeEngine
 
-    /** A stand-in for the engine's `/bible-engine` endpoint: records what it is sent, pushes back on demand. */
-    private class FakeEngine(val port: Int) {
+    /**
+     * A stand-in for the engine's `/bible-engine` endpoint: records what it is sent, pushes back on
+     * demand.
+     *
+     * Binds port 0 and reports back what it got, rather than taking a port picked from a probe
+     * socket that was already closed: in the gap before the bind, anything else in the suite that
+     * starts a server can take that port and this one dies with `Address already in use`.
+     */
+    private class FakeEngine {
         val received = LinkedBlockingQueue<String>()
         val sessions = CopyOnWriteArrayList<DefaultWebSocketServerSession>()
         val connectionCount = AtomicInteger()
 
-        private val server = embeddedServer(Netty, port = port) {
+        /** Valid only after [start]. */
+        var port: Int = 0
+            private set
+
+        private val server = embeddedServer(Netty, port = 0) {
             install(WebSockets)
             routing {
                 webSocket("/bible-engine") {
@@ -66,7 +76,13 @@ class BibleEngineClientLinkTest {
             }
         }
 
-        fun start() = server.start(wait = false)
+        fun start() {
+            server.start(wait = false)
+            // resolvedConnectors() suspends until the bind completes, so this is the port Netty is
+            // actually listening on.
+            port = runBlocking { server.engine.resolvedConnectors().first().port }
+        }
+
         fun push(text: String) = runBlocking { sessions.toList().forEach { it.send(Frame.Text(text)) } }
         fun dropConnections() = runBlocking { sessions.toList().forEach { it.close() } }
         fun stop() = server.stop(0, 0)
@@ -74,7 +90,7 @@ class BibleEngineClientLinkTest {
 
     @BeforeTest
     fun startEngine() {
-        engine = FakeEngine(freePort())
+        engine = FakeEngine()
         engine.start()
     }
 
@@ -86,21 +102,26 @@ class BibleEngineClientLinkTest {
         detections.clear()
     }
 
-    private fun freePort(): Int = ServerSocket(0).use { it.localPort }
-
     private fun client(): BibleEngineClient =
         BibleEngineClient(
             onScripture = { e -> detections.add(Detection(e.bookId, e.chapter, e.verseStart, e.verseText)) },
             onVersion = {},
         ).also { created.add(it) }
 
-    /** Connects [this] to the fake engine (no in-process engine) and waits for the link to come up. */
+    /**
+     * Connects [this] to the fake engine (no in-process engine) and waits for the link to come up.
+     *
+     * Waits for the engine to have registered the session as well as for the client to report
+     * itself connected: the two happen on opposite ends of the handshake, and `push` sends to the
+     * sessions the engine currently holds, so pushing on the strength of the client's view alone
+     * can deliver a frame to nobody and leave the test waiting for something already dropped.
+     */
     private fun BibleEngineClient.connect(level: String = "balanced", speed: String = "balanced") {
         start(
             sttUrl = "http://127.0.0.1:1", bibleRoot = "", bibleFiles = emptyList(),
             runLocal = false, host = "127.0.0.1", port = engine.port, level = level, continuationSpeed = speed
         )
-        awaitUntil("the engine link to come up") { connected.value }
+        awaitUntil("the engine link to come up") { connected.value && engine.sessions.isNotEmpty() }
     }
 
     private fun nextFrame(timeoutSeconds: Long = 10): String =
