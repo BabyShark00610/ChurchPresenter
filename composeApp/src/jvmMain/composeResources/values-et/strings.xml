@@ -2090,7 +2090,7 @@
     <string name="bible_translation">Tõlge %1$d</string>
     <string name="add_bible_translation">Lisa tõlge</string>
     <string name="bible_translation_mode">Tõlkerežiim</string>
-    <string name="bible_translation_mode_legacy">Klassikaline</string>
+    <string name="bible_translation_mode_dual">Kaks tõlget</string>
     <string name="bible_translation_mode_multi">Mitu tõlget</string>
     <string name="bible_reference">Piibliviide</string>
     <string name="bible_translation_order">Tõlgete järjekord</string>

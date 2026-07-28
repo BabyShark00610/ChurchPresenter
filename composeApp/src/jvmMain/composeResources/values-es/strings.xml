@@ -2085,7 +2085,7 @@
     <string name="bible_translation">Traducción %1$d</string>
     <string name="add_bible_translation">Añadir traducción</string>
     <string name="bible_translation_mode">Modo de traducción</string>
-    <string name="bible_translation_mode_legacy">Clásico</string>
+    <string name="bible_translation_mode_dual">Dos traducciones</string>
     <string name="bible_translation_mode_multi">Varias traducciones</string>
     <string name="bible_reference">Referencia bíblica</string>
     <string name="bible_translation_order">Orden de traducciones</string>

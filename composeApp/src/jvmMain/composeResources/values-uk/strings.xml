@@ -2057,7 +2057,7 @@
     <string name="bible_translation">Переклад %1$d</string>
     <string name="add_bible_translation">Додати переклад</string>
     <string name="bible_translation_mode">Режим перекладів</string>
-    <string name="bible_translation_mode_legacy">Класичний</string>
+    <string name="bible_translation_mode_dual">Два переклади</string>
     <string name="bible_translation_mode_multi">Кілька перекладів</string>
     <string name="bible_reference">Біблійне посилання</string>
     <string name="bible_translation_order">Порядок перекладів</string>

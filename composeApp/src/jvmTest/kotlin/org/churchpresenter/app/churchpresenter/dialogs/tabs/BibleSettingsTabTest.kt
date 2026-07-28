@@ -145,6 +145,10 @@ class BibleSettingsTabTest {
             BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb"),
         )
 
+        // Both mode labels are asserted by name: they are the only place a user is told which mode
+        // they are in, and the first of them was called "Legacy" until it was renamed for reading
+        // as deprecated rather than as the ordinary two-Bible setup it describes.
+        onNodeWithText("Dual translation").assertExists()
         onNodeWithText("Multi-translation").performClick()
         waitForIdle()
 

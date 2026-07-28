@@ -43,7 +43,7 @@ import churchpresenter.composeapp.generated.resources.bible_selection
 import churchpresenter.composeapp.generated.resources.bible_reference
 import churchpresenter.composeapp.generated.resources.bible_multi_layout
 import churchpresenter.composeapp.generated.resources.bible_translation_mode
-import churchpresenter.composeapp.generated.resources.bible_translation_mode_legacy
+import churchpresenter.composeapp.generated.resources.bible_translation_mode_dual
 import churchpresenter.composeapp.generated.resources.bible_translation_mode_multi
 import churchpresenter.composeapp.generated.resources.bible_translation_divider
 import churchpresenter.composeapp.generated.resources.bible_translation_spacing
@@ -381,7 +381,7 @@ private fun LeftColumn(
         )
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().height(28.dp)) {
             listOf(
-                false to stringResource(Res.string.bible_translation_mode_legacy),
+                false to stringResource(Res.string.bible_translation_mode_dual),
                 true to stringResource(Res.string.bible_translation_mode_multi),
             ).forEachIndexed { index, (multiMode, label) ->
                 SegmentedButton(

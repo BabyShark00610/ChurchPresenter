@@ -671,7 +671,7 @@
     <string name="bible_translation">Translation %1$d</string>
     <string name="add_bible_translation">Add translation</string>
     <string name="bible_translation_mode">Translation mode</string>
-    <string name="bible_translation_mode_legacy">Legacy</string>
+    <string name="bible_translation_mode_dual">Dual translation</string>
     <string name="bible_translation_mode_multi">Multi-translation</string>
     <string name="bible_reference">Bible Reference</string>
     <string name="bible_translation_order">Translation order</string>

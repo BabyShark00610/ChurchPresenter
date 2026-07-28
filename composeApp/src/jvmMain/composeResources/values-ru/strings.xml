@@ -2060,7 +2060,7 @@
     <string name="bible_translation">Перевод %1$d</string>
     <string name="add_bible_translation">Добавить перевод</string>
     <string name="bible_translation_mode">Режим переводов</string>
-    <string name="bible_translation_mode_legacy">Классический</string>
+    <string name="bible_translation_mode_dual">Два перевода</string>
     <string name="bible_translation_mode_multi">Несколько переводов</string>
     <string name="bible_reference">Библейская ссылка</string>
     <string name="bible_translation_order">Порядок переводов</string>

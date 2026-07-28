@@ -2057,7 +2057,7 @@
     <string name="bible_translation">Пераклад %1$d</string>
     <string name="add_bible_translation">Дадаць пераклад</string>
     <string name="bible_translation_mode">Рэжым перакладаў</string>
-    <string name="bible_translation_mode_legacy">Класічны</string>
+    <string name="bible_translation_mode_dual">Два пераклады</string>
     <string name="bible_translation_mode_multi">Некалькі перакладаў</string>
     <string name="bible_reference">Біблейская спасылка</string>
     <string name="bible_translation_order">Парадак перакладаў</string>
