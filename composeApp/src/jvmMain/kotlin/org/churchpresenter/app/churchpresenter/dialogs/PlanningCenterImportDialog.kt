@@ -143,87 +143,52 @@ fun PlanningCenterImportDialog(
             title = stringResource(Res.string.planning_center_import_title)
         ) {
             AppThemeWrapper(theme = theme) {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                        Column {
-                            Text(
-                                stringResource(Res.string.planning_center_description),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            connectionError?.let {
-                                Text(
-                                    stringResource(Res.string.planning_center_status_error, it),
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                            TextButton(onClick = onDismiss, modifier = Modifier.padding(end = 8.dp)) {
-                                Text(stringResource(Res.string.cancel))
-                            }
-                            Button(
-                                shape = RoundedCornerShape(6.dp),
-                                enabled = !isConnecting,
-                                onClick = {
-                                    isConnecting = true
-                                    connectionError = null
-                                    connectScope.launch {
-                                        try {
-                                            val authUrl = PlanningCenterClient.buildAuthorizationUrl(BuildConfig.PLANNING_CENTER_CLIENT_ID)
-                                            Desktop.getDesktop().browse(java.net.URI(authUrl))
-                                            when (val callback = PlanningCenterAuthServer.awaitAuthorizationCode()) {
-                                                is PlanningCenterAuthServer.CallbackResult.Success -> {
-                                                    when (
-                                                        val tokenOutcome = PlanningCenterClient.exchangeCodeForToken(
-                                                            BuildConfig.PLANNING_CENTER_CLIENT_ID,
-                                                            BuildConfig.PLANNING_CENTER_CLIENT_SECRET,
-                                                            callback.code
-                                                        )
-                                                    ) {
-                                                        is PlanningCenterClient.TokenOutcome.Success -> {
-                                                            val tokens = tokenOutcome.tokens
-                                                            val personOutcome = PlanningCenterClient.getCurrentPerson(tokens.accessToken)
-                                                            val name = (personOutcome as? PlanningCenterClient.PersonOutcome.Success)
-                                                                ?.person?.displayName ?: ""
-                                                            onConnected(tokens.accessToken, tokens.refreshToken, tokens.expiresAtEpochMs, name)
-                                                        }
-                                                        PlanningCenterClient.TokenOutcome.InvalidCredentials ->
-                                                            connectionError = "Invalid client ID or secret"
-                                                        PlanningCenterClient.TokenOutcome.NetworkError ->
-                                                            connectionError = "Network error — check your connection"
-                                                        PlanningCenterClient.TokenOutcome.Failure ->
-                                                            connectionError = "Connection failed"
-                                                    }
-                                                }
-                                                is PlanningCenterAuthServer.CallbackResult.Error ->
-                                                    connectionError = callback.message
-                                                PlanningCenterAuthServer.CallbackResult.Timeout ->
-                                                    connectionError = "Timed out waiting for browser sign-in"
+                PlanningCenterConnectDialogContent(
+                    isConnecting = isConnecting,
+                    connectionError = connectionError,
+                    onDismiss = onDismiss,
+                    onConnectClick = {
+                        isConnecting = true
+                        connectionError = null
+                        connectScope.launch {
+                            try {
+                                val authUrl = PlanningCenterClient.buildAuthorizationUrl(BuildConfig.PLANNING_CENTER_CLIENT_ID)
+                                Desktop.getDesktop().browse(java.net.URI(authUrl))
+                                when (val callback = PlanningCenterAuthServer.awaitAuthorizationCode()) {
+                                    is PlanningCenterAuthServer.CallbackResult.Success -> {
+                                        when (
+                                            val tokenOutcome = PlanningCenterClient.exchangeCodeForToken(
+                                                BuildConfig.PLANNING_CENTER_CLIENT_ID,
+                                                BuildConfig.PLANNING_CENTER_CLIENT_SECRET,
+                                                callback.code
+                                            )
+                                        ) {
+                                            is PlanningCenterClient.TokenOutcome.Success -> {
+                                                val tokens = tokenOutcome.tokens
+                                                val personOutcome = PlanningCenterClient.getCurrentPerson(tokens.accessToken)
+                                                val name = (personOutcome as? PlanningCenterClient.PersonOutcome.Success)
+                                                    ?.person?.displayName ?: ""
+                                                onConnected(tokens.accessToken, tokens.refreshToken, tokens.expiresAtEpochMs, name)
                                             }
-                                        } finally {
-                                            isConnecting = false
+                                            PlanningCenterClient.TokenOutcome.InvalidCredentials ->
+                                                connectionError = "Invalid client ID or secret"
+                                            PlanningCenterClient.TokenOutcome.NetworkError ->
+                                                connectionError = "Network error — check your connection"
+                                            PlanningCenterClient.TokenOutcome.Failure ->
+                                                connectionError = "Connection failed"
                                         }
                                     }
+                                    is PlanningCenterAuthServer.CallbackResult.Error ->
+                                        connectionError = callback.message
+                                    PlanningCenterAuthServer.CallbackResult.Timeout ->
+                                        connectionError = "Timed out waiting for browser sign-in"
                                 }
-                            ) {
-                                if (isConnecting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                Text(
-                                    if (isConnecting) stringResource(Res.string.planning_center_status_connecting)
-                                    else stringResource(Res.string.planning_center_connect)
-                                )
+                            } finally {
+                                isConnecting = false
                             }
                         }
                     }
-                }
+                )
             }
         }
         return
@@ -245,12 +210,6 @@ fun PlanningCenterImportDialog(
 
     var addSongForItem by remember { mutableStateOf<PlanningCenterClient.PlanItem?>(null) }
     var addSongPrefill by remember { mutableStateOf<SongItem?>(null) }
-    var isFetchingArrangement by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    // Header rows import with no color-picker step, so they need a default — sourced from the
-    // current theme (matching AddLabelDialog's own picker) instead of a hardcoded hex pair.
-    val defaultHeaderTextColor = cpColorToHex(MaterialTheme.colorScheme.onPrimary)
-    val defaultHeaderBackgroundColor = cpColorToHex(MaterialTheme.colorScheme.primary)
 
     val mainWindowState = LocalMainWindowState.current
     DialogWindow(
@@ -264,450 +223,23 @@ fun PlanningCenterImportDialog(
         resizable = true
     ) {
         AppThemeWrapper(theme = theme) {
-            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        DropdownSelector(
-                            label = stringResource(Res.string.planning_center_import_service_type),
-                            value = viewModel.selectedServiceTypeId ?: "",
-                            options = viewModel.serviceTypes.map { it.id to it.name },
-                            onValueChange = { id -> viewModel.selectServiceType(id) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (viewModel.plans.isNotEmpty() && !viewModel.isLoadingPlans) {
-                            Spacer(Modifier.width(12.dp))
-                            DropdownSelector(
-                                label = stringResource(Res.string.planning_center_import_select_plan),
-                                value = viewModel.selectedPlanId ?: "",
-                                options = viewModel.plans.map { plan ->
-                                    plan.id to "${plan.title}${if (plan.dates.isNotBlank()) " — ${plan.dates}" else ""}"
-                                },
-                                onValueChange = { viewModel.selectPlan(it) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Box(
-                            modifier = Modifier.size(8.dp).clip(CircleShape).background(PC_CONNECTED_GREEN)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            stringResource(Res.string.planning_center_status_connected, settings.connectedPersonName.ifBlank { "?" }),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = PC_CONNECTED_GREEN
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        OutlinedButton(
-                            onClick = onDisconnect,
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            modifier = Modifier.height(32.dp)
-                        ) {
-                            Text(stringResource(Res.string.planning_center_disconnect), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    viewModel.errorMessage?.let { err ->
-                        Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.height(8.dp))
-                    }
-
-                    if (viewModel.isLoadingServiceTypes || viewModel.isLoadingPlans) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    } else if (viewModel.plans.isEmpty()) {
-                        Text(
-                            stringResource(Res.string.planning_center_import_no_plans),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    if (viewModel.selectedPlanId != null) {
-                        HorizontalDivider()
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                stringResource(Res.string.planning_center_import_items),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Checkbox(
-                                checked = viewModel.allSelected,
-                                onCheckedChange = { viewModel.setAllSelected(it) },
-                                enabled = viewModel.planItems.isNotEmpty()
-                            )
-                            Text(
-                                if (viewModel.allSelected) {
-                                    stringResource(Res.string.planning_center_import_deselect_all)
-                                } else {
-                                    stringResource(Res.string.planning_center_import_select_all)
-                                },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-
-                        if (viewModel.isLoadingItems) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
-                            val itemsListState = rememberLazyListState()
-                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            LazyColumn(
-                                state = itemsListState,
-                                modifier = Modifier.fillMaxSize().padding(end = 12.dp)
-                            ) {
-                                items(viewModel.planItems) { entry ->
-                                    val pco = entry.pco
-                                    // Scoped to the whole row (not just the button's branch) so the
-                                    // attachments list below can also check it — a real accordion.
-                                    var expanded by remember(pco.id) { mutableStateOf(false) }
-                                    val hasScripture = viewModel.detectedScripturesByItemId[pco.id]?.isNotEmpty() == true
-                                    val isExpandable = pco.itemType == "item" && !hasScripture &&
-                                        viewModel.attachmentsByItemId.containsKey(pco.id) &&
-                                        (viewModel.attachmentsByItemId[pco.id]?.size ?: 0) > 0
-                                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth()
-                                                .then(if (isExpandable) Modifier.clickable { expanded = !expanded } else Modifier),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            when (pco.itemType) {
-                                                "song" -> {
-                                                    Checkbox(
-                                                        checked = entry.selected && entry.matchedSongId != null,
-                                                        enabled = entry.matchedSongId != null,
-                                                        onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
-                                                    )
-                                                    PlanItemTypeIcon(Icons.Filled.MusicNote)
-                                                    Text(pco.songTitle ?: pco.title, modifier = Modifier.weight(1f))
-                                                    if (entry.matchedSongId != null) {
-                                                        MatchedTag()
-                                                    } else if (isFetchingArrangement == pco.id) {
-                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                                    } else {
-                                                        Button(
-                                                            shape = RoundedCornerShape(8.dp),
-                                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                                                            modifier = Modifier.height(32.dp),
-                                                            onClick = {
-                                                                isFetchingArrangement = pco.id
-                                                                scope.launch {
-                                                                    val detail = viewModel.fetchArrangementForAddSong(pco)
-                                                                    addSongPrefill = SongItem(
-                                                                        number = "",
-                                                                        title = pco.songTitle ?: pco.title,
-                                                                        songbook = viewModel.defaultSongbookForNewSongs(),
-                                                                        author = pco.songAuthor ?: "",
-                                                                        lyrics = (detail?.lyrics ?: "").split("\n"),
-                                                                        ccliNumber = pco.songCcliNumber ?: ""
-                                                                    )
-                                                                    addSongForItem = pco
-                                                                    isFetchingArrangement = null
-                                                                }
-                                                            }
-                                                        ) {
-                                                            Text(
-                                                                stringResource(Res.string.planning_center_import_add_song),
-                                                                style = MaterialTheme.typography.labelMedium
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                "header" -> {
-                                                    Checkbox(
-                                                        checked = entry.selected,
-                                                        onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
-                                                    )
-                                                    PlanItemTypeIcon(Icons.Filled.Label, tint = PC_HEADER_AMBER)
-                                                    Text(
-                                                        pco.title,
-                                                        style = MaterialTheme.typography.titleSmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        modifier = Modifier.weight(1f)
-                                                    )
-                                                }
-                                                "media" -> {
-                                                    // PCO "media" items reference video/audio that lives
-                                                    // in the Media Library, not the Attachments API — the
-                                                    // "attachments" this endpoint would return are incidental
-                                                    // files, not the actual media, so there's nothing usable
-                                                    // to import. Show the row disabled — a greyed,
-                                                    // uncheckable checkbox and muted title (e.g. YouTube/
-                                                    // Vimeo videos, which are external links, not files).
-                                                    // Non-null (no-op) onCheckedChange keeps the same
-                                                    // minimumInteractiveComponentSize footprint as the
-                                                    // interactive rows so the checkbox stays aligned.
-                                                    Checkbox(checked = false, enabled = false, onCheckedChange = {})
-                                                    PlanItemTypeIcon(Icons.Filled.PlayCircle, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                                                    Text(
-                                                        pco.title,
-                                                        modifier = Modifier.weight(1f),
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                                        textDecoration = TextDecoration.LineThrough
-                                                    )
-                                                }
-                                                else -> {
-                                                    // Generic "item" rows: if scripture references were
-                                                    // detected (see below), that accordion IS the selection
-                                                    // mechanism — no separate announcement checkbox needed.
-                                                    // Otherwise fall back to a plain checkbox (import the
-                                                    // title as an announcement). hasScripture is hoisted above.
-                                                    if (!hasScripture) {
-                                                        Checkbox(
-                                                            checked = entry.selected,
-                                                            onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
-                                                        )
-                                                    } else {
-                                                        Spacer(Modifier.width(40.dp))
-                                                    }
-                                                    PlanItemTypeIcon(if (hasScripture) Icons.Filled.MenuBook else Icons.Filled.Campaign)
-                                                    Text(
-                                                        pco.title,
-                                                        modifier = Modifier.weight(1f),
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                                    )
-                                                    // Attachments are now loaded eagerly (see selectPlan),
-                                                    // so the button only appears once we actually know
-                                                    // there's something to show — never a dead-end click.
-                                                    val attachmentsLoaded = viewModel.attachmentsByItemId.containsKey(pco.id)
-                                                    val fileCount = viewModel.attachmentsByItemId[pco.id]?.size ?: 0
-                                                    if (!attachmentsLoaded) {
-                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                                    } else if (fileCount > 0) {
-                                                        // Plain badge — the whole row is the click target
-                                                        // for expand/collapse (see isExpandable above).
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(50))
-                                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(50))
-                                                                .padding(horizontal = 12.dp, vertical = 5.dp)
-                                                        ) {
-                                                            Text(
-                                                                stringResource(Res.string.planning_center_import_file_count, fileCount),
-                                                                style = MaterialTheme.typography.labelMedium,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        val scriptures = viewModel.detectedScripturesByItemId[pco.id].orEmpty()
-                                        if (scriptures.isNotEmpty()) {
-                                            val selectedScriptureIdx = viewModel.selectedScriptureIndices[pco.id].orEmpty()
-                                            scriptures.forEachIndexed { index, verse ->
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(start = 40.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    Checkbox(
-                                                        checked = index in selectedScriptureIdx,
-                                                        onCheckedChange = { viewModel.toggleScriptureSelected(pco.id, index) }
-                                                    )
-                                                    Text(verse.displayReference, style = MaterialTheme.typography.bodySmall)
-                                                }
-                                            }
-                                        }
-
-                                        if (expanded && pco.itemType == "item") {
-                                            val attachments = viewModel.attachmentsByItemId[pco.id].orEmpty()
-                                            val selectedIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
-                                            attachments.forEach { att ->
-                                                val ext = att.filename.substringAfterLast('.', "").lowercase()
-                                                val supported = isSupportedAttachment(att.filename)
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(start = 40.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    Checkbox(
-                                                        checked = supported && att.id in selectedIds,
-                                                        enabled = supported,
-                                                        onCheckedChange = { viewModel.toggleAttachmentSelected(pco.id, att.id) }
-                                                    )
-                                                    val thumbUrl = att.thumbnailUrl
-                                                    if (thumbUrl != null && ext in IMAGE_EXTENSIONS) {
-                                                        AttachmentThumbnail(thumbUrl, viewModel)
-                                                    } else {
-                                                        PlanItemTypeIcon(attachmentExtensionIcon(ext))
-                                                    }
-                                                    Text(
-                                                        att.filename,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = if (supported) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                                        textDecoration = if (supported) null else TextDecoration.LineThrough
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            VerticalScrollbar(
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                adapter = rememberScrollbarAdapter(scrollState = itemsListState)
-                            )
-                            }
-                        }
-                    } else {
-                        Box(modifier = Modifier.weight(1f))
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(stringResource(Res.string.cancel))
-                        }
-                        var isImporting by remember { mutableStateOf(false) }
-                        val planId = viewModel.selectedPlanId
-                        Button(
-                            shape = RoundedCornerShape(6.dp),
-                            enabled = !isImporting && planId != null && viewModel.planItems.any { entry ->
-                                val pco = entry.pco
-                                val hasScripture = viewModel.detectedScripturesByItemId[pco.id]?.isNotEmpty() == true
-                                when (pco.itemType) {
-                                    "header" -> entry.selected
-                                    "song" -> entry.matchedSongId != null
-                                    "item" -> if (hasScripture) {
-                                        viewModel.selectedScriptureIndices[pco.id]?.isNotEmpty() == true
-                                    } else {
-                                        val selectedAttachmentIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
-                                        entry.selected || viewModel.attachmentsByItemId[pco.id].orEmpty()
-                                            .any { it.id in selectedAttachmentIds && isSupportedAttachment(it.filename) }
-                                    }
-                                    else -> false
-                                }
-                            },
-                            onClick = {
-                                if (planId == null) return@Button
-                                isImporting = true
-                                scope.launch {
-                                    for (entry in viewModel.planItems) {
-                                        val pco = entry.pco
-                                        when (pco.itemType) {
-                                            "song" -> {
-                                                if (!entry.selected) continue
-                                                val songId = entry.matchedSongId ?: continue
-                                                val parts = songId.split("::", limit = 2)
-                                                val songbook = parts.getOrNull(0) ?: ""
-                                                val songNumber = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                                                onAddSong(songNumber, pco.songTitle ?: pco.title, songbook, songId)
-                                            }
-                                            "header" -> {
-                                                if (!entry.selected) continue
-                                                onAddLabel(pco.title, defaultHeaderTextColor, defaultHeaderBackgroundColor)
-                                            }
-                                            "item" -> {
-                                                // Scripture and attachment checkboxes are independent of
-                                                // the row's own checkbox (matching the button's enabled
-                                                // check above) — unchecking the row while leaving one of
-                                                // those checked must still import just that one thing.
-                                                val scriptures = viewModel.detectedScripturesByItemId[pco.id].orEmpty()
-                                                val selectedAttachmentIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
-                                                val hasSelectedAttachments = viewModel.attachmentsByItemId[pco.id].orEmpty()
-                                                    .any { it.id in selectedAttachmentIds && isSupportedAttachment(it.filename) }
-                                                if (scriptures.isNotEmpty()) {
-                                                    val selectedIdx = viewModel.selectedScriptureIndices[pco.id].orEmpty()
-                                                    scriptures.forEachIndexed { index, verse ->
-                                                        if (index !in selectedIdx) return@forEachIndexed
-                                                        onAddBibleVerse(
-                                                            verse.bookName,
-                                                            verse.chapter,
-                                                            verse.verseNumber,
-                                                            verse.verseText,
-                                                            verse.verseRange,
-                                                            verse.bookId
-                                                        )
-                                                    }
-                                                } else if (entry.selected && !hasSelectedAttachments) {
-                                                    // Only fall back to a text announcement when there's
-                                                    // no attached file — a file import already becomes its
-                                                    // own Presentation/Picture/Media schedule entry below,
-                                                    // so adding an announcement too would just duplicate it.
-                                                    onAddAnnouncement(pco.description.ifBlank { pco.title })
-                                                }
-                                            }
-                                            else -> continue
-                                        }
-                                        // Attachments are their own per-file checkboxes, independent of
-                                        // the row's main checkbox.
-                                        if (pco.itemType == "item") {
-                                            val attachments = viewModel.attachmentsByItemId[pco.id].orEmpty()
-                                            val selectedIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
-                                            // All selected images for this item share one cache folder
-                                            // (keyed by item id) — collect them into a single Picture
-                                            // schedule entry (one slideshow) instead of one per image.
-                                            var pictureFolderPath: String? = null
-                                            var pictureFolderName: String? = null
-                                            var pictureCount = 0
-                                            for (att in attachments) {
-                                                if (att.id !in selectedIds || !isSupportedAttachment(att.filename)) continue
-                                                // The schedule item's title should read as the plan item's
-                                                // own title (e.g. "Guest Speaker Presentation"), not the
-                                                // raw uploaded filename — fall back to the filename only
-                                                // when the plan item has no title.
-                                                when (val imported = viewModel.importAttachment(planId, pco.id, att)) {
-                                                    is PlanningCenterImportViewModel.ImportedMedia.Presentation ->
-                                                        onAddPresentation(
-                                                            imported.filePath,
-                                                            pco.title.ifBlank { imported.fileName },
-                                                            imported.slideCount,
-                                                            imported.fileType
-                                                        )
-                                                    is PlanningCenterImportViewModel.ImportedMedia.Picture -> {
-                                                        pictureFolderPath = imported.folderPath
-                                                        pictureFolderName = pco.title.ifBlank { imported.folderName }
-                                                        pictureCount++
-                                                    }
-                                                    is PlanningCenterImportViewModel.ImportedMedia.Media ->
-                                                        onAddMedia(imported.mediaUrl, pco.title.ifBlank { imported.mediaTitle }, "local")
-                                                    null -> {}
-                                                }
-                                            }
-                                            if (pictureFolderPath != null && pictureFolderName != null) {
-                                                onAddPicture(pictureFolderPath, pictureFolderName, pictureCount)
-                                            }
-                                        }
-                                    }
-                                    isImporting = false
-                                    onDismiss()
-                                }
-                            }
-                        ) {
-                            if (isImporting) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text(stringResource(Res.string.planning_center_import_button))
-                        }
-                    }
+            PlanningCenterImportDialogContent(
+                viewModel = viewModel,
+                settings = settings,
+                onDismiss = onDismiss,
+                onDisconnect = onDisconnect,
+                onAddSong = onAddSong,
+                onAddLabel = onAddLabel,
+                onAddPresentation = onAddPresentation,
+                onAddPicture = onAddPicture,
+                onAddMedia = onAddMedia,
+                onAddAnnouncement = onAddAnnouncement,
+                onAddBibleVerse = onAddBibleVerse,
+                onAddSongRequested = { pco, prefill ->
+                    addSongForItem = pco
+                    addSongPrefill = prefill
                 }
-            }
+            )
         }
     }
 
@@ -732,6 +264,524 @@ fun PlanningCenterImportDialog(
             addSongPrefill = null
         }
     )
+}
+
+@Composable
+internal fun PlanningCenterConnectDialogContent(
+    isConnecting: Boolean,
+    connectionError: String?,
+    onDismiss: () -> Unit,
+    onConnectClick: () -> Unit
+) {
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text(
+                    stringResource(Res.string.planning_center_description),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                connectionError?.let {
+                    Text(
+                        stringResource(Res.string.planning_center_status_error, it),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onDismiss, modifier = Modifier.padding(end = 8.dp)) {
+                    Text(stringResource(Res.string.cancel))
+                }
+                Button(
+                    shape = RoundedCornerShape(6.dp),
+                    enabled = !isConnecting,
+                    onClick = onConnectClick
+                ) {
+                    if (isConnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(
+                        if (isConnecting) stringResource(Res.string.planning_center_status_connecting)
+                        else stringResource(Res.string.planning_center_connect)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun PlanningCenterImportDialogContent(
+    viewModel: PlanningCenterImportViewModel,
+    settings: PlanningCenterSettings,
+    onDismiss: () -> Unit,
+    onDisconnect: () -> Unit,
+    onAddSong: (songNumber: Int, title: String, songbook: String, songId: String) -> Unit,
+    onAddLabel: (text: String, textColor: String, backgroundColor: String) -> Unit,
+    onAddPresentation: (filePath: String, fileName: String, slideCount: Int, fileType: String) -> Unit,
+    onAddPicture: (folderPath: String, folderName: String, imageCount: Int) -> Unit,
+    onAddMedia: (mediaUrl: String, mediaTitle: String, mediaType: String) -> Unit,
+    onAddAnnouncement: (text: String) -> Unit,
+    onAddBibleVerse: (bookName: String, chapter: Int, verseNumber: Int, verseText: String, verseRange: String, bookId: Int) -> Unit,
+    onAddSongRequested: (pco: PlanningCenterClient.PlanItem, prefill: SongItem) -> Unit
+) {
+    var isFetchingArrangement by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    // Header rows import with no color-picker step, so they need a default — sourced from the
+    // current theme (matching AddLabelDialog's own picker) instead of a hardcoded hex pair.
+    val defaultHeaderTextColor = cpColorToHex(MaterialTheme.colorScheme.onPrimary)
+    val defaultHeaderBackgroundColor = cpColorToHex(MaterialTheme.colorScheme.primary)
+
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DropdownSelector(
+                    label = stringResource(Res.string.planning_center_import_service_type),
+                    value = viewModel.selectedServiceTypeId ?: "",
+                    options = viewModel.serviceTypes.map { it.id to it.name },
+                    onValueChange = { id -> viewModel.selectServiceType(id) },
+                    modifier = Modifier.weight(1f)
+                )
+                if (viewModel.plans.isNotEmpty() && !viewModel.isLoadingPlans) {
+                    Spacer(Modifier.width(12.dp))
+                    DropdownSelector(
+                        label = stringResource(Res.string.planning_center_import_select_plan),
+                        value = viewModel.selectedPlanId ?: "",
+                        options = viewModel.plans.map { plan ->
+                            plan.id to "${plan.title}${if (plan.dates.isNotBlank()) " — ${plan.dates}" else ""}"
+                        },
+                        onValueChange = { viewModel.selectPlan(it) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier.size(8.dp).clip(CircleShape).background(PC_CONNECTED_GREEN)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(Res.string.planning_center_status_connected, settings.connectedPersonName.ifBlank { "?" }),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PC_CONNECTED_GREEN
+                )
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(
+                    onClick = onDisconnect,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(stringResource(Res.string.planning_center_disconnect), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            viewModel.errorMessage?.let { err ->
+                Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (viewModel.isLoadingServiceTypes || viewModel.isLoadingPlans) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            } else if (viewModel.plans.isEmpty()) {
+                Text(
+                    stringResource(Res.string.planning_center_import_no_plans),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+
+            if (viewModel.selectedPlanId != null) {
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(Res.string.planning_center_import_items),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Checkbox(
+                        checked = viewModel.allSelected,
+                        onCheckedChange = { viewModel.setAllSelected(it) },
+                        enabled = viewModel.planItems.isNotEmpty()
+                    )
+                    Text(
+                        if (viewModel.allSelected) {
+                            stringResource(Res.string.planning_center_import_deselect_all)
+                        } else {
+                            stringResource(Res.string.planning_center_import_select_all)
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+
+                if (viewModel.isLoadingItems) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                } else {
+                    val itemsListState = rememberLazyListState()
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = itemsListState,
+                        modifier = Modifier.fillMaxSize().padding(end = 12.dp)
+                    ) {
+                        items(viewModel.planItems) { entry ->
+                            val pco = entry.pco
+                            // Scoped to the whole row (not just the button's branch) so the
+                            // attachments list below can also check it — a real accordion.
+                            var expanded by remember(pco.id) { mutableStateOf(false) }
+                            val hasScripture = viewModel.detectedScripturesByItemId[pco.id]?.isNotEmpty() == true
+                            val isExpandable = pco.itemType == "item" && !hasScripture &&
+                                viewModel.attachmentsByItemId.containsKey(pco.id) &&
+                                (viewModel.attachmentsByItemId[pco.id]?.size ?: 0) > 0
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .then(if (isExpandable) Modifier.clickable { expanded = !expanded } else Modifier),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    when (pco.itemType) {
+                                        "song" -> {
+                                            Checkbox(
+                                                checked = entry.selected && entry.matchedSongId != null,
+                                                enabled = entry.matchedSongId != null,
+                                                onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
+                                            )
+                                            PlanItemTypeIcon(Icons.Filled.MusicNote)
+                                            Text(pco.songTitle ?: pco.title, modifier = Modifier.weight(1f))
+                                            if (entry.matchedSongId != null) {
+                                                MatchedTag()
+                                            } else if (isFetchingArrangement == pco.id) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Button(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                                                    modifier = Modifier.height(32.dp),
+                                                    onClick = {
+                                                        isFetchingArrangement = pco.id
+                                                        scope.launch {
+                                                            val detail = viewModel.fetchArrangementForAddSong(pco)
+                                                            val prefill = SongItem(
+                                                                number = "",
+                                                                title = pco.songTitle ?: pco.title,
+                                                                songbook = viewModel.defaultSongbookForNewSongs(),
+                                                                author = pco.songAuthor ?: "",
+                                                                lyrics = (detail?.lyrics ?: "").split("\n"),
+                                                                ccliNumber = pco.songCcliNumber ?: ""
+                                                            )
+                                                            onAddSongRequested(pco, prefill)
+                                                            isFetchingArrangement = null
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text(
+                                                        stringResource(Res.string.planning_center_import_add_song),
+                                                        style = MaterialTheme.typography.labelMedium
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        "header" -> {
+                                            Checkbox(
+                                                checked = entry.selected,
+                                                onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
+                                            )
+                                            PlanItemTypeIcon(Icons.Filled.Label, tint = PC_HEADER_AMBER)
+                                            Text(
+                                                pco.title,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        "media" -> {
+                                            // PCO "media" items reference video/audio that lives
+                                            // in the Media Library, not the Attachments API — the
+                                            // "attachments" this endpoint would return are incidental
+                                            // files, not the actual media, so there's nothing usable
+                                            // to import. Show the row disabled — a greyed,
+                                            // uncheckable checkbox and muted title (e.g. YouTube/
+                                            // Vimeo videos, which are external links, not files).
+                                            // Non-null (no-op) onCheckedChange keeps the same
+                                            // minimumInteractiveComponentSize footprint as the
+                                            // interactive rows so the checkbox stays aligned.
+                                            Checkbox(checked = false, enabled = false, onCheckedChange = {})
+                                            PlanItemTypeIcon(Icons.Filled.PlayCircle, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                            Text(
+                                                pco.title,
+                                                modifier = Modifier.weight(1f),
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                                textDecoration = TextDecoration.LineThrough
+                                            )
+                                        }
+                                        else -> {
+                                            // Generic "item" rows: if scripture references were
+                                            // detected (see below), that accordion IS the selection
+                                            // mechanism — no separate announcement checkbox needed.
+                                            // Otherwise fall back to a plain checkbox (import the
+                                            // title as an announcement). hasScripture is hoisted above.
+                                            if (!hasScripture) {
+                                                Checkbox(
+                                                    checked = entry.selected,
+                                                    onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
+                                                )
+                                            } else {
+                                                Spacer(Modifier.width(40.dp))
+                                            }
+                                            PlanItemTypeIcon(if (hasScripture) Icons.Filled.MenuBook else Icons.Filled.Campaign)
+                                            Text(
+                                                pco.title,
+                                                modifier = Modifier.weight(1f),
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                            )
+                                            // Attachments are now loaded eagerly (see selectPlan),
+                                            // so the button only appears once we actually know
+                                            // there's something to show — never a dead-end click.
+                                            val attachmentsLoaded = viewModel.attachmentsByItemId.containsKey(pco.id)
+                                            val fileCount = viewModel.attachmentsByItemId[pco.id]?.size ?: 0
+                                            if (!attachmentsLoaded) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else if (fileCount > 0) {
+                                                // Plain badge — the whole row is the click target
+                                                // for expand/collapse (see isExpandable above).
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(50))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(50))
+                                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                                ) {
+                                                    Text(
+                                                        stringResource(Res.string.planning_center_import_file_count, fileCount),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                val scriptures = viewModel.detectedScripturesByItemId[pco.id].orEmpty()
+                                if (scriptures.isNotEmpty()) {
+                                    val selectedScriptureIdx = viewModel.selectedScriptureIndices[pco.id].orEmpty()
+                                    scriptures.forEachIndexed { index, verse ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(start = 40.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Checkbox(
+                                                checked = index in selectedScriptureIdx,
+                                                onCheckedChange = { viewModel.toggleScriptureSelected(pco.id, index) }
+                                            )
+                                            Text(verse.displayReference, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
+
+                                if (expanded && pco.itemType == "item") {
+                                    val attachments = viewModel.attachmentsByItemId[pco.id].orEmpty()
+                                    val selectedIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
+                                    attachments.forEach { att ->
+                                        val ext = att.filename.substringAfterLast('.', "").lowercase()
+                                        val supported = isSupportedAttachment(att.filename)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(start = 40.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Checkbox(
+                                                checked = supported && att.id in selectedIds,
+                                                enabled = supported,
+                                                onCheckedChange = { viewModel.toggleAttachmentSelected(pco.id, att.id) }
+                                            )
+                                            val thumbUrl = att.thumbnailUrl
+                                            if (thumbUrl != null && ext in IMAGE_EXTENSIONS) {
+                                                AttachmentThumbnail(thumbUrl, viewModel)
+                                            } else {
+                                                PlanItemTypeIcon(attachmentExtensionIcon(ext))
+                                            }
+                                            Text(
+                                                att.filename,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (supported) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                                textDecoration = if (supported) null else TextDecoration.LineThrough
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    VerticalScrollbar(
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        adapter = rememberScrollbarAdapter(scrollState = itemsListState)
+                    )
+                    }
+                }
+            } else {
+                Box(modifier = Modifier.weight(1f))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text(stringResource(Res.string.cancel))
+                }
+                var isImporting by remember { mutableStateOf(false) }
+                val planId = viewModel.selectedPlanId
+                Button(
+                    shape = RoundedCornerShape(6.dp),
+                    enabled = !isImporting && planId != null && viewModel.planItems.any { entry ->
+                        val pco = entry.pco
+                        val hasScripture = viewModel.detectedScripturesByItemId[pco.id]?.isNotEmpty() == true
+                        when (pco.itemType) {
+                            "header" -> entry.selected
+                            "song" -> entry.matchedSongId != null
+                            "item" -> if (hasScripture) {
+                                viewModel.selectedScriptureIndices[pco.id]?.isNotEmpty() == true
+                            } else {
+                                val selectedAttachmentIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
+                                entry.selected || viewModel.attachmentsByItemId[pco.id].orEmpty()
+                                    .any { it.id in selectedAttachmentIds && isSupportedAttachment(it.filename) }
+                            }
+                            else -> false
+                        }
+                    },
+                    onClick = {
+                        if (planId == null) return@Button
+                        isImporting = true
+                        scope.launch {
+                            for (entry in viewModel.planItems) {
+                                val pco = entry.pco
+                                when (pco.itemType) {
+                                    "song" -> {
+                                        if (!entry.selected) continue
+                                        val songId = entry.matchedSongId ?: continue
+                                        val parts = songId.split("::", limit = 2)
+                                        val songbook = parts.getOrNull(0) ?: ""
+                                        val songNumber = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                                        onAddSong(songNumber, pco.songTitle ?: pco.title, songbook, songId)
+                                    }
+                                    "header" -> {
+                                        if (!entry.selected) continue
+                                        onAddLabel(pco.title, defaultHeaderTextColor, defaultHeaderBackgroundColor)
+                                    }
+                                    "item" -> {
+                                        // Scripture and attachment checkboxes are independent of
+                                        // the row's own checkbox (matching the button's enabled
+                                        // check above) — unchecking the row while leaving one of
+                                        // those checked must still import just that one thing.
+                                        val scriptures = viewModel.detectedScripturesByItemId[pco.id].orEmpty()
+                                        val selectedAttachmentIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
+                                        val hasSelectedAttachments = viewModel.attachmentsByItemId[pco.id].orEmpty()
+                                            .any { it.id in selectedAttachmentIds && isSupportedAttachment(it.filename) }
+                                        if (scriptures.isNotEmpty()) {
+                                            val selectedIdx = viewModel.selectedScriptureIndices[pco.id].orEmpty()
+                                            scriptures.forEachIndexed { index, verse ->
+                                                if (index !in selectedIdx) return@forEachIndexed
+                                                onAddBibleVerse(
+                                                    verse.bookName,
+                                                    verse.chapter,
+                                                    verse.verseNumber,
+                                                    verse.verseText,
+                                                    verse.verseRange,
+                                                    verse.bookId
+                                                )
+                                            }
+                                        } else if (entry.selected && !hasSelectedAttachments) {
+                                            // Only fall back to a text announcement when there's
+                                            // no attached file — a file import already becomes its
+                                            // own Presentation/Picture/Media schedule entry below,
+                                            // so adding an announcement too would just duplicate it.
+                                            onAddAnnouncement(pco.description.ifBlank { pco.title })
+                                        }
+                                    }
+                                    else -> continue
+                                }
+                                // Attachments are their own per-file checkboxes, independent of
+                                // the row's main checkbox.
+                                if (pco.itemType == "item") {
+                                    val attachments = viewModel.attachmentsByItemId[pco.id].orEmpty()
+                                    val selectedIds = viewModel.selectedAttachmentIds[pco.id].orEmpty()
+                                    // All selected images for this item share one cache folder
+                                    // (keyed by item id) — collect them into a single Picture
+                                    // schedule entry (one slideshow) instead of one per image.
+                                    var pictureFolderPath: String? = null
+                                    var pictureFolderName: String? = null
+                                    var pictureCount = 0
+                                    for (att in attachments) {
+                                        if (att.id !in selectedIds || !isSupportedAttachment(att.filename)) continue
+                                        // The schedule item's title should read as the plan item's
+                                        // own title (e.g. "Guest Speaker Presentation"), not the
+                                        // raw uploaded filename — fall back to the filename only
+                                        // when the plan item has no title.
+                                        when (val imported = viewModel.importAttachment(planId, pco.id, att)) {
+                                            is PlanningCenterImportViewModel.ImportedMedia.Presentation ->
+                                                onAddPresentation(
+                                                    imported.filePath,
+                                                    pco.title.ifBlank { imported.fileName },
+                                                    imported.slideCount,
+                                                    imported.fileType
+                                                )
+                                            is PlanningCenterImportViewModel.ImportedMedia.Picture -> {
+                                                pictureFolderPath = imported.folderPath
+                                                pictureFolderName = pco.title.ifBlank { imported.folderName }
+                                                pictureCount++
+                                            }
+                                            is PlanningCenterImportViewModel.ImportedMedia.Media ->
+                                                onAddMedia(imported.mediaUrl, pco.title.ifBlank { imported.mediaTitle }, "local")
+                                            null -> {}
+                                        }
+                                    }
+                                    if (pictureFolderPath != null && pictureFolderName != null) {
+                                        onAddPicture(pictureFolderPath, pictureFolderName, pictureCount)
+                                    }
+                                }
+                            }
+                            isImporting = false
+                            onDismiss()
+                        }
+                    }
+                ) {
+                    if (isImporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(stringResource(Res.string.planning_center_import_button))
+                }
+            }
+        }
+    }
 }
 
 private val PC_CONNECTED_GREEN = Color(0xFF4CAF50)

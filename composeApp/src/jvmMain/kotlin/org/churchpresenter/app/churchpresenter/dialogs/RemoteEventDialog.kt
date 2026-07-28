@@ -226,6 +226,47 @@ fun RemoteEventDialog(
         resizable = false,
         alwaysOnTop = true
     ) {
+        RemoteEventDialogContent(
+            event = event,
+            actionLabel = actionLabel,
+            typeIcon = typeIcon,
+            typeAccent = typeAccent,
+            bodyTitle = bodyTitle,
+            remaining = remaining,
+            showAllowPermanently = showAllowPermanently,
+            isClientKnownAllowed = isClientKnownAllowed,
+            isClientKnownBlocked = isClientKnownBlocked,
+            isInstanceLinkFollower = isInstanceLinkFollower,
+            onAllow = onAllow,
+            onAllowForSession = onAllowForSession,
+            onAllowPermanently = onAllowPermanently,
+            onBlockForSession = onBlockForSession,
+            onBlockPermanently = onBlockPermanently,
+            onDeny = onDeny,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RemoteEventDialogContent(
+    event: RemoteEvent,
+    actionLabel: String,
+    typeIcon: ImageVector,
+    typeAccent: Color,
+    bodyTitle: String,
+    remaining: Int,
+    showAllowPermanently: Boolean,
+    isClientKnownAllowed: Boolean,
+    isClientKnownBlocked: Boolean,
+    isInstanceLinkFollower: Boolean,
+    onAllow: () -> Unit,
+    onAllowForSession: () -> Unit,
+    onAllowPermanently: () -> Unit,
+    onBlockForSession: () -> Unit,
+    onBlockPermanently: () -> Unit,
+    onDeny: () -> Unit,
+) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -419,7 +460,6 @@ fun RemoteEventDialog(
             }
         }
     }
-}
 
 private val REMOTE_SCHEDULE_AMBER = Color(0xFFF5B301)
 private val REMOTE_ALLOW_GREEN = Color(0xFF43A047)

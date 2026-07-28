@@ -101,9 +101,6 @@ fun STTSettingsDialog(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sttSettings = appSettings.sttSettings
-    val engine = appSettings.bibleEngineSettings
-
     val availableFonts = remember {
         GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
     }
@@ -138,6 +135,26 @@ fun STTSettingsDialog(
         title = stringResource(Res.string.stt_settings_dialog_title),
         resizable = false
     ) {
+        STTSettingsDialogContent(
+            appSettings = appSettings,
+            onSettingsChange = onSettingsChange,
+            onDismiss = onDismiss,
+            availableFonts = availableFonts,
+        )
+    }
+}
+
+@Composable
+internal fun STTSettingsDialogContent(
+    appSettings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+    onDismiss: () -> Unit,
+    availableFonts: List<String>,
+) {
+    val sttSettings = appSettings.sttSettings
+    val engine = appSettings.bibleEngineSettings
+    val scrollState = rememberScrollState()
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -424,4 +441,3 @@ fun STTSettingsDialog(
             }
         }
     }
-}

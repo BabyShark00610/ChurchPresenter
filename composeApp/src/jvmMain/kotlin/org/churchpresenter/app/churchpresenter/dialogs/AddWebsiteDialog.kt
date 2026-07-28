@@ -45,9 +45,6 @@ fun AddWebsiteDialog(
     onDismiss: () -> Unit,
     onConfirm: (url: String, title: String) -> Unit
 ) {
-    var url by remember { mutableStateOf("https://") }
-    var displayTitle by remember { mutableStateOf("") }
-
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
         position = centeredOnMainWindow(mainWindowState, 500.dp, 440.dp),
@@ -61,10 +58,22 @@ fun AddWebsiteDialog(
         title = stringResource(Res.string.website_dialog_title),
         resizable = false
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface
-        ) {
+        AddWebsiteDialogContent(onDismiss = onDismiss, onConfirm = onConfirm)
+    }
+}
+
+@Composable
+internal fun AddWebsiteDialogContent(
+    onDismiss: () -> Unit,
+    onConfirm: (url: String, title: String) -> Unit
+) {
+    var url by remember { mutableStateOf("https://") }
+    var displayTitle by remember { mutableStateOf("") }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface
+    ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -174,4 +183,3 @@ fun AddWebsiteDialog(
             }
         }
     }
-}

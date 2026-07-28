@@ -109,6 +109,45 @@ fun PresentationRemoteDialog(
         title = stringResource(Res.string.presentation_remote_control),
         resizable = false
     ) {
+        PresentationRemoteDialogContent(
+            settings = settings,
+            onSettingsChange = onSettingsChange,
+            serverUrl = serverUrl,
+            apiKeyEnabled = apiKeyEnabled,
+            apiKey = apiKey,
+            tunnelStatus = tunnelStatus,
+            tunnelUrl = tunnelUrl,
+            presentationDisplayUrl = presentationDisplayUrl,
+            onPresentationDisplayUrlChanged = onPresentationDisplayUrlChanged,
+            onStartTunnel = onStartTunnel,
+            onStopTunnel = onStopTunnel,
+            onDismiss = onDismiss,
+            scrollState = scrollState,
+            copyText = copyText,
+        )
+    }
+}
+
+@Composable
+internal fun PresentationRemoteDialogContent(
+    settings: AppSettings,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+    serverUrl: String,
+    apiKeyEnabled: Boolean,
+    apiKey: String,
+    tunnelStatus: TunnelStatus,
+    tunnelUrl: String,
+    presentationDisplayUrl: String,
+    onPresentationDisplayUrlChanged: (String) -> Unit,
+    onStartTunnel: () -> Unit,
+    onStopTunnel: () -> Unit,
+    onDismiss: () -> Unit,
+    scrollState: androidx.compose.foundation.ScrollState = rememberScrollState(),
+    copyText: (String) -> Unit = { text ->
+        java.awt.Toolkit.getDefaultToolkit().systemClipboard
+            .setContents(java.awt.datatransfer.StringSelection(text), null)
+    },
+) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -299,4 +338,3 @@ fun PresentationRemoteDialog(
             }
         }
     }
-}
