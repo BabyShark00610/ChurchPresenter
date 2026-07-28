@@ -423,6 +423,25 @@ class BibleLegacyModuleTest {
         assertEquals("RST77", b.getBibleAbbreviation(), "abbreviating an abbreviation would give 'R'")
     }
 
+    /**
+     * Documents CURRENT behaviour for a `##Title:` line with nothing after it. The title itself
+     * stays blank — only a genuinely absent `##Title:` line falls back to the file name, because the
+     * fallback is a null check (`bibleTitle ?: filename`) and a parsed-but-empty string is not null.
+     * The abbreviation takes the other branch regardless, since it tests blankness rather than
+     * nullness — so the two end up disagreeing about the same module.
+     */
+    @Test
+    fun `a blank title line is kept blank while the abbreviation still falls back to the file name`() {
+        val file = File(dir, "ru_RST77.spb").also {
+            it.writeText("##Title: \n1 Genesis 1\n-----\nB001C001V001 1 1 1 In the beginning.", Charsets.UTF_8)
+        }
+
+        val b = Bible().also { it.loadFromSpb(file.absolutePath) }
+
+        assertEquals("", b.getBibleTitle(), "a parsed empty string is not the same as no title line at all")
+        assertEquals("ru_RST77", b.getBibleAbbreviation(), "the abbreviation falls back because it checks blankness")
+    }
+
     @Test
     fun `a module with no title falls back to its file name`() {
         val file = File(dir, "ru_RST77.spb").also {
