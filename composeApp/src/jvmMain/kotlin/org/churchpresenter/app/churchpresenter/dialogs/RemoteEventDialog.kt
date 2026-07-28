@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
@@ -134,28 +135,24 @@ enum class RemoteEventType {
  *  - **Block for Session**   — deny all queued items from this client for the rest of the session
  *  - **Block Permanently**   — deny and permanently remember this client as blocked
  */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun RemoteEventDialog(
-    event: RemoteEvent?,
-    queueSize: Int = 1,
-    /** True when the client is already in the permanent allow list. */
-    isClientKnownAllowed: Boolean = false,
-    /** True when the client is already in the permanent block list. */
-    isClientKnownBlocked: Boolean = false,
-    /** True when this client is currently connected as an Instance Link follower/controller, rather
-     *  than a regular mobile/browser companion — same badge already shown in ServerSettingsTab's
-     *  Remote Clients list. */
-    isInstanceLinkFollower: Boolean = false,
-    onAllow: () -> Unit,
-    onAllowForSession: () -> Unit,
-    onAllowPermanently: () -> Unit,
-    onBlockForSession: () -> Unit,
-    onBlockPermanently: () -> Unit,
-    onDeny: () -> Unit
-) {
-    if (event == null) return
+internal data class RemoteEventPresentation(
+    val actionLabel: String,
+    val typeIcon: ImageVector,
+    val typeAccent: Color,
+    val bodyTitle: String,
+    val remaining: Int,
+    val showAllowPermanently: Boolean,
+    val dialogTitle: String,
+    val dialogHeight: Dp,
+)
 
+@Composable
+internal fun resolveRemoteEventPresentation(
+    event: RemoteEvent,
+    queueSize: Int,
+    isClientKnownAllowed: Boolean,
+    isClientKnownBlocked: Boolean,
+): RemoteEventPresentation {
     val actionLabel = when (event.type) {
         RemoteEventType.ADD_TO_SCHEDULE -> stringResource(Res.string.remote_api_add_to_schedule)
         RemoteEventType.REMOVE_FROM_SCHEDULE -> stringResource(Res.string.remote_api_remove_from_schedule)
@@ -212,20 +209,97 @@ fun RemoteEventDialog(
         stringResource(Res.string.remote_api_request_title)
 
     val dialogHeight = if (remaining > 0) 330.dp else 290.dp
+
+    return RemoteEventPresentation(
+        actionLabel = actionLabel,
+        typeIcon = typeIcon,
+        typeAccent = typeAccent,
+        bodyTitle = bodyTitle,
+        remaining = remaining,
+        showAllowPermanently = showAllowPermanently,
+        dialogTitle = dialogTitle,
+        dialogHeight = dialogHeight,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RemoteEventDialog(
+    event: RemoteEvent?,
+    queueSize: Int = 1,
+    /** True when the client is already in the permanent allow list. */
+    isClientKnownAllowed: Boolean = false,
+    /** True when the client is already in the permanent block list. */
+    isClientKnownBlocked: Boolean = false,
+    /** True when this client is currently connected as an Instance Link follower/controller, rather
+     *  than a regular mobile/browser companion — same badge already shown in ServerSettingsTab's
+     *  Remote Clients list. */
+    isInstanceLinkFollower: Boolean = false,
+    onAllow: () -> Unit,
+    onAllowForSession: () -> Unit,
+    onAllowPermanently: () -> Unit,
+    onBlockForSession: () -> Unit,
+    onBlockPermanently: () -> Unit,
+    onDeny: () -> Unit
+) {
+    if (event == null) return
+
+    val presentation = resolveRemoteEventPresentation(event, queueSize, isClientKnownAllowed, isClientKnownBlocked)
     val dialogWidth = 500.dp
     val mainWindowState = LocalMainWindowState.current
 
     DialogWindow(
         onCloseRequest = onDeny,
         state = rememberDialogState(
-            position = centeredOnMainWindow(mainWindowState, dialogWidth, dialogHeight),
+            position = centeredOnMainWindow(mainWindowState, dialogWidth, presentation.dialogHeight),
             width = dialogWidth,
-            height = dialogHeight
+            height = presentation.dialogHeight
         ),
-        title = dialogTitle,
+        title = presentation.dialogTitle,
         resizable = false,
         alwaysOnTop = true
     ) {
+        RemoteEventDialogContent(
+            event = event,
+            actionLabel = presentation.actionLabel,
+            typeIcon = presentation.typeIcon,
+            typeAccent = presentation.typeAccent,
+            bodyTitle = presentation.bodyTitle,
+            remaining = presentation.remaining,
+            showAllowPermanently = presentation.showAllowPermanently,
+            isClientKnownAllowed = isClientKnownAllowed,
+            isClientKnownBlocked = isClientKnownBlocked,
+            isInstanceLinkFollower = isInstanceLinkFollower,
+            onAllow = onAllow,
+            onAllowForSession = onAllowForSession,
+            onAllowPermanently = onAllowPermanently,
+            onBlockForSession = onBlockForSession,
+            onBlockPermanently = onBlockPermanently,
+            onDeny = onDeny,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RemoteEventDialogContent(
+    event: RemoteEvent,
+    actionLabel: String,
+    typeIcon: ImageVector,
+    typeAccent: Color,
+    bodyTitle: String,
+    remaining: Int,
+    showAllowPermanently: Boolean,
+    isClientKnownAllowed: Boolean,
+    isClientKnownBlocked: Boolean,
+    isInstanceLinkFollower: Boolean,
+    onAllow: () -> Unit,
+    onAllowForSession: () -> Unit,
+    onAllowPermanently: () -> Unit,
+    onBlockForSession: () -> Unit,
+    onBlockPermanently: () -> Unit,
+    onDeny: () -> Unit,
+) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -419,7 +493,6 @@ fun RemoteEventDialog(
             }
         }
     }
-}
 
 private val REMOTE_SCHEDULE_AMBER = Color(0xFFF5B301)
 private val REMOTE_ALLOW_GREEN = Color(0xFF43A047)

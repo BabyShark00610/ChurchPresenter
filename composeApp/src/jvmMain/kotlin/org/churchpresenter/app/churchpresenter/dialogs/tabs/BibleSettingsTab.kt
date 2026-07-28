@@ -26,7 +26,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
@@ -34,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.animation_crossfade
+import churchpresenter.composeapp.generated.resources.bible_catalog_button
 import churchpresenter.composeapp.generated.resources.bible_selection
 import churchpresenter.composeapp.generated.resources.bible_reference
 import churchpresenter.composeapp.generated.resources.bible_multi_layout
@@ -112,6 +116,7 @@ import churchpresenter.composeapp.generated.resources.auto_fit
 import org.churchpresenter.app.churchpresenter.composables.VerticalAlignmentButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
+import org.churchpresenter.app.churchpresenter.dialogs.BibleCatalogBrowserDialog
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
@@ -121,6 +126,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import java.awt.GraphicsEnvironment
+import java.io.File
 
 
 @Composable

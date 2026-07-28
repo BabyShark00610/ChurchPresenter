@@ -95,15 +95,6 @@ fun InstanceLinkDialog(
 ) {
     if (!isVisible) return
 
-    var host by remember(isVisible) { mutableStateOf(settings.primaryHost) }
-    var portText by remember(isVisible) { mutableStateOf(if (settings.primaryPort > 0) settings.primaryPort.toString() else "") }
-    var apiKey by remember(isVisible) { mutableStateOf(settings.apiKey) }
-    var autoConnect by remember(isVisible) { mutableStateOf(settings.autoConnect) }
-    var allowPushToSchedule by remember(isVisible) { mutableStateOf(settings.allowPushToSchedule) }
-    var bibleSyncMode by remember(isVisible) { mutableStateOf(settings.bibleSyncMode) }
-    var mirrorBackgrounds by remember(isVisible) { mutableStateOf(settings.mirrorBackgrounds) }
-    var role by remember(isVisible) { mutableStateOf(settings.role) }
-
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
         position = centeredOnMainWindow(mainWindowState, 760.dp, 620.dp),
@@ -117,6 +108,41 @@ fun InstanceLinkDialog(
         title = stringResource(Res.string.instance_link_title),
         resizable = false
     ) {
+        InstanceLinkDialogContent(
+            isVisible = isVisible,
+            settings = settings,
+            connectionStatus = connectionStatus,
+            remoteLiveState = remoteLiveState,
+            remoteScheduleCount = remoteScheduleCount,
+            lastMessageAtMs = lastMessageAtMs,
+            onConnect = onConnect,
+            onDisconnect = onDisconnect,
+            onDismiss = onDismiss,
+        )
+    }
+}
+
+@Composable
+internal fun InstanceLinkDialogContent(
+    isVisible: Boolean,
+    settings: InstanceLinkSettings,
+    connectionStatus: InstanceLinkStatus,
+    remoteLiveState: LiveStateDto?,
+    remoteScheduleCount: Int,
+    lastMessageAtMs: Long? = null,
+    onConnect: (host: String, port: Int, apiKey: String, autoConnect: Boolean, allowPushToSchedule: Boolean, bibleSyncMode: BibleSyncMode, mirrorBackgrounds: Boolean, role: InstanceLinkRole) -> Unit,
+    onDisconnect: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var host by remember(isVisible) { mutableStateOf(settings.primaryHost) }
+    var portText by remember(isVisible) { mutableStateOf(if (settings.primaryPort > 0) settings.primaryPort.toString() else "") }
+    var apiKey by remember(isVisible) { mutableStateOf(settings.apiKey) }
+    var autoConnect by remember(isVisible) { mutableStateOf(settings.autoConnect) }
+    var allowPushToSchedule by remember(isVisible) { mutableStateOf(settings.allowPushToSchedule) }
+    var bibleSyncMode by remember(isVisible) { mutableStateOf(settings.bibleSyncMode) }
+    var mirrorBackgrounds by remember(isVisible) { mutableStateOf(settings.mirrorBackgrounds) }
+    var role by remember(isVisible) { mutableStateOf(settings.role) }
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface
@@ -171,8 +197,7 @@ fun InstanceLinkDialog(
                                     }
                                 }
                                 val ageSeconds = ((ageNowMs - lastMessageAtMs) / 1000).coerceAtLeast(0)
-                                val ageText = if (ageSeconds < 60) "${ageSeconds}s"
-                                else "${ageSeconds / 60}m ${ageSeconds % 60}s"
+                                val ageText = formatInstanceLinkAge(ageSeconds)
                                 Text(
                                     text = stringResource(Res.string.instance_link_last_update_age, ageText),
                                     style = MaterialTheme.typography.bodySmall,
@@ -390,11 +415,15 @@ fun InstanceLinkDialog(
             }
         }
     }
-}
+
+/** Formats an elapsed-seconds count for the "Last update N ago" readout. */
+internal fun formatInstanceLinkAge(ageSeconds: Long): String =
+    if (ageSeconds < 60) "${ageSeconds}s"
+    else "${ageSeconds / 60}m ${ageSeconds % 60}s"
 
 /** Short human-readable summary of a [LiveStateDto] for the "Last received" readout. */
 @Composable
-private fun liveStateSummary(state: LiveStateDto): String = when (state.contentType) {
+internal fun liveStateSummary(state: LiveStateDto): String = when (state.contentType) {
     "BIBLE" -> state.bookName?.let { "$it ${state.chapter}:${state.verseNumber}" }
         ?: stringResource(Res.string.obs_mode_bible)
     "LYRICS" -> state.songTitle ?: stringResource(Res.string.obs_mode_songs)

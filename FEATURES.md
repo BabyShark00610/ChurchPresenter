@@ -34,6 +34,7 @@
 - **Search the whole Bible** — search across the entire text or just the current book.
 - **History** — jump back to recently shown passages instantly.
 - **Strong's dictionary** — explore original Hebrew and Greek words with transliteration, pronunciation, definitions and KJV usage.
+- **Download translations in-app** — browse over 1,500 translations in more than 1,000 languages from eBible.org and the Zefania XML archive, filter by language, and install one in a click: it downloads and converts on your machine, straight into your Bible folder, with its copyright shown up front.
 - **Follow along automatically** — connect a live speech-to-text feed and the app listens for spoken Bible references — stated outright or simply the next verse in a passage being read — and stages or goes live with the matching verse on its own, tiered by confidence so only clear matches jump straight to the screen.
 
 **Source locations:**
@@ -42,6 +43,10 @@
 - `viewmodel/BibleViewModel.kt`, `viewmodel/BibleSettingsViewModel.kt`, `viewmodel/DictionaryViewModel.kt`
 - `viewmodel/BibleEngineClient.kt` — auto-follow speech detection client
 - `data/Bible.kt`, `data/BibleBook.kt`, `data/BibleBookNames.kt`, `data/BibleSearch.kt`, `data/BibleVerse.kt`, `data/StrongsEntry.kt`
+- `data/BibleSource.kt`, `data/BibleInstallSupport.kt` — download sources: shared model and install machinery
+- `data/EBibleSource.kt` — eBible.org catalogue (USFX), `data/ZefaniaSource.kt` + `data/ZefaniaRepositoryIndex.kt` — Zefania archive
+- `viewmodel/BibleCatalogViewModel.kt`, `dialogs/BibleCatalogBrowserDialog.kt` — download browser UI
+- `appResources/common/ChurchPresenter-Converter/src/main/kotlin/converter/UsfxToSpbConverter.kt` — USFX conversion
 - `data/settings/BibleSettings.kt`, `data/settings/BibleEngineSettings.kt`
 - `presenter/BiblePresenter.kt`
 - `dialogs/tabs/BibleSettingsTab.kt`

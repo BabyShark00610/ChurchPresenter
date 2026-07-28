@@ -593,19 +593,26 @@ class SongsViewModel(
             }
         }
 
-        // Filter by search query
-        if (_searchQuery.value.isNotEmpty()) {
+        // Filter by search query.
+        //
+        // Matched trimmed, while the box keeps what was typed: a query pasted from a service plan or
+        // an email routinely carries a leading or trailing space, and matching it raw made the search
+        // come back empty with nothing on screen to explain why — the worst possible moment being
+        // mid-service. Only the ends are trimmed; whitespace inside a title is still significant, so
+        // "Be Thou  My Vision" and "Be Thou My Vision" remain different queries.
+        val query = _searchQuery.value.trim()
+        if (query.isNotEmpty()) {
             filtered = when (_filterType.value) {
                 Constants.CONTAINS -> filtered.filter {
-                    "${it.number}. ${it.title}".contains(_searchQuery.value, ignoreCase = true)
+                    "${it.number}. ${it.title}".contains(query, ignoreCase = true)
                 }
                 Constants.STARTS_WITH -> filtered.filter {
-                    it.title.startsWith(_searchQuery.value, ignoreCase = true) ||
-                    it.number.startsWith(_searchQuery.value, ignoreCase = true)
+                    it.title.startsWith(query, ignoreCase = true) ||
+                    it.number.startsWith(query, ignoreCase = true)
                 }
                 Constants.EXACT_MATCH -> filtered.filter {
-                    it.title.equals(_searchQuery.value, ignoreCase = true) ||
-                    it.number.equals(_searchQuery.value, ignoreCase = true)
+                    it.title.trim().equals(query, ignoreCase = true) ||
+                    it.number.trim().equals(query, ignoreCase = true)
                 }
                 else -> filtered
             }

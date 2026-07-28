@@ -105,6 +105,31 @@ private fun MemoryMonitorContent() {
         }
     }
 
+    MemoryMonitorDialogContent(
+        heapUsed = heapUsed,
+        heapCommitted = heapCommitted,
+        heapMax = heapMax,
+        nonHeapUsed = nonHeapUsed,
+        nonHeapCommitted = nonHeapCommitted,
+        gcCount = gcCount,
+        gcTimeMs = gcTimeMs,
+        history = history,
+        onForceGc = { System.gc() },
+    )
+}
+
+@Composable
+internal fun MemoryMonitorDialogContent(
+    heapUsed: Long,
+    heapCommitted: Long,
+    heapMax: Long,
+    nonHeapUsed: Long,
+    nonHeapCommitted: Long,
+    gcCount: Long,
+    gcTimeMs: Long,
+    history: List<Long>,
+    onForceGc: () -> Unit,
+) {
     val usedFraction = if (heapMax > 0) (heapUsed.toFloat() / heapMax.toFloat()).coerceIn(0f, 1f) else 0f
 
     Surface(modifier = Modifier.fillMaxWidth()) {
@@ -156,7 +181,7 @@ private fun MemoryMonitorContent() {
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { System.gc() }) {
+                Button(onClick = onForceGc) {
                     Text(stringResource(Res.string.memory_monitor_force_gc))
                 }
             }

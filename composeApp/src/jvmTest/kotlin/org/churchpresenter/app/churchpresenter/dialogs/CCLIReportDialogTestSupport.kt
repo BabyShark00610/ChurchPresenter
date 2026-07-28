@@ -116,6 +116,8 @@ internal object CcliLabel {
     const val STAT_VERSES = "Bible verses"
     const val STAT_BUSIEST = "Busiest period"
     const val BLANK = "—"
+    const val EXPORT_SUCCESS = "Report exported successfully."
+    const val EXPORT_ERROR = "Failed to export report."
 
     /** The subtitle under a chart heading, which reports both totals. */
     fun songsSummary(unique: Int, plays: Int) = "$unique unique songs · $plays total plays"

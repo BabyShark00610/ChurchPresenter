@@ -92,6 +92,24 @@ internal sealed class DownloadState {
 }
 
 /**
+ * The temp-file suffix for a downloaded installer, inferred from the release asset's URL so the
+ * OS-native launcher in [launchInstaller] can dispatch on file extension.
+ */
+internal fun installerSuffixFor(downloadUrl: String): String = when {
+    downloadUrl.endsWith(".msi", ignoreCase = true) -> ".msi"
+    downloadUrl.endsWith(".dmg", ignoreCase = true) -> ".dmg"
+    downloadUrl.endsWith(".deb", ignoreCase = true) -> ".deb"
+    else -> ".bin"
+}
+
+/**
+ * Fraction of the download complete, or -1f (indeterminate) when the server didn't report a
+ * content length to measure against.
+ */
+internal fun downloadProgressFraction(bytesRead: Long, contentLength: Long): Float =
+    if (contentLength > 0) (bytesRead.toFloat() / contentLength.toFloat()).coerceIn(0f, 1f) else -1f
+
+/**
  * Launches the downloaded installer using the platform's native mechanism.
  *
  * Deliberately avoids [Desktop.open], which on Windows rejects `.msi` files with
@@ -217,12 +235,7 @@ fun UpdateAvailableDialog(
                 connection.connect()
 
                 val contentLength = connection.contentLengthLong
-                val suffix = when {
-                    updateInfo.downloadUrl.endsWith(".msi", ignoreCase = true) -> ".msi"
-                    updateInfo.downloadUrl.endsWith(".dmg", ignoreCase = true) -> ".dmg"
-                    updateInfo.downloadUrl.endsWith(".deb", ignoreCase = true) -> ".deb"
-                    else -> ".bin"
-                }
+                val suffix = installerSuffixFor(updateInfo.downloadUrl)
                 // NB: do not deleteOnExit() — the installer is launched as the
                 // app exits via exitProcess(0), and the shutdown hook would
                 // delete the file out from under the installer.
@@ -236,9 +249,7 @@ fun UpdateAvailableDialog(
                         while (input.read(buffer).also { read = it } != -1) {
                             output.write(buffer, 0, read)
                             bytesRead += read
-                            val progress = if (contentLength > 0)
-                                (bytesRead.toFloat() / contentLength.toFloat()).coerceIn(0f, 1f)
-                            else -1f
+                            val progress = downloadProgressFraction(bytesRead, contentLength)
                             withContext(Dispatchers.Main) {
                                 downloadState = DownloadState.Downloading(progress)
                             }

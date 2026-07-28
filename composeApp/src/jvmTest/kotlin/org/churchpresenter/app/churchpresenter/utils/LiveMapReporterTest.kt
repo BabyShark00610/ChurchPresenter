@@ -52,6 +52,36 @@ class LiveMapReporterTest {
     }
 
     @Test
+    fun `build provenance is included when known and omitted when not`() {
+        val known = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            repoSlug = "churchpresenter/churchpresenter", commit = "a1b2c3d", buildType = "release",
+        )
+        assertTrue("repo=churchpresenter/churchpresenter" in known, known)
+        assertTrue("commit=a1b2c3d" in known, known)
+        assertTrue("build=release" in known, known)
+
+        // A source-tarball build has no git at all — the server treats the
+        // missing params the same as unrecognised ones and still counts it.
+        val unknown = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            repoSlug = "unknown", commit = "unknown", buildType = "nogit",
+        )
+        assertFalse("repo=" in unknown, unknown)
+        assertFalse("commit=" in unknown, unknown)
+        assertTrue("build=nogit" in unknown, unknown)
+    }
+
+    @Test
+    fun `a fork build reports its own repo slug`() {
+        val fork = LiveMapReporter.buildPingUrl(
+            "windows", "26.1.0", null, isDevBuild = false,
+            repoSlug = "someone/churchpresenter-fork", commit = "deadbeef", buildType = "release",
+        )
+        assertTrue("repo=someone/churchpresenter-fork" in fork, fork)
+    }
+
+    @Test
     fun `the configured update-check interval is included when set and omitted when null`() {
         val withInterval = LiveMapReporter.buildPingUrl(
             "windows", "26.1.0", UpdateCheckInterval.WEEKLY, isDevBuild = false,

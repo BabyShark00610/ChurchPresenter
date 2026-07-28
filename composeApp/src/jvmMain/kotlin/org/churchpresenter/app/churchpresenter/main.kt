@@ -229,7 +229,7 @@ fun main() {
     // out of the box without requiring the user to pick a Bible folder first.
     if (startupSettings.bibleSettings.storageDirectory.isEmpty() && startupSettings.bibleSettings.primaryBible.isEmpty()) {
         try {
-            val defaultBibleDir = File(System.getProperty("user.home"), ".churchpresenter/Bibles")
+            val defaultBibleDir = File(System.getProperty("user.home"), Constants.DEFAULT_BIBLES_DIR)
             defaultBibleDir.mkdirs()
             val targetFile = File(defaultBibleDir, "kjv1769.spb")
             if (!targetFile.exists()) {
@@ -859,7 +859,7 @@ fun main() {
         // Secret keypress unlock (press D seven times) — reveals the Developer menu in a
         // packaged build for this session only. See MainDesktop's onPreviewKeyEvent.
         var developerMenuUnlocked by remember { mutableStateOf(false) }
-        var lottieGenOutputDir by remember { mutableStateOf<java.io.File?>(null) }
+        var lottieGenOutputDir by remember { mutableStateOf<File?>(null) }
         var lottieGenOnFileSaved by remember { mutableStateOf<(() -> Unit)?>(null) }
         var pendingUpdateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
         var pendingUpdateCheckWasManual by remember { mutableStateOf(false) }
@@ -1954,8 +1954,8 @@ fun main() {
                                         presenterManager.requestClearDisplay()
                                     },
                                     onOpenLottieGen = { outputDir, onSaved ->
-                                        if (outputDir.isNotEmpty() && java.io.File(outputDir).isDirectory) {
-                                            lottieGenOutputDir = java.io.File(outputDir)
+                                        if (outputDir.isNotEmpty() && File(outputDir).isDirectory) {
+                                            lottieGenOutputDir = File(outputDir)
                                             lottieGenOnFileSaved = onSaved
                                             showLottieGenWindow = true
                                         } else {
@@ -2019,8 +2019,8 @@ fun main() {
                                         presenterManager.identifyBrowserSourceOutput(index)
                                     },
                                     onOpenLottieGen = { outputDir, onSaved ->
-                                        if (outputDir.isNotEmpty() && java.io.File(outputDir).isDirectory) {
-                                            lottieGenOutputDir = java.io.File(outputDir)
+                                        if (outputDir.isNotEmpty() && File(outputDir).isDirectory) {
+                                            lottieGenOutputDir = File(outputDir)
                                             lottieGenOnFileSaved = onSaved
                                             showLottieGenWindow = true
                                         } else {

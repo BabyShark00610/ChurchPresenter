@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Surface
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -378,7 +380,7 @@ private fun TextProperties(source: SceneSource.TextSource, onUpdate: (SceneSourc
             title = stringResource(Res.string.canvas_text_content),
             resizable = true
         ) {
-            androidx.compose.material3.Surface(
+            Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) {
@@ -797,7 +799,7 @@ private fun ClockProperties(source: SceneSource.ClockSource, onUpdate: (SceneSou
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(4.dp))
         Row(
@@ -1861,7 +1863,7 @@ private fun BibleProperties(
     val bibleDisplayNames = remember(storageDir, bibleFiles) {
         bibleFiles.associateWith { fileName ->
             try {
-                java.io.File(storageDir, fileName).bufferedReader(java.nio.charset.StandardCharsets.UTF_8).use { reader ->
+                File(storageDir, fileName).bufferedReader(java.nio.charset.StandardCharsets.UTF_8).use { reader ->
                     repeat(10) {
                         val line = reader.readLine() ?: return@use fileName.removeSuffix(".spb")
                         if (line.startsWith("##Title:")) return@use line.substring(8).trim()

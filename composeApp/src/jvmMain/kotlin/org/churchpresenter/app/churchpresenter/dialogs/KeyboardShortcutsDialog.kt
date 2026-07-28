@@ -132,100 +132,105 @@ fun KeyboardShortcutsDialog(
         title = stringResource(Res.string.keyboard_shortcuts_title),
         resizable = true
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+        KeyboardShortcutsDialogContent(onDismiss = onDismiss)
+    }
+}
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_global)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_shift_n), stringResource(Res.string.shortcut_description_new_schedule))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_o),       stringResource(Res.string.shortcut_description_open_schedule))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_s),       stringResource(Res.string.shortcut_description_save_schedule))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_w),       stringResource(Res.string.shortcut_description_close_schedule))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_q),       stringResource(Res.string.shortcut_description_exit))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_t),       stringResource(Res.string.shortcut_description_settings))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f1),           stringResource(Res.string.shortcut_description_f1_keyboard_shortcuts))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f2),           stringResource(Res.string.shortcut_description_add_to_schedule))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_delete),       stringResource(Res.string.shortcut_description_remove_from_schedule))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_escape),       stringResource(Res.string.shortcut_description_escape))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_double_click), stringResource(Res.string.shortcut_description_go_live))
-                    }
+@Composable
+internal fun KeyboardShortcutsDialogContent(onDismiss: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_tab_switching)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f6),  stringResource(Res.string.shortcut_description_f6_bible))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f7),  stringResource(Res.string.shortcut_description_f7_songs))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f8),  stringResource(Res.string.shortcut_description_f8_pictures))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f9),  stringResource(Res.string.shortcut_description_f9_presentation))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f10), stringResource(Res.string.shortcut_description_f10_media))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f11), stringResource(Res.string.shortcut_description_f11_lower_third))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_f12), stringResource(Res.string.shortcut_description_f12_announcements))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_bible)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_up),          stringResource(Res.string.shortcut_description_prev_verse))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_down),        stringResource(Res.string.shortcut_description_next_verse))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_left),        stringResource(Res.string.shortcut_description_prev_chapter))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_right),       stringResource(Res.string.shortcut_description_next_chapter))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_right_click), stringResource(Res.string.shortcut_description_context_menu))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_songs)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_up),              stringResource(Res.string.shortcut_description_prev_section))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_down),            stringResource(Res.string.shortcut_description_next_section))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_up_left_song),    stringResource(Res.string.shortcut_description_prev_song))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_down_right_song), stringResource(Res.string.shortcut_description_next_song))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_right_click),     stringResource(Res.string.shortcut_description_context_menu))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_pictures)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_up_left),    stringResource(Res.string.shortcut_description_prev_image))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_down_right), stringResource(Res.string.shortcut_description_next_image))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_space),      stringResource(Res.string.shortcut_description_play_pause))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_shift_drag), stringResource(Res.string.shortcut_description_reorder_image))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_schedule)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_z),       stringResource(Res.string.shortcut_description_undo))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_shift_z), stringResource(Res.string.shortcut_description_redo))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_shift_drag),   stringResource(Res.string.shortcut_description_reorder_item))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_presentation)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_up_left),    stringResource(Res.string.shortcut_description_prev_slide))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_down_right), stringResource(Res.string.shortcut_description_next_slide))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_space),      stringResource(Res.string.shortcut_description_play_pause))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_media)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_space), stringResource(Res.string.shortcut_description_spacebar))
-                        ShortcutRow(stringResource(Res.string.shortcut_key_m),     stringResource(Res.string.shortcut_description_media_mute))
-                    }
-
-                    ShortcutsCategory(stringResource(Res.string.shortcut_category_canvas)) {
-                        ShortcutRow(stringResource(Res.string.shortcut_key_delete_backspace), stringResource(Res.string.shortcut_description_delete_source))
-                    }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_global)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_shift_n), stringResource(Res.string.shortcut_description_new_schedule))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_o),       stringResource(Res.string.shortcut_description_open_schedule))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_s),       stringResource(Res.string.shortcut_description_save_schedule))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_w),       stringResource(Res.string.shortcut_description_close_schedule))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_q),       stringResource(Res.string.shortcut_description_exit))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_t),       stringResource(Res.string.shortcut_description_settings))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f1),           stringResource(Res.string.shortcut_description_f1_keyboard_shortcuts))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f2),           stringResource(Res.string.shortcut_description_add_to_schedule))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_delete),       stringResource(Res.string.shortcut_description_remove_from_schedule))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_escape),       stringResource(Res.string.shortcut_description_escape))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_double_click), stringResource(Res.string.shortcut_description_go_live))
                 }
 
-                // Close button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                        Text("${stringResource(Res.string.symbol_ok)} ${stringResource(Res.string.ok)}")
-                    }
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_tab_switching)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f6),  stringResource(Res.string.shortcut_description_f6_bible))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f7),  stringResource(Res.string.shortcut_description_f7_songs))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f8),  stringResource(Res.string.shortcut_description_f8_pictures))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f9),  stringResource(Res.string.shortcut_description_f9_presentation))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f10), stringResource(Res.string.shortcut_description_f10_media))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f11), stringResource(Res.string.shortcut_description_f11_lower_third))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_f12), stringResource(Res.string.shortcut_description_f12_announcements))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_bible)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_up),          stringResource(Res.string.shortcut_description_prev_verse))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_down),        stringResource(Res.string.shortcut_description_next_verse))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_left),        stringResource(Res.string.shortcut_description_prev_chapter))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_right),       stringResource(Res.string.shortcut_description_next_chapter))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_right_click), stringResource(Res.string.shortcut_description_context_menu))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_songs)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_up),              stringResource(Res.string.shortcut_description_prev_section))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_down),            stringResource(Res.string.shortcut_description_next_section))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_up_left_song),    stringResource(Res.string.shortcut_description_prev_song))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_down_right_song), stringResource(Res.string.shortcut_description_next_song))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_right_click),     stringResource(Res.string.shortcut_description_context_menu))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_pictures)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_up_left),    stringResource(Res.string.shortcut_description_prev_image))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_down_right), stringResource(Res.string.shortcut_description_next_image))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_space),      stringResource(Res.string.shortcut_description_play_pause))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_shift_drag), stringResource(Res.string.shortcut_description_reorder_image))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_schedule)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_z),       stringResource(Res.string.shortcut_description_undo))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_ctrl_shift_z), stringResource(Res.string.shortcut_description_redo))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_shift_drag),   stringResource(Res.string.shortcut_description_reorder_item))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_presentation)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_up_left),    stringResource(Res.string.shortcut_description_prev_slide))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_down_right), stringResource(Res.string.shortcut_description_next_slide))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_space),      stringResource(Res.string.shortcut_description_play_pause))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_media)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_space), stringResource(Res.string.shortcut_description_spacebar))
+                    ShortcutRow(stringResource(Res.string.shortcut_key_m),     stringResource(Res.string.shortcut_description_media_mute))
+                }
+
+                ShortcutsCategory(stringResource(Res.string.shortcut_category_canvas)) {
+                    ShortcutRow(stringResource(Res.string.shortcut_key_delete_backspace), stringResource(Res.string.shortcut_description_delete_source))
+                }
+            }
+
+            // Close button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                    Text("${stringResource(Res.string.symbol_ok)} ${stringResource(Res.string.ok)}")
                 }
             }
         }

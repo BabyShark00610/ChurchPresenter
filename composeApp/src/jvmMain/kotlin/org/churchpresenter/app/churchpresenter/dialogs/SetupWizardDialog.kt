@@ -101,8 +101,10 @@ import churchpresenter.composeapp.generated.resources.setup_step2_step2
 import churchpresenter.composeapp.generated.resources.setup_step2_step3
 import churchpresenter.composeapp.generated.resources.setup_step2_step4
 import churchpresenter.composeapp.generated.resources.setup_step2_step5
+import churchpresenter.composeapp.generated.resources.setup_step2_step6
 import churchpresenter.composeapp.generated.resources.setup_step2_subtitle
 import churchpresenter.composeapp.generated.resources.setup_step2_tip
+import churchpresenter.composeapp.generated.resources.setup_step2_download_hint
 import churchpresenter.composeapp.generated.resources.setup_step2_tip2
 import churchpresenter.composeapp.generated.resources.setup_step2_title
 import churchpresenter.composeapp.generated.resources.setup_step3_step1
@@ -651,8 +653,14 @@ private fun BibleStep(onOpenSettings: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                 )
+                Text(
+                    text = stringResource(Res.string.setup_step2_step6),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+                )
                 SettingsTabHint(highlightedTab = stringResource(Res.string.bible))
             }
+            TipBox(text = stringResource(Res.string.setup_step2_download_hint))
             TipBox(text = stringResource(Res.string.setup_step2_tip))
             TipBox(text = stringResource(Res.string.setup_step2_tip2))
         }

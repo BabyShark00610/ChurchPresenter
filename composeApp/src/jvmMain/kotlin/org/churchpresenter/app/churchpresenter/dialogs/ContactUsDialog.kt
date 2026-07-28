@@ -70,11 +70,47 @@ import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.net.URI
 
-private sealed interface SendStatus {
+internal sealed interface SendStatus {
     data object Idle : SendStatus
     data object Sending : SendStatus
     data object Sent : SendStatus
     data class Error(val message: String) : SendStatus
+}
+
+/**
+ * Builds the submit request from the dialog's current field state, trimming free-text
+ * fields the way the server expects. Split out from the [onSend][ContactUsDialog] closure
+ * — which lives inside a real [DialogWindow] and can't run headless — so this decision is
+ * directly testable. See [statusForOutcome] for the matching answer-side decision.
+ */
+internal fun buildContactRequest(
+    type: String,
+    name: String,
+    email: String,
+    message: String,
+): ContactReporter.ContactRequest = ContactReporter.ContactRequest(
+    type = type,
+    name = name.trim(),
+    message = message.trim(),
+    email = email.trim(),
+    context = ContactReporter.defaultContext(),
+)
+
+/**
+ * Turns a [ContactReporter.submit] outcome into the status the dialog should show, using
+ * the caller-supplied fallback texts. Split out for the same reason as [buildContactRequest].
+ */
+internal fun statusForOutcome(
+    outcome: ContactReporter.Outcome,
+    errorText: String,
+    networkText: String,
+    rateLimitedText: String,
+): SendStatus = when (outcome) {
+    ContactReporter.Outcome.Success -> SendStatus.Sent
+    ContactReporter.Outcome.RateLimited -> SendStatus.Error(rateLimitedText)
+    is ContactReporter.Outcome.Invalid -> SendStatus.Error(outcome.error ?: errorText)
+    ContactReporter.Outcome.NetworkError -> SendStatus.Error(networkText)
+    ContactReporter.Outcome.Failure -> SendStatus.Error(errorText)
 }
 
 @Composable
@@ -117,6 +153,52 @@ fun ContactUsDialog(
         title = stringResource(Res.string.contact_us_title),
         resizable = false
     ) {
+        ContactUsDialogContent(
+            onDismiss = onDismiss,
+            types = types,
+            selectedType = selectedType,
+            onSelectedTypeChange = { selectedType = it },
+            name = name,
+            onNameChange = { name = it },
+            email = email,
+            onEmailChange = { email = it },
+            message = message,
+            onMessageChange = { message = it },
+            status = status,
+            onSend = {
+                status = SendStatus.Sending
+                scope.launch {
+                    val outcome = ContactReporter.submit(
+                        buildContactRequest(selectedType.second, name, email, message)
+                    )
+                    status = statusForOutcome(outcome, errorText, networkText, rateLimitedText)
+                    if (status == SendStatus.Sent) {
+                        delay(1500)
+                        onDismiss()
+                    }
+                }
+            },
+            sentText = sentText,
+        )
+    }
+}
+
+@Composable
+internal fun ContactUsDialogContent(
+    onDismiss: () -> Unit,
+    types: List<Pair<String, String>>,
+    selectedType: Pair<String, String>,
+    onSelectedTypeChange: (Pair<String, String>) -> Unit,
+    name: String,
+    onNameChange: (String) -> Unit,
+    email: String,
+    onEmailChange: (String) -> Unit,
+    message: String,
+    onMessageChange: (String) -> Unit,
+    status: SendStatus,
+    onSend: () -> Unit,
+    sentText: String,
+) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface
@@ -150,7 +232,7 @@ fun ContactUsDialog(
                                 TypePill(
                                     label = type.first,
                                     selected = selectedType == type,
-                                    onClick = { selectedType = type }
+                                    onClick = { onSelectedTypeChange(type) }
                                 )
                             }
                         }
@@ -158,7 +240,7 @@ fun ContactUsDialog(
 
                     SettingsTextField(
                         value = name,
-                        onValueChange = { name = it },
+                        onValueChange = onNameChange,
                         label = stringResource(Res.string.contact_name_label),
                         singleLine = true,
                         fillWidth = true,
@@ -167,7 +249,7 @@ fun ContactUsDialog(
 
                     SettingsTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = onEmailChange,
                         label = stringResource(Res.string.contact_email_label),
                         singleLine = true,
                         fillWidth = true,
@@ -182,7 +264,7 @@ fun ContactUsDialog(
                         Spacer(modifier = Modifier.height(6.dp))
                         BasicTextField(
                             value = message,
-                            onValueChange = { message = it },
+                            onValueChange = onMessageChange,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(140.dp)
@@ -249,36 +331,7 @@ fun ContactUsDialog(
                     Button(
                         shape = RoundedCornerShape(6.dp),
                         enabled = name.isNotBlank() && message.isNotBlank() && status != SendStatus.Sending,
-                        onClick = {
-                            status = SendStatus.Sending
-                            scope.launch {
-                                val outcome = ContactReporter.submit(
-                                    ContactReporter.ContactRequest(
-                                        type = selectedType.second,
-                                        name = name.trim(),
-                                        message = message.trim(),
-                                        email = email.trim(),
-                                        context = ContactReporter.defaultContext(),
-                                    )
-                                )
-                                when (outcome) {
-                                    ContactReporter.Outcome.Success -> {
-                                        status = SendStatus.Sent
-                                        delay(1500)
-                                        onDismiss()
-                                    }
-                                    ContactReporter.Outcome.RateLimited ->
-                                        // The web form (with the always-visible button below) is the escape hatch.
-                                        status = SendStatus.Error(rateLimitedText)
-                                    is ContactReporter.Outcome.Invalid ->
-                                        status = SendStatus.Error(outcome.error ?: errorText)
-                                    ContactReporter.Outcome.NetworkError ->
-                                        status = SendStatus.Error(networkText)
-                                    ContactReporter.Outcome.Failure ->
-                                        status = SendStatus.Error(errorText)
-                                }
-                            }
-                        },
+                        onClick = onSend,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
@@ -289,7 +342,6 @@ fun ContactUsDialog(
             }
         }
     }
-}
 
 @Composable
 private fun FieldLabel(text: String) {

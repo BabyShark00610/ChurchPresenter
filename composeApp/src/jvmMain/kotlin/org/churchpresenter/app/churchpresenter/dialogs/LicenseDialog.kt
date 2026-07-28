@@ -72,82 +72,83 @@ fun LicenseDialog(
         alwaysOnTop = true
     ) {
         MacMenuBarActivationFix()
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+        LicenseDialogContent(licenseText = licenseText, onAccept = onAccept, onDecline = onDecline)
+    }
+}
 
-                // Header
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = stringResource(Res.string.license_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(Res.string.license_prompt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-
-                HorizontalDivider()
-
-                // License text — scrollable
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
+@Composable
+internal fun LicenseDialogContent(licenseText: String, onAccept: () -> Unit, onDecline: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Column {
                     Text(
-                        text = licenseText,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            lineHeight = 18.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = stringResource(Res.string.license_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(Res.string.license_prompt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
+            }
 
-                HorizontalDivider()
+            HorizontalDivider()
 
-                // Button row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = licenseText,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 18.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            HorizontalDivider()
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    shape = RoundedCornerShape(6.dp),
+                    onClick = onDecline,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
                 ) {
-                    OutlinedButton(
-                        shape = RoundedCornerShape(6.dp),
-                        onClick = onDecline,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text(stringResource(Res.string.license_decline_button))
-                    }
+                    Text(stringResource(Res.string.license_decline_button))
+                }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-                    Button(shape = RoundedCornerShape(6.dp), onClick = onAccept) {
-                        Text(stringResource(Res.string.license_accept_button))
-                    }
+                Button(shape = RoundedCornerShape(6.dp), onClick = onAccept) {
+                    Text(stringResource(Res.string.license_accept_button))
                 }
             }
         }

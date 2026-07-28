@@ -69,20 +69,37 @@ private val VIDEO_EXTENSIONS = setOf("mp4", "mov", "avi", "mkv", "webm")
 private const val BUNDLED_BACKGROUNDS_PATH = "files/backgrounds"
 
 /** An entry in the local library grid — either a file the user already downloaded, or one shipped with the app. */
-private sealed interface LibraryEntry {
+internal sealed interface LibraryEntry {
     val name: String
     val key: String
 }
-private data class DownloadedEntry(val file: File) : LibraryEntry {
+internal data class DownloadedEntry(val file: File) : LibraryEntry {
     override val name get() = file.name
     override val key get() = file.absolutePath
 }
-private data class BundledEntry(override val name: String) : LibraryEntry {
+internal data class BundledEntry(override val name: String) : LibraryEntry {
     override val key get() = "bundled:$name"
 }
 
+/** Combines downloaded and bundled entries (bundled ones already downloaded under the same name are
+ * hidden), then applies the search filter. */
+internal fun libraryEntries(
+    downloadedFiles: List<File>,
+    bundledFileNames: List<String>,
+    searchQuery: String,
+): List<LibraryEntry> {
+    val downloadedNames = downloadedFiles.map { it.name }.toSet()
+    val downloaded: List<LibraryEntry> = downloadedFiles.map { DownloadedEntry(it) }
+    val bundled: List<LibraryEntry> = bundledFileNames
+        .filter { it !in downloadedNames }
+        .sorted()
+        .map { BundledEntry(it) }
+    val combined = downloaded + bundled
+    return if (searchQuery.isBlank()) combined else combined.filter { it.name.contains(searchQuery, ignoreCase = true) }
+}
+
 /** Copies a bundled background out of app resources into the stock library folder the first time it's picked. */
-private suspend fun materializeBundledEntry(fileName: String): File = withContext(Dispatchers.IO) {
+internal suspend fun materializeBundledEntry(fileName: String): File = withContext(Dispatchers.IO) {
     val dir = File(System.getProperty("user.home"), ".churchpresenter/stock-backgrounds")
     dir.mkdirs()
     val target = File(dir, fileName)
@@ -132,24 +149,6 @@ fun LocalLibraryDialog(
         }
     }
 
-    var searchQuery by remember { mutableStateOf("") }
-    val entries: List<LibraryEntry> = remember(allFiles, bundledFileNames, searchQuery) {
-        val downloadedNames = allFiles.map { it.name }.toSet()
-        val downloaded: List<LibraryEntry> = allFiles.map { DownloadedEntry(it) }
-        val bundled: List<LibraryEntry> = bundledFileNames
-            .filter { it !in downloadedNames }
-            .sorted()
-            .map { BundledEntry(it) }
-        val combined = downloaded + bundled
-        if (searchQuery.isBlank()) {
-            combined
-        } else {
-            combined.filter { it.name.contains(searchQuery, ignoreCase = true) }
-        }
-    }
-    val gridState = rememberLazyGridState()
-    val coroutineScope = rememberCoroutineScope()
-
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
         position = centeredOnMainWindow(mainWindowState, 1100.dp, 800.dp),
@@ -163,79 +162,120 @@ fun LocalLibraryDialog(
         title = stringResource(titleRes),
         resizable = true
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-                Text(
-                    text = stringResource(titleRes),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
+        LocalLibraryDialogContent(
+            mediaType = mediaType,
+            downloadedFiles = allFiles,
+            bundledFileNames = bundledFileNames,
+            onDismiss = onDismiss,
+            onMediaSelected = onMediaSelected,
+        )
+    }
+}
 
-                SettingsTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(stringResource(Res.string.stock_library_search_placeholder)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(12.dp))
+@Composable
+internal fun LocalLibraryDialogContent(
+    mediaType: StockMediaClient.StockMediaType,
+    downloadedFiles: List<File>,
+    bundledFileNames: List<String>,
+    onDismiss: () -> Unit,
+    onMediaSelected: (filePath: String) -> Unit
+) {
+    val titleRes = if (mediaType == StockMediaClient.StockMediaType.PHOTO) {
+        Res.string.stock_library_title_photos
+    } else {
+        Res.string.stock_library_title_videos
+    }
 
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    if (entries.isEmpty()) {
-                        Text(
-                            text = stringResource(Res.string.stock_library_empty),
-                            modifier = Modifier.align(Alignment.Center),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    } else {
-                        LazyVerticalGrid(
-                            state = gridState,
-                            columns = GridCells.Adaptive(160.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxSize().padding(end = 12.dp)
-                        ) {
-                            items(entries, key = { it.key }) { entry ->
-                                LibraryThumbnail(
-                                    entry = entry,
-                                    isVideo = mediaType == StockMediaClient.StockMediaType.VIDEO,
-                                    onClick = {
-                                        when (entry) {
-                                            is DownloadedEntry -> {
-                                                onMediaSelected(entry.file.absolutePath)
-                                                onDismiss()
-                                            }
-                                            is BundledEntry -> coroutineScope.launch {
-                                                val file = materializeBundledEntry(entry.name)
-                                                onMediaSelected(file.absolutePath)
-                                                onDismiss()
-                                            }
+    var searchQuery by remember { mutableStateOf("") }
+    val entries: List<LibraryEntry> = remember(downloadedFiles, bundledFileNames, searchQuery) {
+        libraryEntries(downloadedFiles, bundledFileNames, searchQuery)
+    }
+    val gridState = rememberLazyGridState()
+    val coroutineScope = rememberCoroutineScope()
+
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+            Text(
+                text = stringResource(titleRes),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
+
+            SettingsTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(stringResource(Res.string.stock_library_search_placeholder)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                if (entries.isEmpty()) {
+                    Text(
+                        text = stringResource(Res.string.stock_library_empty),
+                        modifier = Modifier.align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                } else {
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Adaptive(160.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize().padding(end = 12.dp)
+                    ) {
+                        items(entries, key = { it.key }) { entry ->
+                            LibraryThumbnail(
+                                entry = entry,
+                                isVideo = mediaType == StockMediaClient.StockMediaType.VIDEO,
+                                onClick = {
+                                    when (entry) {
+                                        is DownloadedEntry -> {
+                                            onMediaSelected(entry.file.absolutePath)
+                                            onDismiss()
+                                        }
+                                        is BundledEntry -> coroutineScope.launch {
+                                            val file = materializeBundledEntry(entry.name)
+                                            onMediaSelected(file.absolutePath)
+                                            onDismiss()
                                         }
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
-                        VerticalScrollbar(
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            adapter = rememberScrollbarAdapter(scrollState = gridState)
-                        )
                     }
+                    VerticalScrollbar(
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        adapter = rememberScrollbarAdapter(scrollState = gridState)
+                    )
                 }
+            }
 
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(Res.string.cancel))
-                    }
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(Res.string.cancel))
                 }
             }
         }
     }
+}
+
+/** Decodes an entry's thumbnail image, or `null` if the file is missing/corrupt/unreadable. */
+internal suspend fun loadThumbnailBitmap(entry: LibraryEntry): ImageBitmap? = try {
+    val bytes = when (entry) {
+        is DownloadedEntry -> entry.file.readBytes()
+        is BundledEntry -> Res.readBytes("$BUNDLED_BACKGROUNDS_PATH/${entry.name}")
+    }
+    SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
+} catch (_: Exception) {
+    null
 }
 
 @Composable
@@ -247,17 +287,7 @@ private fun LibraryThumbnail(
     var bitmap by remember(entry.key) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(entry.key) {
         if (!isVideo) {
-            bitmap = withContext(Dispatchers.IO) {
-                try {
-                    val bytes = when (entry) {
-                        is DownloadedEntry -> entry.file.readBytes()
-                        is BundledEntry -> Res.readBytes("$BUNDLED_BACKGROUNDS_PATH/${entry.name}")
-                    }
-                    SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
-                } catch (_: Exception) {
-                    null
-                }
-            }
+            bitmap = withContext(Dispatchers.IO) { loadThumbnailBitmap(entry) }
         }
     }
 

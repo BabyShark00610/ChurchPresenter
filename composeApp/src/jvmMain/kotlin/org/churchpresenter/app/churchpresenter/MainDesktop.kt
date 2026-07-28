@@ -252,7 +252,7 @@ fun MainDesktop(
     nextSlideFlow: Flow<Unit>? = null,
     previousSlideFlow: Flow<Unit>? = null,
     /** Emits a presentation [File] uploaded by a mobile client — loaded into [PresentationViewModel] automatically. */
-    uploadPresentationFlow: Flow<java.io.File>? = null,
+    uploadPresentationFlow: Flow<File>? = null,
     serverUrl: String = "",
     /** Persistent "Following <host>" badge shown above the Schedule panel while connected via Instance Link. */
     instanceLinkConnectionStatus: InstanceLinkStatus = InstanceLinkStatus.DISCONNECTED,
@@ -717,7 +717,7 @@ fun MainDesktop(
     // Load picture folder when a picture schedule item is selected (works even before Pictures tab is composed)
     LaunchedEffect(selectedPictureItem) {
         selectedPictureItem?.let { pictureItem ->
-            val folder = java.io.File(pictureItem.folderPath)
+            val folder = File(pictureItem.folderPath)
             if (folder.exists() && folder.isDirectory) {
                 picturesViewModel.selectFolder(folder)
             }
@@ -1365,7 +1365,7 @@ fun MainDesktop(
                             presenting(Presenting.ANNOUNCEMENTS)
                         },
                         onPresentLowerThird = { item ->
-                            val lottieFolder = java.io.File(appSettings.streamingSettings.lowerThirdFolder)
+                            val lottieFolder = File(appSettings.streamingSettings.lowerThirdFolder)
                             val lottieFile = lottieFolder.listFiles()?.find {
                                 it.nameWithoutExtension == item.presetLabel || it.nameWithoutExtension == item.presetId
                             }
