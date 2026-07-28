@@ -81,6 +81,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import java.awt.Cursor
 import java.awt.Window as AwtWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -1335,7 +1336,10 @@ fun BibleTab(
                     val listState = rememberLazyListState()
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(end = 8.dp)) {
                         itemsIndexed(searchResults) { _, result ->
-                            val resultText = "${result.book} ${result.chapter}:${result.verse} - ${result.verseText}"
+                            // `verseText` already begins with "Book Chapter:Verse " (Bible.addSearchResult
+                            // builds it that way so a result line reads on its own) — prefixing the
+                            // reference again here printed it twice on every row.
+                            val resultText = result.verseText
                             val highlightedText = buildAnnotatedString {
                                 var lastIndex = 0
                                 // Match against the same trimmed query that produced the results.
@@ -2059,7 +2063,11 @@ private fun BibleSearchField(
             )
         }
         if (value.isNotEmpty()) {
-            IconButton(onClick = onClear, modifier = Modifier.size(30.dp)) {
+            IconButton(
+                onClick = onClear,
+                // Tagged for tests: the icon is decorative, so there is no label to address it by.
+                modifier = Modifier.size(30.dp).testTag("bible_searchClear")
+            ) {
                 Icon(painter = painterResource(Res.drawable.ic_close), contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
