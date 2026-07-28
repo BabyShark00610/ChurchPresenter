@@ -221,6 +221,7 @@ import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleSearchMode
 import org.churchpresenter.app.churchpresenter.utils.highlightRanges
+import org.churchpresenter.app.churchpresenter.viewmodel.BibleSettingsViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -1539,12 +1540,24 @@ fun BibleTab(
                         appSettings.bibleSettings.translationList().size > 1
                     ) {
                         val translations = appSettings.bibleSettings.translationList()
+                        val translationDisplayNames = remember(
+                            appSettings.bibleSettings.storageDirectory,
+                            translationSelectionKey,
+                        ) {
+                            BibleSettingsViewModel().run {
+                                setDirectory(appSettings.bibleSettings.storageDirectory)
+                                fileDisplayNames(translations.map { it.fileName })
+                            }
+                        }
                         DropdownSelector(
                             label = translationOrderStr,
                             value = translations.first().fileName,
                             options = translations.mapIndexed { index, translation ->
                                 translation.fileName to
-                                    "${index + 1}. ${translation.fileName.substringBeforeLast('.')}"
+                                    "${index + 1}. ${
+                                        translationDisplayNames[translation.fileName]
+                                            ?: translation.fileName.substringBeforeLast('.')
+                                    }"
                             },
                             onValueChange = { fileName ->
                                 val index = translations.indexOfFirst { it.fileName == fileName }

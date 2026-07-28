@@ -64,7 +64,10 @@ fun DropdownSelector(
             )
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(verticalArrangement = Arrangement.Center) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center,
+            ) {
                 if (label.isNotEmpty()) {
                     Text(
                         text = label.uppercase(),
