@@ -5,6 +5,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -95,7 +96,17 @@ class BibleViewModel(
     private val onBibleLoaded: ((bible: Bible, translation: String) -> Unit)? = null,
     /** Reports the secondary bible's file path to CompanionServer — no companion catalog exists for
      *  it (mobile clients never browse a secondary bible), it's only used by Instance Link. */
-    private val onSecondaryBibleFilePathChanged: ((filePath: String) -> Unit)? = null
+    private val onSecondaryBibleFilePathChanged: ((filePath: String) -> Unit)? = null,
+    // Test seams (production defaults reproduce the shipping behaviour) — the same pair
+    // SongsViewModel takes, for the same reason (issue #56):
+    //  - [dispatcher] backs the view-model scope. It is Dispatchers.Main in the app so state updates
+    //    land on the UI thread; tests pass an immediate dispatcher so the load isn't queued behind
+    //    the single Swing event thread.
+    //  - [ioDispatcher] runs the bible file reads. With Dispatchers.IO hardcoded, a test had no way
+    //    to control the part that does the work and had to poll a wall clock for it; passing an
+    //    immediate dispatcher makes a load complete synchronously.
+    dispatcher: CoroutineDispatcher = Dispatchers.Main,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val _primaryBible = mutableStateOf<Bible?>(null)
     val primaryBible: State<Bible?> = _primaryBible
@@ -393,7 +404,7 @@ class BibleViewModel(
         )
     }
 
-    private val viewModelScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val viewModelScope = CoroutineScope(dispatcher + SupervisorJob())
     private var loadChapterJob: kotlinx.coroutines.Job? = null
     private var searchJob: kotlinx.coroutines.Job? = null
     private var lastChapterSelectTime = 0L
@@ -486,7 +497,7 @@ class BibleViewModel(
                     )
                     return@launch
                 }
-                withContext(Dispatchers.IO) {
+                withContext(ioDispatcher) {
                     remoteBibleCacheDir.mkdirs()
                     cacheFile.writeBytes(bytes)
                 }
@@ -501,7 +512,7 @@ class BibleViewModel(
             if (!secondaryCacheFile.exists()) {
                 val bytes = fetchSecondaryBibleFile?.invoke()
                 if (bytes != null) {
-                    withContext(Dispatchers.IO) {
+                    withContext(ioDispatcher) {
                         remoteBibleCacheDir.mkdirs()
                         secondaryCacheFile.writeBytes(bytes)
                     }
@@ -547,14 +558,14 @@ class BibleViewModel(
                 else null
 
                 // ── Phase 1: load book names only (header scan — very fast) ──────────
-                val bookNameMappingDeferred = async(Dispatchers.IO) {
+                val bookNameMappingDeferred = async(ioDispatcher) {
                     try { BibleBookNames.getBookNameMapping() } catch (_: Exception) { emptyMap() }
                 }
-                val englishBookNamesDeferred = async(Dispatchers.IO) {
+                val englishBookNamesDeferred = async(ioDispatcher) {
                     try { BibleBookNames.getEnglishBookNames() } catch (_: Exception) { emptyList() }
                 }
                 val quickPrimary = primaryPath?.let { path ->
-                    async(Dispatchers.IO) {
+                    async(ioDispatcher) {
                         try { Bible().apply { loadBooksOnly(path.absolutePath) } }
                         catch (_: Exception) { null }
                     }
@@ -573,13 +584,13 @@ class BibleViewModel(
 
                 // ── Phase 2: load full verse data in background ────────────────────
                 val primaryDeferred = primaryPath?.let { path ->
-                    async(Dispatchers.IO) {
+                    async(ioDispatcher) {
                         try { Bible().apply { loadFromSpb(path.absolutePath) } }
                         catch (e: Exception) { e.printStackTrace(); null }
                     }
                 }
                 val secondaryDeferred = secondaryPath?.let { path ->
-                    async(Dispatchers.IO) {
+                    async(ioDispatcher) {
                         try { Bible().apply { loadFromSpb(path.absolutePath) } }
                         catch (e: Exception) { e.printStackTrace(); null }
                     }
@@ -619,7 +630,7 @@ class BibleViewModel(
                     }
                     _selectedBookIndex.value = clampedBookIndex
                     val bookId = primary.getBookId(clampedBookIndex)
-                    val chapterResult = withContext(Dispatchers.IO) {
+                    val chapterResult = withContext(ioDispatcher) {
                         primary.getChapter(bookId, _selectedChapter.value)
                     }
                     _verses.value = chapterResult.verses
@@ -649,7 +660,7 @@ class BibleViewModel(
         val bookIndex = _books.value.indexOfFirst { it.equals(bookName, ignoreCase = true) }
         if (bookIndex < 0) return emptyList()
         val bookId = primaryBible.getBookId(bookIndex)
-        return withContext(Dispatchers.IO) {
+        return withContext(ioDispatcher) {
             val verseList = mutableListOf<SelectedVerse>()
             val chapterVerses = primaryBible.getChapter(bookId, chapter).verses
             val verseStr = chapterVerses.firstOrNull { v ->
@@ -699,7 +710,7 @@ class BibleViewModel(
         val bookIndex = _books.value.indexOfFirst { it.equals(bookName, ignoreCase = true) }
         if (bookIndex < 0) return emptyList()
         val bookId = bible.getBookId(bookIndex)
-        return withContext(Dispatchers.IO) {
+        return withContext(ioDispatcher) {
             bible.getChapter(bookId, chapter).verses
         }
     }
@@ -715,7 +726,7 @@ class BibleViewModel(
                 loadChapterJob?.cancel()
                 loadChapterJob = viewModelScope.launch {
                     val bookId = bible.getBookId(clampedIndex)
-                    val chapterResult = withContext(Dispatchers.IO) {
+                    val chapterResult = withContext(ioDispatcher) {
                         bible.getChapter(bookId, chapter)
                     }
                     _verses.value = chapterResult.verses
@@ -807,7 +818,7 @@ class BibleViewModel(
             val clampedIndex = bookIndex.coerceIn(0, bookCount - 1)
             val bookId = bible.getBookId(clampedIndex)
 
-            val chapterResult = withContext(Dispatchers.IO) {
+            val chapterResult = withContext(ioDispatcher) {
                 bible.getChapter(bookId, chapter)
             }
             val chapterVerses = chapterResult.verses
@@ -872,7 +883,7 @@ class BibleViewModel(
         loadChapterJob = viewModelScope.launch {
             if (!_isFullyLoadedFlow.value) _isFullyLoadedFlow.first { it }
             val bId = bible.getBookId(clamped)
-            val chapterVerses = withContext(Dispatchers.IO) { bible.getChapter(bId, chapter).verses }
+            val chapterVerses = withContext(ioDispatcher) { bible.getChapter(bId, chapter).verses }
             _verses.value = chapterVerses
             val verseIdx = chapterVerses.indexOfFirst { it.startsWith("$verseNumber. ") }
             _selectedVerseIndex.value = if (verseIdx >= 0) verseIdx else 0
@@ -1329,7 +1340,7 @@ class BibleViewModel(
 
         searchJob = viewModelScope.launch {
             if (debounceMs > 0) delay(debounceMs)
-            val results = withContext(Dispatchers.IO) {
+            val results = withContext(ioDispatcher) {
                 try {
                     val pattern = if (isExactMatch) "\\b${Regex.escape(query)}\\b" else Regex.escape(query)
                     val searchRegex = Regex(pattern, RegexOption.IGNORE_CASE)
@@ -1518,7 +1529,7 @@ class BibleViewModel(
         loadChapterJob = viewModelScope.launch {
             if (!_isFullyLoadedFlow.value) _isFullyLoadedFlow.first { it }
             val bookId = bible.getBookId(idx)
-            val chapterVerses = withContext(Dispatchers.IO) {
+            val chapterVerses = withContext(ioDispatcher) {
                 bible.getChapter(bookId, targetChapter).verses
             }
             _verses.value = chapterVerses
@@ -1617,7 +1628,7 @@ class BibleViewModel(
         _selectedVerseIndex.value = 0
 
         viewModelScope.launch {
-            val chapterResult = withContext(Dispatchers.IO) {
+            val chapterResult = withContext(ioDispatcher) {
                 bible.getChapter(bookId, chapter)
             }
             val chapterVerses = chapterResult.verses

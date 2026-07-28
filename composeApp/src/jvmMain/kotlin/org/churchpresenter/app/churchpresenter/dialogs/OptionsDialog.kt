@@ -96,11 +96,6 @@ fun OptionsDialog(
 ) {
     if (!isVisible) return
 
-    var currentSettings by remember { mutableStateOf(initialSettings ?: settingsManager.loadSettings()) }
-    val companionSatelliteTabIndex = if (obsManager != null) 11 else 10
-    val tabCount = companionSatelliteTabIndex + 1
-    var selectedTabIndex by remember(initialTab) { mutableStateOf(initialTab) }
-    val safeTabIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
     val mainWindowState = LocalMainWindowState.current
     DialogWindow(
         onCloseRequest = onDismiss,
@@ -112,6 +107,52 @@ fun OptionsDialog(
         title = stringResource(Res.string.options),
         resizable = true
     ) {
+        OptionsDialogContent(
+            theme = theme,
+            settingsManager = settingsManager,
+            companionServer = companionServer,
+            remoteClientManager = remoteClientManager,
+            presenterManager = presenterManager,
+            onDismiss = onDismiss,
+            onSave = onSave,
+            onIdentifyScreen = onIdentifyScreen,
+            onIdentifyBrowserSource = onIdentifyBrowserSource,
+            onThemeChange = onThemeChange,
+            scenes = scenes,
+            onOpenLottieGen = onOpenLottieGen,
+            obsManager = obsManager,
+            companionSatelliteViewModel = companionSatelliteViewModel,
+            initialTab = initialTab,
+            initialSettings = initialSettings,
+        )
+    }
+}
+
+@Composable
+internal fun OptionsDialogContent(
+    theme: ThemeMode,
+    settingsManager: SettingsManager,
+    companionServer: CompanionServer,
+    remoteClientManager: RemoteClientManager,
+    presenterManager: PresenterManager,
+    onDismiss: () -> Unit,
+    onSave: (AppSettings) -> Unit = {},
+    onIdentifyScreen: () -> Unit = {},
+    onIdentifyBrowserSource: (Int) -> Unit = {},
+    onThemeChange: (ThemeMode) -> Unit = {},
+    scenes: List<Scene> = emptyList(),
+    onOpenLottieGen: (outputDir: String, onFileSaved: (() -> Unit)?) -> Unit = { _, _ -> },
+    obsManager: OBSWebSocketManager? = null,
+    companionSatelliteViewModel: CompanionSatelliteViewModel? = null,
+    initialTab: Int = 0,
+    initialSettings: AppSettings? = null
+) {
+    var currentSettings by remember { mutableStateOf(initialSettings ?: settingsManager.loadSettings()) }
+    val companionSatelliteTabIndex = if (obsManager != null) 11 else 10
+    val tabCount = companionSatelliteTabIndex + 1
+    var selectedTabIndex by remember(initialTab) { mutableStateOf(initialTab) }
+    val safeTabIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
+
         AppThemeWrapper(theme = theme) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
@@ -352,4 +393,3 @@ fun OptionsDialog(
             }
         }
     }
-}

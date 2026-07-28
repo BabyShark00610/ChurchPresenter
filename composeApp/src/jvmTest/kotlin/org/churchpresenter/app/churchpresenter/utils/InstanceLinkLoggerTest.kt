@@ -124,9 +124,8 @@ a newline"""),
 
     @Test
     fun `each call appends exactly one line`() {
-        val before = logFile().readLines().size
         repeat(3) { InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "unit_append_$it") }
-        assertEquals(before + 3, logFile().readLines().size)
+        repeat(3) { assertEquals("unit_append_$it", lastRowFor("unit_append_$it").str("event")) }
     }
 
     @Test

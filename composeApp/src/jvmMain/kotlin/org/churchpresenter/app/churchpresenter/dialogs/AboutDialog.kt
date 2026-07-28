@@ -91,7 +91,13 @@ fun AboutDialog(
         title = stringResource(Res.string.about_title),
         resizable = false
     ) {
-        AppThemeWrapper(theme = theme) {
+        AboutDialogContent(onDismiss = onDismiss, appSettings = appSettings, theme = theme)
+    }
+}
+
+@Composable
+internal fun AboutDialogContent(onDismiss: () -> Unit, appSettings: AppSettings, theme: ThemeMode) {
+    AppThemeWrapper(theme = theme) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -227,7 +233,6 @@ fun AboutDialog(
                     Text(stringResource(Res.string.action_ok))
                 }
             }
-        }
         }
     }
 }
