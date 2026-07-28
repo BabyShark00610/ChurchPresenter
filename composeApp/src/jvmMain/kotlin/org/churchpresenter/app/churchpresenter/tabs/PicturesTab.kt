@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.serialization.json.Json
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.TooltipArea
@@ -148,8 +149,8 @@ import kotlinx.coroutines.delay
 
 private object RecentPictureFolders {
     private const val MAX = 10
-    private val file = java.io.File(System.getProperty("user.home"), ".churchpresenter/recent_picture_folders.json")
-    private val pinnedFile = java.io.File(System.getProperty("user.home"), ".churchpresenter/pinned_picture_folders.json")
+    private val file = File(System.getProperty("user.home"), ".churchpresenter/recent_picture_folders.json")
+    private val pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_picture_folders.json")
     val folders = androidx.compose.runtime.mutableStateListOf<String>()
     val pinned = androidx.compose.runtime.mutableStateListOf<String>()
 
@@ -370,7 +371,7 @@ fun PicturesTab(
                     stringResource(Res.string.select_folder),
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontSize = TextUnit(12.5f, TextUnitType.Sp),
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold
                     )
                 )
             }
@@ -380,7 +381,7 @@ fun PicturesTab(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis
             )
             if (onAddToSchedule != null) {
                 AddToScheduleButton(
@@ -413,7 +414,7 @@ fun PicturesTab(
             ) {
                 Text(
                     text = stringResource(Res.string.recent),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
                 TooltipArea(
@@ -456,7 +457,7 @@ fun PicturesTab(
                                         RoundedCornerShape(6.dp)
                                     )
                                     .clickable {
-                                        val folder = java.io.File(path)
+                                        val folder = File(path)
                                         if (folder.exists() && folder.isDirectory) {
                                             viewModel.selectFolder(folder)
                                             onSettingsChange { s -> s.copy(pictureSettings = s.pictureSettings.copy(storageDirectory = path)) }
@@ -467,8 +468,8 @@ fun PicturesTab(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = java.io.File(path).name,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
+                                    text = File(path).name,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                                     color = if (isActive) MaterialTheme.colorScheme.onSurface
                                             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                     maxLines = 1
@@ -624,7 +625,7 @@ fun PicturesTab(
                         text = stringResource(Res.string.auto_scroll_interval).uppercase(),
                         fontSize = TextUnit(8f, TextUnitType.Sp),
                         lineHeight = TextUnit(9f, TextUnitType.Sp),
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.9.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         maxLines = 1
@@ -634,7 +635,7 @@ fun PicturesTab(
                             text = "${appSettings.pictureSettings.autoScrollInterval.toInt()} ${stringResource(Res.string.unit_s)}",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 12.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                                fontWeight = FontWeight.Medium
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
@@ -687,7 +688,7 @@ fun PicturesTab(
                         text = stringResource(Res.string.transition_duration).uppercase(),
                         fontSize = TextUnit(8f, TextUnitType.Sp),
                         lineHeight = TextUnit(9f, TextUnitType.Sp),
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.9.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         maxLines = 1
@@ -697,7 +698,7 @@ fun PicturesTab(
                             text = "${appSettings.pictureSettings.transitionDuration.toInt()} ${stringResource(Res.string.unit_ms)}",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 12.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                                fontWeight = FontWeight.Medium
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
@@ -948,13 +949,13 @@ fun PicturesTab(
                                     text = imageFile.nameWithoutExtension,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = TextUnit(11.5f, TextUnitType.Sp),
-                                        fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold
-                                                     else androidx.compose.ui.text.font.FontWeight.Medium
+                                        fontWeight = if (isSelected) FontWeight.SemiBold
+                                                     else FontWeight.Medium
                                     ),
                                     color = if (isSelected) MaterialTheme.colorScheme.onSurface
                                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
                                     maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }

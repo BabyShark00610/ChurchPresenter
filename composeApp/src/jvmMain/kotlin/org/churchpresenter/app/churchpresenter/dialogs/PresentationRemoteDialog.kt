@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -142,7 +143,7 @@ internal fun PresentationRemoteDialogContent(
     onStartTunnel: () -> Unit,
     onStopTunnel: () -> Unit,
     onDismiss: () -> Unit,
-    scrollState: androidx.compose.foundation.ScrollState = rememberScrollState(),
+    scrollState: ScrollState = rememberScrollState(),
     copyText: (String) -> Unit = { text ->
         java.awt.Toolkit.getDefaultToolkit().systemClipboard
             .setContents(java.awt.datatransfer.StringSelection(text), null)

@@ -98,6 +98,7 @@ import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.SceneCanvas
 import org.churchpresenter.app.churchpresenter.composables.SourcePropertiesPanel
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.utils.assignedDisplayBounds
 import org.churchpresenter.app.churchpresenter.utils.formatAspectRatio
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.models.SourceTransform
@@ -241,19 +242,7 @@ fun CanvasTab(
             // Resolve live presentation display for aspect ratio checks
             val presentationAssignment0 = appSettings.projectionSettings.getAssignment(0)
             val presentationBounds0 = remember(presentationAssignment0.targetDisplay, presentationAssignment0.targetBoundsX, presentationAssignment0.targetBoundsY) {
-                val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-                val screens = ge.screenDevices
-                val matched = if (presentationAssignment0.targetBoundsX != Int.MIN_VALUE) {
-                    screens.firstOrNull { sd ->
-                        val b = sd.defaultConfiguration.bounds
-                        b.x == presentationAssignment0.targetBoundsX && b.y == presentationAssignment0.targetBoundsY
-                    }
-                } else null
-                val device = matched
-                    ?: screens.getOrNull(presentationAssignment0.targetDisplay)
-                    ?: screens.firstOrNull { it != ge.defaultScreenDevice }
-                    ?: ge.defaultScreenDevice
-                device.defaultConfiguration.bounds
+                assignedDisplayBounds(presentationAssignment0)
             }
             val displayAr0 = if (presentationBounds0.height > 0) presentationBounds0.width.toFloat() / presentationBounds0.height else 0f
 
@@ -832,19 +821,7 @@ fun CanvasTab(
                 // Aspect ratio mismatch warning
                 val presentationAssignment = appSettings.projectionSettings.getAssignment(0)
                 val presentationBounds = remember(presentationAssignment.targetDisplay, presentationAssignment.targetBoundsX, presentationAssignment.targetBoundsY) {
-                    val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
-                    val screens = ge.screenDevices
-                    val matched = if (presentationAssignment.targetBoundsX != Int.MIN_VALUE) {
-                        screens.firstOrNull { sd ->
-                            val b = sd.defaultConfiguration.bounds
-                            b.x == presentationAssignment.targetBoundsX && b.y == presentationAssignment.targetBoundsY
-                        }
-                    } else null
-                    val device = matched
-                        ?: screens.getOrNull(presentationAssignment.targetDisplay)
-                        ?: screens.firstOrNull { it != ge.defaultScreenDevice }
-                        ?: ge.defaultScreenDevice
-                    device.defaultConfiguration.bounds
+                    assignedDisplayBounds(presentationAssignment)
                 }
                 val displayW = presentationBounds.width
                 val displayH = presentationBounds.height

@@ -582,7 +582,7 @@ fun ProjectionSettingsTab(
                                     text = currentOption.shortLabel,
                                     style = MaterialTheme.typography.labelSmall,
                                     maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -596,7 +596,7 @@ fun ProjectionSettingsTab(
                                 text = currentOption.shortLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -738,7 +738,7 @@ fun ProjectionSettingsTab(
                                     text = currentKeyOption.shortLabel,
                                     style = MaterialTheme.typography.labelSmall,
                                     maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -752,7 +752,7 @@ fun ProjectionSettingsTab(
                                 text = currentKeyOption.shortLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -1114,7 +1114,7 @@ fun ProjectionSettingsTab(
                                     text = displayModes.find { it.second == output.displayMode }?.first ?: fullScreenLabel,
                                     style = MaterialTheme.typography.labelSmall,
                                     maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             DropdownMenu(
