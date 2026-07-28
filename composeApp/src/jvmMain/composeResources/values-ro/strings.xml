@@ -1340,6 +1340,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Slide Titlu Cântare</string>
+    <string name="show_song_number_before_title">Afișează numărul cântării înaintea titlului</string>
     <string name="enabled">Activat</string>
 
     <!-- Stage Monitor Settings -->

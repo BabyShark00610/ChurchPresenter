@@ -1313,6 +1313,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Slide de Título da Música</string>
+    <string name="show_song_number_before_title">Mostrar o número da música antes do título</string>
     <string name="enabled">Habilitado</string>
 
     <!-- Stage Monitor Settings -->

@@ -1076,6 +1076,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Слайд с названием песни</string>
+    <string name="show_song_number_before_title">Показывать номер песни перед названием</string>
     <string name="enabled">Включено</string>
 
     <!-- Canvas Tab -->

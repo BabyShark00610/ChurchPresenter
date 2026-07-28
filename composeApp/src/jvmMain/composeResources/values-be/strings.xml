@@ -1050,6 +1050,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Слайд з назвай песні</string>
+    <string name="show_song_number_before_title">Паказваць нумар песні перад назвай</string>
     <string name="enabled">Уключана</string>
 
     <!-- Canvas Tab -->
