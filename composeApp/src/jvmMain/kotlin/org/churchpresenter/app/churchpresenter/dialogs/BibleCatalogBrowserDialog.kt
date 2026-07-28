@@ -135,22 +135,10 @@ fun BibleCatalogBrowserDialog(
     val viewModels = remember(storageDirectory) {
         sources.map { (source, _) -> BibleCatalogViewModel(source, storageDirectory) }
     }
+    val tabLabels = sources.map { (_, label) -> stringResource(label) }
     DisposableEffect(viewModels) {
         onDispose { viewModels.forEach { it.dispose() } }
     }
-
-    var selectedTab by remember { mutableStateOf(0) }
-    val viewModel = viewModels[selectedTab]
-
-    // Each tab loads the first time it is opened, so the second archive costs nothing unless asked for.
-    LaunchedEffect(viewModel) {
-        viewModel.refreshInstalled()
-        viewModel.load()
-    }
-
-    // Every download is confirmed, deliberately with no "don't ask again": the licence differs per
-    // translation, so an acknowledgement given for one says nothing about the next.
-    var pendingInstall by remember { mutableStateOf<BibleModule?>(null) }
 
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
@@ -165,6 +153,35 @@ fun BibleCatalogBrowserDialog(
         title = stringResource(Res.string.bible_catalog_title),
         resizable = true
     ) {
+        BibleCatalogBrowserDialogContent(
+            viewModels = viewModels,
+            tabLabels = tabLabels,
+            onDismiss = onDismiss,
+            onBibleInstalled = onBibleInstalled,
+        )
+    }
+}
+
+@Composable
+internal fun BibleCatalogBrowserDialogContent(
+    viewModels: List<BibleCatalogViewModel>,
+    tabLabels: List<String>,
+    onDismiss: () -> Unit,
+    onBibleInstalled: (fileName: String) -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+    val viewModel = viewModels[selectedTab]
+
+    // Each tab loads the first time it is opened, so the second archive costs nothing unless asked for.
+    LaunchedEffect(viewModel) {
+        viewModel.refreshInstalled()
+        viewModel.load()
+    }
+
+    // Every download is confirmed, deliberately with no "don't ask again": the licence differs per
+    // translation, so an acknowledgement given for one says nothing about the next.
+    var pendingInstall by remember { mutableStateOf<BibleModule?>(null) }
+
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
                 Text(
@@ -175,11 +192,11 @@ fun BibleCatalogBrowserDialog(
                 Spacer(Modifier.height(12.dp))
 
                 PrimaryTabRow(selectedTabIndex = selectedTab) {
-                    sources.forEachIndexed { index, (_, label) ->
+                    tabLabels.forEachIndexed { index, label ->
                         Tab(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
-                            text = { Text(stringResource(label)) }
+                            text = { Text(label) }
                         )
                     }
                 }
@@ -305,7 +322,6 @@ fun BibleCatalogBrowserDialog(
             )
         }
     }
-}
 
 /**
  * Shown before every download.

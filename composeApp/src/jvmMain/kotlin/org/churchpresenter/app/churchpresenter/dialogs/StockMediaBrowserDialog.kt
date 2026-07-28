@@ -151,6 +151,38 @@ fun StockMediaBrowserDialog(
         title = stringResource(titleRes),
         resizable = true
     ) {
+        StockMediaBrowserDialogContent(
+            titleRes = titleRes,
+            searchPlaceholderRes = searchPlaceholderRes,
+            pexelsViewModel = pexelsViewModel,
+            pixabayViewModel = pixabayViewModel,
+            pexelsApiKey = pexelsApiKey,
+            onPexelsApiKeyChange = onPexelsApiKeyChange,
+            pixabayApiKey = pixabayApiKey,
+            onPixabayApiKeyChange = onPixabayApiKeyChange,
+            selectedTab = selectedTab,
+            onSelectedTabChange = { selectedTab = it },
+            onDismiss = onDismiss,
+            onDownloadedAndClose = onDownloadedAndClose,
+        )
+    }
+}
+
+@Composable
+internal fun StockMediaBrowserDialogContent(
+    titleRes: StringResource,
+    searchPlaceholderRes: StringResource,
+    pexelsViewModel: StockMediaViewModel,
+    pixabayViewModel: StockMediaViewModel,
+    pexelsApiKey: String,
+    onPexelsApiKeyChange: (String) -> Unit,
+    pixabayApiKey: String,
+    onPixabayApiKeyChange: (String) -> Unit,
+    selectedTab: Int,
+    onSelectedTabChange: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    onDownloadedAndClose: (String) -> Unit,
+) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
                 Text(
@@ -164,12 +196,12 @@ fun StockMediaBrowserDialog(
                 PrimaryTabRow(selectedTabIndex = selectedTab) {
                     Tab(
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                        onClick = { onSelectedTabChange(0) },
                         text = { Text(stringResource(Res.string.stock_photo_source_pexels)) }
                     )
                     Tab(
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+                        onClick = { onSelectedTabChange(1) },
                         text = { Text(stringResource(Res.string.stock_photo_source_pixabay)) }
                     )
                 }
@@ -212,7 +244,6 @@ fun StockMediaBrowserDialog(
             }
         }
     }
-}
 
 @Composable
 private fun StockSourcePane(

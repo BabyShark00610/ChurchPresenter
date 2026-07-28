@@ -50,10 +50,6 @@ fun AddLabelDialog(
     existingBackgroundColor: String = "#2196F3",
     isEdit: Boolean = false
 ) {
-    var labelText by remember { mutableStateOf(existingText) }
-    var textColor by remember { mutableStateOf(existingTextColor) }
-    var backgroundColor by remember { mutableStateOf(existingBackgroundColor) }
-
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
         position = centeredOnMainWindow(mainWindowState, 500.dp, 400.dp),
@@ -67,125 +63,156 @@ fun AddLabelDialog(
         title = stringResource(if (isEdit) Res.string.edit_label else Res.string.add_label),
         resizable = false
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface
+        AddLabelDialogContent(
+            onDismiss = onDismiss,
+            onConfirm = onConfirm,
+            existingText = existingText,
+            existingTextColor = existingTextColor,
+            existingBackgroundColor = existingBackgroundColor,
+            isEdit = isEdit
+        )
+    }
+}
+
+/**
+ * The label editor itself: the text field, the two colour pickers, and the Cancel/OK row.
+ *
+ * Held apart from [AddLabelDialog] because that function's only other statement is the
+ * `DialogWindow` it opens, which cannot be composed on a headless machine. Keeping the window down
+ * to that one call leaves the field defaults, the blank-text guard on OK, and what OK hands back
+ * reachable from a test.
+ */
+@Composable
+internal fun AddLabelDialogContent(
+    onDismiss: () -> Unit,
+    onConfirm: (text: String, textColor: String, backgroundColor: String) -> Unit,
+    existingText: String = "",
+    existingTextColor: String = "#FFFFFF",
+    existingBackgroundColor: String = "#2196F3",
+    isEdit: Boolean = false
+) {
+    var labelText by remember { mutableStateOf(existingText) }
+    var textColor by remember { mutableStateOf(existingTextColor) }
+    var backgroundColor by remember { mutableStateOf(existingBackgroundColor) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
         ) {
+            // Title
+            Text(
+                text = stringResource(if (isEdit) Res.string.edit_label else Res.string.add_label),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Content
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Title
-                Text(
-                    text = stringResource(if (isEdit) Res.string.edit_label else Res.string.add_label),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Content
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Label text input
-                    Column {
-                        Text(
-                            text = stringResource(Res.string.label_text),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SettingsTextField(
-                            value = labelText,
-                            onValueChange = { labelText = it },
-                            placeholder = {
-                                Text(
-                                    stringResource(Res.string.enter_label_text),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
-                    }
-
-                    // Text color picker
-                    Row(
+                // Label text input
+                Column {
+                    Text(
+                        text = stringResource(Res.string.label_text),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SettingsTextField(
+                        value = labelText,
+                        onValueChange = { labelText = it },
+                        placeholder = {
+                            Text(
+                                stringResource(Res.string.enter_label_text),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(Res.string.text_color),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        ColorPickerField(
-                            color = textColor,
-                            onColorChange = { textColor = it }
-                        )
-                    }
-
-                    // Background color picker
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(Res.string.background_color_label),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        ColorPickerField(
-                            color = backgroundColor,
-                            onColorChange = { backgroundColor = it }
-                        )
-                    }
+                        singleLine = true,
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Buttons
+                // Text color picker
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                        Text(
-                            stringResource(Res.string.cancel),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
+                    Text(
+                        text = stringResource(Res.string.text_color),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    ColorPickerField(
+                        color = textColor,
+                        onColorChange = { textColor = it }
+                    )
+                }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                // Background color picker
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(Res.string.background_color_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    ColorPickerField(
+                        color = backgroundColor,
+                        onColorChange = { backgroundColor = it }
+                    )
+                }
+            }
 
-                    Button(
-                        shape = RoundedCornerShape(6.dp),
-                        onClick = {
-                            if (labelText.isNotBlank()) {
-                                onConfirm(labelText.trim(), textColor, backgroundColor)
-                                onDismiss()
-                            }
-                        },
-                        enabled = labelText.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text(
-                            stringResource(Res.string.ok),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                    Text(
+                        stringResource(Res.string.cancel),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(
+                    shape = RoundedCornerShape(6.dp),
+                    onClick = {
+                        if (labelText.isNotBlank()) {
+                            onConfirm(labelText.trim(), textColor, backgroundColor)
+                            onDismiss()
+                        }
+                    },
+                    enabled = labelText.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        stringResource(Res.string.ok),
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }
