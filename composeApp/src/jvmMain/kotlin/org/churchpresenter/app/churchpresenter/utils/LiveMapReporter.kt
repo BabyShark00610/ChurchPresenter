@@ -65,11 +65,28 @@ object LiveMapReporter {
         }
     }
 
+    /**
+     * @param repoSlug The git origin this build was made from, as "owner/name"
+     * (see the build-provenance helpers in build.gradle.kts). The app is
+     * open-source and hardcodes [PING_URL], so without this a fork's launches
+     * are indistinguishable from real installs on the live map. Only the slug
+     * is sent — never the remote URL, which can embed credentials.
+     * @param commit Short commit hash the build was made from.
+     * @param buildType "release", "snapshot", "dirty" or "nogit" — separates a
+     * real end-user run from a self-compiled one, including inside a fork
+     * (src=dev only covers our own IDE launches).
+     *
+     * Each is omitted when unknown; the server treats a missing value the same
+     * as an unrecognised one and still counts the ping.
+     */
     internal fun buildPingUrl(
         os: String,
         version: String,
         updateCheckInterval: UpdateCheckInterval?,
         isDevBuild: Boolean,
+        repoSlug: String = BuildConfig.REPO_SLUG,
+        commit: String = BuildConfig.COMMIT_HASH,
+        buildType: String = BuildConfig.BUILD_TYPE,
     ): String = buildString {
         append(PING_URL)
         append("?platform=desktop")
@@ -77,6 +94,9 @@ object LiveMapReporter {
         append("&version=$version")
         if (updateCheckInterval != null) append("&updateCheck=${updateCheckInterval.name.lowercase()}")
         if (isDevBuild) append("&src=dev")
+        if (repoSlug.isNotBlank() && repoSlug != "unknown") append("&repo=$repoSlug")
+        if (commit.isNotBlank() && commit != "unknown") append("&commit=$commit")
+        if (buildType.isNotBlank() && buildType != "unknown") append("&build=$buildType")
     }
 
     /**
