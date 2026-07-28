@@ -6,6 +6,10 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.LocalSystemTheme
+import androidx.compose.ui.SystemTheme
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
@@ -35,7 +39,7 @@ import kotlin.test.assertTrue
  * SYSTEM is deliberately asserted loosely — it follows the host OS, so a test that pinned it to
  * light would pass on one machine and fail on the next.
  */
-@OptIn(ExperimentalTestApi::class)
+@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
 class ThemeRenderTest {
 
     /** One of the private schemes in `Theme.kt`, by name. */
@@ -98,6 +102,50 @@ class ThemeRenderTest {
             applied === scheme("LightColorScheme") || applied === scheme("DarkColorScheme"),
             "System has to resolve to the plain light or dark scheme, not to an accent theme",
         )
+    }
+
+    /** Overrides the desktop's own theme signal, so both sides of `isSystemInDarkTheme()` are reachable. */
+    private fun <T> underSystemTheme(systemTheme: SystemTheme, capture: @Composable () -> T): T {
+        var captured: T? = null
+        runComposeUiTest {
+            setContent {
+                CompositionLocalProvider(LocalSystemTheme provides systemTheme) {
+                    ChurchPresenterTheme(themeMode = ThemeMode.SYSTEM) { captured = capture() }
+                }
+            }
+        }
+        @Suppress("UNCHECKED_CAST")
+        return captured as T
+    }
+
+    @Test
+    fun `system mode picks the light scheme when the desktop reports light`() {
+        val applied = underSystemTheme(SystemTheme.Light) { MaterialTheme.colorScheme }
+
+        assertSame(scheme("LightColorScheme"), applied)
+    }
+
+    @Test
+    fun `system mode picks the dark scheme when the desktop reports dark`() {
+        val applied = underSystemTheme(SystemTheme.Dark) { MaterialTheme.colorScheme }
+
+        assertSame(scheme("DarkColorScheme"), applied)
+    }
+
+    @Test
+    fun `the theme mode defaults to system when none is given`() {
+        // Every call site in the app passes themeMode explicitly, so this is the only place
+        // ChurchPresenterTheme's own default argument is ever actually used.
+        var applied: ColorScheme? = null
+        runComposeUiTest {
+            setContent {
+                CompositionLocalProvider(LocalSystemTheme provides SystemTheme.Light) {
+                    ChurchPresenterTheme { applied = MaterialTheme.colorScheme }
+                }
+            }
+        }
+
+        assertSame(scheme("LightColorScheme"), applied)
     }
 
     @Test
@@ -200,6 +248,30 @@ class ThemeRenderTest {
             applied === scheme("LightColorScheme") || applied === scheme("DarkColorScheme"),
             "a wrapper with no theme named must not pick an accent theme of its own",
         )
+    }
+
+    @Test
+    fun `reading the theme manager with no provider still returns a usable one`() {
+        // compositionLocalOf { ThemeManager() } — the fallback a screen hits if it forgets
+        // ProvideThemeManager entirely, rather than what AppThemeWrapper always sets up.
+        var seen: ThemeManager? = null
+        runComposeUiTest {
+            setContent { seen = LocalThemeManager.current }
+        }
+
+        assertEquals(ThemeMode.SYSTEM, seen?.themeMode?.value, "an unprovided manager must not leave the UI blank or throw")
+    }
+
+    @Test
+    fun `provide theme manager without one explicitly given still creates one for its content`() {
+        // Exercises ProvideThemeManager's own default `remember { ThemeManager() }`, not the
+        // explicit instance AppThemeWrapper always passes in.
+        var seen: ThemeManager? = null
+        runComposeUiTest {
+            setContent { ProvideThemeManager { seen = rememberThemeManager() } }
+        }
+
+        assertEquals(ThemeMode.SYSTEM, seen!!.themeMode.value)
     }
 
     @Test
