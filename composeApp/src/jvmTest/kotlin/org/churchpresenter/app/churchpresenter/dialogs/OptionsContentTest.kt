@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.data.RemoteClientManager
 import org.churchpresenter.app.churchpresenter.data.SettingsManager
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -32,6 +33,10 @@ class OptionsContentTest {
 
     @BeforeTest
     fun isolateHome() {
+        // Pin the JVM-wide log path to the real test home before swapping user.home below: this test
+        // builds a PresenterManager and a CompanionServer, whose Instance Link paths log, and
+        // InstanceLinkLogger keeps whatever user.home pointed at the first time anything logged.
+        TestSingletons.latchToTestHome()
         realHome = System.getProperty("user.home")
         home = Files.createTempDirectory("cp-options-test").toFile()
         System.setProperty("user.home", home.absolutePath)
