@@ -71,7 +71,7 @@ data class RemoteActivityNotification(
     val clientLabel: String = ""
 )
 
-private const val TOAST_AUTO_DISMISS_MS = 10_000L
+internal const val TOAST_AUTO_DISMISS_MS = 10_000L
 
 /**
  * Overlay shown at the bottom of the screen whenever a session-allowed or

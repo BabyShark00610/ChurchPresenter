@@ -210,4 +210,15 @@ class CCLIReportContentTest {
             onNodeWithText(CcliLabel.LEGEND_SONGS).assertIsDisplayed()
             onNodeWithText(CcliLabel.LEGEND_BIBLE).assertIsDisplayed()
         }
+
+    @Test
+    fun `beyond ten periods only every few-th x-axis label is drawn to avoid crowding`() =
+        reportContent({
+            ActivityContent((1..20).map { activity("P$it", songs = it, verses = 0) })
+        }) {
+            val shown = renderedText()
+            assertTrue(shown.contains("P1"), "the first period's label always shows; showed $shown")
+            assertTrue(shown.contains("P20"), "the last period's label always shows, whatever the step; showed $shown")
+            assertFalse(shown.contains("P2"), "with 20 periods, labels in between the step are dropped; showed $shown")
+        }
 }

@@ -197,8 +197,7 @@ internal fun InstanceLinkDialogContent(
                                     }
                                 }
                                 val ageSeconds = ((ageNowMs - lastMessageAtMs) / 1000).coerceAtLeast(0)
-                                val ageText = if (ageSeconds < 60) "${ageSeconds}s"
-                                else "${ageSeconds / 60}m ${ageSeconds % 60}s"
+                                val ageText = formatInstanceLinkAge(ageSeconds)
                                 Text(
                                     text = stringResource(Res.string.instance_link_last_update_age, ageText),
                                     style = MaterialTheme.typography.bodySmall,
@@ -417,9 +416,14 @@ internal fun InstanceLinkDialogContent(
         }
     }
 
+/** Formats an elapsed-seconds count for the "Last update N ago" readout. */
+internal fun formatInstanceLinkAge(ageSeconds: Long): String =
+    if (ageSeconds < 60) "${ageSeconds}s"
+    else "${ageSeconds / 60}m ${ageSeconds % 60}s"
+
 /** Short human-readable summary of a [LiveStateDto] for the "Last received" readout. */
 @Composable
-private fun liveStateSummary(state: LiveStateDto): String = when (state.contentType) {
+internal fun liveStateSummary(state: LiveStateDto): String = when (state.contentType) {
     "BIBLE" -> state.bookName?.let { "$it ${state.chapter}:${state.verseNumber}" }
         ?: stringResource(Res.string.obs_mode_bible)
     "LYRICS" -> state.songTitle ?: stringResource(Res.string.obs_mode_songs)

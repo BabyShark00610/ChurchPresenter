@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
@@ -102,6 +103,34 @@ class PresentationRemoteContentTest {
     }
 
     @Test
+    fun `an enabled api key with a blank value is not appended to the copied url`() = dialog(apiKeyEnabled = true, apiKey = "") { result ->
+        onNodeWithText("Copy URL").performClick()
+        assertEquals("http://192.168.1.5:8080/presentation-remote", result.copiedText)
+    }
+
+    @Test
+    fun `a manually chosen display url overrides the server url in the qr code`() = dialog(
+        presentationDisplayUrl = "https://custom.example.com",
+    ) { result ->
+        onNodeWithText("Copy URL").performClick()
+        assertEquals("https://custom.example.com/presentation-remote", result.copiedText)
+    }
+
+    @Test
+    fun `an api key too long to fit a QR code still renders the copy fallback`() = dialog(
+        apiKeyEnabled = true,
+        apiKey = "k".repeat(5000),
+    ) { result ->
+        // The 5000-character URL is rendered above the button, so how far down the button lands
+        // depends on where that text wraps -- which depends on font metrics, and so differs between
+        // this machine and CI. Scroll it into view rather than clicking wherever it happened to be:
+        // an off-screen node is still in the tree, so the click silently does nothing and the
+        // failure reads as "the callback never fired".
+        onNodeWithText("Copy URL").performScrollTo().performClick()
+        assertEquals("http://192.168.1.5:8080/presentation-remote?password=" + "k".repeat(5000), result.copiedText)
+    }
+
+    @Test
     fun `an idle tunnel offers to enable public access`() = dialog { result ->
         onNodeWithText("Enable Public Access").performClick()
         assertEquals(1, result.startTunnelCalls)
@@ -127,6 +156,26 @@ class PresentationRemoteContentTest {
 
         onNodeWithText("Local").performClick()
         assertEquals("http://192.168.1.5:8080", result.displayUrlChangedTo)
+    }
+
+    @Test
+    fun `a connected tunnel already showing the public url can switch back to local`() = dialog(
+        tunnelStatus = TunnelStatus.Connected("https://x.trycloudflare.com"),
+        tunnelUrl = "https://x.trycloudflare.com",
+        presentationDisplayUrl = "https://x.trycloudflare.com",
+    ) { result ->
+        onNodeWithText("Local").performClick()
+        assertEquals("http://192.168.1.5:8080", result.displayUrlChangedTo)
+    }
+
+    @Test
+    fun `a connected tunnel already showing the server url by exact match can switch to public`() = dialog(
+        tunnelStatus = TunnelStatus.Connected("https://x.trycloudflare.com"),
+        tunnelUrl = "https://x.trycloudflare.com",
+        presentationDisplayUrl = "http://192.168.1.5:8080",
+    ) { result ->
+        onNodeWithText("Public").performClick()
+        assertEquals("https://x.trycloudflare.com", result.displayUrlChangedTo)
     }
 
     @Test

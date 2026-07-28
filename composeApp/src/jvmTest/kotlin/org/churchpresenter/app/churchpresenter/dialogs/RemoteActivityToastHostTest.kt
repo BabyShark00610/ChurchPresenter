@@ -1,31 +1,34 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-/**
- * The overlay that tells the operator what an auto-approved remote client just did on their behalf.
- * It shows the most-recent notification, labels the action, attributes it to a client (preferring a
- * human label, otherwise a truncated id) and badges a client that is an Instance Link follower.
- * These are the cues the operator uses to notice an unexpected remote action, so the action label,
- * the attribution and the follower badge are each asserted — plus the empty case that shows nothing.
- */
 @OptIn(ExperimentalTestApi::class)
 class RemoteActivityToastHostTest {
 
     private fun host(
         notifications: List<RemoteActivityNotification>,
         followers: Set<String> = emptySet(),
+        onDismiss: (RemoteActivityNotification) -> Unit = {},
+        onDismissAll: () -> Unit = {},
+        onBlockForSession: (RemoteActivityNotification) -> Unit = {},
     ): @androidx.compose.runtime.Composable () -> Unit = {
         MaterialTheme {
             RemoteActivityToastHost(
                 notifications = notifications,
-                onDismiss = {},
-                onDismissAll = {},
-                onBlockForSession = {},
+                onDismiss = onDismiss,
+                onDismissAll = onDismissAll,
+                onBlockForSession = onBlockForSession,
                 connectedInstanceLinkFollowers = followers,
             )
         }
@@ -89,5 +92,125 @@ class RemoteActivityToastHostTest {
         setContent(host(emptyList()))
         onNodeWithText("Dismiss", substring = true)
             .assertDoesNotExist()
+    }
+
+    @Test
+    fun `every remaining remote event type renders its own action label`() = runComposeUiTest {
+        var notifications by mutableStateOf(emptyList<RemoteActivityNotification>())
+        setContent {
+            MaterialTheme {
+                RemoteActivityToastHost(
+                    notifications = notifications,
+                    onDismiss = {},
+                    onDismissAll = {},
+                    onBlockForSession = {},
+                )
+            }
+        }
+        val labelByType = mapOf(
+            RemoteEventType.ADD_TO_SCHEDULE to "Added to Schedule",
+            RemoteEventType.REMOVE_FROM_SCHEDULE to "Removed from Schedule",
+            RemoteEventType.PRESENT to "Presenting",
+            RemoteEventType.UPLOAD to "Uploaded",
+            RemoteEventType.CLEAR to "Cleared Display",
+            RemoteEventType.QA_ADD to "Q&A Question Added",
+            RemoteEventType.QA_EDIT to "Q&A Question Edited",
+            RemoteEventType.QA_DELETE to "Q&A Question Deleted",
+            RemoteEventType.QA_APPROVE to "Q&A Question Approved",
+            RemoteEventType.QA_DENY to "Q&A Question Denied",
+            RemoteEventType.QA_DONE to "Q&A Question Done",
+            RemoteEventType.QA_DISPLAY to "Q&A Question Live",
+            RemoteEventType.QA_CLEAR_DISPLAY to "Q&A Display Cleared",
+        )
+        for ((type, label) in labelByType) {
+            notifications = listOf(RemoteActivityNotification(type, title = "Detail for $type"))
+            waitForIdle()
+            onNodeWithText(label, substring = true)
+                .assertExists("the action label for $type must show")
+        }
+    }
+
+    @Test
+    fun `a blank-title presentation connect falls back to its detail line`() = runComposeUiTest {
+        setContent(host(listOf(RemoteActivityNotification(RemoteEventType.PRESENTATION_CONNECT, title = ""))))
+        onNodeWithText("Connected to Presentation Remote", substring = true).assertExists()
+        onNodeWithText("Now connected", substring = true)
+            .assertExists("a blank title on a connect event must fall back to its detail line")
+    }
+
+    @Test
+    fun `a blank-title qa admin connect falls back to its detail line`() = runComposeUiTest {
+        setContent(host(listOf(RemoteActivityNotification(RemoteEventType.QA_ADMIN_CONNECT, title = ""))))
+        onNodeWithText("Connected to Q&A Admin", substring = true).assertExists()
+        onNodeWithText("Now connected", substring = true)
+            .assertExists("a blank title on a connect event must fall back to its detail line")
+    }
+
+    @Test
+    fun `a notification's detail is shown alongside its title`() = runComposeUiTest {
+        setContent(
+            host(
+                listOf(
+                    RemoteActivityNotification(
+                        RemoteEventType.UPLOAD,
+                        title = "sermon-slides.pptx",
+                        detail = "12.4 MB",
+                    )
+                )
+            )
+        )
+        onNodeWithText("12.4 MB", substring = true)
+            .assertExists("the detail text must render next to the title")
+    }
+
+    @Test
+    fun `dismiss dismisses the current (most recent) notification`() = runComposeUiTest {
+        var dismissed: RemoteActivityNotification? = null
+        val newest = RemoteActivityNotification(RemoteEventType.PROJECT, title = "Newest")
+        setContent(
+            host(
+                listOf(RemoteActivityNotification(RemoteEventType.UPLOAD, title = "Oldest"), newest),
+                onDismiss = { dismissed = it },
+            )
+        )
+        onNodeWithText("Dismiss").performClick()
+        assertEquals(newest, dismissed, "dismiss must target the newest (currently shown) notification")
+    }
+
+    @Test
+    fun `dismiss all invokes onDismissAll`() = runComposeUiTest {
+        var dismissedAll = false
+        setContent(
+            host(
+                listOf(
+                    RemoteActivityNotification(RemoteEventType.UPLOAD, title = "Oldest"),
+                    RemoteActivityNotification(RemoteEventType.PROJECT, title = "Newest"),
+                ),
+                onDismissAll = { dismissedAll = true },
+            )
+        )
+        onNodeWithText("Dismiss All").performClick()
+        assertTrue(dismissedAll, "the Dismiss All button must invoke onDismissAll")
+    }
+
+    @Test
+    fun `blocking for session targets the current notification`() = runComposeUiTest {
+        var blocked: RemoteActivityNotification? = null
+        val notification = RemoteActivityNotification(RemoteEventType.PROJECT, title = "Psalm 23")
+        setContent(host(listOf(notification), onBlockForSession = { blocked = it }))
+        // The block-for-session icon button is the first clickable node in the toast (before Dismiss).
+        onAllNodes(hasClickAction())[0].performClick()
+        assertEquals(notification, blocked, "block-for-session must target the currently shown notification")
+    }
+
+    @Test
+    fun `the toast auto-dismisses after the timeout`() = runComposeUiTest {
+        var dismissed: RemoteActivityNotification? = null
+        val notification = RemoteActivityNotification(RemoteEventType.PROJECT, title = "Psalm 23")
+        mainClock.autoAdvance = false
+        setContent(host(listOf(notification), onDismiss = { dismissed = it }))
+        mainClock.advanceTimeBy(TOAST_AUTO_DISMISS_MS)
+        waitForIdle()
+        assertEquals(notification, dismissed, "the toast must dismiss itself once the auto-dismiss timer elapses")
     }
 }

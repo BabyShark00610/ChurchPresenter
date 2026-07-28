@@ -22,6 +22,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkSettings
 import org.churchpresenter.app.churchpresenter.server.InstanceLinkStatus
+import org.churchpresenter.app.churchpresenter.server.LiveStateDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -49,6 +50,8 @@ class InstanceLinkContentTest {
         settings: InstanceLinkSettings = InstanceLinkSettings(),
         connectionStatus: InstanceLinkStatus = InstanceLinkStatus.DISCONNECTED,
         remoteScheduleCount: Int = 0,
+        remoteLiveState: LiveStateDto? = null,
+        lastMessageAtMs: Long? = null,
         block: ComposeUiTest.(Result) -> Unit,
     ) {
         val result = Result()
@@ -59,8 +62,9 @@ class InstanceLinkContentTest {
                         isVisible = true,
                         settings = settings,
                         connectionStatus = connectionStatus,
-                        remoteLiveState = null,
+                        remoteLiveState = remoteLiveState,
                         remoteScheduleCount = remoteScheduleCount,
+                        lastMessageAtMs = lastMessageAtMs,
                         onConnect = { host, port, apiKey, autoConnect, allowPushToSchedule, bibleSyncMode, mirrorBackgrounds, role ->
                             result.connected = Connected(host, port, apiKey, autoConnect, allowPushToSchedule, bibleSyncMode, mirrorBackgrounds, role)
                         },
@@ -268,5 +272,248 @@ class InstanceLinkContentTest {
 
         onNodeWithText("Connect").performClick()
         assertEquals(true, result.connected?.mirrorBackgrounds)
+    }
+
+    // ── Last-update age readout ─────────────────────────────────────────────────
+
+    @Test
+    fun `formatInstanceLinkAge shows seconds under a minute`() {
+        assertEquals("0s", formatInstanceLinkAge(0))
+        assertEquals("45s", formatInstanceLinkAge(45))
+        assertEquals("59s", formatInstanceLinkAge(59))
+    }
+
+    @Test
+    fun `formatInstanceLinkAge shows minutes and seconds at and beyond a minute`() {
+        assertEquals("1m 0s", formatInstanceLinkAge(60))
+        assertEquals("1m 1s", formatInstanceLinkAge(61))
+        assertEquals("2m 5s", formatInstanceLinkAge(125))
+    }
+
+    @Test
+    fun `the age readout is shown while connected once a last-message timestamp exists`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        lastMessageAtMs = System.currentTimeMillis(),
+    ) {
+        onNodeWithText("Last update", substring = true).assertExists()
+    }
+
+    @Test
+    fun `the age readout is absent without a last-message timestamp`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+    ) {
+        onNodeWithText("Last update", substring = true).assertDoesNotExist()
+    }
+
+    // ── Last-received summary (remoteLiveState) ─────────────────────────────────
+
+    @Test
+    fun `the last-received line is absent without remote live state`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+    ) {
+        onNodeWithText("Last received", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `BIBLE with a book name shows book, chapter and verse`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "BIBLE", bookName = "John", chapter = 3, verseNumber = 16),
+    ) {
+        onNodeWithText("Last received: John 3:16").assertExists()
+    }
+
+    @Test
+    fun `BIBLE without a book name falls back to the generic Bible label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "BIBLE"),
+    ) {
+        onNodeWithText("Last received: Bible").assertExists()
+    }
+
+    @Test
+    fun `LYRICS shows the song title`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "LYRICS", songTitle = "Amazing Grace"),
+    ) {
+        onNodeWithText("Last received: Amazing Grace").assertExists()
+    }
+
+    @Test
+    fun `LYRICS without a title falls back to the generic Songs label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "LYRICS"),
+    ) {
+        onNodeWithText("Last received: Songs").assertExists()
+    }
+
+    @Test
+    fun `PICTURES shows the generic Pictures label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "PICTURES"),
+    ) {
+        onNodeWithText("Last received: Pictures").assertExists()
+    }
+
+    @Test
+    fun `PRESENTATION shows the generic Presentation label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "PRESENTATION"),
+    ) {
+        onNodeWithText("Last received: Presentation").assertExists()
+    }
+
+    @Test
+    fun `MEDIA shows the filename from the URL`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "MEDIA", mediaUrl = "https://example.com/videos/clip.mp4"),
+    ) {
+        onNodeWithText("Last received: clip.mp4").assertExists()
+    }
+
+    @Test
+    fun `MEDIA without a URL falls back to the generic Media label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "MEDIA"),
+    ) {
+        onNodeWithText("Last received: Media").assertExists()
+    }
+
+    @Test
+    fun `ANNOUNCEMENTS shows the announcement text truncated to 40 chars`() {
+        val longText = "Service starts in five minutes, please take your seats"
+        dialog(
+            connectionStatus = InstanceLinkStatus.CONNECTED,
+            remoteLiveState = LiveStateDto(contentType = "ANNOUNCEMENTS", announcementText = longText),
+        ) {
+            onNodeWithText("Last received: ${longText.take(40)}").assertExists()
+        }
+    }
+
+    @Test
+    fun `ANNOUNCEMENTS without text falls back to the generic Announcements label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "ANNOUNCEMENTS"),
+    ) {
+        onNodeWithText("Last received: Announcements").assertExists()
+    }
+
+    @Test
+    fun `WEBSITE prefers the page title over the URL`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "WEBSITE", websiteTitle = "Church Home", websiteUrl = "https://church.example"),
+    ) {
+        onNodeWithText("Last received: Church Home").assertExists()
+    }
+
+    @Test
+    fun `WEBSITE falls back to the URL when there is no title`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "WEBSITE", websiteUrl = "https://church.example"),
+    ) {
+        onNodeWithText("Last received: https://church.example").assertExists()
+    }
+
+    @Test
+    fun `WEBSITE falls back to the generic Website label when both are absent`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "WEBSITE"),
+    ) {
+        onNodeWithText("Last received: Website").assertExists()
+    }
+
+    @Test
+    fun `CANVAS shows the scene name`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "CANVAS", sceneName = "Welcome Scene"),
+    ) {
+        onNodeWithText("Last received: Welcome Scene").assertExists()
+    }
+
+    @Test
+    fun `CANVAS without a scene name falls back to the generic Canvas label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "CANVAS"),
+    ) {
+        onNodeWithText("Last received: Canvas").assertExists()
+    }
+
+    @Test
+    fun `QA shows the question text truncated to 40 chars`() {
+        val longText = "What time does the second service start on Sundays?"
+        dialog(
+            connectionStatus = InstanceLinkStatus.CONNECTED,
+            remoteLiveState = LiveStateDto(contentType = "QA", questionText = longText),
+        ) {
+            onNodeWithText("Last received: ${longText.take(40)}").assertExists()
+        }
+    }
+
+    @Test
+    fun `QA without text falls back to the generic Q&A label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "QA"),
+    ) {
+        onNodeWithText("Last received: Q&A").assertExists()
+    }
+
+    @Test
+    fun `DICTIONARY shows the word`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "DICTIONARY", dictionaryWord = "agape"),
+    ) {
+        onNodeWithText("Last received: agape").assertExists()
+    }
+
+    @Test
+    fun `DICTIONARY without a word falls back to the generic Dictionary label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "DICTIONARY"),
+    ) {
+        onNodeWithText("Last received: Dictionary").assertExists()
+    }
+
+    @Test
+    fun `LOWER_THIRD shows the generic Lower Third label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "LOWER_THIRD"),
+    ) {
+        onNodeWithText("Last received: Lower Third").assertExists()
+    }
+
+    @Test
+    fun `NONE shows the generic Clear Display label`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "NONE"),
+    ) {
+        onNodeWithText("Last received: Clear Display").assertExists()
+    }
+
+    @Test
+    fun `an unrecognized content type is shown verbatim`() = dialog(
+        connectionStatus = InstanceLinkStatus.CONNECTED,
+        remoteLiveState = LiveStateDto(contentType = "SOMETHING_NEW"),
+    ) {
+        onNodeWithText("Last received: SOMETHING_NEW").assertExists()
+    }
+
+    // ── InstanceLinkDialog (outer wrapper) ──────────────────────────────────────
+
+    @Test
+    fun `InstanceLinkDialog renders nothing when not visible`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                InstanceLinkDialog(
+                    isVisible = false,
+                    settings = InstanceLinkSettings(),
+                    connectionStatus = InstanceLinkStatus.DISCONNECTED,
+                    remoteLiveState = null,
+                    remoteScheduleCount = 0,
+                    onConnect = { _, _, _, _, _, _, _, _ -> },
+                    onDisconnect = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        onNodeWithText("Instance Link", substring = true).assertDoesNotExist()
     }
 }

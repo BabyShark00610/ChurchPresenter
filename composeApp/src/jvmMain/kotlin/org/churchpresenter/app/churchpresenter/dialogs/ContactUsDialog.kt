@@ -77,6 +77,42 @@ internal sealed interface SendStatus {
     data class Error(val message: String) : SendStatus
 }
 
+/**
+ * Builds the submit request from the dialog's current field state, trimming free-text
+ * fields the way the server expects. Split out from the [onSend][ContactUsDialog] closure
+ * — which lives inside a real [DialogWindow] and can't run headless — so this decision is
+ * directly testable. See [statusForOutcome] for the matching answer-side decision.
+ */
+internal fun buildContactRequest(
+    type: String,
+    name: String,
+    email: String,
+    message: String,
+): ContactReporter.ContactRequest = ContactReporter.ContactRequest(
+    type = type,
+    name = name.trim(),
+    message = message.trim(),
+    email = email.trim(),
+    context = ContactReporter.defaultContext(),
+)
+
+/**
+ * Turns a [ContactReporter.submit] outcome into the status the dialog should show, using
+ * the caller-supplied fallback texts. Split out for the same reason as [buildContactRequest].
+ */
+internal fun statusForOutcome(
+    outcome: ContactReporter.Outcome,
+    errorText: String,
+    networkText: String,
+    rateLimitedText: String,
+): SendStatus = when (outcome) {
+    ContactReporter.Outcome.Success -> SendStatus.Sent
+    ContactReporter.Outcome.RateLimited -> SendStatus.Error(rateLimitedText)
+    is ContactReporter.Outcome.Invalid -> SendStatus.Error(outcome.error ?: errorText)
+    ContactReporter.Outcome.NetworkError -> SendStatus.Error(networkText)
+    ContactReporter.Outcome.Failure -> SendStatus.Error(errorText)
+}
+
 @Composable
 fun ContactUsDialog(
     isVisible: Boolean,
@@ -133,28 +169,12 @@ fun ContactUsDialog(
                 status = SendStatus.Sending
                 scope.launch {
                     val outcome = ContactReporter.submit(
-                        ContactReporter.ContactRequest(
-                            type = selectedType.second,
-                            name = name.trim(),
-                            message = message.trim(),
-                            email = email.trim(),
-                            context = ContactReporter.defaultContext(),
-                        )
+                        buildContactRequest(selectedType.second, name, email, message)
                     )
-                    when (outcome) {
-                        ContactReporter.Outcome.Success -> {
-                            status = SendStatus.Sent
-                            delay(1500)
-                            onDismiss()
-                        }
-                        ContactReporter.Outcome.RateLimited ->
-                            status = SendStatus.Error(rateLimitedText)
-                        is ContactReporter.Outcome.Invalid ->
-                            status = SendStatus.Error(outcome.error ?: errorText)
-                        ContactReporter.Outcome.NetworkError ->
-                            status = SendStatus.Error(networkText)
-                        ContactReporter.Outcome.Failure ->
-                            status = SendStatus.Error(errorText)
+                    status = statusForOutcome(outcome, errorText, networkText, rateLimitedText)
+                    if (status == SendStatus.Sent) {
+                        delay(1500)
+                        onDismiss()
                     }
                 }
             },

@@ -8,13 +8,36 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
+import churchpresenter.composeapp.generated.resources.Res
+import kotlinx.coroutines.runBlocking
 import org.churchpresenter.app.churchpresenter.data.StockMediaClient
 import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+private const val REAL_BUNDLED_IMAGE = "mountains_34448034.jpg"
 
 class LocalLibraryContentTest {
+
+    private var realHome: String? = null
+    private lateinit var tempHome: File
+
+    @BeforeTest
+    fun setUpHome() {
+        realHome = System.getProperty("user.home")
+        tempHome = Files.createTempDirectory("cp-local-library-content-home").toFile()
+        System.setProperty("user.home", tempHome.absolutePath)
+    }
+
+    @AfterTest
+    fun tearDownHome() {
+        realHome?.let { System.setProperty("user.home", it) }
+    }
 
     private class Result {
         var selected: String? = null
@@ -98,5 +121,28 @@ class LocalLibraryContentTest {
     @Test
     fun `the video library title is used for videos`() = dialog(mediaType = StockMediaClient.StockMediaType.VIDEO) {
         onNodeWithText("Video Library").assertExists()
+    }
+
+    @Test
+    fun `a downloaded photo renders its decoded thumbnail`() {
+        val file = File(tempHome, "photo.jpg")
+        file.writeBytes(runBlocking { Res.readBytes("files/backgrounds/$REAL_BUNDLED_IMAGE") })
+
+        dialog(mediaType = StockMediaClient.StockMediaType.PHOTO, downloadedFiles = listOf(file)) {
+            onNodeWithText("Nothing downloaded yet — use Search to add photos or videos.").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun `clicking a bundled entry materializes it, selects it and dismisses the dialog`() = dialog(
+        bundledFileNames = listOf(REAL_BUNDLED_IMAGE),
+    ) { result ->
+        onNodeWithText(REAL_BUNDLED_IMAGE).performClick()
+
+        waitUntil("bundled entry materialized") { result.dismissed == 1 }
+
+        val expected = File(tempHome, ".churchpresenter/stock-backgrounds/$REAL_BUNDLED_IMAGE")
+        assertEquals(expected.absolutePath, result.selected)
+        assertTrue(expected.exists())
     }
 }

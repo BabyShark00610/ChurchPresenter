@@ -21,23 +21,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The update window, and the one button whose label depends on how far the download has got.
- *
- * That button is the whole dialog: Download & Install to begin, a disabled Downloading while it
- * runs, Install Now when it finishes, and — if the download failed or the release has no installer
- * for this platform — a fallback link to the release page so the operator is never left with no way
- * forward. Offering the wrong one either strands them or, worse, offers Install Now for a file that
- * was never fetched.
- *
- * `UpdateAvailableDialog`'s other statements all reach the machine: the `DialogWindow`, an HTTP
- * download, launching an installer and calling `exitProcess(0)`, and handing a URL to the desktop
- * browser. None run headless and two would be destructive in a test run, so the body was lifted into
- * `UpdateAvailableContent` and all four stay outside it. `downloadState` is passed in, which is what
- * lets these tests put the dialog at each stage of a download without one taking place.
- *
- * Left uncovered: the `DialogWindow` call and those four machine-facing operations.
- */
 class UpdateAvailableContentTest {
 
     private object Label {
@@ -250,5 +233,52 @@ class UpdateAvailableContentTest {
         waitForIdle()
         assertEquals(1, actions.dismissed)
         assertEquals(0, actions.downloads)
+    }
+
+    // ── Pure decisions the download coroutine makes ─────────────────────────────
+
+    @Test
+    fun `the installer suffix matches the release asset's extension`() {
+        assertEquals(".msi", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0.msi"))
+        assertEquals(".dmg", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0.dmg"))
+        assertEquals(".deb", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0.deb"))
+    }
+
+    @Test
+    fun `the installer suffix match is case-insensitive`() {
+        assertEquals(".msi", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0.MSI"))
+        assertEquals(".dmg", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0.DMG"))
+    }
+
+    @Test
+    fun `an unrecognized asset extension falls back to a generic binary suffix`() {
+        assertEquals(".bin", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0.zip"))
+        assertEquals(".bin", installerSuffixFor("https://example.invalid/ChurchPresenter-2.5.0"))
+    }
+
+    @Test
+    fun `download progress is the fraction of bytes received so far`() {
+        assertEquals(0f, downloadProgressFraction(bytesRead = 0L, contentLength = 1_000L))
+        assertEquals(0.5f, downloadProgressFraction(bytesRead = 500L, contentLength = 1_000L))
+        assertEquals(1f, downloadProgressFraction(bytesRead = 1_000L, contentLength = 1_000L))
+    }
+
+    @Test
+    fun `download progress is coerced into range even if more bytes arrive than expected`() {
+        assertEquals(
+            1f,
+            downloadProgressFraction(bytesRead = 1_200L, contentLength = 1_000L),
+            "a content-length off by a little must not report over 100%",
+        )
+    }
+
+    @Test
+    fun `download progress is indeterminate when the server reports no content length`() {
+        assertEquals(
+            -1f,
+            downloadProgressFraction(bytesRead = 500L, contentLength = 0L),
+            "no content length means no percentage can be computed",
+        )
+        assertEquals(-1f, downloadProgressFraction(bytesRead = 500L, contentLength = -1L))
     }
 }
