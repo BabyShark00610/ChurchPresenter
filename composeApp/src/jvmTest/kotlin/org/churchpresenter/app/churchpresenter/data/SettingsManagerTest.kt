@@ -70,6 +70,19 @@ class SettingsManagerTest {
         assertEquals(1600, reloaded.windowWidth)
     }
 
+    @Test
+    fun `a second load on the same manager reuses the cached instance rather than rereading the file`() {
+        val manager = SettingsManager()
+        val first = manager.loadSettings()
+        // Written directly, bypassing saveSettings — a real second read would pick this up.
+        writeSettings("""{"theme":"mutated-on-disk-behind-the-manager's-back"}""")
+
+        val second = manager.loadSettings()
+
+        assertEquals(first, second, "the cached instance must be returned rather than rereading a changed file")
+        assertEquals(AppSettings().theme, second.theme, "the on-disk mutation must not have been read at all")
+    }
+
     // ── Migration from pre-versioning files ─────────────────────────────────────
 
     @Test
@@ -153,6 +166,74 @@ class SettingsManagerTest {
         assertFalse("STT" in hidden)
     }
 
+    // ── Reading a damaged version number ────────────────────────────────────────
+    //
+    // readSettingsVersion falls back to 0 (pre-versioning) whenever the field can't be read as a
+    // plain number — but that fallback only decides which migration steps run. The document's own
+    // settingsVersion field is still whatever it was, and since AppSettings declares that field as
+    // an Int, decoding it back afterwards fails regardless of what the migration steps did with the
+    // rest of the document. So in practice a damaged version number is not "pre-versioning" — it is
+    // unreadable, and takes the same corrupt-file path as truncated JSON.
+
+    @Test
+    fun `a settingsVersion that is not a number makes the whole document unreadable`() {
+        writeSettings("""{"settingsVersion":"not-a-number","theme":"dark"}""")
+
+        val settings = SettingsManager().loadSettings()
+
+        assertEquals(AppSettings().theme, settings.theme, "defaults are used rather than crashing")
+        assertNotNull(
+            backupFiles().firstOrNull { it.name.startsWith("settings.json.corrupt-") },
+            "the original must still be preserved, exactly as for any other unreadable file",
+        )
+    }
+
+    @Test
+    fun `a settingsVersion that is an object rather than a number makes the whole document unreadable`() {
+        writeSettings("""{"settingsVersion":{"nested":true},"theme":"dark"}""")
+
+        val settings = SettingsManager().loadSettings()
+
+        assertEquals(AppSettings().theme, settings.theme)
+    }
+
+    // ── Migrations only run for the versions a document actually needs ─────────
+
+    @Test
+    fun `a document already past version 1 does not have its screen-assignment fields re-migrated`() {
+        // If this document's own version claims migration 1 already ran, its result must be
+        // trusted rather than replayed — a raw showBible field left over from something else
+        // entirely must not be reinterpreted as if it were still pre-migration.
+        writeSettings(
+            """{"settingsVersion":2,"projectionSettings":{"screenAssignments":[
+               {"targetDisplay":0,"showBible":false}]}}""",
+        )
+
+        val settings = SettingsManager().loadSettings()
+
+        assertEquals(
+            "both",
+            settings.projectionSettings.screenAssignments.single().bibleMode,
+            "version 1 is marked as already applied to this document; migration 1 must not run a second time",
+        )
+    }
+
+    @Test
+    fun `a document already past version 2 still receives the later companion migrations`() {
+        writeSettings(
+            """{"settingsVersion":2,"companionSatelliteConnections":[
+               {"name":"Deck","rows":2,"columns":6}]}""",
+        )
+
+        val settings = SettingsManager().loadSettings()
+
+        assertEquals(
+            2,
+            settings.companionSatelliteConnections.single().tabRows,
+            "migrations numbered above this document's own version must still run",
+        )
+    }
+
     // ── Already current ─────────────────────────────────────────────────────────
 
     @Test
@@ -219,6 +300,24 @@ class SettingsManagerTest {
     }
 
     @Test
+    fun `a second downgrade at the same future version does not overwrite the first snapshot`() {
+        val future = AppSettings.CURRENT_SETTINGS_VERSION + 1
+        writeSettings("""{"settingsVersion":$future,"theme":"first-load"}""")
+        SettingsManager().loadSettings()
+        val backup = backupFiles().single { it.name == "settings.json.v$future.bak" }
+        val original = backup.readText()
+
+        writeSettings("""{"settingsVersion":$future,"theme":"second-load"}""")
+        SettingsManager().loadSettings()
+
+        assertEquals(
+            original,
+            backup.readText(),
+            "the oldest snapshot for a version is the one taken before any lossy rewrite, so it is the one worth keeping",
+        )
+    }
+
+    @Test
     fun `a newer file keeps its version through a save, so its migrations do not re-run`() {
         val future = AppSettings.CURRENT_SETTINGS_VERSION + 1
         writeSettings("""{"settingsVersion":$future,"theme":"dark"}""")
@@ -250,6 +349,18 @@ class SettingsManagerTest {
     fun `importing never writes a backup next to the source file`() {
         SettingsManager().migrateAndDecode("""{"theme":"dark"}""")
         assertTrue(backupFiles().isEmpty(), "import passes no backup target; the user's file is not ours to touch")
+    }
+
+    @Test
+    fun `importing a file from a newer build also writes no backup`() {
+        // The downgrade path snapshots before rewriting too, but import passes no backup target
+        // either way — this is the same "the user's file is not ours to touch" rule on the other
+        // of the two version branches that can call backupBeforeRewrite.
+        val future = AppSettings.CURRENT_SETTINGS_VERSION + 1
+        val imported = SettingsManager().migrateAndDecode("""{"settingsVersion":$future,"theme":"dark"}""")
+
+        assertEquals(future, imported.settingsVersion)
+        assertTrue(backupFiles().isEmpty())
     }
 
     // ── Backward compatibility ──────────────────────────────────────────────────
