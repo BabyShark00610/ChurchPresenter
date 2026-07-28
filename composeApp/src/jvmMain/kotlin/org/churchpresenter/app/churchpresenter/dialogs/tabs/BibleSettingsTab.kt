@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -378,7 +379,7 @@ private fun LeftColumn(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().height(32.dp)) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().height(28.dp)) {
             listOf(
                 false to stringResource(Res.string.bible_translation_mode_legacy),
                 true to stringResource(Res.string.bible_translation_mode_multi),
@@ -390,10 +391,15 @@ private fun LeftColumn(
                             app.copy(bibleSettings = app.bibleSettings.withMultiTranslationMode(multiMode))
                         }
                     },
-                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                    shape = bibleSegmentedItemShape(index = index, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.primary,
+                        activeContentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     icon = {},
                 ) {
-                    Text(label)
+                    Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
             }
         }
@@ -628,6 +634,26 @@ private fun LeftColumn(
             }
             NumberSettingsTextField(modifier = Modifier.width(100.dp), label = stringResource(Res.string.bottom), initialText = settings.bibleSettings.marginBottom, onValueChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(marginBottom = value)) } }, range = 0..500)
         }
+    }
+}
+
+private fun bibleSegmentedItemShape(index: Int, count: Int): Shape {
+    val radius = 4.dp
+    return when {
+        count == 1 -> RoundedCornerShape(radius)
+        index == 0 -> RoundedCornerShape(
+            topStart = radius,
+            bottomStart = radius,
+            topEnd = 0.dp,
+            bottomEnd = 0.dp,
+        )
+        index == count - 1 -> RoundedCornerShape(
+            topStart = 0.dp,
+            bottomStart = 0.dp,
+            topEnd = radius,
+            bottomEnd = radius,
+        )
+        else -> RoundedCornerShape(0.dp)
     }
 }
 
