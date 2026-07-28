@@ -807,7 +807,13 @@ fun ScheduleTab(
     }
 }
 
-private fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel) {
+/**
+ * Adds each dropped file to the schedule as whatever [classifyDroppedFile] says it is.
+ *
+ * `internal` rather than private so the drop handling can be tested directly: the drop itself
+ * arrives through an AWT `DropTarget` on the real window, which a headless test cannot deliver.
+ */
+internal fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel) {
     for (file in files) {
         if (file.isDirectory) {
             // Folder dropped — count image files inside and add as pictures
