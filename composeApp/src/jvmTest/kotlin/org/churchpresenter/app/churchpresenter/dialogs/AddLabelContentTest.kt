@@ -228,4 +228,46 @@ class AddLabelContentTest {
 
         assertEquals(Triple("Welcome", "#111111", "#222222"), result.confirmed)
     }
+
+    @Test
+    fun `every optional parameter can be left to its own default`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                AddLabelDialogContent(onDismiss = {}, onConfirm = { _, _, _ -> })
+            }
+        }
+        onNodeWithText("Add Label").assertExists()
+        onNodeWithText("#FFFFFF").assertExists()
+        onNodeWithText("#2196F3").assertExists()
+    }
+
+    // ── AddLabelDialog itself, via its isVisible guard ─────────────────────────
+
+    @Test
+    fun `AddLabelDialog renders nothing when not visible, using only its required parameters`() = runComposeUiTest {
+        setContent {
+            AddLabelDialog(
+                isVisible = false,
+                onDismiss = {},
+                onConfirm = { _, _, _ -> },
+            )
+        }
+        onNodeWithText("Add Label").assertDoesNotExist()
+    }
+
+    @Test
+    fun `AddLabelDialog renders nothing when not visible, with every optional parameter supplied`() = runComposeUiTest {
+        setContent {
+            AddLabelDialog(
+                isVisible = false,
+                onDismiss = {},
+                onConfirm = { _, _, _ -> },
+                existingText = "Welcome",
+                existingTextColor = "#000000",
+                existingBackgroundColor = "#FF0000",
+                isEdit = true,
+            )
+        }
+        onNodeWithText("Edit Label").assertDoesNotExist()
+    }
 }

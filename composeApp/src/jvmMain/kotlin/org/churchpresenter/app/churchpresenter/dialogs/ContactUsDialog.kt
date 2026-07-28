@@ -113,6 +113,25 @@ internal fun statusForOutcome(
     ContactReporter.Outcome.Failure -> SendStatus.Error(errorText)
 }
 
+/**
+ * Submits the contact form and turns the result into the status the dialog should show. Split out
+ * from [ContactUsDialog]'s `onSend` closure — same reason as [buildContactRequest] — so the
+ * submit-then-map sequence is directly testable, leaving only the coroutine launch and the
+ * send-then-dismiss glue inside the real [DialogWindow].
+ */
+internal suspend fun submitContactRequest(
+    type: String,
+    name: String,
+    email: String,
+    message: String,
+    errorText: String,
+    networkText: String,
+    rateLimitedText: String,
+): SendStatus {
+    val outcome = ContactReporter.submit(buildContactRequest(type, name, email, message))
+    return statusForOutcome(outcome, errorText, networkText, rateLimitedText)
+}
+
 @Composable
 fun ContactUsDialog(
     isVisible: Boolean,
@@ -168,10 +187,9 @@ fun ContactUsDialog(
             onSend = {
                 status = SendStatus.Sending
                 scope.launch {
-                    val outcome = ContactReporter.submit(
-                        buildContactRequest(selectedType.second, name, email, message)
+                    status = submitContactRequest(
+                        selectedType.second, name, email, message, errorText, networkText, rateLimitedText
                     )
-                    status = statusForOutcome(outcome, errorText, networkText, rateLimitedText)
                     if (status == SendStatus.Sent) {
                         delay(1500)
                         onDismiss()
