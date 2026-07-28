@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
@@ -120,7 +121,12 @@ class PresentationRemoteContentTest {
         apiKeyEnabled = true,
         apiKey = "k".repeat(5000),
     ) { result ->
-        onNodeWithText("Copy URL").performClick()
+        // The 5000-character URL is rendered above the button, so how far down the button lands
+        // depends on where that text wraps -- which depends on font metrics, and so differs between
+        // this machine and CI. Scroll it into view rather than clicking wherever it happened to be:
+        // an off-screen node is still in the tree, so the click silently does nothing and the
+        // failure reads as "the callback never fired".
+        onNodeWithText("Copy URL").performScrollTo().performClick()
         assertEquals("http://192.168.1.5:8080/presentation-remote?password=" + "k".repeat(5000), result.copiedText)
     }
 
