@@ -1633,7 +1633,11 @@ fun SongsTab(
                             val creditLine = songCreditLine(currentSong)
 
                             fun buildTitleSection() =
-                                titleSlideSection(currentSong, appSettings.songBpm[currentSong.songId] ?: 0)
+                                titleSlideSection(
+                                    currentSong,
+                                    appSettings.songBpm[currentSong.songId] ?: 0,
+                                    appSettings.songSettings.titleSlideShowSongNumber,
+                                )
 
                             fun sendTitleSlide() {
                                 val ts = buildTitleSection()
