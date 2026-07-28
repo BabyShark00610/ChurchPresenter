@@ -140,16 +140,8 @@ internal object ScheduleLabel {
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────
 
-/** Every string on screen. */
-internal fun ComposeUiTest.renderedText(): List<String> =
-    onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
-        .fetchSemanticsNodes(atLeastOneRootRequired = false)
-        .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }
-
-internal fun ComposeUiTest.showsExactly(text: String): Boolean = renderedText().any { it == text }
-
-internal fun ComposeUiTest.showsContainingText(fragment: String): Boolean =
-    renderedText().any { it.contains(fragment) }
+// renderedText/showsExactly/showsContainingText live in TabRenderedText.kt — they are shared with
+// the other tab suites in this package.
 
 /**
  * A toolbar or row button, addressed by the content description [TooltipIconButton] gives it —
