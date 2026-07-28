@@ -30,6 +30,75 @@ fun gitCommitHash(): String {
     } catch (_: Exception) { "unknown" }
 }
 
+// ── Build provenance ──────────────────────────────────────────────────────────
+// The app is GPLv3 and hardcodes the live-map ping URL, so a fork built from
+// source pings churchpresenter.org with a payload identical to an official
+// install. Stamping the build's git origin and build kind lets the server tell
+// them apart (see the build_channel column and api/ping.ts in the website
+// repo). This is attribution for honest forks, not authentication — anyone can
+// patch these constants out. Every helper falls back to "unknown"/"nogit"
+// rather than failing the build.
+
+/** Runs a git command, returning null when git is missing or exits non-zero. */
+fun gitOutput(vararg args: String): String? {
+    return try {
+        val process = ProcessBuilder("git", *args)
+            .directory(rootProject.projectDir)
+            // Deliberately NOT redirectErrorStream(true): git writes "fatal: not a
+            // git repository" to stderr, and merging it would hand back that text
+            // as if it were a real value.
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        if (process.waitFor() != 0) null else output
+    } catch (_: Exception) { null }
+}
+
+// Matches the server's REPO_RE — anything else is stored as 'unknown' there, so
+// there's no point sending it.
+val repoSlugRegex = Regex("^[a-z0-9][a-z0-9._-]{0,38}/[a-z0-9][a-z0-9._-]{0,99}$")
+
+/**
+ * Parses a git remote URL down to a lowercase "owner/name" slug.
+ *
+ * Only the slug is ever sent — never the raw URL, which can embed credentials
+ * (https://user:token@github.com/...). Handles https://, ssh:// and scp-style
+ * (git@host:owner/name) remotes; anything else yields "unknown".
+ */
+fun parseRepoSlug(remoteUrl: String): String {
+    val trimmed = remoteUrl.trim().removeSuffix(".git").trimEnd('/')
+    if (trimmed.isEmpty()) return "unknown"
+    val path = when {
+        trimmed.contains("://") -> trimmed.substringAfter("://").substringAfter('/', "")
+        trimmed.contains(':') -> trimmed.substringAfter(':')
+        // A bare filesystem path is a local clone, not an identifiable remote.
+        else -> return "unknown"
+    }
+    val parts = path.split('/').filter { it.isNotEmpty() }
+    if (parts.size < 2) return "unknown"
+    val slug = "${parts[parts.size - 2]}/${parts[parts.size - 1]}".lowercase()
+    return if (repoSlugRegex.matches(slug)) slug else "unknown"
+}
+
+fun gitRepoSlug(): String = parseRepoSlug(gitOutput("remote", "get-url", "origin") ?: "")
+
+/**
+ * Build kind, mirroring the server's KNOWN_BUILD_TYPE set.
+ *
+ * Precedence puts `release` ahead of `dirty` on purpose: IS_RELEASE means a
+ * packaged-installer task ran, which is already this project's user-vs-developer
+ * signal (see the ?src=dev flag). Letting a dirty tree outrank it would
+ * misclassify official CI builds as developer builds if the packaging steps ever
+ * touch a tracked file — and counting real users as developers is the costlier
+ * mistake. `dirty` therefore only distinguishes among non-packaged builds.
+ */
+fun gitBuildType(isRelease: Boolean): String = when {
+    gitOutput("rev-parse", "--git-dir") == null -> "nogit" // source tarball / distro packaging
+    isRelease -> "release"
+    !gitOutput("status", "--porcelain").isNullOrEmpty() -> "dirty"
+    else -> "snapshot"
+}
+
 // ── macOS DMG volume icon ──────────────────────────────────────────────────────
 // jpackage sets the icon for the .app bundle it creates, but has no support for
 // setting a custom icon on the .dmg container itself — Finder shows the generic
@@ -506,6 +575,11 @@ val generateBuildConfig by tasks.registering {
     // multi-tenant guidance — each church authorizes this one app, rather than registering their
     // own). Neither value is committed — both are read from env vars at build time, same pattern
     // as SENTRY_AUTH_TOKEN above. Local/dev builds without these set simply can't complete OAuth.
+    // Build provenance for the live-map ping — see the helpers at the top of this
+    // file. Resolved here at build time, never at runtime: a runtime git call
+    // would read whatever directory the user happened to launch the app from.
+    val repoSlug = gitRepoSlug()
+    val buildType = gitBuildType(isRelease)
     val planningCenterClientId = System.getenv("PLANNING_CENTER_CLIENT_ID") ?: ""
     val planningCenterClientSecret = System.getenv("PLANNING_CENTER_CLIENT_SECRET") ?: ""
     val outputDir = layout.buildDirectory.dir("generated/buildconfig")
@@ -527,6 +601,8 @@ val generateBuildConfig by tasks.registering {
             |    const val COMMIT_COUNT = "$commits"
             |    const val VERSION_DISPLAY = "$appVersion ($commitHash)"
             |    const val IS_RELEASE = $isRelease
+            |    const val REPO_SLUG = "$repoSlug"
+            |    const val BUILD_TYPE = "$buildType"
             |    const val PLANNING_CENTER_CLIENT_ID = "$planningCenterClientId"
             |    const val PLANNING_CENTER_CLIENT_SECRET = "$planningCenterClientSecret"
             |}
