@@ -39,9 +39,20 @@ class PlanningCenterDownloadTest {
     private lateinit var dir: File
     private lateinit var server: FakeAttachmentHost
 
-    /** A stand-in for the attachment host: a few fixed routes covering the outcomes that matter. */
-    private class FakeAttachmentHost(val port: Int, val payload: ByteArray) {
-        private val engine = embeddedServer(Netty, port = port) {
+    /**
+     * A stand-in for the attachment host: a few fixed routes covering the outcomes that matter.
+     *
+     * Binds port 0 and asks the engine what it got, rather than picking a free port up front and
+     * binding it a moment later — between the probe socket closing and Netty binding, anything else
+     * in the suite that starts a server can take the port, and this one then dies with
+     * `BindException: Address already in use`.
+     */
+    private class FakeAttachmentHost(val payload: ByteArray) {
+        /** Valid only after [start]; port 0 means "whatever the OS gives us". */
+        var port: Int = 0
+            private set
+
+        private val engine = embeddedServer(Netty, port = 0) {
             routing {
                 get("/attachment.pdf") { call.respondBytes(payload) }
                 get("/empty") { call.respondBytes(ByteArray(0)) }
@@ -51,7 +62,13 @@ class PlanningCenterDownloadTest {
             }
         }
 
-        fun start() = engine.start(wait = false)
+        fun start() {
+            engine.start(wait = false)
+            // resolvedConnectors() suspends until the bind completes, so the port it reports is the
+            // one Netty is actually listening on.
+            port = runBlocking { engine.engine.resolvedConnectors().first().port }
+        }
+
         fun stop() = engine.stop(0, 0)
         fun url(path: String) = "http://127.0.0.1:$port$path"
     }
@@ -62,7 +79,7 @@ class PlanningCenterDownloadTest {
     @BeforeTest
     fun startHost() {
         dir = Files.createTempDirectory("cp-pco-download-test").toFile()
-        server = FakeAttachmentHost(ServerSocket(0).use { it.localPort }, payload)
+        server = FakeAttachmentHost(payload)
         server.start()
         awaitListening(server.port)
     }
