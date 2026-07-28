@@ -639,7 +639,7 @@ fun WebTab(
                             .pointerInput(liveBrowser) {
                                 // Forward mouse events via CefBrowser_N.sendMouseEvent (reflection)
                                 if (liveBrowser == null) return@pointerInput
-                                val sendMouse = findMethod(liveBrowser, "sendMouseEvent", java.awt.event.MouseEvent::class.java)
+                                val sendMouse = findMethod(liveBrowser, "sendMouseEvent", MouseEvent::class.java)
                                 var lastMoveTime = 0L
                                 awaitPointerEventScope {
                                     while (true) {
@@ -714,7 +714,7 @@ fun WebTab(
                             .pointerInput(liveBrowser) {
                                 // Forward scroll via CefBrowser_N.sendMouseWheelEvent (reflection)
                                 if (liveBrowser == null) return@pointerInput
-                                val sendWheel = findMethod(liveBrowser, "sendMouseWheelEvent", java.awt.event.MouseWheelEvent::class.java)
+                                val sendWheel = findMethod(liveBrowser, "sendMouseWheelEvent", MouseWheelEvent::class.java)
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()

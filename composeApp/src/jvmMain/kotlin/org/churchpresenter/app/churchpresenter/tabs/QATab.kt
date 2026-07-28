@@ -508,8 +508,8 @@ fun QATab(
                                 if (path != null) {
                                     val export = filteredQuestions.joinToString("\n") { q ->
                                         val status = q.status.name.lowercase().replaceFirstChar { it.uppercase() }
-                                        val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                                            .format(java.util.Date(q.timestamp))
+                                        val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+                                            .format(Date(q.timestamp))
                                         "[$time] [$status] ${q.text}"
                                     }
                                     try {
@@ -643,7 +643,7 @@ fun QATab(
                                         withContext(Dispatchers.IO) {
                                             path.toFile().writeText(
                                                 toExport.joinToString("\n") { q ->
-                                                    "[${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(q.timestamp))}] [${q.status}] ${q.text}"
+                                                    "[${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(q.timestamp))}] [${q.status}] ${q.text}"
                                                 }
                                             )
                                         }

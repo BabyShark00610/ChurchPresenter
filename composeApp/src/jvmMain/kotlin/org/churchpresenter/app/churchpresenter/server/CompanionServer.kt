@@ -1051,8 +1051,8 @@ class CompanionServer {
     }
 
     /** Lottie files in the configured lower-third folder. */
-    private fun lowerThirdFiles(): List<java.io.File> =
-        java.io.File(_lowerThirdFolder).takeIf { _lowerThirdFolder.isNotEmpty() && it.isDirectory }
+    private fun lowerThirdFiles(): List<File> =
+        File(_lowerThirdFolder).takeIf { _lowerThirdFolder.isNotEmpty() && it.isDirectory }
             ?.listFiles { f -> f.extension.lowercase() == "json" && isLottieFile(f) }
             ?.sortedBy { it.nameWithoutExtension.lowercase() } ?: emptyList()
 
@@ -1497,7 +1497,7 @@ class CompanionServer {
             // ── Songs ──────────────────────────────────────────────────────────
             if (songStorageDir.isNotEmpty()) {
                 try {
-                    val dir = java.io.File(songStorageDir)
+                    val dir = File(songStorageDir)
                     if (dir.exists() && dir.isDirectory) {
                         val songs = Songs()
                         dir.listFiles { f -> f.extension.lowercase() == Constants.EXTENSION_SPS }
@@ -1529,7 +1529,7 @@ class CompanionServer {
             // ── Bible ──────────────────────────────────────────────────────────
             if (bibleStorageDir.isNotEmpty() && primaryBibleFileName.isNotEmpty()) {
                 try {
-                    val file = java.io.File(bibleStorageDir, primaryBibleFileName)
+                    val file = File(bibleStorageDir, primaryBibleFileName)
                     if (file.exists()) {
                         val bible = Bible()
                         bible.loadFromSpb(file.absolutePath)

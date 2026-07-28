@@ -588,7 +588,7 @@ fun PresentationTab(
                                     )
                                     .border(1.dp, if (isActive) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
                                     .clickable {
-                                        val f = java.io.File(path)
+                                        val f = File(path)
                                         if (f.exists()) {
                                             viewModel.addPresentation(f)
                                             RecentPresentationFiles.add(path)
@@ -598,7 +598,7 @@ fun PresentationTab(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = java.io.File(path).name,
+                                    text = File(path).name,
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                                     color = if (isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                     maxLines = 1

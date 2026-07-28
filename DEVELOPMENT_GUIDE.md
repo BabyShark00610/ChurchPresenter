@@ -217,10 +217,21 @@ object Constants {
 | Debug prints | ~8 | VideoPlayer.kt, LowerThirdSettingsTab.kt, WebsitePresenter.kt | All `System.err.println` for error diagnostics — kept intentionally |
 | Non-null assertions (`!!`) | 0 | — | Replaced with smart casts and `getValue()` ✅ |
 | Hardcoded UI strings | 0 | — | "OK" moved to strings.xml; emojis kept (not translatable) ✅ |
+| Fully qualified `androidx.compose.*` | 0 | — | 20 sites removed 2026-07-28; the verification grep below returns nothing ✅ |
+| Fully qualified `java.*` where the import exists | 0 | — | 27 redundant sites removed 2026-07-28 ✅ |
+| Fully qualified `java.*` with no import | ~164 | Widespread | **Kept deliberately** — see the decision log |
 
 ### Decision Log
 
 **Kept intentionally:**
+- Fully qualified `java.*` references that have **no** matching import (~164, audited 2026-07-28).
+  Unlike the redundant ones, these are not automatic: many exist to disambiguate against a Compose
+  type of the same simple name — `java.awt.Window` (×8) against Compose's `Window`,
+  `java.awt.image.BufferedImage` (×7) — and
+  `java.awt.Toolkit.getDefaultToolkit().systemClipboard` is the settled form for the clipboard
+  one-liner in five files. Shortening them would need a per-site judgement and could make the code
+  less clear, not more. The zero-tolerance rule is about writing the long form when an import
+  already binds the name; that count is now 0.
 - Singular/plural verse API in PresenterManager — convenience accessors
 - `System.err.println` in VideoPlayer/WebsitePresenter/LowerThirdSettingsTab — error diagnostics for VLC/JCEF/WebView issues
 - Emoji strings — not translatable, no benefit to moving to resources

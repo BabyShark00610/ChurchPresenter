@@ -722,7 +722,7 @@ fun ServerSettingsTab(
                             Text(
                                 text = stringResource(Res.string.companion_atem_key_section),
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
