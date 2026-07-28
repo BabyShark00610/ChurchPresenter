@@ -34,7 +34,7 @@ import kotlinx.coroutines.delay
 import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkCommandFailure
 import org.jetbrains.compose.resources.stringResource
 
-private const val TOAST_AUTO_DISMISS_MS = 6_000L
+private const val INSTANCE_LINK_TOAST_AUTO_DISMISS_MS = 6_000L
 
 /**
  * Bottom-of-screen toast for InstanceLink command failures — the visible counterpart to what
@@ -99,7 +99,7 @@ fun InstanceLinkToastHost(
                     }
                 }
                 LaunchedEffect(current) {
-                    delay(TOAST_AUTO_DISMISS_MS)
+                    delay(INSTANCE_LINK_TOAST_AUTO_DISMISS_MS)
                     onDismiss(current)
                 }
             }

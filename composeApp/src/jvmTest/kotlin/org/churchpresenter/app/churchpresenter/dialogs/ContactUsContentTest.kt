@@ -16,8 +16,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.utils.ContactReporter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ContactUsContentTest {
 
@@ -143,5 +145,106 @@ class ContactUsContentTest {
     @Test
     fun `the browser fallback button is present and enabled`() = dialog {
         onNodeWithText("Open in Browser").assertIsEnabled()
+    }
+
+    @Test
+    fun `clicking the browser fallback button does not crash`() = dialog {
+        // Desktop#browse has no display to open in this headless test JVM; the click handler
+        // wraps it in runCatching specifically so this is safe to exercise.
+        onNodeWithText("Open in Browser").performClick()
+    }
+
+    @Test
+    fun `buildContactRequest trims free-text fields and carries the type through`() {
+        val request = buildContactRequest(
+            type = "bugReport",
+            name = "  A Church  ",
+            email = " pastor@church.org ",
+            message = "  Something's broken  ",
+        )
+
+        assertEquals("bugReport", request.type)
+        assertEquals("A Church", request.name)
+        assertEquals("pastor@church.org", request.email)
+        assertEquals("Something's broken", request.message)
+    }
+
+    @Test
+    fun `buildContactRequest carries diagnostic context so bug reports are triageable`() {
+        val request = buildContactRequest("bugReport", "A Church", "", "Something's broken")
+
+        assertTrue(request.context.isNotBlank())
+    }
+
+    @Test
+    fun `statusForOutcome maps Success to Sent`() {
+        val status = statusForOutcome(
+            ContactReporter.Outcome.Success,
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Sent, status)
+    }
+
+    @Test
+    fun `statusForOutcome maps RateLimited to its own error text`() {
+        val status = statusForOutcome(
+            ContactReporter.Outcome.RateLimited,
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("rate limited"), status)
+    }
+
+    @Test
+    fun `statusForOutcome maps NetworkError to its own error text`() {
+        val status = statusForOutcome(
+            ContactReporter.Outcome.NetworkError,
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("network"), status)
+    }
+
+    @Test
+    fun `statusForOutcome maps Failure to the generic error text`() {
+        val status = statusForOutcome(
+            ContactReporter.Outcome.Failure,
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("error"), status)
+    }
+
+    @Test
+    fun `statusForOutcome prefers the server's reason for an Invalid outcome`() {
+        val status = statusForOutcome(
+            ContactReporter.Outcome.Invalid("Message is required"),
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("Message is required"), status)
+    }
+
+    @Test
+    fun `statusForOutcome falls back to the generic text when Invalid has no server reason`() {
+        val status = statusForOutcome(
+            ContactReporter.Outcome.Invalid(null),
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("error"), status)
     }
 }

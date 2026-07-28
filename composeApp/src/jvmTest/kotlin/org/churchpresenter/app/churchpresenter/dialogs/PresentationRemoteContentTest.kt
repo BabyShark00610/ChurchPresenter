@@ -102,6 +102,29 @@ class PresentationRemoteContentTest {
     }
 
     @Test
+    fun `an enabled api key with a blank value is not appended to the copied url`() = dialog(apiKeyEnabled = true, apiKey = "") { result ->
+        onNodeWithText("Copy URL").performClick()
+        assertEquals("http://192.168.1.5:8080/presentation-remote", result.copiedText)
+    }
+
+    @Test
+    fun `a manually chosen display url overrides the server url in the qr code`() = dialog(
+        presentationDisplayUrl = "https://custom.example.com",
+    ) { result ->
+        onNodeWithText("Copy URL").performClick()
+        assertEquals("https://custom.example.com/presentation-remote", result.copiedText)
+    }
+
+    @Test
+    fun `an api key too long to fit a QR code still renders the copy fallback`() = dialog(
+        apiKeyEnabled = true,
+        apiKey = "k".repeat(5000),
+    ) { result ->
+        onNodeWithText("Copy URL").performClick()
+        assertEquals("http://192.168.1.5:8080/presentation-remote?password=" + "k".repeat(5000), result.copiedText)
+    }
+
+    @Test
     fun `an idle tunnel offers to enable public access`() = dialog { result ->
         onNodeWithText("Enable Public Access").performClick()
         assertEquals(1, result.startTunnelCalls)
@@ -127,6 +150,26 @@ class PresentationRemoteContentTest {
 
         onNodeWithText("Local").performClick()
         assertEquals("http://192.168.1.5:8080", result.displayUrlChangedTo)
+    }
+
+    @Test
+    fun `a connected tunnel already showing the public url can switch back to local`() = dialog(
+        tunnelStatus = TunnelStatus.Connected("https://x.trycloudflare.com"),
+        tunnelUrl = "https://x.trycloudflare.com",
+        presentationDisplayUrl = "https://x.trycloudflare.com",
+    ) { result ->
+        onNodeWithText("Local").performClick()
+        assertEquals("http://192.168.1.5:8080", result.displayUrlChangedTo)
+    }
+
+    @Test
+    fun `a connected tunnel already showing the server url by exact match can switch to public`() = dialog(
+        tunnelStatus = TunnelStatus.Connected("https://x.trycloudflare.com"),
+        tunnelUrl = "https://x.trycloudflare.com",
+        presentationDisplayUrl = "http://192.168.1.5:8080",
+    ) { result ->
+        onNodeWithText("Public").performClick()
+        assertEquals("https://x.trycloudflare.com", result.displayUrlChangedTo)
     }
 
     @Test

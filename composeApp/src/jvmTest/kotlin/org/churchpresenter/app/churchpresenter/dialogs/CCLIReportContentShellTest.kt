@@ -7,17 +7,29 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkAll
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
+import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.playSong
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.playVerse
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.withStatsHome
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import java.io.File
+import java.nio.file.Files
+import javax.swing.filechooser.FileNameExtensionFilter
+import kotlin.io.path.Path
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import java.nio.file.Path as NioPath
 
 /**
  * The report window's shell: the tab row over the three bodies, the quick-range presets, and what is
@@ -36,8 +48,11 @@ import kotlin.test.assertTrue
  * counts to arrive rather than pausing: the count in the tab label is the positive signal that the
  * load finished.
  *
- * Left uncovered: the `DialogWindow` call, and the two export buttons, which open a native save
- * dialog through `FileChooser.platformInstance` — they are asserted to be present, never pressed.
+ * The export buttons open a native save dialog through `FileChooser.platformInstance`; the export
+ * tests below replace it with a fake that "picks" a path without opening anything, the same pattern
+ * `AboutContentTest` uses.
+ *
+ * Left uncovered: the `DialogWindow` call itself.
  */
 class CCLIReportContentShellTest {
 
@@ -64,6 +79,36 @@ class CCLIReportContentShellTest {
     }
 
     private class Closed { var count = 0 }
+
+    @AfterTest
+    fun tidy() {
+        unmockkAll()
+    }
+
+    // ── Standing in for the native save dialog ──────────────────────────────────
+
+    /** A save dialog that "returns" [picked] without opening anything. */
+    private class FakeChooser(private val picked: String?) : FileChooser() {
+        override suspend fun chooseImpl(
+            path: NioPath,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+            selectDirectory: Boolean,
+            multiple: Boolean,
+        ): List<NioPath>? = null
+
+        override suspend fun saveImpl(
+            location: NioPath,
+            suggestedName: String,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+        ): NioPath? = picked?.let { Path(it) }
+    }
+
+    private fun givenSaveChooserReturns(picked: String) {
+        mockkObject(FileChooser.Companion)
+        every { FileChooser.platformInstance } returns FakeChooser(picked)
+    }
 
     @OptIn(ExperimentalTestApi::class)
     private fun report(
@@ -188,6 +233,119 @@ class CCLIReportContentShellTest {
             waitUntil("all time must take it back", timeoutMillis = 5_000) { countOf(Tab.songs(1)) == 1 }
             assertTrue(countOf("Amazing Grace") >= 1, "the row must be back in the table too")
         }
+
+    @Test
+    fun `the last-30-days preset keeps a just-recorded song in range`() =
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Preset.LAST_30).performClick()
+            waitUntil("a song recorded moments ago always falls inside the last 30 days", timeoutMillis = 5_000) {
+                countOf(Tab.songs(1)) == 1
+            }
+        }
+
+    @Test
+    fun `the last-90-days preset keeps a just-recorded song in range`() =
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Preset.LAST_90).performClick()
+            waitUntil("a song recorded moments ago always falls inside the last 90 days", timeoutMillis = 5_000) {
+                countOf(Tab.songs(1)) == 1
+            }
+        }
+
+    @Test
+    fun `This Year restores a song that Last Year's range had excluded`() =
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Preset.LAST_YEAR).performClick()
+            waitUntil("last year must exclude it first", timeoutMillis = 5_000) { countOf(Tab.songs(0)) == 1 }
+
+            onNodeWithText(Preset.THIS_YEAR).performClick()
+            waitUntil("this year must bring it back", timeoutMillis = 5_000) { countOf(Tab.songs(1)) == 1 }
+            assertTrue(countOf("Amazing Grace") >= 1, "the row must be back in the table too")
+        }
+
+    // ── Date pickers ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `opening the From day picker and choosing a new day updates its label`() = report { _ ->
+        onNodeWithText("1").performClick()
+        waitForIdle()
+        onNodeWithText("15").performClick()
+        waitForIdle()
+        onNodeWithText("15").assertIsDisplayed()
+    }
+
+    @Test
+    fun `opening the From month picker and choosing a new month updates its short label`() = report { _ ->
+        onAllNodesWithText("Jan")[0].performClick()
+        waitForIdle()
+        onNodeWithText("March").performClick()
+        waitForIdle()
+        assertTrue(countOf("Mar") >= 1, "the From button must now show the short form of the chosen month")
+    }
+
+    // ── Export ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `exporting to CSV writes the filtered report and reports success`() {
+        val dir = Files.createTempDirectory("cp-ccli-csv").toFile()
+        val target = File(dir, "ccli_report.csv")
+        givenSaveChooserReturns(target.path)
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Tab.EXPORT_CSV).performClick()
+            waitUntil("the export must finish and report success", timeoutMillis = 5_000) {
+                countOf(CcliLabel.EXPORT_SUCCESS) == 1
+            }
+            assertTrue(target.exists(), "the CSV file must have been written")
+            assertTrue(target.readText().contains("Amazing Grace"), "the row must be in the exported CSV")
+        }
+    }
+
+    @Test
+    fun `exporting to CSV reports failure when the file cannot be written`() {
+        val target = File(Files.createTempDirectory("cp-ccli-csv-missing").toFile(), "nope/ccli_report.csv")
+        givenSaveChooserReturns(target.path)
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Tab.EXPORT_CSV).performClick()
+            waitUntil("the export must finish and report failure", timeoutMillis = 5_000) {
+                countOf(CcliLabel.EXPORT_ERROR) == 1
+            }
+            assertFalse(target.exists(), "no file can exist under a parent directory that was never created")
+        }
+    }
+
+    @Test
+    fun `exporting to XLS writes the filtered workbook and reports success`() {
+        val dir = Files.createTempDirectory("cp-ccli-xls").toFile()
+        val target = File(dir, "ccli_report.xls")
+        givenSaveChooserReturns(target.path)
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Tab.EXPORT_XLS).performClick()
+            waitUntil("the export must finish and report success", timeoutMillis = 5_000) {
+                countOf(CcliLabel.EXPORT_SUCCESS) == 1
+            }
+            assertTrue(target.exists(), "the XLS workbook must have been written")
+        }
+    }
+
+    @Test
+    fun `exporting to XLS reports failure when the file cannot be written`() {
+        val target = File(Files.createTempDirectory("cp-ccli-xls-missing").toFile(), "nope/ccli_report.xls")
+        givenSaveChooserReturns(target.path)
+        report({ playSong(number = 1, title = "Amazing Grace", songbook = "Hymnal") }) { _ ->
+            awaitLoaded(songs = 1, verses = 0)
+            onNodeWithText(Tab.EXPORT_XLS).performClick()
+            waitUntil("the export must finish and report failure", timeoutMillis = 5_000) {
+                countOf(CcliLabel.EXPORT_ERROR) == 1
+            }
+            assertFalse(target.exists(), "no file can exist under a parent directory that was never created")
+        }
+    }
 
     // ── Leaving ─────────────────────────────────────────────────────────────────
 

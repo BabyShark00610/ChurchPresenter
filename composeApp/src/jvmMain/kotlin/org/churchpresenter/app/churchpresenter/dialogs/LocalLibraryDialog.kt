@@ -99,7 +99,7 @@ internal fun libraryEntries(
 }
 
 /** Copies a bundled background out of app resources into the stock library folder the first time it's picked. */
-private suspend fun materializeBundledEntry(fileName: String): File = withContext(Dispatchers.IO) {
+internal suspend fun materializeBundledEntry(fileName: String): File = withContext(Dispatchers.IO) {
     val dir = File(System.getProperty("user.home"), ".churchpresenter/stock-backgrounds")
     dir.mkdirs()
     val target = File(dir, fileName)
@@ -267,6 +267,17 @@ internal fun LocalLibraryDialogContent(
     }
 }
 
+/** Decodes an entry's thumbnail image, or `null` if the file is missing/corrupt/unreadable. */
+internal suspend fun loadThumbnailBitmap(entry: LibraryEntry): ImageBitmap? = try {
+    val bytes = when (entry) {
+        is DownloadedEntry -> entry.file.readBytes()
+        is BundledEntry -> Res.readBytes("$BUNDLED_BACKGROUNDS_PATH/${entry.name}")
+    }
+    SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
+} catch (_: Exception) {
+    null
+}
+
 @Composable
 private fun LibraryThumbnail(
     entry: LibraryEntry,
@@ -276,17 +287,7 @@ private fun LibraryThumbnail(
     var bitmap by remember(entry.key) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(entry.key) {
         if (!isVideo) {
-            bitmap = withContext(Dispatchers.IO) {
-                try {
-                    val bytes = when (entry) {
-                        is DownloadedEntry -> entry.file.readBytes()
-                        is BundledEntry -> Res.readBytes("$BUNDLED_BACKGROUNDS_PATH/${entry.name}")
-                    }
-                    SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
-                } catch (_: Exception) {
-                    null
-                }
-            }
+            bitmap = withContext(Dispatchers.IO) { loadThumbnailBitmap(entry) }
         }
     }
 
