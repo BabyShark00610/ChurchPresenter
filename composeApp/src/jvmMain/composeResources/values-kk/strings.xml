@@ -1105,6 +1105,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Ән атауының слайды</string>
+    <string name="show_song_number_before_title">Ән нөмірін атаудың алдында көрсету</string>
     <string name="enabled">Қосулы</string>
 
     <!-- Canvas Tab -->

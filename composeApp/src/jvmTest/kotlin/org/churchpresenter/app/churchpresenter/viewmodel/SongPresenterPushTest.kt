@@ -37,6 +37,9 @@ class SongPresenterPushTest {
     @Test fun `title line drops a blank title`() =
         assertEquals("123", songTitleLine(song(title = "")))
 
+    @Test fun `title line omits the number when disabled`() =
+        assertEquals("Amazing Grace", songTitleLine(song(), showSongNumber = false))
+
     @Test fun `credit line joins author and composer`() =
         assertEquals("Newton / Excell", songCreditLine(song(author = "Newton", composer = "Excell")))
 
@@ -59,6 +62,12 @@ class SongPresenterPushTest {
 
     @Test fun `a title slide with no credit has only the heading line`() =
         assertEquals(listOf("123 – Amazing Grace"), titleSlideSection(song(), bpm = 0).lines)
+
+    @Test fun `a title slide can omit the number from its heading`() =
+        assertEquals(
+            listOf("Amazing Grace"),
+            titleSlideSection(song(), bpm = 0, showSongNumber = false).lines,
+        )
 
     @Test fun `a non-numeric song number becomes zero`() =
         assertEquals(0, titleSlideSection(song(number = "12b"), bpm = 0).songNumber)

@@ -10,9 +10,11 @@ import org.churchpresenter.app.churchpresenter.utils.Constants
  * math are tested apart from the composable and the presenter callbacks around them.
  */
 
-/** The heading line of a title slide: `"<number> – <title>"`, dropping either part when it's blank. */
-internal fun songTitleLine(song: SongItem): String =
-    listOf(song.number, song.title).filter { it.isNotBlank() }.joinToString(" – ")
+/** The heading line of a title slide, optionally prefixed with the song number. */
+internal fun songTitleLine(song: SongItem, showSongNumber: Boolean = true): String =
+    listOfNotNull(song.number.takeIf { showSongNumber }, song.title)
+        .filter { it.isNotBlank() }
+        .joinToString(" – ")
 
 /** The credit line of a title slide: `"<author> / <composer>"`, dropping either part when it's blank. */
 internal fun songCreditLine(song: SongItem): String =
@@ -22,13 +24,17 @@ internal fun songCreditLine(song: SongItem): String =
  * The title-slide [LyricSection] for [song] at [bpm]: a heading line plus a credit line when there is
  * one. Its `songNumber` is the numeric part of the song number, or 0 when the number isn't numeric.
  */
-internal fun titleSlideSection(song: SongItem, bpm: Int): LyricSection = LyricSection(
+internal fun titleSlideSection(
+    song: SongItem,
+    bpm: Int,
+    showSongNumber: Boolean = true,
+): LyricSection = LyricSection(
     type = "title_slide",
     title = song.title,
     secondaryTitle = song.secondaryTitle,
     songNumber = song.number.toIntOrNull() ?: 0,
     lines = buildList {
-        add(songTitleLine(song))
+        add(songTitleLine(song, showSongNumber))
         val credit = songCreditLine(song)
         if (credit.isNotBlank()) add(credit)
     },

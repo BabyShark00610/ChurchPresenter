@@ -65,6 +65,7 @@ class SongSettingsTabLabelsTest {
 
         // Checkbox captions.
         "Enabled" to 1,
+        "Show song number before title" to 1,
         "Word Wrap" to 1,
         "Fade In" to 1,
         "Fade Out" to 1,

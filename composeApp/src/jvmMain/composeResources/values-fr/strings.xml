@@ -1368,6 +1368,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Diapositive de titre du cantique</string>
+    <string name="show_song_number_before_title">Afficher le numéro du cantique avant le titre</string>
     <string name="enabled">Activé</string>
 
     <!-- Stage Monitor Settings -->

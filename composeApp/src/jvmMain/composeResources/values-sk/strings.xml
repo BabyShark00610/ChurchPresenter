@@ -1368,6 +1368,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Snímka s názvom piesne</string>
+    <string name="show_song_number_before_title">Zobraziť číslo piesne pred názvom</string>
     <string name="enabled">Povolené</string>
 
     <!-- Stage Monitor Settings -->

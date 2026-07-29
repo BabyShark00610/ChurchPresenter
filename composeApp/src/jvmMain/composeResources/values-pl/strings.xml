@@ -1104,6 +1104,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Slajd tytułu pieśni</string>
+    <string name="show_song_number_before_title">Pokaż numer pieśni przed tytułem</string>
     <string name="enabled">Włączone</string>
 
     <!-- Canvas Tab -->
