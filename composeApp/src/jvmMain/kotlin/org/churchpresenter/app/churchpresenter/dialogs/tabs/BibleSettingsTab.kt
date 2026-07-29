@@ -97,11 +97,13 @@ import androidx.compose.foundation.layout.size
 import org.churchpresenter.app.churchpresenter.composables.ActionIconButton
 import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.DropdownSettingsField
+import org.churchpresenter.app.churchpresenter.composables.rememberDropdownWidthFor
 import org.churchpresenter.app.churchpresenter.composables.FontSettingsDropdown
 import org.churchpresenter.app.churchpresenter.composables.HorizontalAlignmentButtons
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.PositionButtons
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingRowFirstControlOffset
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.ShadowDetailRow
 import org.churchpresenter.app.churchpresenter.composables.SlimSlider
@@ -296,7 +298,13 @@ private fun AdditionalTranslationStyleColumn(
                 leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT,
             )
         }
-        SettingRow(stringResource(Res.string.bible_reference)) {
+        // Six controls deep, so the label is pinned to the top rather than floating halfway down
+        // them — offset so it lands on the centre line of the first row instead of its top edge.
+        SettingRow(
+            stringResource(Res.string.bible_reference),
+            verticalAlignment = Alignment.Top,
+            labelTopPadding = SettingRowFirstControlOffset,
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ColorPickerField(
@@ -465,6 +473,10 @@ private fun LeftColumn(
                 )
             }
         } else {
+            // One width for every picker in the stack, so the reorder and delete buttons beside them
+            // form a straight column instead of stepping in and out with each Bible's name length.
+            val addTranslationLabel = stringResource(Res.string.add_bible_translation)
+            val pickerWidth = rememberDropdownWidthFor(bibleDisplayOptions + addTranslationLabel)
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -472,6 +484,7 @@ private fun LeftColumn(
             translations.forEachIndexed { index, translation ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     DropdownSettingsField(
+                        width = pickerWidth,
                         label = stringResource(Res.string.bible_translation, index + 1),
                         value = bibleFileDisplayNames[translation.fileName] ?: translation.fileName,
                         options = bibleDisplayOptions,
@@ -520,8 +533,8 @@ private fun LeftColumn(
                 translations.none { it.fileName == candidate }
             }
             if (unselectedFiles.isNotEmpty()) {
-                val addTranslationLabel = stringResource(Res.string.add_bible_translation)
                 DropdownSettingsField(
+                    width = pickerWidth,
                     label = addTranslationLabel,
                     value = addTranslationLabel,
                     options = listOf(addTranslationLabel) +

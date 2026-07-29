@@ -64,10 +64,23 @@ fun SettingsSection(
     }
 }
 
+/**
+ * Drop needed to sit a top-aligned label on the centre line of the first control beside it: half the
+ * difference between the shared 42.dp field height ([DropdownSettingsField], [ColorPickerField]) and
+ * the 20.dp line box of `bodyMedium`.
+ */
+val SettingRowFirstControlOffset: Dp = (42.dp - 20.dp) / 2
+
 @Composable
 fun SettingRow(
     label: String,
     width: Dp = 120.dp,
+    /** Centred suits the usual single control. Pass [Alignment.Top] when [content] is a tall stack,
+     *  where a centred label floats halfway down the block instead of naming its first row. */
+    verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
+    /** With [Alignment.Top], nudges the label down onto the first control's centre line rather than
+     *  leaving it flush with the top edge. [SettingRowFirstControlOffset] fits a standard field. */
+    labelTopPadding: Dp = 0.dp,
     content: @Composable () -> Unit
 ) {
     Row(
@@ -75,14 +88,14 @@ fun SettingRow(
             .fillMaxWidth()
             .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = verticalAlignment
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            modifier = Modifier.width(width)
+            modifier = Modifier.width(width).padding(top = labelTopPadding)
         )
         Box(modifier = Modifier.weight(1f)) {
             content()
