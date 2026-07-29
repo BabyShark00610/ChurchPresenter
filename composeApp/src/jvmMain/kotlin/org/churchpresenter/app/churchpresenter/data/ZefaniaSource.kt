@@ -34,14 +34,15 @@ object ZefaniaSource : BibleSource {
         }
 
     internal fun ZefaniaRepositoryIndex.Module.toBibleModule(
-        languageNames: Map<String, String> = emptyMap()
+        languageNames: Map<String, LanguageNaming> = emptyMap()
     ) = BibleModule(
         sourceId = BibleSourceId.ZEFANIA,
         downloadKey = path,
         checksum = blobSha,
         sizeBytes = sizeBytes,
         language = language,
-        languageName = languageNames[language].orEmpty(),
+        languageName = languageNames[language]?.english.orEmpty(),
+        languageNativeName = languageNames[language]?.native.orEmpty(),
         identifier = identifier,
         displayName = displayName,
         releaseDate = releaseDate,

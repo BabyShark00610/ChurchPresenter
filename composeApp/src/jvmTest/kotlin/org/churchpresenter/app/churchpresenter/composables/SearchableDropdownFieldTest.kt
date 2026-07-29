@@ -98,6 +98,18 @@ class SearchableDropdownFieldTest {
     }
 
     @Test
+    fun `a non-Latin query matches a non-Latin option`() = runComposeUiTest {
+        // Filtering is a plain substring match, so it is script-agnostic — pinned here because the
+        // language filter leans on it to find "русский" from "рус".
+        field(initial = "", options = listOf("Russian · русский · RUS (31)", "English · ENG (5)"))
+        open().performTextInput("рус")
+        waitForIdle()
+
+        onNode(menuItem("Russian · русский · RUS (31)")).assertExists()
+        onNode(menuItem("English · ENG (5)")).assertDoesNotExist()
+    }
+
+    @Test
     fun `a query matching nothing says so instead of showing an empty menu`() = runComposeUiTest {
         field(initial = "")
         open().performTextInput("kiwi")

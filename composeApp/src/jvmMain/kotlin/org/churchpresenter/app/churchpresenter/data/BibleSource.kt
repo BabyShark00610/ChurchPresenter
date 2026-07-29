@@ -34,6 +34,14 @@ data class BibleModule(
      * that path resolves the name through [BibleLanguageNames] instead.
      */
     val languageName: String = "",
+    /**
+     * What the language calls itself, when the source publishes it; blank when it doesn't.
+     *
+     * Kept alongside [languageName] rather than instead of it: the two agree for about two thirds of
+     * eBible's rows, and where they differ the autonym is the only spelling a speaker of that
+     * language would think to type.
+     */
+    val languageNativeName: String = "",
     val identifier: String,
     val displayName: String,
     /** Blank when the source only reveals it inside the file, as the Zefania archive does. */

@@ -309,17 +309,33 @@ class ZefaniaSourceTest {
     fun `a language name is attached from the lookup when the archive has one`() {
         // The archive names its folders by code alone, so this is the only place a Zefania module
         // can acquire a language name.
-        val mapped = with(ZefaniaSource) { indexModule("GER").toBibleModule(mapOf("GER" to "German")) }
+        val mapped = with(ZefaniaSource) {
+            indexModule("GER").toBibleModule(mapOf("GER" to LanguageNaming("German", "Deutsch")))
+        }
 
         assertEquals("German", mapped.languageName)
+        assertEquals("Deutsch", mapped.languageNativeName)
         assertEquals("GER", mapped.language, "the code stays as the archive spelled it")
     }
 
     @Test
+    fun `a curated code with no settled autonym leaves the native name blank`() {
+        val mapped = with(ZefaniaSource) {
+            indexModule("UND").toBibleModule(mapOf("UND" to LanguageNaming("Unknown")))
+        }
+
+        assertEquals("Unknown", mapped.languageName)
+        assertEquals("", mapped.languageNativeName)
+    }
+
+    @Test
     fun `a language absent from the lookup keeps a blank name rather than a guess`() {
-        val mapped = with(ZefaniaSource) { indexModule("XKX").toBibleModule(mapOf("GER" to "German")) }
+        val mapped = with(ZefaniaSource) {
+            indexModule("XKX").toBibleModule(mapOf("GER" to LanguageNaming("German", "Deutsch")))
+        }
 
         assertEquals("", mapped.languageName)
+        assertEquals("", mapped.languageNativeName)
     }
 
     @Test

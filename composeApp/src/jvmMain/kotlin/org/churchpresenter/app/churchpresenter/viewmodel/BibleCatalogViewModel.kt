@@ -54,8 +54,16 @@ class BibleCatalogViewModel(
      * [name] is the English language name where the source publishes one, blank otherwise; the
      * dropdown shows it alongside [code] rather than instead of it, because a handful of distinct
      * codes share an English name and the label has to stay unique.
+     *
+     * [nativeName] is what the language calls itself. The dropdown shows it only where it differs
+     * from [name], which is about a quarter of the list; either spelling finds the language.
      */
-    data class LanguageOption(val code: String, val name: String, val count: Int)
+    data class LanguageOption(
+        val code: String,
+        val name: String,
+        val count: Int,
+        val nativeName: String = "",
+    )
 
     var query by mutableStateOf("")
     var selectedLanguage by mutableStateOf<String?>(null)
@@ -112,7 +120,8 @@ class BibleCatalogViewModel(
         displayName.contains(needle, ignoreCase = true) ||
             identifier.contains(needle, ignoreCase = true) ||
             language.contains(needle, ignoreCase = true) ||
-            languageName.contains(needle, ignoreCase = true)
+            languageName.contains(needle, ignoreCase = true) ||
+            languageNativeName.contains(needle, ignoreCase = true)
 
     /** Fetches the catalogue. Safe to call again to retry; an in-flight load is not duplicated. */
     fun load() {
@@ -130,7 +139,12 @@ class BibleCatalogViewModel(
                                 code = code,
                                 name = group.firstNotNullOfOrNull { it.languageName.takeIf(String::isNotBlank) }
                                     .orEmpty(),
-                                count = group.size
+                                count = group.size,
+                                // Chosen independently of the English name: every row in the group
+                                // shares the code, so one carrying only the autonym still supplies it.
+                                nativeName = group
+                                    .firstNotNullOfOrNull { it.languageNativeName.takeIf(String::isNotBlank) }
+                                    .orEmpty()
                             )
                         }
                         // Alphabetical by what the row actually reads as, so a named language sorts

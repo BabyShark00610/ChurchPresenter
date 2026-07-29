@@ -45,7 +45,7 @@ object EBibleSource : BibleSource {
     internal fun downloadUrlFor(translationId: String): String = "$DOWNLOAD_BASE/${translationId}_usfx.zip"
 
     @Volatile
-    private var languageNameCache: Map<String, String>? = null
+    private var languageNameCache: Map<String, LanguageNaming>? = null
 
     internal fun clearMemoryCache() {
         memoryCache = null
@@ -53,17 +53,18 @@ object EBibleSource : BibleSource {
     }
 
     /**
-     * Uppercase language code to English name, for every language this catalogue carries.
+     * Uppercase language code to its names, for every language this catalogue carries.
      *
      * Reads whatever is already known — the parsed catalogue in memory, else the copy on disk — and
      * **never fetches**: it exists so the Zefania tab can name its languages, and making that tab
      * reach out to a second host to do so would be a worse trade than showing a bare code.
      */
-    internal suspend fun cachedLanguageNames(cacheFile: File = defaultCacheFile): Map<String, String> =
+    internal suspend fun cachedLanguageNames(cacheFile: File = defaultCacheFile): Map<String, LanguageNaming> =
         languageNameCache ?: withContext(Dispatchers.IO) {
             val modules = memoryCache?.second ?: readCache(cacheFile).orEmpty()
-            modules.filter { it.languageName.isNotBlank() }
-                .associate { it.language to it.languageName }
+            // Either spelling on its own is worth keeping, so this is an or, not an and.
+            modules.filter { it.languageName.isNotBlank() || it.languageNativeName.isNotBlank() }
+                .associate { it.language to LanguageNaming(it.languageName, it.languageNativeName) }
                 .also { languageNameCache = it }
         }
 
@@ -165,9 +166,12 @@ object EBibleSource : BibleSource {
                     downloadKey = translationId,
                     sizeBytes = 0,
                     language = language,
-                    // English first: the autonym is what the language calls itself ("Miniafia"),
-                    // which is no help to someone typing "english" into the filter.
+                    // English first, because the autonym is no help to someone typing "english" —
+                    // but both are kept, since it is the only spelling a speaker of the language
+                    // would think to type. A row publishing no English name falls back to the
+                    // autonym rather than showing a bare code.
                     languageName = cell(languageNameEnglishIndex).ifBlank { cell(languageNameIndex) },
+                    languageNativeName = cell(languageNameIndex),
                     identifier = translationId,
                     displayName = title,
                     copyright = cell(copyrightIndex),

@@ -71,6 +71,7 @@ class BibleCatalogBrowserContentTest {
         displayName: String = "A Conservative Version",
         language: String = "ENG",
         languageName: String = "English",
+        languageNativeName: String = "",
         fileStem: String = "ENG_ACV",
         copyright: String = "",
         sizeBytes: Long = 0,
@@ -80,6 +81,7 @@ class BibleCatalogBrowserContentTest {
         downloadKey = identifier,
         language = language,
         languageName = languageName,
+        languageNativeName = languageNativeName,
         identifier = identifier,
         displayName = displayName,
         fileStem = fileStem,
@@ -365,6 +367,61 @@ class BibleCatalogBrowserContentTest {
 
         onNodeWithText("Reina Valera").assertExists()
         onNodeWithText("A Conservative Version").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a language whose own name differs shows both spellings`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(
+                module(
+                    identifier = "SYN", displayName = "Synodal", language = "RUS",
+                    languageName = "Russian", languageNativeName = "русский", fileStem = "RUS_SYN"
+                )
+            )
+        ),
+    ) { _, _ ->
+        openLanguageMenu()
+
+        onNode(hasTextExactly("Russian · русский · RUS (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun `an autonym that only repeats the English name is not shown twice`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(
+                module(
+                    identifier = "ZAM", displayName = "Zamenhof", language = "EPO",
+                    // Differing only in case still counts as the same name.
+                    languageName = "Esperanto", languageNativeName = "esperanto", fileStem = "EPO_ZAM"
+                )
+            )
+        ),
+    ) { _, _ ->
+        openLanguageMenu()
+
+        onNode(hasTextExactly("Esperanto · EPO (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun `typing a language's own name narrows the dropdown`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(
+                module(
+                    identifier = "ACV", displayName = "A Conservative Version", language = "ENG",
+                    languageName = "English", fileStem = "ENG_ACV"
+                ),
+                module(
+                    identifier = "SYN", displayName = "Synodal", language = "RUS",
+                    languageName = "Russian", languageNativeName = "русский", fileStem = "RUS_SYN"
+                ),
+            )
+        ),
+    ) { _, _ ->
+        openLanguageMenu().performTextInput("рус")
+        waitForIdle()
+
+        onNode(hasTextExactly("Russian · русский · RUS (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertDoesNotExist()
     }
 
     @Test

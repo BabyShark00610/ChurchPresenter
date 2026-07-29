@@ -114,6 +114,7 @@ class BibleCatalogViewModelTest {
         stem: String,
         language: String = "ENG",
         languageName: String = "",
+        languageNativeName: String = "",
         identifier: String = stem.substringAfter('_', stem),
         displayName: String = stem,
         releaseDate: String = "2009-01-20",
@@ -123,6 +124,7 @@ class BibleCatalogViewModelTest {
         sizeBytes = 1000,
         language = language,
         languageName = languageName,
+        languageNativeName = languageNativeName,
         identifier = identifier,
         displayName = displayName,
         releaseDate = releaseDate,
@@ -220,6 +222,34 @@ class BibleCatalogViewModelTest {
         model.query = "german"
 
         assertEquals(listOf("DEU_LUT"), model.visibleModules.map { it.fileStem })
+    }
+
+    @Test
+    fun `searching by the language's own name for itself finds a translation`() {
+        // A Russian speaker would type "рус" long before they would think to try "Russian".
+        val model = vm(
+            catalogOf(module("RUS_SYN", language = "RUS", languageName = "Russian", languageNativeName = "русский"))
+        )
+
+        model.load()
+        settle()
+        model.query = "рус"
+
+        assertEquals(listOf("RUS_SYN"), model.visibleModules.map { it.fileStem })
+    }
+
+    @Test
+    fun `a language option carries both spellings of its name`() {
+        val model = vm(
+            catalogOf(module("RUS_SYN", language = "RUS", languageName = "Russian", languageNativeName = "русский"))
+        )
+
+        model.load()
+        settle()
+
+        val option = model.languages.single()
+        assertEquals("Russian", option.name)
+        assertEquals("русский", option.nativeName)
     }
 
     @Test

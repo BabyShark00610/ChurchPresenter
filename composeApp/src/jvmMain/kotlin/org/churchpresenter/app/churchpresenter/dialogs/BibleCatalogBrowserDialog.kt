@@ -90,6 +90,7 @@ import churchpresenter.composeapp.generated.resources.bible_catalog_installed_su
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_all
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_count
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_named
+import churchpresenter.composeapp.generated.resources.bible_catalog_language_named_native
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_accept
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_badge_redistributable
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_badge_unverified
@@ -664,10 +665,18 @@ private fun LanguageDropdown(
     // Display label -> language code. The label carries the name and count, so the map is what turns
     // the user's pick back into the code the filter works on.
     val languageLabels = languages.associate { option ->
-        val label = if (option.name.isNotBlank()) {
-            stringResource(Res.string.bible_catalog_language_named, option.name, option.code, option.count)
-        } else {
-            stringResource(Res.string.bible_catalog_language_count, option.code, option.count)
+        // The autonym only earns its place when it says something the English name doesn't — the two
+        // agree for about three quarters of the list, and repeating a word helps nobody.
+        val names = listOf(option.name, option.nativeName)
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+        val label = when (names.size) {
+            0 -> stringResource(Res.string.bible_catalog_language_count, option.code, option.count)
+            1 -> stringResource(Res.string.bible_catalog_language_named, names[0], option.code, option.count)
+            else -> stringResource(
+                Res.string.bible_catalog_language_named_native,
+                names[0], names[1], option.code, option.count
+            )
         }
         label to option.code
     }
@@ -687,10 +696,20 @@ private fun LanguageDropdown(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
-        // The field is sized to the header row, but a language name can run to forty characters, so
-        // the menu is allowed to be wider than what it drops from.
+        // The field is sized to the header row, but a label carrying both spellings of a language
+        // name runs long — most fit in this width, and the rest wrap rather than ellipsize, because
+        // the truncated tail would take the code and count with it and those are what disambiguate
+        // two languages sharing an English name.
         horizontalPadding = 11.dp,
-        menuWidth = 280.dp,
+        menuWidth = 340.dp,
+        itemContent = { option ->
+            Text(
+                text = option,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         clearOnFocus = true,
         modifier = Modifier.width(220.dp)
     )
