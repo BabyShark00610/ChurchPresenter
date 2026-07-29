@@ -50,7 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.clear
 import churchpresenter.composeapp.generated.resources.ic_arrow_down
+import churchpresenter.composeapp.generated.resources.ic_close
 import churchpresenter.composeapp.generated.resources.no_results_found
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -75,6 +77,12 @@ import org.jetbrains.compose.resources.stringResource
  *   on the whole list rather than on the one row the pick itself matches. Wanted wherever [value] is
  *   a long label nobody would want to clear by hand. Selecting the text instead of clearing it does
  *   not work here: a mouse click places the caret *after* focus arrives, undoing the selection.
+ * @param fillWidth stretches the field to its parent, putting the chevron against the right edge
+ *   instead of trailing the text. Only for a field given a width of its own — with none, filling
+ *   resolves against the parent's constraints and blows the field out to whatever contains it.
+ * @param onClear when given, shows a clear button that discards both the typed text and, through
+ *   this callback, the selection behind it. Pass null wherever there is nothing to clear, which is
+ *   what keeps the button from offering to undo a choice nobody has made.
  * @param valueTextStyle overrides the style of the value in the field, for a caller that renders the
  *   selection in something other than the default (a font picker previewing the font itself).
  * @param itemContent renders one option in the menu.
@@ -91,6 +99,8 @@ fun SearchableDropdownField(
     menuWidth: Dp = 200.dp,
     menuHeight: Dp = 300.dp,
     clearOnFocus: Boolean = false,
+    fillWidth: Boolean = false,
+    onClear: (() -> Unit)? = null,
     valueTextStyle: TextStyle? = null,
     itemContent: @Composable (String) -> Unit = { option ->
         Text(
@@ -132,11 +142,19 @@ fun SearchableDropdownField(
             .padding(start = horizontalPadding, end = horizontalPadding, top = 4.dp, bottom = 4.dp),
         contentAlignment = Alignment.CenterStart
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            // Only stretch when the caller imposed a width: with none, filling would resolve
+            // against the parent's constraints and blow the field out to the width of its container.
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (leadingIcon != null) {
                 Box(modifier = Modifier.padding(end = 6.dp)) { leadingIcon() }
             }
-            Column(verticalArrangement = Arrangement.Center) {
+            Column(
+                modifier = if (fillWidth) Modifier.weight(1f) else Modifier,
+                verticalArrangement = Arrangement.Center
+            ) {
                 if (label.isNotEmpty()) {
                     Text(
                         text = label.uppercase(),
@@ -197,6 +215,23 @@ fun SearchableDropdownField(
                 )
             }
             Spacer(Modifier.width(4.dp))
+            if (onClear != null) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_close),
+                    contentDescription = stringResource(Res.string.clear),
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            // The typed text goes too: leaving a stale query behind would filter the
+                            // menu by a selection that no longer exists.
+                            query = if (clearOnFocus) "" else value
+                            expanded = false
+                            onClear()
+                        },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(6.dp))
+            }
             Icon(
                 painter = painterResource(Res.drawable.ic_arrow_down),
                 contentDescription = null,

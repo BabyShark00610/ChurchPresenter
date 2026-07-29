@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.isEditable
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -323,6 +324,28 @@ class BibleCatalogBrowserContentTest {
         onNodeWithText("All languages").performClick()
         waitForIdle()
         return onNode(isEditable() and isFocused())
+    }
+
+    @Test
+    fun `no clear button is shown until a language has been picked`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        // "All languages" is the unfiltered state, so there is nothing there to undo.
+        onNodeWithContentDescription("Clear").assertDoesNotExist()
+    }
+
+    @Test
+    fun `clearing the language filter puts every translation back`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu()
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).performClick()
+        waitForIdle()
+        onNodeWithText("A Conservative Version").assertDoesNotExist()
+
+        onNodeWithContentDescription("Clear").performClick()
+        waitForIdle()
+
+        onNodeWithText("A Conservative Version").assertExists()
+        onNodeWithText("Reina Valera").assertExists()
+        onNodeWithText("All languages").assertExists()
+        onNodeWithContentDescription("Clear").assertDoesNotExist()
     }
 
     @Test

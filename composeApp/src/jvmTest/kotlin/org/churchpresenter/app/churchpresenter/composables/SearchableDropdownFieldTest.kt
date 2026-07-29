@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.isEditable
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -136,6 +137,64 @@ class SearchableDropdownFieldTest {
         waitForIdle()
 
         assertNull(committed())
+    }
+
+    // --- the clear button ---
+
+    @Test
+    fun `no clear button is offered when there is nothing to clear`() = runComposeUiTest {
+        setContent { MaterialTheme { SearchableDropdownField(value = "Apple", options = fruits, onValueChange = {}) } }
+        waitForIdle()
+
+        onNodeWithContentDescription("Clear").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the clear button reports back to the caller`() = runComposeUiTest {
+        var cleared = 0
+        setContent {
+            MaterialTheme {
+                SearchableDropdownField(
+                    value = "Apple",
+                    options = fruits,
+                    onValueChange = {},
+                    onClear = { cleared++ },
+                )
+            }
+        }
+        waitForIdle()
+
+        onNodeWithContentDescription("Clear").performClick()
+        waitForIdle()
+
+        assertEquals(1, cleared)
+    }
+
+    @Test
+    fun `clearing discards the typed text as well as the selection`() = runComposeUiTest {
+        var cleared = 0
+        setContent {
+            MaterialTheme {
+                SearchableDropdownField(
+                    value = "Apple",
+                    options = fruits,
+                    onValueChange = {},
+                    clearOnFocus = true,
+                    onClear = { cleared++ },
+                )
+            }
+        }
+        waitForIdle()
+        open().performTextInput("cher")
+        waitForIdle()
+
+        onNodeWithContentDescription("Clear").performClick()
+        waitForIdle()
+
+        assertEquals(1, cleared)
+        // A stale query left behind would keep filtering by a selection that no longer exists.
+        onNodeWithText("cher", substring = true).assertDoesNotExist()
+        onNodeWithText("Apple").assertIsDisplayed()
     }
 
     // --- the flags-off configuration the font pickers use ---

@@ -702,6 +702,10 @@ private fun LanguageDropdown(
         // two languages sharing an English name.
         horizontalPadding = 11.dp,
         menuWidth = 340.dp,
+        fillWidth = true,
+        // Nothing to clear until a language has actually been picked — "All languages" is the
+        // unfiltered state, so offering to clear it would undo nothing.
+        onClear = { onLanguageChange(null) }.takeIf { selectedLanguage != null },
         itemContent = { option ->
             Text(
                 text = option,
