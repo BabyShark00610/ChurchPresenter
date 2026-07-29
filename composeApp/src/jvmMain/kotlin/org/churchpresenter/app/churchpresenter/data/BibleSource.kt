@@ -6,6 +6,12 @@ import java.io.File
 /** The archives the downloader can install from, in the order they are offered. */
 enum class BibleSourceId { EBIBLE, ZEFANIA }
 
+/** Which portion of scripture a translation covers. */
+enum class Testament { OLD, NEW, FULL }
+
+private val NT_TOKEN = Regex("\\bNT\\b")
+private val OT_TOKEN = Regex("\\bOT\\b")
+
 /**
  * One downloadable translation, as shown in the browse list.
  *
@@ -21,17 +27,69 @@ data class BibleModule(
     val checksum: String = "",
     val sizeBytes: Long = 0,
     val language: String,
+    /**
+     * English name for [language], when the source publishes one; blank when it doesn't.
+     *
+     * Only eBible carries this. The Zefania archive names its language folders by code alone, so
+     * that path resolves the name through [BibleLanguageNames] instead.
+     */
+    val languageName: String = "",
+    /**
+     * What the language calls itself, when the source publishes it; blank when it doesn't.
+     *
+     * Kept alongside [languageName] rather than instead of it: the two agree for about two thirds of
+     * eBible's rows, and where they differ the autonym is the only spelling a speaker of that
+     * language would think to type.
+     */
+    val languageNativeName: String = "",
     val identifier: String,
     val displayName: String,
     /** Blank when the source only reveals it inside the file, as the Zefania archive does. */
     val copyright: String = "",
     val releaseDate: String = "",
+    /**
+     * How many books of each testament the translation contains, where the source publishes counts;
+     * both zero when it doesn't, which is the Zefania archive's case.
+     */
+    val otBookCount: Int = 0,
+    val ntBookCount: Int = 0,
     val fileStem: String
 ) {
     val fileName: String get() = "$fileStem.${Constants.EXTENSION_SPB}"
 
     /** Stable across sources, so an install in one tab can't be confused with one in another. */
     val key: String get() = "${sourceId.name}:$downloadKey"
+
+    /**
+     * Which portion of scripture this covers.
+     *
+     * Taken from [otBookCount]/[ntBookCount] where the source publishes them, since that is the
+     * translation's actual contents rather than a reading of its title. Only where it doesn't is
+     * the name consulted: a standalone "NT" or "OT" token names the portion, and a name with
+     * neither is assumed to be a whole Bible.
+     *
+     * The fallback is a guess and reads like one — it takes "New Testament in Achi" for a complete
+     * Bible, because that name spells the words out instead of using the token. Roughly a fifth of
+     * eBible's catalogue is misread that way, which is why the published counts win wherever they
+     * exist.
+     */
+    val testament: Testament
+        get() {
+            if (otBookCount > 0 || ntBookCount > 0) {
+                return when {
+                    otBookCount > 0 && ntBookCount > 0 -> Testament.FULL
+                    ntBookCount > 0 -> Testament.NEW
+                    else -> Testament.OLD
+                }
+            }
+            val hasNt = NT_TOKEN.containsMatchIn(displayName)
+            val hasOt = OT_TOKEN.containsMatchIn(displayName)
+            return when {
+                hasNt && !hasOt -> Testament.NEW
+                hasOt && !hasNt -> Testament.OLD
+                else -> Testament.FULL
+            }
+        }
 }
 
 sealed interface BibleCatalogOutcome {

@@ -42,6 +42,7 @@ fun DropdownSettingsField(
     onValueChange: (String) -> Unit,
     label: String = "",
     modifier: Modifier = Modifier,
+    leadingIcon: @Composable (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var currentValue by remember(value) { mutableStateOf(value) }
@@ -56,6 +57,9 @@ fun DropdownSettingsField(
         contentAlignment = Alignment.CenterStart
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (leadingIcon != null) {
+                Box(modifier = Modifier.padding(end = 6.dp)) { leadingIcon() }
+            }
             Column(verticalArrangement = Arrangement.Center) {
                 if (label.isNotEmpty()) {
                     Text(

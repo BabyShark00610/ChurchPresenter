@@ -4,11 +4,15 @@ package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
-import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.isEditable
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -54,12 +58,25 @@ class BibleCatalogBrowserContentTest {
         var parkedCatalog: CompletableDeferred<BibleCatalogOutcome>? = null,
         var parkedInstall: CompletableDeferred<BibleInstallOutcome>? = null,
         var emitProgress: InstallProgress? = null,
+        /**
+         * Puts the installed file in the target folder, as a real source does.
+         *
+         * Off by default because most tests here only care about what the dialog says. It matters
+         * wherever something re-reads the folder afterwards — switching tabs does — since a fake
+         * that reported success without leaving a file would look like an install that vanished.
+         */
+        var writesInstalledFile: Boolean = false,
     ) : BibleSource {
         override val sourceId = BibleSourceId.EBIBLE
         override suspend fun catalog(nowMillis: Long) = parkedCatalog?.await() ?: catalogOutcome
         override suspend fun install(module: BibleModule, targetDir: File, onProgress: (InstallProgress) -> Unit): BibleInstallOutcome {
             emitProgress?.let(onProgress)
-            return parkedInstall?.await() ?: installOutcome
+            val outcome = parkedInstall?.await() ?: installOutcome
+            if (writesInstalledFile && outcome is BibleInstallOutcome.Success) {
+                targetDir.mkdirs()
+                File(targetDir, module.fileName).writeText("##Title:\t${module.displayName}")
+            }
+            return outcome
         }
     }
 
@@ -67,6 +84,8 @@ class BibleCatalogBrowserContentTest {
         identifier: String = "ACV",
         displayName: String = "A Conservative Version",
         language: String = "ENG",
+        languageName: String = "English",
+        languageNativeName: String = "",
         fileStem: String = "ENG_ACV",
         copyright: String = "",
         sizeBytes: Long = 0,
@@ -75,6 +94,8 @@ class BibleCatalogBrowserContentTest {
         sourceId = sourceId,
         downloadKey = identifier,
         language = language,
+        languageName = languageName,
+        languageNativeName = languageNativeName,
         identifier = identifier,
         displayName = displayName,
         fileStem = fileStem,
@@ -107,6 +128,88 @@ class BibleCatalogBrowserContentTest {
             settle()
             waitForIdle()
             block({ dismissed }, { installedFileName })
+        }
+    }
+
+    /**
+     * The browser with both archives as tabs, each backed by its own view model over the same Bible
+     * folder — which is what makes an install on one of them everyone's business.
+     */
+    private fun twoTabDialog(
+        firstTab: BibleCatalogOutcome,
+        secondTab: BibleCatalogOutcome,
+        block: ComposeUiTest.(selectSecondTab: ComposeUiTest.() -> Unit) -> Unit,
+    ) {
+        fun vm(outcome: BibleCatalogOutcome) = BibleCatalogViewModel(
+            FakeSource(outcome, writesInstalledFile = true), dir.absolutePath, dispatcher = Dispatchers.Unconfined
+        ).also { created.add(it) }
+
+        val models = listOf(vm(firstTab), vm(secondTab))
+        runComposeUiTest {
+            setContent {
+                MaterialTheme {
+                    BibleCatalogBrowserDialogContent(
+                        viewModels = models,
+                        tabLabels = listOf("eBible.org", "Zefania"),
+                        onDismiss = {},
+                        onBibleInstalled = {},
+                    )
+                }
+            }
+            settle()
+            waitForIdle()
+            block {
+                onNodeWithText("Zefania").performClick()
+                settle()
+                waitForIdle()
+            }
+        }
+    }
+
+    @Test
+    fun `installing on one tab counts towards the header straight away`() {
+        // Every tab lists the same Bible folder, so the count must not wait for the tab that ran the
+        // install to be the one being looked at.
+        twoTabDialog(
+            firstTab = BibleCatalogOutcome.Success(listOf(module(identifier = "ACV", fileStem = "ENG_ACV"))),
+            secondTab = BibleCatalogOutcome.Success(
+                listOf(module(identifier = "SYN", displayName = "Synodal", language = "RUS", fileStem = "RUS_SYN"))
+            ),
+        ) { selectSecondTab ->
+            onNodeWithText("0 installed").assertExists()
+
+            selectSecondTab()
+            onNodeWithText("Download").performClick()
+            onNodeWithText("I understand — Download").performClick()
+            settle()
+            waitForIdle()
+
+            onNodeWithText("1 installed").assertExists()
+        }
+    }
+
+    @Test
+    fun `a Bible installed on one tab shows as installed on the other`() {
+        val shared = module(identifier = "ACV", fileStem = "ENG_ACV")
+        twoTabDialog(
+            firstTab = BibleCatalogOutcome.Success(listOf(shared)),
+            secondTab = BibleCatalogOutcome.Success(listOf(shared)),
+        ) { selectSecondTab ->
+            selectSecondTab()
+            onNodeWithText("Download").performClick()
+            onNodeWithText("I understand — Download").performClick()
+            settle()
+            waitForIdle()
+            onNodeWithText("OK").performClick()
+            waitForIdle()
+
+            // Back on the first tab the same file is on disk, so it must not still offer to download it.
+            onNodeWithText("eBible.org").performClick()
+            settle()
+            waitForIdle()
+
+            onNodeWithText("Re-download").assertExists()
+            onNodeWithText("Download").assertDoesNotExist()
         }
     }
 
@@ -198,8 +301,8 @@ class BibleCatalogBrowserContentTest {
     }
 
     @Test
-    fun `the OK button dismisses the dialog`() = dialog { dismissed, _ ->
-        onAllNodes(hasText("OK")).onFirst().performClick()
+    fun `the Done button dismisses the dialog`() = dialog { dismissed, _ ->
+        onNodeWithText("Done").performClick()
         assertEquals(1, dismissed())
     }
 
@@ -281,18 +384,103 @@ class BibleCatalogBrowserContentTest {
         onNodeWithText("2.0 MB", substring = true).assertExists()
     }
 
+    private val twoLanguages = BibleCatalogOutcome.Success(
+        listOf(
+            module(
+                identifier = "ACV", displayName = "A Conservative Version",
+                language = "ENG", languageName = "English", fileStem = "ENG_ACV"
+            ),
+            module(
+                identifier = "RVA", displayName = "Reina Valera",
+                language = "SPA", languageName = "Spanish", fileStem = "SPA_RVA"
+            ),
+        )
+    )
+
     @Test
-    fun `picking a language from the dropdown filters the list`() = dialog(
-        catalogOutcome = BibleCatalogOutcome.Success(
-            listOf(
-                module(identifier = "ACV", displayName = "A Conservative Version", language = "ENG", fileStem = "ENG_ACV"),
-                module(identifier = "RVA", displayName = "Reina Valera", language = "SPA", fileStem = "SPA_RVA"),
-            )
-        ),
-    ) { _, _ ->
-        onNode(hasClickAction() and hasText("All languages")).performClick()
+    fun `picking a language from the dropdown filters the list`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        onNodeWithText("All languages").performClick()
         waitForIdle()
-        onNode(hasTextExactly("SPA (1)") and hasClickAction()).performClick()
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).performClick()
+        waitForIdle()
+
+        onNodeWithText("Reina Valera").assertExists()
+        onNodeWithText("A Conservative Version").assertDoesNotExist()
+    }
+
+    /**
+     * Opens the language menu and returns its text field.
+     *
+     * "All languages" is on screen twice once the menu is open — the field and the first option —
+     * and the dialog's own search box is editable too, so the field is identified as the editable
+     * one holding focus, which the click just gave it.
+     */
+    private fun ComposeUiTest.openLanguageMenu(): SemanticsNodeInteraction {
+        onNodeWithText("All languages").performClick()
+        waitForIdle()
+        return onNode(isEditable() and isFocused())
+    }
+
+    @Test
+    fun `no clear button is shown until a language has been picked`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        // "All languages" is the unfiltered state, so there is nothing there to undo.
+        onNodeWithContentDescription("Clear").assertDoesNotExist()
+    }
+
+    @Test
+    fun `clearing the language filter puts every translation back`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu()
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).performClick()
+        waitForIdle()
+        onNodeWithText("A Conservative Version").assertDoesNotExist()
+
+        onNodeWithContentDescription("Clear").performClick()
+        waitForIdle()
+
+        onNodeWithText("A Conservative Version").assertExists()
+        onNodeWithText("Reina Valera").assertExists()
+        onNodeWithText("All languages").assertExists()
+        onNodeWithContentDescription("Clear").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the language dropdown lists every language until something is typed`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu()
+
+        // Focus clears the field, so the menu opens on the whole list rather than on the one row
+        // the current pick happens to match.
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun `typing the English name narrows the language dropdown`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu().performTextInput("span")
+        waitForIdle()
+
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun `typing the language code narrows the dropdown just as the name does`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu().performTextInput("spa")
+        waitForIdle()
+
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun `typing into the language field replaces the current pick rather than editing it`() = dialog(
+        catalogOutcome = twoLanguages,
+    ) { _, _ ->
+        // Clicking places a caret mid-word, so a field that kept its text would splice the
+        // keystrokes into "All languages" and match nothing.
+        openLanguageMenu().performTextInput("spanish")
+        waitForIdle()
+
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).performClick()
         waitForIdle()
 
         onNodeWithText("Reina Valera").assertExists()
@@ -300,11 +488,81 @@ class BibleCatalogBrowserContentTest {
     }
 
     @Test
+    fun `a language whose own name differs shows both spellings`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(
+                module(
+                    identifier = "SYN", displayName = "Synodal", language = "RUS",
+                    languageName = "Russian", languageNativeName = "русский", fileStem = "RUS_SYN"
+                )
+            )
+        ),
+    ) { _, _ ->
+        openLanguageMenu()
+
+        onNode(hasTextExactly("Russian · русский · RUS (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun `an autonym that only repeats the English name is not shown twice`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(
+                module(
+                    identifier = "ZAM", displayName = "Zamenhof", language = "EPO",
+                    // Differing only in case still counts as the same name.
+                    languageName = "Esperanto", languageNativeName = "esperanto", fileStem = "EPO_ZAM"
+                )
+            )
+        ),
+    ) { _, _ ->
+        openLanguageMenu()
+
+        onNode(hasTextExactly("Esperanto · EPO (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun `typing a language's own name narrows the dropdown`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(
+                module(
+                    identifier = "ACV", displayName = "A Conservative Version", language = "ENG",
+                    languageName = "English", fileStem = "ENG_ACV"
+                ),
+                module(
+                    identifier = "SYN", displayName = "Synodal", language = "RUS",
+                    languageName = "Russian", languageNativeName = "русский", fileStem = "RUS_SYN"
+                ),
+            )
+        ),
+    ) { _, _ ->
+        openLanguageMenu().performTextInput("рус")
+        waitForIdle()
+
+        onNode(hasTextExactly("Russian · русский · RUS (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a language with no published name falls back to its bare code`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(module(identifier = "CSP", displayName = "Cesky", language = "CZE", languageName = "", fileStem = "CZE_CSP"))
+        ),
+    ) { _, _ ->
+        onNodeWithText("All languages").performClick()
+        waitForIdle()
+
+        onNode(hasTextExactly("CZE (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
     fun `the licence dialog names the module's own copyright and the archive's licence note`() = dialog(
         catalogOutcome = BibleCatalogOutcome.Success(listOf(module(copyright = "Public Domain"))),
     ) { _, _ ->
         onNodeWithText("Download").performClick()
-        onNodeWithText("Copyright: Public Domain").assertExists()
+        onNodeWithText("Copyright").assertExists()
+        // The row behind the dialog still shows its own copyright line, so this text now
+        // appears twice: once in the list row, once in the dialog's metadata field.
+        onAllNodes(hasText("Public Domain")).assertCountEquals(2)
         onNodeWithText(
             "eBible.org lists this translation as redistributable and publishes the copyright shown above."
         ).assertExists()

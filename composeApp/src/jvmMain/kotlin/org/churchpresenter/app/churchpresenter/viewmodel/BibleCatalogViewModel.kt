@@ -48,8 +48,22 @@ class BibleCatalogViewModel(
 
     private val viewModelScope = CoroutineScope(dispatcher + SupervisorJob())
 
-    /** One entry per language present in the catalogue, for the filter dropdown. */
-    data class LanguageOption(val code: String, val count: Int)
+    /**
+     * One entry per language present in the catalogue, for the filter dropdown.
+     *
+     * [name] is the English language name where the source publishes one, blank otherwise; the
+     * dropdown shows it alongside [code] rather than instead of it, because a handful of distinct
+     * codes share an English name and the label has to stay unique.
+     *
+     * [nativeName] is what the language calls itself. The dropdown shows it only where it differs
+     * from [name], which is about a quarter of the list; either spelling finds the language.
+     */
+    data class LanguageOption(
+        val code: String,
+        val name: String,
+        val count: Int,
+        val nativeName: String = "",
+    )
 
     var query by mutableStateOf("")
     var selectedLanguage by mutableStateOf<String?>(null)
@@ -105,7 +119,9 @@ class BibleCatalogViewModel(
     private fun BibleModule.matches(needle: String): Boolean =
         displayName.contains(needle, ignoreCase = true) ||
             identifier.contains(needle, ignoreCase = true) ||
-            language.contains(needle, ignoreCase = true)
+            language.contains(needle, ignoreCase = true) ||
+            languageName.contains(needle, ignoreCase = true) ||
+            languageNativeName.contains(needle, ignoreCase = true)
 
     /** Fetches the catalogue. Safe to call again to retry; an in-flight load is not duplicated. */
     fun load() {
@@ -118,8 +134,22 @@ class BibleCatalogViewModel(
                     modules = outcome.modules
                     languages = outcome.modules
                         .groupBy { it.language.uppercase() }
-                        .map { (code, group) -> LanguageOption(code, group.size) }
-                        .sortedBy { it.code }
+                        .map { (code, group) ->
+                            LanguageOption(
+                                code = code,
+                                name = group.firstNotNullOfOrNull { it.languageName.takeIf(String::isNotBlank) }
+                                    .orEmpty(),
+                                count = group.size,
+                                // Chosen independently of the English name: every row in the group
+                                // shares the code, so one carrying only the autonym still supplies it.
+                                nativeName = group
+                                    .firstNotNullOfOrNull { it.languageNativeName.takeIf(String::isNotBlank) }
+                                    .orEmpty()
+                            )
+                        }
+                        // Alphabetical by what the row actually reads as, so a named language sorts
+                        // under its name and an unnamed one stays findable under its code.
+                        .sortedWith(compareBy({ it.name.ifBlank { it.code }.lowercase() }, { it.code }))
                     duplicateDisplayNames = outcome.modules
                         .groupingBy { it.displayName.trim().lowercase() }
                         .eachCount()
@@ -155,6 +185,18 @@ class BibleCatalogViewModel(
     fun isInstalled(module: BibleModule): Boolean = module.fileName in installedFiles
 
     /**
+     * Records [fileName] as present without re-reading the folder.
+     *
+     * Every tab of the browser lists the same Bible folder, so an install done on one is installed
+     * for all of them — but only the tab that ran it learns so from [install]. Re-scanning the
+     * others would work and would also undo that tab's own entry on any machine where the write has
+     * not yet settled, so the name is handed over directly instead.
+     */
+    fun markInstalled(fileName: String) {
+        installedFiles = installedFiles + fileName
+    }
+
+    /**
      * Downloads and converts [module], handing the installed file name — the same value
      * [org.churchpresenter.app.churchpresenter.data.settings.BibleSettings.primaryBible] stores —
      * to [onInstalled].
@@ -181,7 +223,7 @@ class BibleCatalogViewModel(
             }
             when (outcome) {
                 is BibleInstallOutcome.Success -> {
-                    installedFiles = installedFiles + module.fileName
+                    markInstalled(module.fileName)
                     lastInstalled = InstalledBible(module.fileName, outcome.title, outcome.books, outcome.rights)
                     onInstalled(module.fileName)
                 }

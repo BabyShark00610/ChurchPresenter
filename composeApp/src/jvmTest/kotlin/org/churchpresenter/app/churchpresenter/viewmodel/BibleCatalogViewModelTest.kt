@@ -113,6 +113,8 @@ class BibleCatalogViewModelTest {
     private fun module(
         stem: String,
         language: String = "ENG",
+        languageName: String = "",
+        languageNativeName: String = "",
         identifier: String = stem.substringAfter('_', stem),
         displayName: String = stem,
         releaseDate: String = "2009-01-20",
@@ -121,6 +123,8 @@ class BibleCatalogViewModelTest {
         downloadKey = stem,
         sizeBytes = 1000,
         language = language,
+        languageName = languageName,
+        languageNativeName = languageNativeName,
         identifier = identifier,
         displayName = displayName,
         releaseDate = releaseDate,
@@ -156,6 +160,96 @@ class BibleCatalogViewModelTest {
         assertEquals(listOf("ENG" to 2, "RUS" to 1), model.languages.map { it.code to it.count })
         assertFalse(model.isLoading)
         assertNull(model.catalogError)
+    }
+
+    @Test
+    fun `each language option carries the English name its modules were published with`() {
+        val model = vm(
+            catalogOf(
+                module("ENG_ACV", languageName = "English"),
+                module("RUS_SYN", language = "RUS", languageName = "Russian"),
+            )
+        )
+
+        model.load()
+        settle()
+
+        assertEquals(
+            listOf("English" to "ENG", "Russian" to "RUS"),
+            model.languages.map { it.name to it.code }
+        )
+    }
+
+    @Test
+    fun `languages are ordered by the name they read as, not by their code`() {
+        // DEU sorts before ELL by code, but "Greek" comes before "German" by name — which is the
+        // order that matters, because the name is what the dropdown shows and filters on.
+        val model = vm(
+            catalogOf(
+                module("DEU_LUT", language = "DEU", languageName = "German"),
+                module("ELL_BYZ", language = "ELL", languageName = "Greek"),
+            )
+        )
+
+        model.load()
+        settle()
+
+        assertEquals(listOf("German", "Greek"), model.languages.map { it.name })
+    }
+
+    @Test
+    fun `a language with no published name is still listed, under its code`() {
+        val model = vm(
+            catalogOf(
+                module("ENG_ACV", languageName = "English"),
+                module("CZE_CZBKR", language = "CZE", languageName = ""),
+            )
+        )
+
+        model.load()
+        settle()
+
+        // "CZE" sorts before "English" once the blank name falls back to the code.
+        assertEquals(listOf("CZE" to "", "ENG" to "English"), model.languages.map { it.code to it.name })
+    }
+
+    @Test
+    fun `searching by language name finds a translation`() {
+        val model = vm(catalogOf(module("DEU_LUT", language = "DEU", languageName = "German")))
+
+        model.load()
+        settle()
+        model.query = "german"
+
+        assertEquals(listOf("DEU_LUT"), model.visibleModules.map { it.fileStem })
+    }
+
+    @Test
+    fun `searching by the language's own name for itself finds a translation`() {
+        // A Russian speaker would type "рус" long before they would think to try "Russian".
+        val model = vm(
+            catalogOf(module("RUS_SYN", language = "RUS", languageName = "Russian", languageNativeName = "русский"))
+        )
+
+        model.load()
+        settle()
+        model.query = "рус"
+
+        assertEquals(listOf("RUS_SYN"), model.visibleModules.map { it.fileStem })
+    }
+
+    @Test
+    fun `a language option carries both spellings of its name`() {
+        val model = vm(
+            catalogOf(module("RUS_SYN", language = "RUS", languageName = "Russian", languageNativeName = "русский"))
+        )
+
+        model.load()
+        settle()
+
+        val option = model.languages.single()
+        assertEquals("Russian", option.name)
+        assertEquals("русский", option.nativeName)
     }
 
     @Test
