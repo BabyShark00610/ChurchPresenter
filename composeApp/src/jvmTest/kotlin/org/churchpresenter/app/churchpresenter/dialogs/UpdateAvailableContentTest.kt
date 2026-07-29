@@ -12,10 +12,18 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import org.churchpresenter.app.churchpresenter.utils.UpdateCheckInterval
 import org.churchpresenter.app.churchpresenter.utils.UpdateCheckResult
+import org.churchpresenter.app.churchpresenter.utils.UpdateChecker
 import org.churchpresenter.app.churchpresenter.utils.UpdateInfo
+import java.awt.Desktop
 import java.io.File
+import java.net.URI
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -93,6 +101,21 @@ class UpdateAvailableContentTest {
     private fun ComposeUiTest.shows(text: String): Boolean =
         onAllNodes(hasText(text)).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
 
+    @AfterTest
+    fun cleanUp() {
+        unmockkStatic(Desktop::class)
+    }
+
+    /** Makes `Desktop.getDesktop()` resolve to a fake that records what it was asked to browse. */
+    private fun stubDesktop(): () -> URI? {
+        var browsed: URI? = null
+        val fakeDesktop = mockk<Desktop>()
+        every { fakeDesktop.browse(any()) } answers { browsed = firstArg(); Unit }
+        mockkStatic(Desktop::class)
+        every { Desktop.getDesktop() } returns fakeDesktop
+        return { browsed }
+    }
+
     // ── An update is available ──────────────────────────────────────────────────
 
     @Test
@@ -113,6 +136,12 @@ class UpdateAvailableContentTest {
     fun `a stable release is labelled stable`() = updateDialog(available(prerelease = false)) { _ ->
         assertTrue(shows("Stable release"))
     }
+
+    @Test
+    fun `a release with no notes shows no release-notes section`() =
+        updateDialog(available(notes = "")) { _ ->
+            assertTrue(!shows(Label.RELEASE_NOTES), "there is nothing to read")
+        }
 
     // ── The button, at each stage of the download ───────────────────────────────
 
@@ -195,6 +224,30 @@ class UpdateAvailableContentTest {
             assertTrue(!shows(Label.RELEASE_NOTES), "and no notes to read")
         }
 
+    @Test
+    fun `up to date View on GitHub browses to the releases page and dismisses`() {
+        val browsed = stubDesktop()
+        updateDialog(UpdateCheckResult.UpToDate) { actions ->
+            onNodeWithText("View on GitHub").performClick()
+            waitForIdle()
+
+            assertEquals(URI(UpdateChecker.RELEASES_URL), browsed())
+            assertEquals(1, actions.dismissed)
+        }
+    }
+
+    @Test
+    fun `up to date OK just dismisses without browsing anywhere`() {
+        val browsed = stubDesktop()
+        updateDialog(UpdateCheckResult.UpToDate) { actions ->
+            onNodeWithText("OK").performClick()
+            waitForIdle()
+
+            assertEquals(1, actions.dismissed)
+            assertNull(browsed(), "OK must not open a browser")
+        }
+    }
+
     // ── The settings carried on the dialog ──────────────────────────────────────
 
     @Test
@@ -223,6 +276,57 @@ class UpdateAvailableContentTest {
             // A popup that appeared on its own at launch is not the place to change settings.
             assertTrue(!shows(Label.CHECK_INTERVAL))
         }
+    }
+
+    @Test
+    fun `opening the check-interval dropdown lists every interval by its own label`() =
+        updateDialog(isManualCheck = true) { _ ->
+            onNodeWithText("Weekly").performClick()
+            waitForIdle()
+
+            assertTrue(shows("Every launch"))
+            assertTrue(shows("Weekly"))
+            assertTrue(shows("Monthly"))
+            assertTrue(shows("Every 2 Months"))
+            assertTrue(shows("Every 3 Months"))
+            assertTrue(shows("Every 6 Months"))
+            assertTrue(shows("Never"))
+        }
+
+    @Test
+    fun `choosing a different interval from the dropdown reports it and closes the menu`() =
+        updateDialog(isManualCheck = true) { actions ->
+            onNodeWithText("Weekly").performClick()
+            waitForIdle()
+
+            onNodeWithText("Every 3 Months").performClick()
+            waitForIdle()
+
+            assertEquals(UpdateCheckInterval.EVERY_3_MONTHS, actions.interval)
+            assertTrue(!shows("Never"), "the menu must close after a choice")
+        }
+
+    // ── Pure decisions the installer launch makes ───────────────────────────────
+
+    @Test
+    fun `msiexec installs on Windows`() {
+        assertEquals(listOf("msiexec", "/i", "C:\\temp\\update.msi"), installerLaunchCommand("Windows 11", "C:\\temp\\update.msi"))
+    }
+
+    @Test
+    fun `open mounts the installer in Finder on macOS`() {
+        assertEquals(listOf("open", "/tmp/update.dmg"), installerLaunchCommand("Mac OS X", "/tmp/update.dmg"))
+    }
+
+    @Test
+    fun `xdg-open is the fallback everywhere else`() {
+        assertEquals(listOf("xdg-open", "/tmp/update.deb"), installerLaunchCommand("Linux", "/tmp/update.deb"))
+    }
+
+    @Test
+    fun `the os name match is case-insensitive`() {
+        assertEquals(listOf("msiexec", "/i", "path"), installerLaunchCommand("WINDOWS", "path"))
+        assertEquals(listOf("open", "path"), installerLaunchCommand("MACOS", "path"))
     }
 
     // ── Leaving ─────────────────────────────────────────────────────────────────

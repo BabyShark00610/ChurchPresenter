@@ -47,11 +47,48 @@ import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import java.lang.management.GarbageCollectorMXBean
 import java.lang.management.ManagementFactory
+import java.lang.management.MemoryMXBean
 
 private const val MAX_SAMPLES = 60
 
 private fun formatMb(bytes: Long): String = "%,d MB".format(bytes / (1024L * 1024L))
+
+internal data class MemorySnapshot(
+    val heapUsed: Long,
+    val heapCommitted: Long,
+    val heapMax: Long,
+    val nonHeapUsed: Long,
+    val nonHeapCommitted: Long,
+    val gcCount: Long,
+    val gcTimeMs: Long
+)
+
+/**
+ * One JMX read: current heap/non-heap usage and cumulative GC counters. A bean reporting a
+ * negative collection count/time (meaning the collector doesn't support it) counts as zero
+ * rather than throwing off the total.
+ */
+internal fun readMemorySnapshot(memoryBean: MemoryMXBean, gcBeans: List<GarbageCollectorMXBean>): MemorySnapshot {
+    val heap = memoryBean.heapMemoryUsage
+    val nonHeap = memoryBean.nonHeapMemoryUsage
+    return MemorySnapshot(
+        heapUsed = heap.used,
+        heapCommitted = heap.committed,
+        heapMax = heap.max,
+        nonHeapUsed = nonHeap.used,
+        nonHeapCommitted = nonHeap.committed,
+        gcCount = gcBeans.sumOf { if (it.collectionCount >= 0) it.collectionCount else 0L },
+        gcTimeMs = gcBeans.sumOf { if (it.collectionTime >= 0) it.collectionTime else 0L }
+    )
+}
+
+/** Appends [value] to [history], then evicts the oldest samples until at most [maxSamples] remain. */
+internal fun appendSample(history: MutableList<Long>, value: Long, maxSamples: Int = MAX_SAMPLES) {
+    history.add(value)
+    while (history.size > maxSamples) history.removeAt(0)
+}
 
 /**
  * Developer-only live JVM memory monitor. Polls heap/non-heap usage and GC counters once a
@@ -59,7 +96,9 @@ private fun formatMb(bytes: Long): String = "%,d MB".format(bytes / (1024L * 102
  * Reports JVM heap/non-heap only — native (Skia/JCEF/VLC) memory is not exposed via JMX.
  */
 @Composable
-fun MemoryMonitorWindow(theme: ThemeMode, onClose: () -> Unit) {
+fun MemoryMonitorWindow(isVisible: Boolean, theme: ThemeMode, onClose: () -> Unit) {
+    if (!isVisible) return
+
     Window(
         onCloseRequest = onClose,
         title = stringResource(Res.string.memory_monitor_window_title),
@@ -73,7 +112,7 @@ fun MemoryMonitorWindow(theme: ThemeMode, onClose: () -> Unit) {
 }
 
 @Composable
-private fun MemoryMonitorContent() {
+internal fun MemoryMonitorContent() {
     val memoryBean = remember { ManagementFactory.getMemoryMXBean() }
     val gcBeans = remember { ManagementFactory.getGarbageCollectorMXBeans() }
 
@@ -88,18 +127,16 @@ private fun MemoryMonitorContent() {
 
     LaunchedEffect(Unit) {
         while (true) {
-            val heap = memoryBean.heapMemoryUsage
-            val nonHeap = memoryBean.nonHeapMemoryUsage
-            heapUsed = heap.used
-            heapCommitted = heap.committed
-            heapMax = heap.max
-            nonHeapUsed = nonHeap.used
-            nonHeapCommitted = nonHeap.committed
-            gcCount = gcBeans.sumOf { if (it.collectionCount >= 0) it.collectionCount else 0L }
-            gcTimeMs = gcBeans.sumOf { if (it.collectionTime >= 0) it.collectionTime else 0L }
+            val snapshot = readMemorySnapshot(memoryBean, gcBeans)
+            heapUsed = snapshot.heapUsed
+            heapCommitted = snapshot.heapCommitted
+            heapMax = snapshot.heapMax
+            nonHeapUsed = snapshot.nonHeapUsed
+            nonHeapCommitted = snapshot.nonHeapCommitted
+            gcCount = snapshot.gcCount
+            gcTimeMs = snapshot.gcTimeMs
 
-            history.add(heap.used)
-            while (history.size > MAX_SAMPLES) history.removeAt(0)
+            appendSample(history, snapshot.heapUsed)
 
             delay(1000)
         }

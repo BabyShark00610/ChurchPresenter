@@ -287,7 +287,7 @@ private fun CcliBanner(onOpen: () -> Unit) {
 // ── Top Songs / Top Verses sections ─────────────────────────────────────────────
 
 @Composable
-private fun TopSongsSection(data: Map<String, List<SongDisplayEntry>>) {
+internal fun TopSongsSection(data: Map<String, List<SongDisplayEntry>>) {
     val accent = MaterialTheme.colorScheme.primary
     if (data.isEmpty()) {
         EmptyStatSection(stringResource(Res.string.top_songs))
@@ -296,7 +296,7 @@ private fun TopSongsSection(data: Map<String, List<SongDisplayEntry>>) {
     val dash = stringResource(Res.string.em_dash)
     val songbooks = remember(data) { data.keys.toList() }
     var selected by remember(data) { mutableStateOf(songbooks.first()) }
-    val songs = data[selected] ?: emptyList()
+    val songs = data.getValue(selected)
     val maxCount = songs.maxOfOrNull { it.count } ?: 1
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -322,7 +322,7 @@ private fun TopSongsSection(data: Map<String, List<SongDisplayEntry>>) {
 }
 
 @Composable
-private fun TopVersesSection(data: Map<String, List<VerseDisplayEntry>>) {
+internal fun TopVersesSection(data: Map<String, List<VerseDisplayEntry>>) {
     val accent = MaterialTheme.colorScheme.tertiary
     if (data.isEmpty()) {
         EmptyStatSection(stringResource(Res.string.top_verses))
@@ -331,7 +331,7 @@ private fun TopVersesSection(data: Map<String, List<VerseDisplayEntry>>) {
     val dash = stringResource(Res.string.em_dash)
     val bibles = remember(data) { data.keys.toList() }
     var selected by remember(data) { mutableStateOf(bibles.first()) }
-    val verses = data[selected] ?: emptyList()
+    val verses = data.getValue(selected)
     val maxCount = verses.maxOfOrNull { it.count } ?: 1
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
