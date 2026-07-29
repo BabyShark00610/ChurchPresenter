@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -16,7 +15,9 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
@@ -106,12 +107,34 @@ internal fun withBibleStack(vararg names: String, projection: ProjectionSettings
         projectionSettings = projection,
     )
 
-/** Three translations: enough for the per-output translation picker to appear. */
+/**
+ * Three translations: enough for the per-output translation picker to appear.
+ *
+ * Named the way the downloader names what it installs, `LANGUAGE_CODE`, so the picker's code badge
+ * (the part after the underscore) is distinguishable from the full stem it sits beside.
+ */
 internal fun threeTranslations(projection: ProjectionSettings = ProjectionSettings()): AppSettings =
-    withBibleStack("KJV.spb", "NIV.spb", "ESV.spb", projection = projection)
+    withBibleStack("ENG_KJV.spb", "RUS_SYN.spb", "DEU_LUT.spb", projection = projection)
 
 /** One translation — the stack size at which the picker must stay hidden. */
-internal fun oneTranslation(): AppSettings = withBibleStack("KJV.spb")
+internal fun oneTranslation(): AppSettings = withBibleStack("ENG_KJV.spb")
+
+/** A stack named without the downloader's `LANGUAGE_` prefix, where a stem is its own code. */
+internal fun unprefixedTranslations(): AppSettings = withBibleStack("KJV.spb", "NIV.spb")
+
+/**
+ * A row inside the open translation menu.
+ *
+ * The badge, name and any tag merge into one node, so `hasTextExactly` no longer matches a row;
+ * `hasText` matches when any one of those equals [text]. The trigger is excluded by not being
+ * toggleable, which matters because it repeats a code the badge also shows.
+ */
+internal fun ComposeUiTest.translationRow(text: String): SemanticsNodeInteraction =
+    onNode(isToggleable() and hasText(text))
+
+/** The picker's trigger, told apart from a row badge of the same text by carrying the Button role. */
+internal fun ComposeUiTest.translationTrigger(caption: String): SemanticsNodeInteraction =
+    onNode(labelledButton and hasTextExactly(caption))
 
 // ── Grid layout ─────────────────────────────────────────────────────────────────────────────────
 
@@ -155,24 +178,6 @@ internal object Grid {
 internal val labelledButton =
     SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) and
         SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
-
-/**
- * A real [Role.Button], as distinct from a dropdown menu item.
- *
- * The Bible translation menu carries the same "Select All"/"Clear All" captions as the dialog's
- * Quick Select buttons, so while that menu is open a plain text lookup matches two nodes. Menu items
- * publish no role, which is what tells the two apart.
- */
-internal fun ComposeUiTest.quickSelectButton(label: String): SemanticsNodeInteraction =
-    onNode(labelledButton and hasTextExactly(label))
-
-private val notARoleButton = SemanticsMatcher("has no Button role") { node ->
-    node.config.getOrNull(SemanticsProperties.Role) != Role.Button
-}
-
-/** An item captioned [label] inside an open dropdown menu. See [quickSelectButton]. */
-internal fun ComposeUiTest.openMenuItem(label: String): SemanticsNodeInteraction =
-    onNode(hasClickAction() and hasTextExactly(label) and notARoleButton)
 
 internal fun ComposeUiTest.gridButtons(): SemanticsNodeInteractionCollection = onAllNodes(labelledButton)
 

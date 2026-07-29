@@ -4,7 +4,7 @@ package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -23,16 +23,23 @@ import kotlin.test.assertEquals
  * Which translations an output shows is stored as [ScreenAssignment.bibleTranslations], a list of
  * positions in the configured stack, where **empty means all of them** — so that a translation added
  * later appears on every output rather than having to be ticked on each one. That normalisation is
- * the reason this needs its own suite: it makes "none selected" unrepresentable, so unticking the
- * last translation is routed to `bibleMode = SONG_LANG_OFF` instead, which is the same statement
- * about the output and one the settings can actually hold. Before that, unticking the last one wrote
- * an empty list and every box silently re-ticked.
+ * the reason this needs its own suite: it makes "none selected" unrepresentable as a selection, so
+ * showing none of them is stored as `bibleMode = SONG_LANG_OFF` instead, which is the same statement
+ * about the output. Before that, unticking the last box wrote an empty list that read straight back
+ * as *all* and every box silently re-ticked.
  *
- * Every case asserts both halves: the stored assignment, and a signal on screen — the trigger's own
- * caption, or the dialog's "THIS OUTPUT SHOWS" preview, which reads `Bible · N` for the count.
+ * Because clearing switches scripture off, the menu is mounted whenever the stack has more than one
+ * translation rather than only while scripture is on — otherwise Clear would shut the menu under the
+ * hand that just pressed it. With it off, every box reads empty and the count reads zero.
  *
- * The rest of the dialog is covered by [ProjectionSettingsTabContentOutputsTest]; its fixture has no
- * translations configured, so the picker never composes there.
+ * Translations are named by file stem — this tab deliberately does not open the bible folder — and
+ * the code badge is the part of that stem after the underscore, since the downloader names what it
+ * installs `LANGUAGE_CODE`. The fixture uses that shape so badge and name are distinct.
+ *
+ * Two locator traps worth knowing: the menu's header renders **uppercased**, so it is
+ * `"BIBLE TRANSLATIONS"` on screen; and the trigger's cleared caption, "None", is also what an
+ * unassigned target-display dropdown reads, so the cleared state is asserted through the menu's
+ * summary line instead.
  */
 class ProjectionSettingsTabTranslationPickerTest {
 
@@ -41,17 +48,20 @@ class ProjectionSettingsTabTranslationPickerTest {
         waitForIdle()
     }
 
-    /** Opens the translation menu by its count trigger. */
+    /** Opens the translation menu by its trigger. */
     private fun ComposeUiTest.openPicker(caption: String) {
-        onNodeWithText(caption).performScrollTo().performClick()
+        translationTrigger(caption).performScrollTo().performClick()
         waitForIdle()
     }
 
-    /** Clicks a translation row inside the open menu. */
+    /** Clicks a translation row inside the open menu, by the name it shows. */
     private fun ComposeUiTest.toggleTranslation(name: String) {
-        onNode(isToggleable() and hasTextExactly(name)).performClick()
+        translationRow(name).performClick()
         waitForIdle()
     }
+
+    private fun ComposeUiTest.assertMenuOpen() =
+        translationRow("ENG_KJV").assertExists("the menu must still be open")
 
     private fun row0(get: () -> AppSettings): ScreenAssignment =
         get().projectionSettings.screenAssignments[0]
@@ -63,25 +73,38 @@ class ProjectionSettingsTabTranslationPickerTest {
         openContentOutputs()
 
         // Nothing to choose between: the Bible checkbox alone says whether the output shows it.
-        onAllNodesWithText("All (1)").assertCountEquals(0)
+        onAllNodesWithText("BIBLE TRANSLATIONS").assertCountEquals(0)
+        onAllNodesWithText("ENG_KJV").assertCountEquals(0)
     }
 
     @Test
     fun `the picker is hidden with no translations configured`() = projectionTab { _ ->
         openContentOutputs()
 
-        onAllNodesWithText("All (0)").assertCountEquals(0)
+        onAllNodesWithText("BIBLE TRANSLATIONS").assertCountEquals(0)
     }
 
     // ── Reading the current selection ───────────────────────────────────────────────────────────
 
     @Test
-    fun `the trigger reads All when every translation is shown`() = projectionTab(initial = threeTranslations()) { get ->
+    fun `the trigger names the first translation and how many follow it`() = projectionTab(
+        initial = threeTranslations(),
+    ) { get ->
         openContentOutputs()
 
         assertEquals(emptyList(), row0(get).bibleTranslations, "an untouched output shows all of them")
-        onNodeWithText("All (3)").assertExists()
+        translationTrigger("KJV +2").assertExists()
         onNodeWithText("Bible · 3").assertExists("the preview counts the whole stack")
+    }
+
+    @Test
+    fun `the menu says how many of the stack are enabled`() = projectionTab(
+        initial = threeTranslations(),
+    ) { _ ->
+        openContentOutputs()
+        openPicker("KJV +2")
+
+        onNodeWithText("3 of 3 translations enabled").assertExists()
     }
 
     @Test
@@ -93,7 +116,40 @@ class ProjectionSettingsTabTranslationPickerTest {
     ) { _ ->
         openContentOutputs()
 
-        onNodeWithText("1 of 3").assertExists()
+        translationTrigger("KJV").assertExists("only the one surviving index counts, so there is no \"+N\"")
+    }
+
+    // ── Row content ─────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `each row carries the code from its file stem`() = projectionTab(initial = threeTranslations()) { _ ->
+        openContentOutputs()
+        openPicker("KJV +2")
+
+        // The badge is the stem after the underscore; the name beside it is the whole stem.
+        translationRow("SYN").assertExists()
+        translationRow("RUS_SYN").assertExists()
+        translationRow("LUT").assertExists()
+    }
+
+    @Test
+    fun `a stem with no underscore is its own code`() = projectionTab(initial = unprefixedTranslations()) { _ ->
+        openContentOutputs()
+        openPicker("KJV +1")
+
+        translationRow("NIV").assertExists()
+    }
+
+    @Test
+    fun `only the first translation in the stack is tagged as primary`() = projectionTab(
+        initial = threeTranslations(),
+    ) { _ ->
+        openContentOutputs()
+        openPicker("KJV +2")
+
+        onAllNodesWithText("PRIMARY").assertCountEquals(1)
+        // ...and it is the first row's, not a tag floating elsewhere in the menu.
+        onNode(isToggleable() and hasText("ENG_KJV") and hasText("PRIMARY")).assertExists()
     }
 
     // ── Changing the selection ──────────────────────────────────────────────────────────────────
@@ -103,14 +159,13 @@ class ProjectionSettingsTabTranslationPickerTest {
         initial = threeTranslations(),
     ) { get ->
         openContentOutputs()
-        openPicker("All (3)")
-        toggleTranslation("NIV")
+        openPicker("KJV +2")
+        toggleTranslation("RUS_SYN")
 
         assertEquals(listOf(0, 2), row0(get).bibleTranslations)
-        onNodeWithText("2 of 3").assertExists()
+        translationTrigger("KJV +1").assertExists()
         onNodeWithText("Bible · 2").assertExists()
-        // Still open, so a second pick costs no extra trip.
-        onNode(isToggleable() and hasTextExactly("KJV")).assertExists()
+        assertMenuOpen()
     }
 
     @Test
@@ -118,12 +173,12 @@ class ProjectionSettingsTabTranslationPickerTest {
         initial = threeTranslations(),
     ) { get ->
         openContentOutputs()
-        openPicker("All (3)")
-        toggleTranslation("NIV")
-        toggleTranslation("ESV")
+        openPicker("KJV +2")
+        toggleTranslation("RUS_SYN")
+        toggleTranslation("DEU_LUT")
 
         assertEquals(listOf(0), row0(get).bibleTranslations)
-        onNodeWithText("1 of 3").assertExists()
+        translationTrigger("KJV").assertExists()
     }
 
     @Test
@@ -133,14 +188,14 @@ class ProjectionSettingsTabTranslationPickerTest {
         ),
     ) { get ->
         openContentOutputs()
-        openPicker("2 of 3")
-        toggleTranslation("ESV")
+        openPicker("KJV +1")
+        toggleTranslation("DEU_LUT")
 
         assertEquals(
             emptyList(), row0(get).bibleTranslations,
             "everything ticked is stored as \"all\", so a translation added later is included too",
         )
-        onNodeWithText("All (3)").assertExists()
+        translationTrigger("KJV +2").assertExists()
     }
 
     @Test
@@ -148,80 +203,95 @@ class ProjectionSettingsTabTranslationPickerTest {
         initial = threeTranslations(),
     ) { get ->
         openContentOutputs()
-        openPicker("All (3)")
-        toggleTranslation("KJV")
-        toggleTranslation("NIV")
-        toggleTranslation("ESV")
+        openPicker("KJV +2")
+        toggleTranslation("ENG_KJV")
+        toggleTranslation("RUS_SYN")
+        toggleTranslation("DEU_LUT")
 
         // Showing none of them is the same statement as an unticked cell. Storing it as an empty
-        // list instead is what used to read back as "all" and re-tick every box.
+        // selection instead is what used to read back as "all" and re-tick every box.
         assertEquals(Constants.SONG_LANG_OFF, row0(get).bibleMode)
-        onAllNodesWithText("All (3)").assertCountEquals(0)
+        onNodeWithText("0 of 3 translations enabled").assertExists()
         onAllNodesWithText("Bible · 3").assertCountEquals(0)
     }
 
-    // ── Select All and Clear All ────────────────────────────────────────────────────────────────
+    @Test
+    fun `ticking a translation while the output is off switches it back on alone`() = projectionTab(
+        initial = threeTranslations(),
+    ) { get ->
+        openContentOutputs()
+        openPicker("KJV +2")
+        // Reached through Clear rather than a fixture, both because it is the flow an operator
+        // actually takes and because the cleared trigger reads "None" — which is also what an
+        // unassigned target dropdown reads, so it cannot be used to find the trigger.
+        onNodeWithText("Clear").performClick()
+        waitForIdle()
+
+        toggleTranslation("RUS_SYN")
+
+        // Both halves in one event — the old pair of callbacks would have dropped one of them.
+        assertEquals(Constants.SONG_LANG_BOTH, row0(get).bibleMode)
+        assertEquals(listOf(1), row0(get).bibleTranslations, "only the one just ticked")
+        translationTrigger("SYN").assertExists()
+    }
+
+    // ── The All and Clear chips ─────────────────────────────────────────────────────────────────
 
     @Test
-    fun `Select All restores every translation and leaves the menu open`() = projectionTab(
+    fun `the All chip restores every translation and leaves the menu open`() = projectionTab(
         initial = threeTranslations(
             ProjectionSettings(screenAssignments = listOf(ScreenAssignment(bibleTranslations = listOf(0)))),
         ),
     ) { get ->
         openContentOutputs()
-        openPicker("1 of 3")
-        openMenuItem("Select All").performClick()
+        openPicker("KJV")
+        onNodeWithText("All").performClick()
         waitForIdle()
 
         assertEquals(emptyList(), row0(get).bibleTranslations)
-        onNodeWithText("All (3)").assertExists()
-        onNode(isToggleable() and hasTextExactly("ESV")).assertExists("the menu stays open")
+        translationTrigger("KJV +2").assertExists()
+        assertMenuOpen()
     }
 
     @Test
-    fun `Clear All switches the output off`() = projectionTab(initial = threeTranslations()) { get ->
+    fun `the Clear chip empties every tick and switches the output off`() = projectionTab(
+        initial = threeTranslations(),
+    ) { get ->
         openContentOutputs()
-        openPicker("All (3)")
-        openMenuItem("Clear All").performClick()
+        openPicker("KJV +2")
+        onNodeWithText("Clear").performClick()
         waitForIdle()
 
         assertEquals(Constants.SONG_LANG_OFF, row0(get).bibleMode)
-        onAllNodesWithText("All (3)").assertCountEquals(0)
+        assertEquals(emptyList(), row0(get).bibleTranslations)
+        onNodeWithText("0 of 3 translations enabled").assertExists()
     }
 
     @Test
-    fun `the menu does not reopen by itself after Clear All`() = projectionTab(
-        initial = threeTranslations(),
-    ) { _ ->
+    fun `the Clear chip does not close the menu`() = projectionTab(initial = threeTranslations()) { _ ->
         openContentOutputs()
-        openPicker("All (3)")
-        openMenuItem("Clear All").performClick()
+        openPicker("KJV +2")
+        onNodeWithText("Clear").performClick()
         waitForIdle()
 
-        // Re-tick Bible — the cell's own checkbox, which is the dialog's first toggleable node; its
-        // label is a sibling, so the two cannot be matched as one. The open flag outlives the guard
-        // that hides the trigger, so without being cleared it would pop the menu straight back open.
-        onAllNodes(isToggleable())[0].performScrollTo().performClick()
-        waitForIdle()
-
-        onAllNodesWithText("KJV").assertCountEquals(0)
-        onNodeWithText("All (3)").assertExists("the trigger is back, but closed")
+        // Clearing is usually a step towards picking a couple, so the menu has to survive it — which
+        // is only possible because it is mounted independently of whether scripture is on.
+        assertMenuOpen()
+        onNodeWithText("Clear").assertExists("and its own chips are still there to use")
     }
 
     @Test
-    fun `Quick Select and the menu stay tellable apart while both are on screen`() = projectionTab(
+    fun `the menu chips do not collide with Quick Select`() = projectionTab(
         initial = threeTranslations(),
     ) { _ ->
         openContentOutputs()
-        openPicker("All (3)")
+        openPicker("KJV +2")
 
-        // "Select All" and "Clear All" are now on screen twice over, so a plain text lookup matches
-        // two nodes and throws. Only the Quick Select pair are real buttons; menu items publish no
-        // role, which is what keeps each addressable.
-        onAllNodesWithText("Clear All").assertCountEquals(2)
-        quickSelectButton("Clear All").assertExists()
-        openMenuItem("Clear All").assertExists()
-        quickSelectButton("Select All").assertExists()
-        openMenuItem("Select All").assertExists()
+        // Deliberately shorter captions than the dialog's own Quick Select buttons, so every one of
+        // the four stays addressable by the text it shows.
+        onAllNodesWithText("All").assertCountEquals(1)
+        onAllNodesWithText("Clear").assertCountEquals(1)
+        onAllNodesWithText("Select All").assertCountEquals(1)
+        onAllNodesWithText("Clear All").assertCountEquals(1)
     }
 }

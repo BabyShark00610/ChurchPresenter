@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import androidx.compose.material3.OutlinedButton
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.SettingsTextField
 import org.churchpresenter.app.churchpresenter.models.Scene
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -110,12 +112,17 @@ import churchpresenter.composeapp.generated.resources.content_outputs_enabled_sh
 import churchpresenter.composeapp.generated.resources.content_outputs_enabled_subtitle
 import churchpresenter.composeapp.generated.resources.content_outputs_quick_select
 import churchpresenter.composeapp.generated.resources.content_outputs_select_all
-import churchpresenter.composeapp.generated.resources.content_outputs_translations_all
-import churchpresenter.composeapp.generated.resources.content_outputs_translations_some
 import churchpresenter.composeapp.generated.resources.content_outputs_clear_all
 import churchpresenter.composeapp.generated.resources.content_outputs_preview
 import churchpresenter.composeapp.generated.resources.content_outputs_preview_empty
 import churchpresenter.composeapp.generated.resources.content_outputs_section_content
+import churchpresenter.composeapp.generated.resources.content_outputs_translation_primary
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_chip_all
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_chip_clear
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_header
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_more
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_none
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_summary
 import churchpresenter.composeapp.generated.resources.content_outputs_section_backgrounds
 import churchpresenter.composeapp.generated.resources.content_outputs_done
 import churchpresenter.composeapp.generated.resources.detected_screens
@@ -1670,31 +1677,35 @@ private fun ContentTranslationCell(
     translations: List<String>,
     showing: Boolean,
     selected: List<Int>,
-    onShowingChange: (Boolean) -> Unit,
-    onSelectedChange: (List<Int>) -> Unit,
+    /**
+     * Applies both halves of the cell's state at once.
+     *
+     * One callback rather than two because a single click can need to change both — clearing every
+     * tick switches the output's scripture off, and ticking one while it is off switches it back on
+     * with just that translation. Two callbacks could not express either: each was
+     * `onApply(assignment.copy(..))` over the same captured assignment, so the first of two in one
+     * event was silently dropped.
+     */
+    onChange: (showing: Boolean, selected: List<Int>) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     // An index left behind by a translation that has since been removed is not a selection; the
     // preview counts them the same way.
     val effective = selected.filter { it in translations.indices }
-    val everything = effective.isEmpty() || effective.size == translations.size
+    // With the output's scripture switched off nothing is going out, whatever the stored selection
+    // says — so the boxes read empty and the count reads zero until it is switched back on.
+    val enabled = if (!showing) emptyList() else if (effective.isEmpty()) translations.indices.toList() else effective
 
-    // Exactly one callback per event. Both of them are `onApply(assignment.copy(..))` over the same
-    // captured assignment at the call site, so firing two in one event would drop the first.
     fun toggle(index: Int, want: Boolean) {
-        val current = if (selected.isEmpty()) translations.indices.toList() else effective
-        val next = if (want) (current + index).distinct().sorted() else current - index
+        val next = if (want) (enabled + index).distinct().sorted() else enabled - index
         when {
             // Showing none of them says the same thing as unticking the cell, so that is where it
             // goes. Normalising zero to "all" instead is what used to re-tick every box.
-            next.isEmpty() -> {
-                expanded = false
-                onShowingChange(false)
-            }
+            next.isEmpty() -> onChange(false, emptyList())
             // Everything ticked is stored as "all", so a translation added later shows up here too
             // rather than needing to be ticked on every output.
-            next.size == translations.size -> onSelectedChange(emptyList())
-            else -> onSelectedChange(next)
+            next.size == translations.size -> onChange(true, emptyList())
+            else -> onChange(true, next)
         }
     }
 
@@ -1705,7 +1716,7 @@ private fun ContentTranslationCell(
             .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked = showing, onCheckedChange = onShowingChange)
+        Checkbox(checked = showing, onCheckedChange = { want -> onChange(want, selected) })
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
@@ -1717,8 +1728,10 @@ private fun ContentTranslationCell(
             modifier = Modifier.weight(1f),
         )
         // Nothing to choose between with a single translation -- the checkbox already says whether
-        // this output shows it.
-        if (showing && translations.size > 1) {
+        // this output shows it. Deliberately not also gated on `showing`: clearing every tick
+        // switches scripture off, and unmounting the menu at that moment would shut it under the
+        // hand that just used it.
+        if (translations.size > 1) {
             Box {
                 OutlinedButton(
                     shape = RoundedCornerShape(6.dp),
@@ -1726,15 +1739,20 @@ private fun ContentTranslationCell(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                 ) {
+                    val enabledCodes = enabled.map { translationCode(translations[it]) }
                     Text(
-                        text = if (everything) {
-                            stringResource(Res.string.content_outputs_translations_all, translations.size)
-                        } else {
-                            stringResource(
-                                Res.string.content_outputs_translations_some,
-                                effective.size,
-                                translations.size,
+                        // Names the translation actually going out, which is what an operator glancing
+                        // at a row wants; how many others go with it is the "+N", and the exact count
+                        // is in the menu's own header.
+                        text = when {
+                            enabledCodes.isEmpty() ->
+                                stringResource(Res.string.content_outputs_translations_none)
+                            enabledCodes.size > 1 -> stringResource(
+                                Res.string.content_outputs_translations_more,
+                                enabledCodes.first(),
+                                enabledCodes.size - 1,
                             )
+                            else -> enabledCodes.first()
                         },
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
@@ -1749,70 +1767,189 @@ private fun ContentTranslationCell(
                 DropdownMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
-                    // Bibles are named by file stem, which runs long; the menu is capped rather than
-                    // allowed to stretch across the dialog.
-                    modifier = Modifier.widthIn(max = 280.dp),
+                    // Wide enough for a name and its tags on one line, capped so a long file stem
+                    // can't stretch the popup across the dialog behind it.
+                    modifier = Modifier.widthIn(min = 300.dp, max = 360.dp),
                 ) {
+                    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+
+                    // Header strip: what this menu is, and the two bulk actions.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ContentOutputsSectionHeader(stringResource(Res.string.content_outputs_translations_header))
+                        Spacer(modifier = Modifier.weight(1f))
+                        TextButton(
+                            onClick = { onChange(true, emptyList()) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                stringResource(Res.string.content_outputs_translations_chip_all),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        TextButton(
+                            // Showing none of them is the same output state as an unticked cell, so
+                            // that is where it is stored. The menu stays open: clearing is usually a
+                            // step towards picking a couple, not the end of the visit.
+                            onClick = { onChange(false, emptyList()) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                stringResource(Res.string.content_outputs_translations_chip_clear),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = dividerColor)
+
+                    // Summary line. Informational only: the design this follows put a third state
+                    // toggle here, which is dropped as saying the same thing as the two unambiguous
+                    // actions above.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(28.dp),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Filled.Book,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                            )
+                            Text(
+                                text = stringResource(
+                                    Res.string.content_outputs_translations_summary,
+                                    enabled.size,
+                                    translations.size,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = dividerColor)
+
                     translations.forEachIndexed { index, name ->
-                        val ticked = selected.isEmpty() || index in selected
+                        val ticked = index in enabled
                         // A toggleable Row rather than a DropdownMenuItem: the whole row toggles,
                         // the row carries the on/off state, and nothing here dismisses the menu, so
                         // several translations can be picked in one visit.
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 32.dp)
+                                .heightIn(min = 44.dp)
                                 .toggleable(
                                     value = ticked,
                                     role = Role.Checkbox,
                                     onValueChange = { want -> toggle(index, want) },
                                 )
-                                .padding(horizontal = 8.dp),
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // Compact tag for the translation, taken from the file stem: the
+                            // catalogue names its downloads LANGUAGE_CODE, so this is the code on
+                            // its own. A stem with no underscore is its own code, and the row then
+                            // reads the same twice -- harmless, and better than an empty gutter that
+                            // would leave the list ragged.
+                            Surface(
+                                modifier = Modifier.widthIn(min = 44.dp).height(26.dp),
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = translationCode(name),
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 6.dp),
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            // Name and tag share the row's slack so the checkbox sits against the
+                            // right edge, in one column down the list rather than trailing each name.
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                // First in the stack is the one the Bible tab navigates by, which is
+                                // worth saying here because it is not otherwise visible per output.
+                                if (index == 0) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = MaterialTheme.shapes.extraSmall,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    ) {
+                                        Text(
+                                            text = stringResource(Res.string.content_outputs_translation_primary)
+                                                .uppercase(),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Checkbox(checked = ticked, onCheckedChange = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = name,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
                         }
                     }
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(Res.string.content_outputs_select_all),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        },
-                        // Stored as "all" rather than every index, so a translation added later is
-                        // included without revisiting each output.
-                        onClick = { onSelectedChange(emptyList()) },
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(Res.string.content_outputs_clear_all),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        },
-                        // Showing none of them is the same output state as an unticked cell, so it
-                        // is stored there. The flag is cleared too, or re-ticking Bible would pop
-                        // this menu straight back open.
-                        onClick = {
-                            expanded = false
-                            onShowingChange(false)
-                        },
-                    )
                 }
             }
         }
     }
 }
+/**
+ * The compact code for a translation, from its file stem.
+ *
+ * The downloader names what it installs `LANGUAGE_CODE` (`ENG_ACV`), so the part after the underscore
+ * is the translation's own identifier. Anything filed by hand has no underscore and is its own code.
+ * Derived rather than read from the module: naming these by stem is what keeps this tab out of the
+ * bible folder, and opening every `.spb` to render a settings row would be a lot of I/O for a label.
+ */
+private fun translationCode(stem: String): String =
+    stem.substringAfterLast('/').substringAfterLast('_').uppercase()
+
 @Composable
 private fun ContentLangCell(
     modifier: Modifier,
@@ -2125,14 +2262,14 @@ private fun ContentOutputsDialog(
                         translations = translationNames,
                         showing = assignment.showBible,
                         selected = assignment.bibleTranslations,
-                        onShowingChange = { on ->
+                        onChange = { on, next ->
                             onApply(
                                 assignment.copy(
                                     bibleMode = if (on) Constants.SONG_LANG_BOTH else Constants.SONG_LANG_OFF,
+                                    bibleTranslations = next,
                                 ),
                             )
                         },
-                        onSelectedChange = { next -> onApply(assignment.copy(bibleTranslations = next)) },
                     )
                     ContentLangCell(
                         modifier = Modifier.weight(1f),
