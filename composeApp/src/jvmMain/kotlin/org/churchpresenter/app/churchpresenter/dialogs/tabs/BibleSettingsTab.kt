@@ -112,6 +112,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import churchpresenter.composeapp.generated.resources.auto_fit
 import org.churchpresenter.app.churchpresenter.composables.VerticalAlignmentButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.moveBibleTranslation
+import org.churchpresenter.app.churchpresenter.data.settings.removeBibleTranslation
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.dialogs.BibleCatalogBrowserDialog
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -278,20 +280,25 @@ private fun LeftColumn(
                             val fileName = if (displayName == noneStr) "" else
                                 bibleFileDisplayNames.entries.find { it.value == displayName }?.key ?: displayName
                             onSettingsChange { app ->
-                                app.copy(
-                                    bibleSettings = if (fileName.isEmpty()) {
-                                        app.bibleSettings.removeTranslation(index)
-                                    } else {
-                                        app.bibleSettings.updateTranslation(index) { it.copy(fileName = fileName) }
-                                    },
-                                )
+                                // Setting a slot to None takes a translation out of the stack, so it
+                                // has to carry the output selections with it exactly as the delete
+                                // button does. Swapping which bible a slot holds does not: the
+                                // positions are unchanged.
+                                if (fileName.isEmpty()) {
+                                    app.removeBibleTranslation(index)
+                                } else {
+                                    app.copy(
+                                        bibleSettings = app.bibleSettings
+                                            .updateTranslation(index) { it.copy(fileName = fileName) },
+                                    )
+                                }
                             }
                         },
                     )
                     if (index > 0) {
                         ActionIconButton(
                             onClick = { onSettingsChange { app ->
-                                app.copy(bibleSettings = app.bibleSettings.moveTranslation(index, -1))
+                                app.moveBibleTranslation(index, -1)
                             } },
                             tooltipText = stringResource(Res.string.move_translation_up),
                             painter = painterResource(Res.drawable.ic_arrow_up),
@@ -300,7 +307,7 @@ private fun LeftColumn(
                     if (index < translations.lastIndex) {
                         ActionIconButton(
                             onClick = { onSettingsChange { app ->
-                                app.copy(bibleSettings = app.bibleSettings.moveTranslation(index, 1))
+                                app.moveBibleTranslation(index, 1)
                             } },
                             tooltipText = stringResource(Res.string.move_translation_down),
                             painter = painterResource(Res.drawable.ic_arrow_down),
@@ -308,7 +315,7 @@ private fun LeftColumn(
                     }
                     ActionIconButton(
                         onClick = { onSettingsChange { app ->
-                            app.copy(bibleSettings = app.bibleSettings.removeTranslation(index))
+                            app.removeBibleTranslation(index)
                         } },
                         tooltipText = stringResource(Res.string.remove),
                         painter = painterResource(Res.drawable.ic_delete),
