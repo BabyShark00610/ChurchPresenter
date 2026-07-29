@@ -145,13 +145,24 @@ class BibleViewModelSelectedVersesTest {
             listOf("p.spb", "s.spb", "t.spb").map { BibleTranslationSettings(fileName = it) },
         )
         val model = BibleViewModel(AppSettings(bibleSettings = initialSettings))
-        awaitUntil("initial multi load") { model.loadedTranslations.value.size == 3 }
+        // The modules land partway through the load, before the chapter is read and well before the
+        // load reports itself finished. Reordering from that point raced the first load against the
+        // second and could leave the verses behind, so wait for the whole thing to settle.
+        awaitUntil("initial multi load") {
+            model.loadedTranslations.value.size == 3 && model.isFullyLoaded && model.books.value.isNotEmpty()
+        }
 
+        val tokenBeforeReorder = model.verseSelectionToken.value
         model.updateSettings(
             AppSettings(bibleSettings = initialSettings.moveTranslation(2, -2)),
         )
+        // The token is bumped after the reloaded chapter is published and before the load flags
+        // itself done, so it is the signal that the verses below are the reordered ones rather than
+        // the ones still on screen from a moment ago.
         awaitUntil("reordered multi load") {
-            model.loadedTranslations.value.firstOrNull()?.fileName == "t.spb" && model.isFullyLoaded
+            model.loadedTranslations.value.firstOrNull()?.fileName == "t.spb" &&
+                model.isFullyLoaded &&
+                model.verseSelectionToken.value != tokenBeforeReorder
         }
 
         assertEquals("Johannes", model.books.value.first())
