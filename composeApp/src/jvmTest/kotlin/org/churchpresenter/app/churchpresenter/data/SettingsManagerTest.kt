@@ -331,6 +331,44 @@ class SettingsManagerTest {
         )
     }
 
+    // ── Version 6: the bible translation stack ──────────────────────────────────
+
+    @Test
+    fun `an older file's bible pair becomes the translation stack`() {
+        val migrated = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":5,"bibleSettings":{"primaryBible":"kjv.spb","secondaryBible":"rst.spb","primaryBibleColor":"#ABCDEF"}}""",
+        )
+
+        assertEquals(
+            listOf("kjv.spb", "rst.spb"),
+            migrated.bibleSettings.translations.map { it.fileName },
+        )
+        assertEquals(
+            "#ABCDEF",
+            migrated.bibleSettings.translations[0].textColor,
+            "styling has to come across, or everyone's bible resets to the defaults on upgrade",
+        )
+    }
+
+    @Test
+    fun `an output naming one of the two bibles becomes a position`() {
+        val migrated = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":5,"projectionSettings":{"screenAssignments":[
+                {"targetDisplay":0,"bibleMode":"primary"},
+                {"targetDisplay":1,"bibleMode":"secondary"},
+                {"targetDisplay":2,"bibleMode":"both"},
+                {"targetDisplay":3,"bibleMode":"off"}]}}""".trimIndent().replace("\n", ""),
+        )
+        val outputs = migrated.projectionSettings.screenAssignments
+
+        assertEquals(listOf(0), outputs[0].bibleTranslations)
+        assertEquals(listOf(1), outputs[1].bibleTranslations)
+        assertEquals(emptyList(), outputs[2].bibleTranslations, "\"both\" is every translation, which is the empty list")
+        assertEquals(emptyList(), outputs[3].bibleTranslations)
+        assertTrue(outputs[0].showBible, "naming a bible does not switch the output off")
+        assertTrue(!outputs[3].showBible, "and an output that was off stays off")
+    }
+
     // ── Import path ─────────────────────────────────────────────────────────────
 
     @Test

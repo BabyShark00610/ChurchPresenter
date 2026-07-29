@@ -1536,9 +1536,33 @@ fun BibleTab(
                             contentColor = if (sttConnected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (appSettings.bibleSettings.multiTranslationMode &&
-                        appSettings.bibleSettings.translationList().size > 1
-                    ) {
+                    // Two bibles is the bilingual case and keeps its one-tap swap. Three or more
+                    // needs to express an order rather than a flip, so it gets the reorder menu.
+                    if (appSettings.bibleSettings.translationList().size == 2) {
+                        ActionIconButton(
+                            onClick = {
+                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.swapped()) }
+                                focusRequester.requestFocus()
+                            },
+                            tooltipText = swapBiblesStr,
+                            painter = painterResource(Res.drawable.ic_swap),
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary,
+                            tooltipContent = {
+                                val pair = appSettings.bibleSettings.translationList()
+                                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Text(stringResource(Res.string.swap_bibles_hint), color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    pair.forEachIndexed { position, item ->
+                                        Text(
+                                            "${position + 1}. ${item.fileName.substringBeforeLast('.').ifEmpty { "-" }}",
+                                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            }
+                        )
+                    } else if (appSettings.bibleSettings.translationList().size > 2) {
                         val translations = appSettings.bibleSettings.translationList()
                         val translationDisplayNames = remember(
                             appSettings.bibleSettings.storageDirectory,
@@ -1612,27 +1636,6 @@ fun BibleTab(
                                     )
                                 }
                             },
-                        )
-                    } else if (!appSettings.bibleSettings.multiTranslationMode &&
-                        appSettings.bibleSettings.secondaryBible.isNotEmpty()
-                    ) {
-                        // Legacy mode keeps the original primary/secondary swap control.
-                        ActionIconButton(
-                            onClick = {
-                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.swapped()) }
-                                focusRequester.requestFocus()
-                            },
-                            tooltipText = swapBiblesStr,
-                            painter = painterResource(Res.drawable.ic_swap),
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                            contentColor = MaterialTheme.colorScheme.onTertiary,
-                            tooltipContent = {
-                                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                    Text(stringResource(Res.string.swap_bibles_hint), color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                    Text("${stringResource(Res.string.primary_bible)} ${appSettings.bibleSettings.primaryBible.substringBeforeLast('.').ifEmpty { "-" }}", color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodySmall)
-                                    Text("${stringResource(Res.string.secondary_bible)} ${appSettings.bibleSettings.secondaryBible.substringBeforeLast('.').ifEmpty { "-" }}", color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
                         )
                     }
                     // Add to Schedule (teal)

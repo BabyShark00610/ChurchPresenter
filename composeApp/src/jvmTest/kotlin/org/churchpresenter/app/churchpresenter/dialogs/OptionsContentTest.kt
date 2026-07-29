@@ -166,12 +166,14 @@ class OptionsContentTest {
 
     @Test
     fun `toggling a checkbox on the Bible tab feeds back into saved settings`() = dialog(initialTab = 1) { result ->
+        // The checkbox and its label are siblings, so the label is not clickable -- the toggleable
+        // node is what has to be pressed.
         onAllNodes(isToggleable())[0].performScrollTo().performClick()
         onNodeWithText("Apply").performClick()
 
         assertEquals(
-            !AppSettings().bibleSettings.secondaryBibleLowerThirdEnabled,
-            result.saved?.bibleSettings?.secondaryBibleLowerThirdEnabled,
+            !AppSettings().bibleSettings.multiTranslationDivider,
+            result.saved?.bibleSettings?.multiTranslationDivider,
         )
     }
 

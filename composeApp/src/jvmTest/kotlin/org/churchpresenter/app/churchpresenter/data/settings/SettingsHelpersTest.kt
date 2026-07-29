@@ -153,24 +153,62 @@ class ProjectionSettingsTest {
  * leaves the swapped Bible wearing the other's font, colour or alignment, which looks like a
  * rendering bug rather than a settings one.
  */
+/**
+ * Swapping the first two translations.
+ *
+ * Swap used to exchange some ninety primary/secondary styling fields; with the ordered stack it is a
+ * reorder, and each translation carries its own styling with it by construction. What still needs
+ * pinning is that the styling genuinely travels with its bible rather than staying at its position,
+ * and that the retained legacy names follow the stack so an older build opens the right bibles.
+ */
 class BibleSettingsSwapTest {
 
-    /** Both sides set to clearly different values, so a field copied one way is visible. */
-    private fun configured() = BibleSettings(
-        primaryBible = "kjv.spb",
-        secondaryBible = "synodal.spb",
-        primaryBibleColor = "#111111",
-        secondaryBibleColor = "#222222",
-        primaryBibleFontSize = 40,
-        secondaryBibleFontSize = 80,
-        primaryBibleFontType = "Georgia",
-        secondaryBibleFontType = "Arial",
-        primaryBibleBold = true,
-        secondaryBibleBold = false,
-    )
+    /** Both translations set to clearly different values, so styling that stayed put is visible. */
+    private fun configured() = BibleSettings(primaryBible = "kjv.spb", secondaryBible = "synodal.spb")
+        .migrateTranslations()
+        .updateTranslation(0) { it.copy(textColor = "#111111", textFontSize = 40, textFontType = "Georgia", textBold = true) }
+        .updateTranslation(1) { it.copy(textColor = "#222222", textFontSize = 80, textFontType = "Arial", textBold = false) }
 
     @Test
     fun `the two bibles change places`() {
+        val swapped = configured().swapped()
+
+        assertEquals(
+            listOf("synodal.spb", "kjv.spb"),
+            swapped.translationList().map { it.fileName },
+        )
+    }
+
+    @Test
+    fun `styling travels with its bible`() {
+        val swapped = configured().swapped()
+        val (first, second) = swapped.translationList()
+
+        assertEquals("#222222", first.textColor, "the Synodal text keeps its own colour")
+        assertEquals(80, first.textFontSize)
+        assertEquals("Arial", first.textFontType)
+        assertFalse(first.textBold)
+        assertEquals("#111111", second.textColor)
+        assertEquals(40, second.textFontSize)
+        assertEquals("Georgia", second.textFontType)
+        assertTrue(second.textBold)
+    }
+
+    @Test
+    fun `swapping twice puts everything back exactly as it was`() {
+        val original = configured()
+
+        assertEquals(
+            original,
+            original.swapped().swapped(),
+            "anything moved one way only would survive the first swap and be lost on the second",
+        )
+    }
+
+    @Test
+    fun `the retained legacy names follow the stack`() {
+        // Their styling stays frozen at whatever the conversion wrote, but the selection tracks the
+        // stack -- otherwise a rollback would open bibles the operator stopped using.
         val swapped = configured().swapped()
 
         assertEquals("synodal.spb", swapped.primaryBible)
@@ -178,48 +216,11 @@ class BibleSettingsSwapTest {
     }
 
     @Test
-    fun `styling travels with its bible`() {
-        val swapped = configured().swapped()
+    fun `swapping a stack of fewer than two does nothing`() {
+        val single = BibleSettings(primaryBible = "kjv.spb").migrateTranslations()
 
-        assertEquals("#222222", swapped.primaryBibleColor, "the Synodal text keeps its own colour")
-        assertEquals("#111111", swapped.secondaryBibleColor)
-        assertEquals(80, swapped.primaryBibleFontSize)
-        assertEquals(40, swapped.secondaryBibleFontSize)
-        assertEquals("Arial", swapped.primaryBibleFontType)
-        assertEquals("Georgia", swapped.secondaryBibleFontType)
-        assertTrue(swapped.secondaryBibleBold)
-        assertFalse(swapped.primaryBibleBold)
-    }
-
-    @Test
-    fun `swapping twice puts everything back exactly as it was`() {
-        // The strongest check available: any field copied in only one direction shows up here as a
-        // value that did not come home, without having to name all thirty pairs.
-        val original = configured()
-
-        assertEquals(
-            original,
-            original.swapped().swapped(),
-            "a field swapped one way only would survive the first swap and be lost on the second",
-        )
-    }
-
-    /**
-     * Note that this is NOT a no-op: the two sides ship with different lower-third text sizes — the
-     * secondary line is smaller, because it is usually the translation under the primary reading —
-     * so swapping default settings exchanges those defaults along with everything else.
-     */
-    @Test
-    fun `swapping an unconfigured pair exchanges the two sides' own defaults`() {
-        val defaults = BibleSettings()
-        assertEquals(32, defaults.primaryBibleLowerThirdFontSize)
-        assertEquals(28, defaults.secondaryBibleLowerThirdFontSize)
-
-        val swapped = defaults.swapped()
-
-        assertEquals(28, swapped.primaryBibleLowerThirdFontSize)
-        assertEquals(32, swapped.secondaryBibleLowerThirdFontSize)
-        assertEquals(defaults, swapped.swapped(), "and swapping back restores them")
+        assertEquals(single, single.swapped(), "there is no second translation to exchange with")
+        assertEquals(BibleSettings(), BibleSettings().swapped())
     }
 
     @Test
@@ -230,10 +231,18 @@ class BibleSettingsSwapTest {
     }
 }
 
+/**
+ * The ordered translation stack, and the one-way conversion onto it.
+ *
+ * The stack replaced a primary/secondary pair plus a mode toggle. What matters is that a settings
+ * file written before the list existed still presents correctly, that converting it carries the
+ * styling rather than resetting everyone to white Arial, and that the old fields survive the
+ * conversion so a user who rolls back to an earlier build does not open a blank Bible panel.
+ */
 class BibleTranslationListTest {
 
     @Test
-    fun `legacy primary and secondary settings become an ordered translation list`() {
+    fun `a settings file with no list still presents its primary and secondary pair`() {
         val settings = BibleSettings(
             primaryBible = "first.spb",
             secondaryBible = "second.spb",
@@ -248,9 +257,62 @@ class BibleTranslationListTest {
     }
 
     @Test
-    fun `multi mode starts from legacy selection and keeps style while moving`() {
+    fun `converting carries each bible's styling onto its translation`() {
+        val migrated = BibleSettings(
+            primaryBible = "first.spb",
+            secondaryBible = "second.spb",
+            primaryBibleColor = "#111111",
+            primaryBibleFontSize = 88,
+            primaryBibleLowerThirdColor = "#AAAAAA",
+            secondaryBibleColor = "#222222",
+            secondaryBibleLowerThirdEnabled = false,
+        ).migrateTranslations()
+
+        assertEquals(listOf("first.spb", "second.spb"), migrated.translations.map { it.fileName })
+        assertEquals("#111111", migrated.translations[0].textColor)
+        assertEquals(88, migrated.translations[0].textFontSize)
+        assertEquals(
+            "#AAAAAA",
+            migrated.translations[0].lowerThirdTextColor,
+            "lower-third styling has to come across too, or a lower third silently restyles itself",
+        )
+        assertEquals(
+            false,
+            migrated.translations[1].lowerThirdEnabled,
+            "a second bible deliberately kept out of the lower third must stay out of it",
+        )
+    }
+
+    @Test
+    fun `converting leaves the old fields alone so an older build can still read the file`() {
+        val migrated = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
+            .migrateTranslations()
+
+        assertEquals("first.spb", migrated.primaryBible)
+        assertEquals("second.spb", migrated.secondaryBible)
+    }
+
+    @Test
+    fun `converting an already converted file changes nothing`() {
+        val once = BibleSettings(primaryBible = "first.spb").migrateTranslations()
+        val twice = once.addTranslation("second.spb").migrateTranslations()
+
+        assertEquals(
+            listOf("first.spb", "second.spb"),
+            twice.translations.map { it.fileName },
+            "a second conversion must not throw away translations added since the first",
+        )
+    }
+
+    @Test
+    fun `a bible with nothing configured converts to an empty stack`() {
+        assertEquals(emptyList(), BibleSettings().migrateTranslations().translations)
+    }
+
+    @Test
+    fun `translations keep their style while being reordered`() {
         val settings = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
-            .withMultiTranslationMode(true)
+            .migrateTranslations()
             .addTranslation("third.spb")
             .updateTranslation(2) { it.copy(textColor = "#333333", textFontType = "Georgia") }
             .moveTranslation(2, -1)
@@ -258,46 +320,44 @@ class BibleTranslationListTest {
         assertEquals(listOf("first.spb", "third.spb", "second.spb"), settings.translationList().map { it.fileName })
         assertEquals("#333333", settings.translationList()[1].textColor)
         assertEquals("Georgia", settings.translationList()[1].textFontType)
-        assertEquals("first.spb", settings.primaryBible)
-        assertEquals("second.spb", settings.secondaryBible)
     }
 
     @Test
     fun `a translation cannot be selected twice`() {
         val settings = BibleSettings(primaryBible = "first.spb")
-            .withMultiTranslationMode(true)
+            .migrateTranslations()
             .addTranslation("first.spb")
 
         assertEquals(listOf("first.spb"), settings.translationList().map { it.fileName })
     }
 
     @Test
-    fun `editing multi translations preserves the legacy selection`() {
+    fun `removing a translation drops only that one`() {
         val settings = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
-            .withMultiTranslationMode(true)
+            .migrateTranslations()
             .addTranslation("third.spb")
             .removeTranslation(0)
 
         assertEquals(listOf("second.spb", "third.spb"), settings.translationList().map { it.fileName })
-        assertEquals("first.spb", settings.primaryBible)
-        assertEquals("second.spb", settings.secondaryBible)
-        assertEquals(
-            listOf("first.spb", "second.spb"),
-            settings.withMultiTranslationMode(false).translationList().map { it.fileName },
-        )
     }
 
     @Test
-    fun `adding a multi translation changes the module reload key`() {
+    fun `adding a translation changes the module reload key`() {
         val before = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
-            .withMultiTranslationMode(true)
+            .migrateTranslations()
         val after = before.addTranslation("third.spb")
 
         assertTrue(before.translationSelectionKey() != after.translationSelectionKey())
-        assertEquals(
-            true to listOf("first.spb", "second.spb", "third.spb"),
-            after.translationSelectionKey(),
-        )
+        assertEquals(listOf("first.spb", "second.spb", "third.spb"), after.translationSelectionKey())
+    }
+
+    @Test
+    fun `swapping exchanges the first two translations`() {
+        val settings = BibleSettings(primaryBible = "first.spb", secondaryBible = "second.spb")
+            .migrateTranslations()
+            .swapped()
+
+        assertEquals(listOf("second.spb", "first.spb"), settings.translationList().map { it.fileName })
     }
 }
 

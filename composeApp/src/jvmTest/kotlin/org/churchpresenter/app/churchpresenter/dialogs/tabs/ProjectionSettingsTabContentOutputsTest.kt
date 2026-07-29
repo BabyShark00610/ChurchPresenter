@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -201,25 +202,24 @@ class ProjectionSettingsTabContentOutputsTest {
     // ── Bible and Songs language modes ──────────────────────────────────────────────────────────
 
     @Test
-    fun `the Bible language dropdown stores the picked mode`() = projectionTab { get ->
+    fun `unticking Bible switches the output off without touching Songs`() = projectionTab { get ->
         openContentOutputs()
-        assertEquals(Constants.SONG_LANG_BOTH, row0(get).bibleMode, "Bible starts on both languages")
+        assertEquals(Constants.SONG_LANG_BOTH, row0(get).bibleMode, "Bible starts on")
 
-        // Two dropdowns read "Both" — the Bible one comes first.
-        onAllNodesWithText("Both")[0].performClick()
-        waitForIdle()
-        onNodeWithText("Bible 2").performClick()
+        // Bible is a checkbox now; its per-translation ticks only appear with more than one
+        // translation configured, which this fixture does not have.
+        onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
 
-        assertEquals(Constants.SONG_LANG_SECONDARY, row0(get).bibleMode, "picking Bible 2 must be stored")
+        assertEquals(Constants.SONG_LANG_OFF, row0(get).bibleMode, "unticking must be stored")
         assertEquals(Constants.SONG_LANG_BOTH, row0(get).songMode, "Songs must be untouched")
-        onNodeWithText("Bible · Bible 2").assertExists("the preview must name the chosen mode")
     }
 
     @Test
     fun `the Songs language dropdown stores the picked mode`() = projectionTab { get ->
         openContentOutputs()
-        onAllNodesWithText("Both")[1].performClick()
+        // Songs is the only dropdown left in the dialog.
+        onAllNodesWithText("Both")[0].performClick()
         waitForIdle()
         onNodeWithText("Language 1").performClick()
         waitForIdle()
@@ -232,14 +232,13 @@ class ProjectionSettingsTabContentOutputsTest {
     @Test
     fun `switching Bible off drops it from the count and the preview`() = projectionTab { get ->
         openContentOutputs()
-        onAllNodesWithText("Both")[0].performClick()
-        waitForIdle()
-        onNodeWithText("Off").performClick()
+        onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
 
-        assertEquals(Constants.SONG_LANG_OFF, row0(get).bibleMode, "picking Off must be stored")
+        assertEquals(Constants.SONG_LANG_OFF, row0(get).bibleMode, "unticking must be stored")
         onNodeWithText("14 of 16 content types enabled on this screen").assertExists()
-        onAllNodesWithText("Bible · Both").assertCountEquals(0)
+        // Only the dialog's own checkbox label is left; the preview chip is gone.
+        onAllNodesWithText("Bible").assertCountEquals(1)
     }
 
     // ── Back on the tab ─────────────────────────────────────────────────────────────────────────

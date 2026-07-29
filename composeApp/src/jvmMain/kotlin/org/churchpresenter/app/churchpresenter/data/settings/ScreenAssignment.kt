@@ -17,7 +17,17 @@ data class ScreenAssignment(
     val keyTargetBoundsY: Int = Int.MIN_VALUE,
     val keyTargetBoundsW: Int = 0,
     val keyTargetBoundsH: Int = 0,
-    val bibleMode: String = Constants.SONG_LANG_BOTH,  // "off" | "primary" | "secondary" | "both"
+    /** Whether this output shows the Bible at all: "off" or "both". It no longer says *which*
+     *  translations — see [bibleTranslations]. Songs still use the full primary/secondary vocabulary
+     *  in [songMode], which is unrelated. */
+    val bibleMode: String = Constants.SONG_LANG_BOTH,
+    /**
+     * Which translations this output shows, by position in the stack.
+     *
+     * Empty means all of them, including any added later — the behaviour "both" used to have. A
+     * non-empty list is an explicit choice and is left alone when the stack grows.
+     */
+    val bibleTranslations: List<Int> = emptyList(),
     val songMode: String = Constants.SONG_LANG_BOTH,   // "off" | "primary" | "secondary" | "both"
     val showPictures: Boolean = true,
     val showMedia: Boolean = true,

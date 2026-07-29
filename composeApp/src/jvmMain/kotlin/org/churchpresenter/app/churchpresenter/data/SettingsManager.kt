@@ -8,6 +8,8 @@ import java.time.format.DateTimeFormatter
 import kotlinx.serialization.decodeFromString
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings.Companion.CURRENT_SETTINGS_VERSION
+import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -59,8 +61,9 @@ class SettingsManager {
      * is unlikely to exist (the booleans postdate the array), and reordering would change what
      * those users load, so the behaviour is documented rather than "fixed" on assumption.
      *
-     * Version 5 ([migrateHiddenTabs]) has no entry here — it operates on the decoded object rather
-     * than the raw text, and so runs separately in [migrateAndDecode].
+     * Versions 5 ([migrateHiddenTabs]) and 6 (the bible translation list) have no entry here — they
+     * operate on the decoded object rather than the raw text, and so run separately in
+     * [migrateAndDecode].
      */
     private val rawMigrations: List<Pair<Int, (String) -> String>> = listOf(
         1 to ::migrateScreenAssignmentModes,
@@ -127,8 +130,36 @@ class SettingsManager {
         }
         var settings = jsonFormat.decodeFromString<AppSettings>(migrated)
         if (fromVersion < 5) settings = migrateHiddenTabs(settings, raw)
+        if (fromVersion < 6) {
+            // The primary/secondary bible pair became an ordered list of any length. Typed rather
+            // than raw, because the conversion is a field-by-field restructure the data class
+            // already knows how to do. The old fields are left in the document on purpose so a
+            // downgrade still finds a configured bible.
+            settings = settings.copy(
+                bibleSettings = settings.bibleSettings.migrateTranslations(),
+                projectionSettings = settings.projectionSettings.copy(
+                    screenAssignments = settings.projectionSettings.screenAssignments
+                        .map(::migrateOutputTranslations),
+                ),
+            )
+        }
         return settings.copy(settingsVersion = CURRENT_SETTINGS_VERSION)
     }
+
+    /**
+     * An output used to name which of two bibles it showed. With a stack of any length it names
+     * positions instead, so "primary" becomes position 0 and "secondary" position 1. Everything else
+     * — "off", and "both" meaning all of them — is already expressed by an empty list plus the
+     * unchanged on/off flag.
+     */
+    private fun migrateOutputTranslations(assignment: ScreenAssignment): ScreenAssignment =
+        when (assignment.bibleMode) {
+            Constants.SONG_LANG_PRIMARY ->
+                assignment.copy(bibleMode = Constants.SONG_LANG_BOTH, bibleTranslations = listOf(0))
+            Constants.SONG_LANG_SECONDARY ->
+                assignment.copy(bibleMode = Constants.SONG_LANG_BOTH, bibleTranslations = listOf(1))
+            else -> assignment
+        }
 
     /** Reads the document's schema version without decoding it; absent or unparseable means 0
      * (pre-versioning), which runs the full migration chain — the pre-versioning behaviour. */

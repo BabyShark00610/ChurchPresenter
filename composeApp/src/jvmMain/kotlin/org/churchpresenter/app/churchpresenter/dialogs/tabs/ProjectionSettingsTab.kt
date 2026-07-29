@@ -142,8 +142,6 @@ import churchpresenter.composeapp.generated.resources.right
 import churchpresenter.composeapp.generated.resources.screen
 import churchpresenter.composeapp.generated.resources.screen_assignment
 import churchpresenter.composeapp.generated.resources.screen_col_label
-import churchpresenter.composeapp.generated.resources.screen_lang_bible_1
-import churchpresenter.composeapp.generated.resources.screen_lang_bible_2
 import churchpresenter.composeapp.generated.resources.screen_lang_language_1
 import churchpresenter.composeapp.generated.resources.screen_lang_language_2
 import churchpresenter.composeapp.generated.resources.screen_lang_off
@@ -404,11 +402,13 @@ fun ProjectionSettingsTab(
     // table (Card 1) and the Browser Source Outputs table (Card 1.5).
     val offLabel = stringResource(Res.string.screen_lang_off)
     val bothLabel = stringResource(Res.string.song_language_both)
-    val bible1Label = stringResource(Res.string.screen_lang_bible_1)
-    val bible2Label = stringResource(Res.string.screen_lang_bible_2)
     val lang1Label = stringResource(Res.string.screen_lang_language_1)
     val lang2Label = stringResource(Res.string.screen_lang_language_2)
-    val bibleLangModes = listOf(Constants.SONG_LANG_OFF to offLabel, Constants.SONG_LANG_PRIMARY to bible1Label, Constants.SONG_LANG_SECONDARY to bible2Label, Constants.SONG_LANG_BOTH to bothLabel)
+    // Named by file stem rather than by the title inside the module: the projection tab does not
+    // otherwise read the bible folder, and opening every .spb here to render a settings row would be
+    // a lot of I/O for a label.
+    val translationNames = settings.bibleSettings.translationList()
+        .map { it.fileName.substringBeforeLast('.') }
     val songLangModes = listOf(Constants.SONG_LANG_OFF to offLabel, Constants.SONG_LANG_PRIMARY to lang1Label, Constants.SONG_LANG_SECONDARY to lang2Label, Constants.SONG_LANG_BOTH to bothLabel)
 
     // Shared column widths — used by both the Screen Assignment table (Card 1) and the
@@ -903,7 +903,7 @@ fun ProjectionSettingsTab(
                         backgroundGroup = backgroundGroup,
                         bibleLabel = bibleLabel,
                         songsLabel = songsLabel,
-                        bibleLangModes = bibleLangModes,
+                        translationNames = translationNames,
                         songLangModes = songLangModes,
                         webDeckLinkTooltip = stringResource(Res.string.projection_web_decklink_tooltip),
                         webSnapshotTooltip = stringResource(Res.string.browser_source_website_snapshot_tooltip),
@@ -1279,7 +1279,7 @@ fun ProjectionSettingsTab(
                                     backgroundGroup = backgroundGroup,
                                     bibleLabel = bibleLabel,
                                     songsLabel = songsLabel,
-                                    bibleLangModes = bibleLangModes,
+                                    translationNames = translationNames,
                                     songLangModes = songLangModes,
                                     webDeckLinkTooltip = stringResource(Res.string.projection_web_decklink_tooltip),
                                     webSnapshotTooltip = stringResource(Res.string.browser_source_website_snapshot_tooltip),
@@ -1645,6 +1645,65 @@ private fun ContentToggleCell(
 
 /** Bible/Songs language-mode chip — label + a compact dropdown (Off / 1 / 2 / Both). */
 @Composable
+private fun ContentTranslationCell(
+    modifier: Modifier,
+    label: String,
+    /** Display names of the configured stack, in order. */
+    translations: List<String>,
+    showing: Boolean,
+    selected: List<Int>,
+    onShowingChange: (Boolean) -> Unit,
+    onSelectedChange: (List<Int>) -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+            .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = showing, onCheckedChange = onShowingChange)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+        // Nothing to choose between with a single translation -- the checkbox above already says
+        // whether this output shows it.
+        if (showing && translations.size > 1) {
+            translations.forEachIndexed { index, name ->
+                val ticked = selected.isEmpty() || index in selected
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 16.dp),
+                ) {
+                    Checkbox(
+                        checked = ticked,
+                        onCheckedChange = { want ->
+                            val current = if (selected.isEmpty()) translations.indices.toList() else selected
+                            val next = if (want) (current + index).distinct().sorted()
+                                       else current.filterNot { it == index }
+                            // Everything ticked is stored as "all", so a translation added later
+                            // shows up here too rather than needing to be ticked on every output.
+                            onSelectedChange(if (next.size == translations.size) emptyList() else next)
+                        },
+                    )
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ContentLangCell(
     modifier: Modifier,
     label: String,
@@ -1715,13 +1774,15 @@ private fun ContentOutputsMonitorPreview(
     backgroundGroup: List<ContentCol>,
     bibleLabel: String,
     songsLabel: String,
-    bibleLangModes: List<Pair<String, String>>,
+    translationNames: List<String>,
     songLangModes: List<Pair<String, String>>,
 ) {
     val chips = buildList {
-        if (assignment.bibleMode != Constants.SONG_LANG_OFF) {
-            val mode = bibleLangModes.find { it.first == assignment.bibleMode }?.second
-            add(if (mode != null) "$bibleLabel · $mode" else bibleLabel)
+        if (assignment.showBible) {
+            // An empty selection means every translation, so the count is the whole stack.
+            val shown = if (assignment.bibleTranslations.isEmpty()) translationNames.size
+                        else assignment.bibleTranslations.count { it in translationNames.indices }
+            add(if (translationNames.size > 1) "$bibleLabel · $shown" else bibleLabel)
         }
         if (assignment.songMode != Constants.SONG_LANG_OFF) {
             val mode = songLangModes.find { it.first == assignment.songMode }?.second
@@ -1853,7 +1914,7 @@ private fun ContentOutputsDialog(
     backgroundGroup: List<ContentCol>,
     bibleLabel: String,
     songsLabel: String,
-    bibleLangModes: List<Pair<String, String>>,
+    translationNames: List<String>,
     songLangModes: List<Pair<String, String>>,
     webDeckLinkTooltip: String,
     webSnapshotTooltip: String,
@@ -1948,12 +2009,20 @@ private fun ContentOutputsDialog(
                 // Content
                 ContentOutputsSectionHeader(stringResource(Res.string.content_outputs_section_content))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ContentLangCell(
+                    ContentTranslationCell(
                         modifier = Modifier.weight(1f),
                         label = bibleLabel,
-                        modes = bibleLangModes,
-                        currentMode = assignment.bibleMode,
-                        onSelect = { value -> onApply(assignment.copy(bibleMode = value)) }
+                        translations = translationNames,
+                        showing = assignment.showBible,
+                        selected = assignment.bibleTranslations,
+                        onShowingChange = { on ->
+                            onApply(
+                                assignment.copy(
+                                    bibleMode = if (on) Constants.SONG_LANG_BOTH else Constants.SONG_LANG_OFF,
+                                ),
+                            )
+                        },
+                        onSelectedChange = { next -> onApply(assignment.copy(bibleTranslations = next)) },
                     )
                     ContentLangCell(
                         modifier = Modifier.weight(1f),
@@ -1999,7 +2068,7 @@ private fun ContentOutputsDialog(
                 backgroundGroup = backgroundGroup,
                 bibleLabel = bibleLabel,
                 songsLabel = songsLabel,
-                bibleLangModes = bibleLangModes,
+                translationNames = translationNames,
                 songLangModes = songLangModes,
             )
           }

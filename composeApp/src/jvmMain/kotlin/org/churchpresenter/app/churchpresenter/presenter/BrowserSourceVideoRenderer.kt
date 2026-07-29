@@ -245,7 +245,7 @@ class BrowserSourceVideoRenderer(
                                             transitionAlpha = presenterManager.bibleTransitionAlpha.value,
                                             showBackground = showBg && screenAssignment.showBibleBackground,
                                             crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                            languageMode = screenAssignment.bibleMode
+                                            bibleTranslations = screenAssignment.bibleTranslations
                                         )
                                         Presenting.LYRICS -> SongPresenter(
                                             lyricSection = presenterManager.displayedLyricSection.value,

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
@@ -47,6 +48,13 @@ class PresenterRenderTest {
 
     /** Settings with a second translation configured, which is what turns the parallel layout on. */
     private val bilingualBible = AppSettings(bibleSettings = BibleSettings(secondaryBible = "RST"))
+
+    /** Four translations configured, for the per-output selection cases. */
+    private val fourTranslations = AppSettings(
+        bibleSettings = BibleSettings().withTranslations(
+            listOf("kjv.spb", "rst.spb", "lut.spb", "afr.spb").map { BibleTranslationSettings(fileName = it) },
+        ),
+    )
 
     /** Settings with the title placed where the settings picker can actually put it. */
     private val titleAboveVerse = AppSettings(songSettings = SongSettings(titlePosition = Constants.ABOVE_VERSE))
@@ -157,13 +165,13 @@ class PresenterRenderTest {
     }
 
     @Test
-    fun `a screen set to the primary translation shows only that one`() = runComposeUiTest {
+    fun `a screen set to the first translation shows only that one`() = runComposeUiTest {
         setContent {
             Box(screen) {
                 BiblePresenter(
                     selectedVerses = listOf(verse(), verse(text = russian, abbreviation = "RST")),
                     appSettings = bilingualBible,
-                    languageMode = Constants.SONG_LANG_PRIMARY,
+                    bibleTranslations = listOf(0),
                 )
             }
         }
@@ -173,14 +181,15 @@ class PresenterRenderTest {
     }
 
     @Test
-    fun `a screen set to the secondary translation shows it in the primary's place`() = runComposeUiTest {
-        // An overflow room running in another language: the secondary is promoted, not added.
+    fun `a screen set to the second translation shows only that one`() = runComposeUiTest {
+        // An overflow room running in another language. It is no longer promoted into the first
+        // slot: styling is looked up per verse by its own translation, so it keeps its own.
         setContent {
             Box(screen) {
                 BiblePresenter(
                     selectedVerses = listOf(verse(), verse(text = russian, abbreviation = "RST")),
                     appSettings = bilingualBible,
-                    languageMode = Constants.SONG_LANG_SECONDARY,
+                    bibleTranslations = listOf(1),
                 )
             }
         }
@@ -190,19 +199,67 @@ class PresenterRenderTest {
     }
 
     @Test
-    fun `a screen set to the secondary falls back to the primary when there is only one`() = runComposeUiTest {
-        // A single-translation service must not black out the rooms configured for the secondary.
+    fun `a screen set to a translation that is not there falls back to the first`() = runComposeUiTest {
+        // A single-translation service must not black out the rooms configured for a later one.
         setContent {
             Box(screen) {
                 BiblePresenter(
                     selectedVerses = listOf(verse()),
                     appSettings = bilingualBible,
-                    languageMode = Constants.SONG_LANG_SECONDARY,
+                    bibleTranslations = listOf(1),
                 )
             }
         }
 
         onNodeWithText(english, substring = true).assertExists()
+    }
+
+    @Test
+    fun `a screen can show a non-adjacent pair out of a longer stack`() = runComposeUiTest {
+        // The thing the old primary/secondary/both string could not express at all: first and third
+        // of four, for a room that wants the original language and one of the translations.
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = listOf(
+                        verse(),
+                        verse(text = russian, abbreviation = "RST"),
+                        verse(text = "Also sehr liebte Gott", abbreviation = "LUT"),
+                        verse(text = "Want so lief het God", abbreviation = "AFR"),
+                    ),
+                    appSettings = fourTranslations,
+                    bibleTranslations = listOf(0, 2),
+                )
+            }
+        }
+
+        onNodeWithText(english, substring = true).assertExists()
+        onNodeWithText("Also sehr liebte Gott", substring = true).assertExists()
+        onAllNodesWithText(russian, substring = true).assertCountEquals(0)
+        onAllNodesWithText("Want so lief het God", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `an empty selection shows every translation, including ones added later`() = runComposeUiTest {
+        // Empty means all: an output left at the default picks up a bible added afterwards rather
+        // than needing to be ticked again on every screen.
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = listOf(
+                        verse(),
+                        verse(text = russian, abbreviation = "RST"),
+                        verse(text = "Also sehr liebte Gott", abbreviation = "LUT"),
+                    ),
+                    appSettings = fourTranslations,
+                    bibleTranslations = emptyList(),
+                )
+            }
+        }
+
+        onNodeWithText(english, substring = true).assertExists()
+        onNodeWithText(russian, substring = true).assertExists()
+        onNodeWithText("Also sehr liebte Gott", substring = true).assertExists()
     }
 
     @Test

@@ -86,40 +86,44 @@ fun BiblePresenter(
     transitionAlpha: Float = 1f,
     showBackground: Boolean = true,
     crossfadeEnabled: Boolean = false,
-    languageMode: String = "both",
+    /** Positions in the translation stack this output shows; empty means all of them. */
+    bibleTranslations: List<Int> = emptyList(),
 ) {
-    // Filter verses per screen language assignment:
-    // "primary"   → show only the primary translation
-    // "secondary" → promote secondary to primary position (renders full-screen in primary style)
-    // "both"      → keep both (default behaviour)
-    val effectiveVerses = when (languageMode) {
-        Constants.SONG_LANG_PRIMARY -> selectedVerses.take(1)
-        Constants.SONG_LANG_SECONDARY -> selectedVerses.drop(1).ifEmpty { selectedVerses.take(1) }
-        else -> selectedVerses
-    }
+    // Filter to the translations this screen is assigned. Selecting one no longer promotes it into
+    // the primary slot the way the old "secondary" mode did: styling is looked up per verse by its
+    // own translation, so a verse keeps its own colours and font wherever it lands.
+    val effectiveVerses =
+        if (bibleTranslations.isEmpty()) selectedVerses
+        else selectedVerses.filterIndexed { index, _ -> index in bibleTranslations }
+            .ifEmpty { selectedVerses.take(1) }
     val isKey = outputRole == Constants.OUTPUT_ROLE_KEY
     val bs = appSettings.bibleSettings
+    // The first two translations, which the lower third renders. Full screen draws the whole stack
+    // instead; a missing entry falls back to defaults so an unconfigured slot still has a style.
+    val translationStack = bs.translationList()
+    val t0 = translationStack.getOrNull(0) ?: BibleTranslationSettings()
+    val t1 = translationStack.getOrNull(1) ?: BibleTranslationSettings()
 
     // Resolve font families — use lower-third-specific values when applicable
     val primaryBibleFontStyle = remember(
-        if (isLowerThird) bs.primaryBibleLowerThirdFontType else bs.primaryBibleFontType
+        if (isLowerThird) t0.lowerThirdTextFontType else t0.textFontType
     ) {
-        systemFontFamilyOrDefault(if (isLowerThird) bs.primaryBibleLowerThirdFontType else bs.primaryBibleFontType)
+        systemFontFamilyOrDefault(if (isLowerThird) t0.lowerThirdTextFontType else t0.textFontType)
     }
     val primaryBibleReferenceFontStyle = remember(
-        if (isLowerThird) bs.primaryReferenceLowerThirdFontType else bs.primaryReferenceFontType
+        if (isLowerThird) t0.lowerThirdReferenceFontType else t0.referenceFontType
     ) {
-        systemFontFamilyOrDefault(if (isLowerThird) bs.primaryReferenceLowerThirdFontType else bs.primaryReferenceFontType)
+        systemFontFamilyOrDefault(if (isLowerThird) t0.lowerThirdReferenceFontType else t0.referenceFontType)
     }
     val secondaryBibleFontStyle = remember(
-        if (isLowerThird) bs.secondaryBibleLowerThirdFontType else bs.secondaryBibleFontType
+        if (isLowerThird) t1.lowerThirdTextFontType else t1.textFontType
     ) {
-        systemFontFamilyOrDefault(if (isLowerThird) bs.secondaryBibleLowerThirdFontType else bs.secondaryBibleFontType)
+        systemFontFamilyOrDefault(if (isLowerThird) t1.lowerThirdTextFontType else t1.textFontType)
     }
     val secondaryBibleReferenceFontStyle = remember(
-        if (isLowerThird) bs.secondaryReferenceLowerThirdFontType else bs.secondaryReferenceFontType
+        if (isLowerThird) t1.lowerThirdReferenceFontType else t1.referenceFontType
     ) {
-        systemFontFamilyOrDefault(if (isLowerThird) bs.secondaryReferenceLowerThirdFontType else bs.secondaryReferenceFontType)
+        systemFontFamilyOrDefault(if (isLowerThird) t1.lowerThirdReferenceFontType else t1.referenceFontType)
     }
 
     val primaryBible = effectiveVerses.firstOrNull() ?: return
@@ -127,47 +131,47 @@ fun BiblePresenter(
 
     // Resolve colors — key mode forces white for a proper key signal
     val primaryBibleTextColor = remember(
-        if (isLowerThird) bs.primaryBibleLowerThirdColor else bs.primaryBibleColor, isKey
+        if (isLowerThird) t0.lowerThirdTextColor else t0.textColor, isKey
     ) {
         if (isKey) Color.White
-        else parseHexColor(if (isLowerThird) bs.primaryBibleLowerThirdColor else bs.primaryBibleColor)
+        else parseHexColor(if (isLowerThird) t0.lowerThirdTextColor else t0.textColor)
     }
     val primaryBibleReferenceTextColor = remember(
-        if (isLowerThird) bs.primaryReferenceLowerThirdColor else bs.primaryReferenceColor, isKey
+        if (isLowerThird) t0.lowerThirdReferenceColor else t0.referenceColor, isKey
     ) {
         if (isKey) Color.White
-        else parseHexColor(if (isLowerThird) bs.primaryReferenceLowerThirdColor else bs.primaryReferenceColor)
+        else parseHexColor(if (isLowerThird) t0.lowerThirdReferenceColor else t0.referenceColor)
     }
     val secondaryBibleTextColor = remember(
-        if (isLowerThird) bs.secondaryBibleLowerThirdColor else bs.secondaryBibleColor, isKey
+        if (isLowerThird) t1.lowerThirdTextColor else t1.textColor, isKey
     ) {
         if (isKey) Color.White
-        else parseHexColor(if (isLowerThird) bs.secondaryBibleLowerThirdColor else bs.secondaryBibleColor)
+        else parseHexColor(if (isLowerThird) t1.lowerThirdTextColor else t1.textColor)
     }
     val secondaryBibleReferenceTextColor = remember(
-        if (isLowerThird) bs.secondaryReferenceLowerThirdColor else bs.secondaryReferenceColor, isKey
+        if (isLowerThird) t1.lowerThirdReferenceColor else t1.referenceColor, isKey
     ) {
         if (isKey) Color.White
-        else parseHexColor(if (isLowerThird) bs.secondaryReferenceLowerThirdColor else bs.secondaryReferenceColor)
+        else parseHexColor(if (isLowerThird) t1.lowerThirdReferenceColor else t1.referenceColor)
     }
 
     // Resolve bold/italic/underline/shadow — use lower-third-specific values when applicable
-    val pBold = if (isLowerThird) bs.primaryBibleLowerThirdBold else bs.primaryBibleBold
-    val pItalic = if (isLowerThird) bs.primaryBibleLowerThirdItalic else bs.primaryBibleItalic
-    val pUnderline = if (isLowerThird) bs.primaryBibleLowerThirdUnderline else bs.primaryBibleUnderline
-    val pShadow = if (isLowerThird) bs.primaryBibleLowerThirdShadow else bs.primaryBibleShadow
-    val prBold = if (isLowerThird) bs.primaryReferenceLowerThirdBold else bs.primaryReferenceBold
-    val prItalic = if (isLowerThird) bs.primaryReferenceLowerThirdItalic else bs.primaryReferenceItalic
-    val prUnderline = if (isLowerThird) bs.primaryReferenceLowerThirdUnderline else bs.primaryReferenceUnderline
-    val prShadow = if (isLowerThird) bs.primaryReferenceLowerThirdShadow else bs.primaryReferenceShadow
-    val sBold = if (isLowerThird) bs.secondaryBibleLowerThirdBold else bs.secondaryBibleBold
-    val sItalic = if (isLowerThird) bs.secondaryBibleLowerThirdItalic else bs.secondaryBibleItalic
-    val sUnderline = if (isLowerThird) bs.secondaryBibleLowerThirdUnderline else bs.secondaryBibleUnderline
-    val sShadow = if (isLowerThird) bs.secondaryBibleLowerThirdShadow else bs.secondaryBibleShadow
-    val srBold = if (isLowerThird) bs.secondaryReferenceLowerThirdBold else bs.secondaryReferenceBold
-    val srItalic = if (isLowerThird) bs.secondaryReferenceLowerThirdItalic else bs.secondaryReferenceItalic
-    val srUnderline = if (isLowerThird) bs.secondaryReferenceLowerThirdUnderline else bs.secondaryReferenceUnderline
-    val srShadow = if (isLowerThird) bs.secondaryReferenceLowerThirdShadow else bs.secondaryReferenceShadow
+    val pBold = if (isLowerThird) t0.lowerThirdTextBold else t0.textBold
+    val pItalic = if (isLowerThird) t0.lowerThirdTextItalic else t0.textItalic
+    val pUnderline = if (isLowerThird) t0.lowerThirdTextUnderline else t0.textUnderline
+    val pShadow = if (isLowerThird) t0.lowerThirdTextShadow else t0.textShadow
+    val prBold = if (isLowerThird) t0.lowerThirdReferenceBold else t0.referenceBold
+    val prItalic = if (isLowerThird) t0.lowerThirdReferenceItalic else t0.referenceItalic
+    val prUnderline = if (isLowerThird) t0.lowerThirdReferenceUnderline else t0.referenceUnderline
+    val prShadow = if (isLowerThird) t0.lowerThirdReferenceShadow else t0.referenceShadow
+    val sBold = if (isLowerThird) t1.lowerThirdTextBold else t1.textBold
+    val sItalic = if (isLowerThird) t1.lowerThirdTextItalic else t1.textItalic
+    val sUnderline = if (isLowerThird) t1.lowerThirdTextUnderline else t1.textUnderline
+    val sShadow = if (isLowerThird) t1.lowerThirdTextShadow else t1.textShadow
+    val srBold = if (isLowerThird) t1.lowerThirdReferenceBold else t1.referenceBold
+    val srItalic = if (isLowerThird) t1.lowerThirdReferenceItalic else t1.referenceItalic
+    val srUnderline = if (isLowerThird) t1.lowerThirdReferenceUnderline else t1.referenceUnderline
+    val srShadow = if (isLowerThird) t1.lowerThirdReferenceShadow else t1.referenceShadow
 
     // Per-element shadow helpers
     fun makeShadow(color: String, size: Int, opacity: Int, alphaScale: Float = 0.78f): Shadow {
@@ -182,24 +186,24 @@ fun BiblePresenter(
     }
 
     val pBibleShadowVal = makeShadow(
-        if (isLowerThird) bs.primaryBibleLowerThirdShadowColor else bs.primaryBibleShadowColor,
-        if (isLowerThird) bs.primaryBibleLowerThirdShadowSize else bs.primaryBibleShadowSize,
-        if (isLowerThird) bs.primaryBibleLowerThirdShadowOpacity else bs.primaryBibleShadowOpacity
+        if (isLowerThird) t0.lowerThirdTextShadowColor else t0.textShadowColor,
+        if (isLowerThird) t0.lowerThirdTextShadowSize else t0.textShadowSize,
+        if (isLowerThird) t0.lowerThirdTextShadowOpacity else t0.textShadowOpacity
     )
     val pRefShadowVal = makeShadow(
-        if (isLowerThird) bs.primaryReferenceLowerThirdShadowColor else bs.primaryReferenceShadowColor,
-        if (isLowerThird) bs.primaryReferenceLowerThirdShadowSize else bs.primaryReferenceShadowSize,
-        if (isLowerThird) bs.primaryReferenceLowerThirdShadowOpacity else bs.primaryReferenceShadowOpacity
+        if (isLowerThird) t0.lowerThirdReferenceShadowColor else t0.referenceShadowColor,
+        if (isLowerThird) t0.lowerThirdReferenceShadowSize else t0.referenceShadowSize,
+        if (isLowerThird) t0.lowerThirdReferenceShadowOpacity else t0.referenceShadowOpacity
     )
     val sBibleShadowVal = makeShadow(
-        if (isLowerThird) bs.secondaryBibleLowerThirdShadowColor else bs.secondaryBibleShadowColor,
-        if (isLowerThird) bs.secondaryBibleLowerThirdShadowSize else bs.secondaryBibleShadowSize,
-        if (isLowerThird) bs.secondaryBibleLowerThirdShadowOpacity else bs.secondaryBibleShadowOpacity
+        if (isLowerThird) t1.lowerThirdTextShadowColor else t1.textShadowColor,
+        if (isLowerThird) t1.lowerThirdTextShadowSize else t1.textShadowSize,
+        if (isLowerThird) t1.lowerThirdTextShadowOpacity else t1.textShadowOpacity
     )
     val sRefShadowVal = makeShadow(
-        if (isLowerThird) bs.secondaryReferenceLowerThirdShadowColor else bs.secondaryReferenceShadowColor,
-        if (isLowerThird) bs.secondaryReferenceLowerThirdShadowSize else bs.secondaryReferenceShadowSize,
-        if (isLowerThird) bs.secondaryReferenceLowerThirdShadowOpacity else bs.secondaryReferenceShadowOpacity
+        if (isLowerThird) t1.lowerThirdReferenceShadowColor else t1.referenceShadowColor,
+        if (isLowerThird) t1.lowerThirdReferenceShadowSize else t1.referenceShadowSize,
+        if (isLowerThird) t1.lowerThirdReferenceShadowOpacity else t1.referenceShadowOpacity
     )
 
     // Text styles from settings
@@ -264,8 +268,8 @@ fun BiblePresenter(
         else -> TextAlign.Center
     }
 
-    val primaryBibleReferencePosition = if (isLowerThird) bs.primaryReferenceLowerThirdPosition else bs.primaryReferencePosition
-    val secondaryBibleReferencePosition = if (isLowerThird) bs.secondaryReferenceLowerThirdPosition else bs.secondaryReferencePosition
+    val primaryBibleReferencePosition = if (isLowerThird) t0.lowerThirdReferencePosition else t0.referencePosition
+    val secondaryBibleReferencePosition = if (isLowerThird) t1.lowerThirdReferencePosition else t1.referencePosition
 
     // Combine vertical alignment with horizontal center
     val contentAlignment = when (appSettings.bibleSettings.verticalAlignment) {
@@ -386,27 +390,27 @@ fun BiblePresenter(
         }
         val primaryBibleTextStyleScaled = if (pShadow)
             primaryBibleTextStyle.copy(shadow = scaleElementShadow(
-                if (isLowerThird) bs.primaryBibleLowerThirdShadowColor else bs.primaryBibleShadowColor,
-                if (isLowerThird) bs.primaryBibleLowerThirdShadowSize else bs.primaryBibleShadowSize,
-                if (isLowerThird) bs.primaryBibleLowerThirdShadowOpacity else bs.primaryBibleShadowOpacity
+                if (isLowerThird) t0.lowerThirdTextShadowColor else t0.textShadowColor,
+                if (isLowerThird) t0.lowerThirdTextShadowSize else t0.textShadowSize,
+                if (isLowerThird) t0.lowerThirdTextShadowOpacity else t0.textShadowOpacity
             )) else primaryBibleTextStyle
         val primaryReferenceTextStyleScaled = if (prShadow)
             primaryReferenceTextStyle.copy(shadow = scaleElementShadow(
-                if (isLowerThird) bs.primaryReferenceLowerThirdShadowColor else bs.primaryReferenceShadowColor,
-                if (isLowerThird) bs.primaryReferenceLowerThirdShadowSize else bs.primaryReferenceShadowSize,
-                if (isLowerThird) bs.primaryReferenceLowerThirdShadowOpacity else bs.primaryReferenceShadowOpacity
+                if (isLowerThird) t0.lowerThirdReferenceShadowColor else t0.referenceShadowColor,
+                if (isLowerThird) t0.lowerThirdReferenceShadowSize else t0.referenceShadowSize,
+                if (isLowerThird) t0.lowerThirdReferenceShadowOpacity else t0.referenceShadowOpacity
             )) else primaryReferenceTextStyle
         val secondaryBibleTextStyleScaled = if (sShadow)
             secondaryBibleTextStyle.copy(shadow = scaleElementShadow(
-                if (isLowerThird) bs.secondaryBibleLowerThirdShadowColor else bs.secondaryBibleShadowColor,
-                if (isLowerThird) bs.secondaryBibleLowerThirdShadowSize else bs.secondaryBibleShadowSize,
-                if (isLowerThird) bs.secondaryBibleLowerThirdShadowOpacity else bs.secondaryBibleShadowOpacity
+                if (isLowerThird) t1.lowerThirdTextShadowColor else t1.textShadowColor,
+                if (isLowerThird) t1.lowerThirdTextShadowSize else t1.textShadowSize,
+                if (isLowerThird) t1.lowerThirdTextShadowOpacity else t1.textShadowOpacity
             )) else secondaryBibleTextStyle
         val secondaryReferenceTextStyleScaled = if (srShadow)
             secondaryReferenceTextStyle.copy(shadow = scaleElementShadow(
-                if (isLowerThird) bs.secondaryReferenceLowerThirdShadowColor else bs.secondaryReferenceShadowColor,
-                if (isLowerThird) bs.secondaryReferenceLowerThirdShadowSize else bs.secondaryReferenceShadowSize,
-                if (isLowerThird) bs.secondaryReferenceLowerThirdShadowOpacity else bs.secondaryReferenceShadowOpacity
+                if (isLowerThird) t1.lowerThirdReferenceShadowColor else t1.referenceShadowColor,
+                if (isLowerThird) t1.lowerThirdReferenceShadowSize else t1.referenceShadowSize,
+                if (isLowerThird) t1.lowerThirdReferenceShadowOpacity else t1.referenceShadowOpacity
             )) else secondaryReferenceTextStyle
 
         val effectivePrimaryBibleSize =
@@ -505,16 +509,24 @@ fun BiblePresenter(
                 val secondary = verses.getOrNull(1)
                 val primaryVerseRef = if (primary.verseRange.isNotEmpty()) primary.verseRange else primary.verseNumber.toString()
                 val secondaryVerseRef = secondary?.let { if (it.verseRange.isNotEmpty()) it.verseRange else it.verseNumber.toString() } ?: ""
-                val isParallelIntended = appSettings.bibleSettings.secondaryBible.isNotEmpty() ||
-                    appSettings.bibleSettings.translationList().size > 1
-                val showParallelLayout = isParallelIntended && secondary != null && (!isLowerThird || appSettings.bibleSettings.secondaryBibleLowerThirdEnabled)
+                // A settings file that names only a secondary bible still means "bilingual" -- the
+                // condition this replaced keyed off exactly that, and dropping it stopped the second
+                // language rendering for those files.
+                val isParallelIntended = translationStack.size > 1 || bs.secondaryBible.isNotEmpty()
+                val showParallelLayout = isParallelIntended && secondary != null && (!isLowerThird || t1.lowerThirdEnabled)
                 val showSecondary = secondary != null && showParallelLayout
 
-                // Three or more translations always use the ordered vertical stack. Each line reads
-                // its own style profile; a shared fit scale keeps the complete stack on screen.
-                if (bs.multiTranslationMode) {
-                    val configured = bs.translationList()
-                    val visible = verses.mapIndexedNotNull { index, verse ->
+                // Full screen always draws the ordered stack, however many translations there are:
+                // each line reads its own style profile and a shared fit scale keeps the whole stack
+                // on screen. The lower third keeps its own one/two-language layouts below, because a
+                // narrow band cannot usefully hold more than a couple of languages anyway.
+                if (!isLowerThird) {
+                    val configured = translationStack
+                    // Only draw as many languages as this machine is set up for. A verse can arrive
+                    // carrying a second translation -- from a linked instance -- while nothing here
+                    // is configured to show one, and it must not appear unasked.
+                    val allowed = if (isParallelIntended) maxOf(configured.size, 2) else 1
+                    val visible = verses.take(allowed).mapIndexedNotNull { index, verse ->
                         val style = configured.firstOrNull { it.fileName == verse.translationFileName }
                             ?: configured.getOrNull(index)
                             ?: BibleTranslationSettings(fileName = verse.translationFileName)
