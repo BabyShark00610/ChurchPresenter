@@ -331,6 +331,44 @@ class SettingsManagerTest {
         )
     }
 
+    // ── Version 6: the bible translation stack ──────────────────────────────────
+
+    @Test
+    fun `an older file's bible pair becomes the translation stack`() {
+        val migrated = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":5,"bibleSettings":{"primaryBible":"kjv.spb","secondaryBible":"rst.spb","primaryBibleColor":"#ABCDEF"}}""",
+        )
+
+        assertEquals(
+            listOf("kjv.spb", "rst.spb"),
+            migrated.bibleSettings.translations.map { it.fileName },
+        )
+        assertEquals(
+            "#ABCDEF",
+            migrated.bibleSettings.translations[0].textColor,
+            "styling has to come across, or everyone's bible resets to the defaults on upgrade",
+        )
+    }
+
+    @Test
+    fun `an output naming one of the two bibles becomes a position`() {
+        val migrated = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":5,"projectionSettings":{"screenAssignments":[
+                {"targetDisplay":0,"bibleMode":"primary"},
+                {"targetDisplay":1,"bibleMode":"secondary"},
+                {"targetDisplay":2,"bibleMode":"both"},
+                {"targetDisplay":3,"bibleMode":"off"}]}}""".trimIndent().replace("\n", ""),
+        )
+        val outputs = migrated.projectionSettings.screenAssignments
+
+        assertEquals(listOf(0), outputs[0].bibleTranslations)
+        assertEquals(listOf(1), outputs[1].bibleTranslations)
+        assertEquals(emptyList(), outputs[2].bibleTranslations, "\"both\" is every translation, which is the empty list")
+        assertEquals(emptyList(), outputs[3].bibleTranslations)
+        assertTrue(outputs[0].showBible, "naming a bible does not switch the output off")
+        assertTrue(!outputs[3].showBible, "and an output that was off stays off")
+    }
+
     // ── Import path ─────────────────────────────────────────────────────────────
 
     @Test
@@ -378,5 +416,32 @@ class SettingsManagerTest {
         val fresh = SettingsManager().migrateAndDecode(current)
 
         assertEquals(fresh, remigrated, "the guarded migrations must be idempotent")
+    }
+
+    // ── Translation-stack migration reaches every output list ───────────────────────────────────
+
+    @Test
+    fun `a browser source's bible mode is migrated alongside a screen's`() {
+        // Browser sources are the same ScreenAssignment shape driven by the same UI, so they carry
+        // the same legacy mode. Left unmigrated, a stream feed set to one language keeps a mode the
+        // new code cannot read and silently starts showing every translation stacked.
+        writeSettings(
+            """{"settingsVersion":5,"projectionSettings":{
+               "screenAssignments":[{"targetDisplay":1,"bibleMode":"primary"}],
+               "browserSourceOutputs":[{"targetDisplay":0,"bibleMode":"secondary"}]}}""",
+        )
+
+        val projection = SettingsManager().loadSettings().projectionSettings
+
+        assertEquals("both", projection.screenAssignments.single().bibleMode)
+        assertEquals(listOf(0), projection.screenAssignments.single().bibleTranslations)
+        assertEquals(
+            "both", projection.browserSourceOutputs.single().bibleMode,
+            "a browser source must not keep a mode the new code no longer understands",
+        )
+        assertEquals(
+            listOf(1), projection.browserSourceOutputs.single().bibleTranslations,
+            "\"secondary\" names position 1, on a browser source exactly as on a screen",
+        )
     }
 }

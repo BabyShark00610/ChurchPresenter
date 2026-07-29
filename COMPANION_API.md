@@ -199,6 +199,14 @@ Section `type` values: `"verse"` · `"chorus"` · `"other"`
 
 Returns the full Bible catalog (all books with chapter and verse counts). No verse text is included here.
 
+Instance Link also mirrors the complete ordered translation stack through:
+
+- `GET /api/bible/file/translations` — ordered module file-name manifest.
+- `GET /api/bible/file/translation/{index}` — raw `.spb` module at that manifest position.
+
+The existing `/api/bible/file` and `/api/bible/file/secondary` routes remain available for older
+followers.
+
 ```bash
 curl -k https://192.168.1.10:8765/api/bible
 ```
@@ -1348,4 +1356,3 @@ await fetch(`https://host:8765/api/presentations/${presItem.id}/select`, {
 | `404 Not Found` | Resource (song, slide, image, presentation) does not exist |
 | `500 Internal Server Error` | Unexpected server-side error |
 | `503 Service Unavailable` | Data not yet loaded (e.g. Bible not loaded, no picture folder open) |
-

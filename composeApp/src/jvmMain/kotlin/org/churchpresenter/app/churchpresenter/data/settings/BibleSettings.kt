@@ -3,6 +3,67 @@ package org.churchpresenter.app.churchpresenter.data.settings
 import kotlinx.serialization.Serializable
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
+/**
+ * One independently configurable translation in the parallel Bible stack.
+ *
+ * Carries the full appearance profile a single Bible used to get from the primary/secondary field
+ * pairs: full-screen and lower-third, text and reference. [lowerThirdEnabled] is per translation
+ * because a lower third is a narrow band -- a stack that reads well full screen may want only its
+ * first one or two languages down there.
+ */
+@Serializable
+data class BibleTranslationSettings(
+    val fileName: String = "",
+    val textColor: String = "#FFFFFF",
+    val textFontType: String = "Arial",
+    val textFontSize: Int = 70,
+    val lowerThirdTextFontSize: Int = 28,
+    val textHorizontalAlignment: String = Constants.LEFT,
+    val lowerThirdTextHorizontalAlignment: String = Constants.LEFT,
+    val lowerThirdEnabled: Boolean = true,
+    val textBold: Boolean = false,
+    val textItalic: Boolean = false,
+    val textUnderline: Boolean = false,
+    val textShadow: Boolean = false,
+    val lowerThirdTextColor: String = "#FFFFFF",
+    val lowerThirdTextFontType: String = "Arial",
+    val lowerThirdTextBold: Boolean = false,
+    val lowerThirdTextItalic: Boolean = false,
+    val lowerThirdTextUnderline: Boolean = false,
+    val lowerThirdTextShadow: Boolean = false,
+    val referenceColor: String = "#FFFFFF",
+    val referenceFontType: String = "Arial",
+    val referenceFontSize: Int = 70,
+    val lowerThirdReferenceFontSize: Int = 24,
+    val referencePosition: String = "Below",
+    val lowerThirdReferencePosition: String = "Below",
+    val referenceHorizontalAlignment: String = Constants.RIGHT,
+    val lowerThirdReferenceHorizontalAlignment: String = Constants.RIGHT,
+    val showAbbreviation: Boolean = false,
+    val referenceBold: Boolean = false,
+    val referenceItalic: Boolean = false,
+    val referenceUnderline: Boolean = false,
+    val referenceShadow: Boolean = false,
+    val lowerThirdReferenceColor: String = "#FFFFFF",
+    val lowerThirdReferenceFontType: String = "Arial",
+    val lowerThirdReferenceBold: Boolean = false,
+    val lowerThirdReferenceItalic: Boolean = false,
+    val lowerThirdReferenceUnderline: Boolean = false,
+    val lowerThirdReferenceShadow: Boolean = false,
+    val textShadowColor: String = "#000000",
+    val textShadowSize: Int = 100,
+    val textShadowOpacity: Int = 90,
+    val lowerThirdTextShadowColor: String = "#000000",
+    val lowerThirdTextShadowSize: Int = 100,
+    val lowerThirdTextShadowOpacity: Int = 90,
+    val referenceShadowColor: String = "#000000",
+    val referenceShadowSize: Int = 100,
+    val referenceShadowOpacity: Int = 90,
+    val lowerThirdReferenceShadowColor: String = "#000000",
+    val lowerThirdReferenceShadowSize: Int = 100,
+    val lowerThirdReferenceShadowOpacity: Int = 90,
+)
+
 @Serializable
 data class BibleSettings(
     // Bible file management
@@ -12,6 +73,16 @@ data class BibleSettings(
     // Bible selection
     val primaryBible: String = "",
     val secondaryBible: String = "",
+    /**
+     * The presentation stack, in order; the first is the navigation bible.
+     *
+     * Source of truth. [primaryBible]/[secondaryBible] and their styling fields above are retained
+     * only so an older build can still read a settings file written by this one -- see
+     * [migrateTranslations].
+     */
+    val translations: List<BibleTranslationSettings> = emptyList(),
+    val multiTranslationSpacing: Int = 24,
+    val multiTranslationDivider: Boolean = false,
 
     // Bible tab column widths (dp); 0 = use default
     val bibleColWidthBook: Int = 200,
@@ -145,103 +216,158 @@ data class BibleSettings(
     val splitBrowseMode: Boolean = false,
     val splitLivePanelWidth: Int = 300,
 ) {
-    /** Returns a copy with primary and secondary bible settings swapped. */
-    fun swapped() = copy(
-        primaryBible = secondaryBible,
-        secondaryBible = primaryBible,
-        primaryBibleColor = secondaryBibleColor,
-        primaryBibleFontType = secondaryBibleFontType,
-        primaryBibleFontSize = secondaryBibleFontSize,
-        primaryBibleLowerThirdFontSize = secondaryBibleLowerThirdFontSize,
-        primaryBibleHorizontalAlignment = secondaryBibleHorizontalAlignment,
-        primaryBibleLowerThirdHorizontalAlignment = secondaryBibleLowerThirdHorizontalAlignment,
-        primaryBibleBold = secondaryBibleBold,
-        primaryBibleItalic = secondaryBibleItalic,
-        primaryBibleUnderline = secondaryBibleUnderline,
-        primaryBibleShadow = secondaryBibleShadow,
-        primaryBibleShadowColor = secondaryBibleShadowColor,
-        primaryBibleShadowSize = secondaryBibleShadowSize,
-        primaryBibleShadowOpacity = secondaryBibleShadowOpacity,
-        primaryBibleLowerThirdShadowColor = secondaryBibleLowerThirdShadowColor,
-        primaryBibleLowerThirdShadowSize = secondaryBibleLowerThirdShadowSize,
-        primaryBibleLowerThirdShadowOpacity = secondaryBibleLowerThirdShadowOpacity,
-        primaryBibleLowerThirdColor = secondaryBibleLowerThirdColor,
-        primaryBibleLowerThirdFontType = secondaryBibleLowerThirdFontType,
-        primaryBibleLowerThirdBold = secondaryBibleLowerThirdBold,
-        primaryBibleLowerThirdItalic = secondaryBibleLowerThirdItalic,
-        primaryBibleLowerThirdUnderline = secondaryBibleLowerThirdUnderline,
-        primaryBibleLowerThirdShadow = secondaryBibleLowerThirdShadow,
-        primaryReferenceColor = secondaryReferenceColor,
-        primaryReferenceFontType = secondaryReferenceFontType,
-        primaryReferenceFontSize = secondaryReferenceFontSize,
-        primaryReferenceLowerThirdFontSize = secondaryReferenceLowerThirdFontSize,
-        primaryReferencePosition = secondaryReferencePosition,
-        primaryReferenceLowerThirdPosition = secondaryReferenceLowerThirdPosition,
-        primaryReferenceHorizontalAlignment = secondaryReferenceHorizontalAlignment,
-        primaryReferenceLowerThirdHorizontalAlignment = secondaryReferenceLowerThirdHorizontalAlignment,
-        primaryShowAbbreviation = secondaryShowAbbreviation,
-        primaryReferenceBold = secondaryReferenceBold,
-        primaryReferenceItalic = secondaryReferenceItalic,
-        primaryReferenceUnderline = secondaryReferenceUnderline,
-        primaryReferenceShadow = secondaryReferenceShadow,
-        primaryReferenceShadowColor = secondaryReferenceShadowColor,
-        primaryReferenceShadowSize = secondaryReferenceShadowSize,
-        primaryReferenceShadowOpacity = secondaryReferenceShadowOpacity,
-        primaryReferenceLowerThirdShadowColor = secondaryReferenceLowerThirdShadowColor,
-        primaryReferenceLowerThirdShadowSize = secondaryReferenceLowerThirdShadowSize,
-        primaryReferenceLowerThirdShadowOpacity = secondaryReferenceLowerThirdShadowOpacity,
-        primaryReferenceLowerThirdColor = secondaryReferenceLowerThirdColor,
-        primaryReferenceLowerThirdFontType = secondaryReferenceLowerThirdFontType,
-        primaryReferenceLowerThirdBold = secondaryReferenceLowerThirdBold,
-        primaryReferenceLowerThirdItalic = secondaryReferenceLowerThirdItalic,
-        primaryReferenceLowerThirdUnderline = secondaryReferenceLowerThirdUnderline,
-        primaryReferenceLowerThirdShadow = secondaryReferenceLowerThirdShadow,
-        secondaryBibleColor = primaryBibleColor,
-        secondaryBibleFontType = primaryBibleFontType,
-        secondaryBibleFontSize = primaryBibleFontSize,
-        secondaryBibleLowerThirdFontSize = primaryBibleLowerThirdFontSize,
-        secondaryBibleHorizontalAlignment = primaryBibleHorizontalAlignment,
-        secondaryBibleLowerThirdHorizontalAlignment = primaryBibleLowerThirdHorizontalAlignment,
-        secondaryBibleBold = primaryBibleBold,
-        secondaryBibleItalic = primaryBibleItalic,
-        secondaryBibleUnderline = primaryBibleUnderline,
-        secondaryBibleShadow = primaryBibleShadow,
-        secondaryBibleShadowColor = primaryBibleShadowColor,
-        secondaryBibleShadowSize = primaryBibleShadowSize,
-        secondaryBibleShadowOpacity = primaryBibleShadowOpacity,
-        secondaryBibleLowerThirdShadowColor = primaryBibleLowerThirdShadowColor,
-        secondaryBibleLowerThirdShadowSize = primaryBibleLowerThirdShadowSize,
-        secondaryBibleLowerThirdShadowOpacity = primaryBibleLowerThirdShadowOpacity,
-        secondaryBibleLowerThirdColor = primaryBibleLowerThirdColor,
-        secondaryBibleLowerThirdFontType = primaryBibleLowerThirdFontType,
-        secondaryBibleLowerThirdBold = primaryBibleLowerThirdBold,
-        secondaryBibleLowerThirdItalic = primaryBibleLowerThirdItalic,
-        secondaryBibleLowerThirdUnderline = primaryBibleLowerThirdUnderline,
-        secondaryBibleLowerThirdShadow = primaryBibleLowerThirdShadow,
-        secondaryReferenceColor = primaryReferenceColor,
-        secondaryReferenceFontType = primaryReferenceFontType,
-        secondaryReferenceFontSize = primaryReferenceFontSize,
-        secondaryReferenceLowerThirdFontSize = primaryReferenceLowerThirdFontSize,
-        secondaryReferencePosition = primaryReferencePosition,
-        secondaryReferenceLowerThirdPosition = primaryReferenceLowerThirdPosition,
-        secondaryReferenceHorizontalAlignment = primaryReferenceHorizontalAlignment,
-        secondaryReferenceLowerThirdHorizontalAlignment = primaryReferenceLowerThirdHorizontalAlignment,
-        secondaryShowAbbreviation = primaryShowAbbreviation,
-        secondaryReferenceBold = primaryReferenceBold,
-        secondaryReferenceItalic = primaryReferenceItalic,
-        secondaryReferenceUnderline = primaryReferenceUnderline,
-        secondaryReferenceShadow = primaryReferenceShadow,
-        secondaryReferenceShadowColor = primaryReferenceShadowColor,
-        secondaryReferenceShadowSize = primaryReferenceShadowSize,
-        secondaryReferenceShadowOpacity = primaryReferenceShadowOpacity,
-        secondaryReferenceLowerThirdShadowColor = primaryReferenceLowerThirdShadowColor,
-        secondaryReferenceLowerThirdShadowSize = primaryReferenceLowerThirdShadowSize,
-        secondaryReferenceLowerThirdShadowOpacity = primaryReferenceLowerThirdShadowOpacity,
-        secondaryReferenceLowerThirdColor = primaryReferenceLowerThirdColor,
-        secondaryReferenceLowerThirdFontType = primaryReferenceLowerThirdFontType,
-        secondaryReferenceLowerThirdBold = primaryReferenceLowerThirdBold,
-        secondaryReferenceLowerThirdItalic = primaryReferenceLowerThirdItalic,
-        secondaryReferenceLowerThirdUnderline = primaryReferenceLowerThirdUnderline,
-        secondaryReferenceLowerThirdShadow = primaryReferenceLowerThirdShadow,
+    /**
+     * The translations to present, in order. The first is the navigation bible.
+     *
+     * Falls back to the pre-list [primaryBible]/[secondaryBible] pair for settings written before
+     * the list existed, so a file that has never been through [migrateTranslations] still presents
+     * correctly rather than showing nothing.
+     */
+    fun translationList(): List<BibleTranslationSettings> =
+        translations.ifEmpty { legacyTranslationList() }
+
+    /** Stable key used by the Bible UI to detect when its loaded module set must be refreshed. */
+    fun translationSelectionKey(): List<String> = translationList().map { it.fileName }
+
+    /**
+     * Moves a pre-list settings file onto [translations], once, at load.
+     *
+     * The old primary/secondary fields are deliberately left in place rather than cleared: they are
+     * what an older build reads, so a user who rolls back keeps their setup instead of opening a
+     * blank Bible panel. They are no longer read by anything but this conversion.
+     */
+    fun migrateTranslations(): BibleSettings =
+        if (translations.isNotEmpty()) this else copy(translations = legacyTranslationList())
+
+    private fun legacyTranslationList(): List<BibleTranslationSettings> =
+        buildList {
+            if (primaryBible.isNotEmpty()) add(primaryTranslation())
+            if (secondaryBible.isNotEmpty()) add(secondaryTranslation())
+        }
+
+    fun withTranslations(value: List<BibleTranslationSettings>): BibleSettings {
+        val cleaned = value.filter { it.fileName.isNotBlank() }.distinctBy { it.fileName }
+        // The retained legacy names track the first two of the stack. Their styling is deliberately
+        // left frozen at whatever the conversion wrote -- but keeping the *selection* current is
+        // cheap, and it is what makes the rollback story true rather than nominal: an older build
+        // opens the bibles the operator is actually using, not the ones they used months ago.
+        return copy(
+            translations = cleaned,
+            primaryBible = cleaned.getOrNull(0)?.fileName ?: "",
+            secondaryBible = cleaned.getOrNull(1)?.fileName ?: "",
+        )
+    }
+
+    fun updateTranslation(index: Int, transform: (BibleTranslationSettings) -> BibleTranslationSettings): BibleSettings {
+        val current = translationList()
+        if (index !in current.indices) return this
+        return withTranslations(current.toMutableList().also { it[index] = transform(it[index]) })
+    }
+
+    fun addTranslation(fileName: String): BibleSettings {
+        if (fileName.isBlank() || translationList().any { it.fileName == fileName }) return this
+        return withTranslations(translationList() + BibleTranslationSettings(fileName = fileName))
+    }
+
+    fun removeTranslation(index: Int): BibleSettings =
+        withTranslations(translationList().filterIndexed { itemIndex, _ -> itemIndex != index })
+
+    fun moveTranslation(index: Int, offset: Int): BibleSettings {
+        val target = index + offset
+        val current = translationList()
+        if (index !in current.indices || target !in current.indices) return this
+        return withTranslations(current.toMutableList().also {
+            val item = it.removeAt(index)
+            it.add(target, item)
+        })
+    }
+
+    private fun primaryTranslation() = BibleTranslationSettings(
+        fileName = primaryBible,
+        textColor = primaryBibleColor, textFontType = primaryBibleFontType,
+        textFontSize = primaryBibleFontSize, lowerThirdTextFontSize = primaryBibleLowerThirdFontSize,
+        textHorizontalAlignment = primaryBibleHorizontalAlignment,
+        lowerThirdTextHorizontalAlignment = primaryBibleLowerThirdHorizontalAlignment,
+        textBold = primaryBibleBold, textItalic = primaryBibleItalic,
+        textUnderline = primaryBibleUnderline, textShadow = primaryBibleShadow,
+        lowerThirdTextColor = primaryBibleLowerThirdColor,
+        lowerThirdTextFontType = primaryBibleLowerThirdFontType,
+        lowerThirdTextBold = primaryBibleLowerThirdBold, lowerThirdTextItalic = primaryBibleLowerThirdItalic,
+        lowerThirdTextUnderline = primaryBibleLowerThirdUnderline, lowerThirdTextShadow = primaryBibleLowerThirdShadow,
+        referenceColor = primaryReferenceColor, referenceFontType = primaryReferenceFontType,
+        referenceFontSize = primaryReferenceFontSize,
+        lowerThirdReferenceFontSize = primaryReferenceLowerThirdFontSize,
+        referencePosition = primaryReferencePosition,
+        lowerThirdReferencePosition = primaryReferenceLowerThirdPosition,
+        referenceHorizontalAlignment = primaryReferenceHorizontalAlignment,
+        lowerThirdReferenceHorizontalAlignment = primaryReferenceLowerThirdHorizontalAlignment,
+        showAbbreviation = primaryShowAbbreviation,
+        referenceBold = primaryReferenceBold, referenceItalic = primaryReferenceItalic,
+        referenceUnderline = primaryReferenceUnderline, referenceShadow = primaryReferenceShadow,
+        lowerThirdReferenceColor = primaryReferenceLowerThirdColor,
+        lowerThirdReferenceFontType = primaryReferenceLowerThirdFontType,
+        lowerThirdReferenceBold = primaryReferenceLowerThirdBold,
+        lowerThirdReferenceItalic = primaryReferenceLowerThirdItalic,
+        lowerThirdReferenceUnderline = primaryReferenceLowerThirdUnderline,
+        lowerThirdReferenceShadow = primaryReferenceLowerThirdShadow,
+        textShadowColor = primaryBibleShadowColor, textShadowSize = primaryBibleShadowSize,
+        textShadowOpacity = primaryBibleShadowOpacity,
+        lowerThirdTextShadowColor = primaryBibleLowerThirdShadowColor,
+        lowerThirdTextShadowSize = primaryBibleLowerThirdShadowSize,
+        lowerThirdTextShadowOpacity = primaryBibleLowerThirdShadowOpacity,
+        referenceShadowColor = primaryReferenceShadowColor,
+        referenceShadowSize = primaryReferenceShadowSize, referenceShadowOpacity = primaryReferenceShadowOpacity,
+        lowerThirdReferenceShadowColor = primaryReferenceLowerThirdShadowColor,
+        lowerThirdReferenceShadowSize = primaryReferenceLowerThirdShadowSize,
+        lowerThirdReferenceShadowOpacity = primaryReferenceLowerThirdShadowOpacity,
     )
+
+    private fun secondaryTranslation() = BibleTranslationSettings(
+        fileName = secondaryBible,
+        textColor = secondaryBibleColor, textFontType = secondaryBibleFontType,
+        textFontSize = secondaryBibleFontSize, lowerThirdTextFontSize = secondaryBibleLowerThirdFontSize,
+        textHorizontalAlignment = secondaryBibleHorizontalAlignment,
+        lowerThirdTextHorizontalAlignment = secondaryBibleLowerThirdHorizontalAlignment,
+        lowerThirdEnabled = secondaryBibleLowerThirdEnabled,
+        textBold = secondaryBibleBold, textItalic = secondaryBibleItalic,
+        textUnderline = secondaryBibleUnderline, textShadow = secondaryBibleShadow,
+        lowerThirdTextColor = secondaryBibleLowerThirdColor,
+        lowerThirdTextFontType = secondaryBibleLowerThirdFontType,
+        lowerThirdTextBold = secondaryBibleLowerThirdBold, lowerThirdTextItalic = secondaryBibleLowerThirdItalic,
+        lowerThirdTextUnderline = secondaryBibleLowerThirdUnderline, lowerThirdTextShadow = secondaryBibleLowerThirdShadow,
+        referenceColor = secondaryReferenceColor, referenceFontType = secondaryReferenceFontType,
+        referenceFontSize = secondaryReferenceFontSize,
+        lowerThirdReferenceFontSize = secondaryReferenceLowerThirdFontSize,
+        referencePosition = secondaryReferencePosition,
+        lowerThirdReferencePosition = secondaryReferenceLowerThirdPosition,
+        referenceHorizontalAlignment = secondaryReferenceHorizontalAlignment,
+        lowerThirdReferenceHorizontalAlignment = secondaryReferenceLowerThirdHorizontalAlignment,
+        showAbbreviation = secondaryShowAbbreviation,
+        referenceBold = secondaryReferenceBold, referenceItalic = secondaryReferenceItalic,
+        referenceUnderline = secondaryReferenceUnderline, referenceShadow = secondaryReferenceShadow,
+        lowerThirdReferenceColor = secondaryReferenceLowerThirdColor,
+        lowerThirdReferenceFontType = secondaryReferenceLowerThirdFontType,
+        lowerThirdReferenceBold = secondaryReferenceLowerThirdBold,
+        lowerThirdReferenceItalic = secondaryReferenceLowerThirdItalic,
+        lowerThirdReferenceUnderline = secondaryReferenceLowerThirdUnderline,
+        lowerThirdReferenceShadow = secondaryReferenceLowerThirdShadow,
+        textShadowColor = secondaryBibleShadowColor, textShadowSize = secondaryBibleShadowSize,
+        textShadowOpacity = secondaryBibleShadowOpacity,
+        lowerThirdTextShadowColor = secondaryBibleLowerThirdShadowColor,
+        lowerThirdTextShadowSize = secondaryBibleLowerThirdShadowSize,
+        lowerThirdTextShadowOpacity = secondaryBibleLowerThirdShadowOpacity,
+        referenceShadowColor = secondaryReferenceShadowColor,
+        referenceShadowSize = secondaryReferenceShadowSize, referenceShadowOpacity = secondaryReferenceShadowOpacity,
+        lowerThirdReferenceShadowColor = secondaryReferenceLowerThirdShadowColor,
+        lowerThirdReferenceShadowSize = secondaryReferenceLowerThirdShadowSize,
+        lowerThirdReferenceShadowOpacity = secondaryReferenceLowerThirdShadowOpacity,
+    )
+
+    /**
+     * Returns a copy with the first two translations exchanged.
+     *
+     * This is the Bible tab's swap button: with the list model it is a reorder, where it used to be
+     * a field-by-field exchange of some ninety primary/secondary styling values.
+     */
+    fun swapped() = moveTranslation(0, 1)
 }

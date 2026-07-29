@@ -1205,6 +1205,7 @@ class CompanionServer {
     /** Same as [_bibleFilePath] but for the secondary bible — serves GET /api/bible/file/secondary,
      *  only used when a follower opts in to mirroring the secondary too (most don't). */
     @Volatile private var _secondaryBibleFilePath: String = ""
+    @Volatile private var _bibleFilePaths: List<String> = emptyList()
     /** Current background settings — serves GET /api/backgrounds for a follower that opted in to
      *  mirroring backgrounds. The image/video fields are still local file paths on this machine;
      *  GET /api/backgrounds/asset/{slot} resolves the current path for a given slot on demand. */
@@ -1578,6 +1579,14 @@ class CompanionServer {
         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "state_updated", mapOf("type" to "secondary_bible_file_path", "filePath" to filePath))
         // Invalidation signal for followers mirroring the secondary bible — they re-download
         // the .spb on this event instead of trusting their local cache forever.
+        broadcast(WebSocketMessage(type = Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED, payload = ""))
+    }
+
+    /** Records every configured Bible module in presentation order for Instance Link replicas. */
+    fun updateBibleFilePaths(filePaths: List<String>) {
+        val existing = filePaths.filter { File(it).exists() }
+        if (_bibleFilePaths == existing) return
+        _bibleFilePaths = existing
         broadcast(WebSocketMessage(type = Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED, payload = ""))
     }
 
@@ -3134,6 +3143,24 @@ class CompanionServer {
                     }
                     logRest("/api/bible/file/secondary", 200)
                     call.respondFile(file)
+                }
+
+                /** Ordered Bible module names available to an Instance Link follower. */
+                get("${Constants.ENDPOINT_BIBLE_FILE}/translations") {
+                    if (!checkApiKey(call)) return@get
+                    call.respond(_bibleFilePaths.map { File(it).name })
+                }
+
+                /** Downloads one Bible module by its stable position in the ordered manifest. */
+                get("${Constants.ENDPOINT_BIBLE_FILE}/translation/{index}") {
+                    if (!checkApiKey(call)) return@get
+                    val index = call.parameters["index"]?.toIntOrNull()
+                    val path = index?.let { _bibleFilePaths.getOrNull(it) }
+                    if (path == null || !File(path).exists()) {
+                        call.respond(HttpStatusCode.NotFound, "Bible translation not found")
+                        return@get
+                    }
+                    call.respondFile(File(path))
                 }
 
                 /** GET /api/backgrounds — current BackgroundSettings as JSON. Image/video fields are
@@ -5693,4 +5720,3 @@ fun SongItem.toDto() = SongDto(
     tune = tune,
     author = author
 )
-

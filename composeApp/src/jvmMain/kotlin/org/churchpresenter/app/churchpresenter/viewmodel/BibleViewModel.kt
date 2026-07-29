@@ -97,6 +97,7 @@ class BibleViewModel(
     /** Reports the secondary bible's file path to CompanionServer — no companion catalog exists for
      *  it (mobile clients never browse a secondary bible), it's only used by Instance Link. */
     private val onSecondaryBibleFilePathChanged: ((filePath: String) -> Unit)? = null,
+    private val onBibleFilePathsChanged: ((filePaths: List<String>) -> Unit)? = null,
     // Test seams (production defaults reproduce the shipping behaviour) — the same pair
     // SongsViewModel takes, for the same reason (issue #56):
     //  - [dispatcher] backs the view-model scope. It is Dispatchers.Main in the app so state updates
@@ -108,11 +109,22 @@ class BibleViewModel(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
+    /** A successfully loaded Bible module paired with the persisted identity of its style profile. */
+    data class LoadedTranslation(val fileName: String, val bible: Bible)
+
     private val _primaryBible = mutableStateOf<Bible?>(null)
     val primaryBible: State<Bible?> = _primaryBible
 
     private val _secondaryBible = mutableStateOf<Bible?>(null)
     val secondaryBible: State<Bible?> = _secondaryBible
+
+    private val _loadedTranslations = mutableStateOf<List<LoadedTranslation>>(emptyList())
+    /** Successfully loaded translations in configured presentation order. */
+    val loadedTranslations: State<List<LoadedTranslation>> = _loadedTranslations
+
+    private val _loadedBibles = mutableStateOf<List<Bible>>(emptyList())
+    /** Every loaded translation in display order; the first item is the navigation bible. */
+    val loadedBibles: State<List<Bible>> = _loadedBibles
 
     private val _books = mutableStateOf<List<String>>(emptyList())
     val books: State<List<String>> = _books
@@ -436,6 +448,7 @@ class BibleViewModel(
     private var syncMode = BibleSyncMode.FULL_REPLICA
     private var remoteBibleCacheFile: File? = null
     private var remoteSecondaryBibleCacheFile: File? = null
+    private var remoteTranslationCacheFiles: List<Pair<String, File>> = emptyList()
     private val remoteBibleCacheDir = File(System.getProperty("user.home"), ".churchpresenter/instance-link/cache/bibles")
 
     /**
@@ -446,7 +459,9 @@ class BibleViewModel(
     fun invalidateInstanceLinkBibleCache() {
         val primary = File(remoteBibleCacheDir, "primary.spb")
         val secondary = File(remoteBibleCacheDir, "secondary.spb")
-        val deleted = primary.delete() or secondary.delete()
+        val dynamicDeleted = remoteTranslationCacheFiles.fold(false) { deleted, (_, file) -> file.delete() or deleted }
+        val deleted = primary.delete() or secondary.delete() or dynamicDeleted
+        remoteTranslationCacheFiles = emptyList()
         InstanceLinkLogger.log(
             InstanceLinkLogSide.FOLLOWER, "cache_invalidated",
             mapOf("kind" to "bible", "deleted" to deleted)
@@ -458,7 +473,8 @@ class BibleViewModel(
         active: Boolean,
         mode: BibleSyncMode,
         fetchBibleFile: (suspend () -> ByteArray?)?,
-        fetchSecondaryBibleFile: (suspend () -> ByteArray?)?
+        fetchSecondaryBibleFile: (suspend () -> ByteArray?)?,
+        fetchBibleTranslations: (suspend () -> List<Pair<String, ByteArray>>)? = null,
     ) {
         if (!active) {
             if (remoteModeActive) {
@@ -466,6 +482,7 @@ class BibleViewModel(
                 syncMode = BibleSyncMode.FULL_REPLICA
                 remoteBibleCacheFile = null
                 remoteSecondaryBibleCacheFile = null
+                remoteTranslationCacheFiles = emptyList()
                 loadBibles()
             }
             return
@@ -478,6 +495,7 @@ class BibleViewModel(
             // disconnected, so the follower's own translation(s) keep working independently.
             remoteBibleCacheFile = null
             remoteSecondaryBibleCacheFile = null
+            remoteTranslationCacheFiles = emptyList()
             InstanceLinkLogger.log(
                 InstanceLinkLogSide.FOLLOWER, "bible_sync_result",
                 mapOf("mode" to mode.name, "primaryDownloaded" to false, "secondaryDownloaded" to false)
@@ -486,6 +504,21 @@ class BibleViewModel(
             return
         }
         viewModelScope.launch {
+            val translations = fetchBibleTranslations?.invoke().orEmpty()
+            if (translations.isNotEmpty()) {
+                remoteTranslationCacheFiles = withContext(Dispatchers.IO) {
+                    remoteBibleCacheDir.mkdirs()
+                    translations.mapIndexed { index, (fileName, bytes) ->
+                        val cacheFile = File(remoteBibleCacheDir, "translation-$index.spb")
+                        cacheFile.writeBytes(bytes)
+                        fileName to cacheFile
+                    }
+                }
+                remoteBibleCacheFile = remoteTranslationCacheFiles.firstOrNull()?.second
+                remoteSecondaryBibleCacheFile = remoteTranslationCacheFiles.getOrNull(1)?.second
+                loadBibles()
+                return@launch
+            }
             val cacheFile = File(remoteBibleCacheDir, "primary.spb")
             var primaryDownloaded = cacheFile.exists()
             if (!cacheFile.exists()) {
@@ -538,11 +571,12 @@ class BibleViewModel(
             _isFullyLoadedFlow.value = false
             try {
                 val useReplica = remoteModeActive && syncMode == BibleSyncMode.FULL_REPLICA
+                val configuredTranslations = appSettings.bibleSettings.translationList()
                 val primaryPath = if (useReplica) {
                     remoteBibleCacheFile?.takeIf { it.exists() }
-                } else if (appSettings.bibleSettings.primaryBible.isNotEmpty() &&
+                } else if (configuredTranslations.firstOrNull()?.fileName?.isNotEmpty() == true &&
                     appSettings.bibleSettings.storageDirectory.isNotEmpty()
-                ) File(appSettings.bibleSettings.storageDirectory, appSettings.bibleSettings.primaryBible)
+                ) File(appSettings.bibleSettings.storageDirectory, configuredTranslations.first().fileName)
                     .takeIf { it.exists() }
                 else null
 
@@ -551,11 +585,24 @@ class BibleViewModel(
                 // keeps working independently of the connection.
                 val secondaryPath = if (useReplica) {
                     remoteSecondaryBibleCacheFile?.takeIf { it.exists() }
-                } else if (appSettings.bibleSettings.secondaryBible.isNotEmpty() &&
+                } else if (configuredTranslations.getOrNull(1)?.fileName?.isNotEmpty() == true &&
                     appSettings.bibleSettings.storageDirectory.isNotEmpty()
-                ) File(appSettings.bibleSettings.storageDirectory, appSettings.bibleSettings.secondaryBible)
+                ) File(appSettings.bibleSettings.storageDirectory, configuredTranslations[1].fileName)
                     .takeIf { it.exists() }
                 else null
+                val translationSources = if (useReplica && remoteTranslationCacheFiles.isNotEmpty()) {
+                    remoteTranslationCacheFiles
+                } else if (useReplica) {
+                    listOfNotNull(primaryPath, secondaryPath).mapIndexed { index, path ->
+                        (configuredTranslations.getOrNull(index)?.fileName ?: path.name) to path
+                    }
+                } else {
+                    configuredTranslations.mapNotNull { translation ->
+                        File(appSettings.bibleSettings.storageDirectory, translation.fileName)
+                            .takeIf { it.exists() }
+                            ?.let { translation.fileName to it }
+                    }
+                }
 
                 // ── Phase 1: load book names only (header scan — very fast) ──────────
                 val bookNameMappingDeferred = async(ioDispatcher) {
@@ -583,21 +630,24 @@ class BibleViewModel(
                 }
 
                 // ── Phase 2: load full verse data in background ────────────────────
-                val primaryDeferred = primaryPath?.let { path ->
-                    async(ioDispatcher) {
+                val bibleDeferred = translationSources.map { (identity, path) ->
+                    identity to async(ioDispatcher) {
                         try { Bible().apply { loadFromSpb(path.absolutePath) } }
                         catch (e: Exception) { e.printStackTrace(); null }
                     }
                 }
-                val secondaryDeferred = secondaryPath?.let { path ->
-                    async(ioDispatcher) {
-                        try { Bible().apply { loadFromSpb(path.absolutePath) } }
-                        catch (e: Exception) { e.printStackTrace(); null }
-                    }
+                val loadedByFile = bibleDeferred.associate { (fileName, deferred) -> fileName to deferred.await() }
+                val orderedIdentities = bibleDeferred.map { it.first }
+                val loaded = orderedIdentities.mapNotNull { fileName ->
+                    loadedByFile[fileName]?.let { LoadedTranslation(fileName, it) }
                 }
-
-                val primary = primaryDeferred?.await()
-                val secondary = secondaryDeferred?.await()
+                val useRemoteIdentities = useReplica && remoteTranslationCacheFiles.isNotEmpty()
+                val primaryIdentity = if (useRemoteIdentities) orderedIdentities.firstOrNull()
+                    else configuredTranslations.firstOrNull()?.fileName ?: orderedIdentities.firstOrNull()
+                val secondaryIdentity = if (useRemoteIdentities) orderedIdentities.getOrNull(1)
+                    else configuredTranslations.getOrNull(1)?.fileName ?: orderedIdentities.getOrNull(1)
+                val primary = primaryIdentity?.let { loadedByFile[it] }
+                val secondary = secondaryIdentity?.let { loadedByFile[it] }
 
                 // Only relevant while following another instance — a purely local load (not connected)
                 // has nothing to compare against a primary's log, so it's not logged here.
@@ -616,7 +666,12 @@ class BibleViewModel(
                 // ── Phase 3: update state with full data and load first chapter ─────
                 _primaryBible.value = primary
                 _secondaryBible.value = secondary
-                if (secondary != null) onSecondaryBibleFilePathChanged?.invoke(secondaryPath.absolutePath)
+                _loadedTranslations.value = loaded
+                _loadedBibles.value = loaded.map { it.bible }
+                onBibleFilePathsChanged?.invoke(translationSources.map { it.second.absolutePath })
+                if (secondary != null) secondaryPath?.let {
+                    onSecondaryBibleFilePathChanged?.invoke(it.absolutePath)
+                }
 
                 if (primary != null) {
                     _books.value = primary.getCanonicalBooks()
@@ -642,7 +697,7 @@ class BibleViewModel(
                     if (previousBookId != null && _verses.value.isNotEmpty()) {
                         _verseSelectionToken.value++
                     }
-                    onBibleLoaded?.invoke(primary, appSettings.bibleSettings.primaryBible)
+                    onBibleLoaded?.invoke(primary, configuredTranslations.firstOrNull()?.fileName.orEmpty())
                 } else if (booksOnlyBible == null) {
                     _books.value = emptyList()
                     _verses.value = emptyList()
@@ -671,6 +726,7 @@ class BibleViewModel(
             if (primaryVerseText.isNotEmpty()) {
                 verseList.add(
                     SelectedVerse(
+                        translationFileName = _loadedTranslations.value.firstOrNull()?.fileName.orEmpty(),
                         bibleAbbreviation = primaryBible.getBibleAbbreviation(),
                         bibleName = primaryBible.getBibleTitle(),
                         bookName = primaryBookName,
@@ -685,21 +741,25 @@ class BibleViewModel(
                 )
             }
             val codeRef = primaryBible.getCodeReference(bookId, chapter, verseNum)
-            val secBook = codeRef?.first ?: bookId
-            val secChapter = codeRef?.second ?: chapter
-            val secVerse = codeRef?.third ?: verseNum
-            _secondaryBible.value?.getVerseDetailsByCode(secBook, secChapter, secVerse)?.let { result ->
-                verseList.add(
-                    SelectedVerse(
-                        bibleAbbreviation = _secondaryBible.value?.getBibleAbbreviation() ?: "",
-                        bibleName = _secondaryBible.value?.getBibleTitle() ?: "",
-                        bookName = result.bookName,
-                        chapter = result.displayChapter,
-                        verseNumber = result.displayVerse,
-                        verseText = result.verseText,
-                        bookId = secBook,
+            val targetBook = codeRef?.first ?: bookId
+            val targetChapter = codeRef?.second ?: chapter
+            val targetVerse = codeRef?.third ?: verseNum
+            _loadedTranslations.value.drop(1).forEach { loadedTranslation ->
+                val bible = loadedTranslation.bible
+                bible.getVerseDetailsByCode(targetBook, targetChapter, targetVerse)?.let { result ->
+                    verseList.add(
+                        SelectedVerse(
+                            translationFileName = loadedTranslation.fileName,
+                            bibleAbbreviation = bible.getBibleAbbreviation(),
+                            bibleName = bible.getBibleTitle(),
+                            bookName = result.bookName,
+                            chapter = result.displayChapter,
+                            verseNumber = result.displayVerse,
+                            verseText = result.verseText,
+                            bookId = targetBook,
+                        )
                     )
-                )
+                }
             }
             verseList
         }
@@ -978,11 +1038,11 @@ class BibleViewModel(
         if (_multiVerseEnabled.value && _selectedVerseIndices.isNotEmpty()) {
             val sortedIndices = _selectedVerseIndices.sorted()
             val primaryTexts = mutableListOf<String>()
-            val secondaryTexts = mutableListOf<String>()
+            val parallelTexts = _loadedBibles.value.drop(1).map { mutableListOf<String>() }
             val verseNumbers = mutableListOf<Int>()
             var bookName = ""
-            var secondaryBookName = ""
-            var secondaryBookId = bookId
+            val parallelBookNames = MutableList(parallelTexts.size) { "" }
+            val parallelBookIds = MutableList(parallelTexts.size) { bookId }
 
             for (idx in sortedIndices) {
                 val verse = _verses.value.getOrNull(idx) ?: continue
@@ -1000,13 +1060,15 @@ class BibleViewModel(
                 val sB = codeRef?.first ?: bookId
                 val sCh = codeRef?.second ?: _selectedChapter.value
                 val sV = codeRef?.third ?: vNum
-                _secondaryBible.value?.takeIf { it.getVerseCount() > 0 }
-                    ?.getVerseDetailsByCode(sB, sCh, sV)?.let { result ->
-                    if (secondaryBookName.isEmpty()) {
-                        secondaryBookName = result.bookName
-                        secondaryBookId = sB
+                _loadedBibles.value.drop(1).forEachIndexed { bibleIndex, bible ->
+                    bible.takeIf { it.getVerseCount() > 0 }
+                        ?.getVerseDetailsByCode(sB, sCh, sV)?.let { result ->
+                    if (parallelBookNames[bibleIndex].isEmpty()) {
+                        parallelBookNames[bibleIndex] = result.bookName
+                        parallelBookIds[bibleIndex] = sB
                     }
-                    secondaryTexts.add(result.verseText)
+                    parallelTexts[bibleIndex].add(result.verseText)
+                    }
                 }
             }
 
@@ -1015,6 +1077,7 @@ class BibleViewModel(
             if (primaryTexts.isNotEmpty()) {
                 verseList.add(
                     SelectedVerse(
+                        translationFileName = _loadedTranslations.value.firstOrNull()?.fileName.orEmpty(),
                         bibleAbbreviation = _primaryBible.value?.getBibleAbbreviation() ?: "",
                         bibleName = _primaryBible.value?.getBibleTitle() ?: "",
                         bookName = bookName,
@@ -1026,17 +1089,18 @@ class BibleViewModel(
                     )
                 )
             }
-            if (secondaryTexts.isNotEmpty()) {
-                verseList.add(
+            parallelTexts.forEachIndexed { index, texts ->
+                if (texts.isNotEmpty()) verseList.add(
                     SelectedVerse(
-                        bibleAbbreviation = _secondaryBible.value?.getBibleAbbreviation() ?: "",
-                        bibleName = _secondaryBible.value?.getBibleTitle() ?: "",
-                        bookName = secondaryBookName,
+                        translationFileName = _loadedTranslations.value[index + 1].fileName,
+                        bibleAbbreviation = _loadedBibles.value[index + 1].getBibleAbbreviation(),
+                        bibleName = _loadedBibles.value[index + 1].getBibleTitle(),
+                        bookName = parallelBookNames[index],
                         chapter = _selectedChapter.value,
                         verseNumber = verseNumbers.first(),
-                        verseText = secondaryTexts.joinToString(" "),
+                        verseText = texts.joinToString(" "),
                         verseRange = rangeStr,
-                        bookId = secondaryBookId
+                        bookId = parallelBookIds[index]
                     )
                 )
             }
@@ -1064,6 +1128,7 @@ class BibleViewModel(
         if (primaryVerseText.isNotEmpty()) {
             verseList.add(
                 SelectedVerse(
+                    translationFileName = _loadedTranslations.value.firstOrNull()?.fileName.orEmpty(),
                     bibleAbbreviation = _primaryBible.value?.getBibleAbbreviation() ?: "",
                     bibleName = _primaryBible.value?.getBibleTitle() ?: "",
                     bookName = primaryBookName,
@@ -1083,20 +1148,21 @@ class BibleViewModel(
         val secBook = codeRef?.first ?: bookId
         val secChapter = codeRef?.second ?: _selectedChapter.value
         val secVerse = codeRef?.third ?: verseNumber
-        _secondaryBible.value?.takeIf { it.getVerseCount() > 0 }
-            ?.getVerseDetailsByCode(secBook, secChapter, secVerse)?.let { result ->
-            val abbreviation = _secondaryBible.value?.getBibleAbbreviation() ?: ""
-            verseList.add(
-                SelectedVerse(
-                    bibleAbbreviation = abbreviation,
-                    bibleName = _secondaryBible.value?.getBibleTitle() ?: "",
+        _loadedTranslations.value.drop(1).forEach { loadedTranslation ->
+            val bible = loadedTranslation.bible
+            bible.takeIf { it.getVerseCount() > 0 }
+                ?.getVerseDetailsByCode(secBook, secChapter, secVerse)?.let { result ->
+                verseList.add(SelectedVerse(
+                    translationFileName = loadedTranslation.fileName,
+                    bibleAbbreviation = bible.getBibleAbbreviation(),
+                    bibleName = bible.getBibleTitle(),
                     bookName = result.bookName,
                     chapter = result.displayChapter,
                     verseNumber = result.displayVerse,
                     verseText = result.verseText,
                     bookId = secBook
-                )
-            )
+                ))
+            }
         }
 
         return verseList
@@ -1146,6 +1212,7 @@ class BibleViewModel(
         if (verseText.isNotEmpty()) {
             verseList.add(
                 SelectedVerse(
+                    translationFileName = _loadedTranslations.value.firstOrNull()?.fileName.orEmpty(),
                     bibleAbbreviation = _primaryBible.value?.getBibleAbbreviation() ?: "",
                     bibleName = _primaryBible.value?.getBibleTitle() ?: "",
                     bookName = _primaryBible.value?.getBookName(bookId) ?: "",
@@ -1159,18 +1226,20 @@ class BibleViewModel(
         val secBook = codeRef?.first ?: bookId
         val secChapter = codeRef?.second ?: chapter
         val secVerse = codeRef?.third ?: verseNumber
-        _secondaryBible.value?.takeIf { it.getVerseCount() > 0 }
-            ?.getVerseDetailsByCode(secBook, secChapter, secVerse)?.let { result ->
-            verseList.add(
-                SelectedVerse(
-                    bibleAbbreviation = _secondaryBible.value?.getBibleAbbreviation() ?: "",
-                    bibleName = _secondaryBible.value?.getBibleTitle() ?: "",
+        _loadedTranslations.value.drop(1).forEach { loadedTranslation ->
+            val bible = loadedTranslation.bible
+            bible.takeIf { it.getVerseCount() > 0 }
+                ?.getVerseDetailsByCode(secBook, secChapter, secVerse)?.let { result ->
+            verseList.add(SelectedVerse(
+                    translationFileName = loadedTranslation.fileName,
+                    bibleAbbreviation = bible.getBibleAbbreviation(),
+                    bibleName = bible.getBibleTitle(),
                     bookName = result.bookName,
                     chapter = result.displayChapter,
                     verseNumber = result.displayVerse,
                     verseText = result.verseText
-                )
-            )
+                ))
+            }
         }
         return verseList
     }

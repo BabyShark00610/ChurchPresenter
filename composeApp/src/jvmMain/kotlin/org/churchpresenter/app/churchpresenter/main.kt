@@ -1775,7 +1775,9 @@ fun main() {
                                     instanceLinkFetchBibleFile = { instanceLinkViewModel.fetchBibleFile() },
                                     instanceLinkBibleSyncMode = appSettings.instanceLink.bibleSyncMode,
                                     instanceLinkFetchSecondaryBibleFile = { instanceLinkViewModel.fetchSecondaryBibleFile() },
+                                    instanceLinkFetchBibleTranslations = { instanceLinkViewModel.fetchBibleTranslations() },
                                     instanceLinkOnSecondaryBibleFilePathChanged = { path -> companionServer.updateSecondaryBibleFilePath(path) },
+                                    instanceLinkOnBibleFilePathsChanged = { paths -> companionServer.updateBibleFilePaths(paths) },
                                     instanceLinkSendAddToSchedule = if (appSettings.instanceLink.allowPushToSchedule) {
                                         { item -> instanceLinkViewModel.sendAddToSchedule(item) }
                                     } else null,
@@ -3329,7 +3331,7 @@ private fun PresenterWindows(
                                             transitionAlpha = bibleTransitionAlpha,
                                             showBackground = showBg && screenAssignment.showBibleBackground,
                                             crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                            languageMode = screenAssignment.bibleMode
+                                            bibleTranslations = screenAssignment.bibleTranslations
                                         )
                                     }
 
@@ -3567,7 +3569,7 @@ private fun PresenterWindows(
                                     outputRole = deckLinkRole,
                                     transitionAlpha = bibleTransitionAlpha,
                                     crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    languageMode = screenAssignment.bibleMode
+                                    bibleTranslations = screenAssignment.bibleTranslations
                                 )
                             }
 
@@ -3723,7 +3725,7 @@ private fun PresenterWindows(
                                     outputRole = Constants.OUTPUT_ROLE_KEY,
                                     transitionAlpha = bibleTransitionAlpha,
                                     crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    languageMode = screenAssignment.bibleMode
+                                    bibleTranslations = screenAssignment.bibleTranslations
                                 )
                             }
 
@@ -3916,7 +3918,7 @@ private fun PresenterWindows(
                                                     outputRole = Constants.OUTPUT_ROLE_KEY,
                                                     transitionAlpha = bibleTransitionAlpha,
                                                     crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                                    languageMode = screenAssignment.bibleMode
+                                                    bibleTranslations = screenAssignment.bibleTranslations
                                                 )
                                             }
 
@@ -4182,7 +4184,7 @@ private fun PresenterWindows(
                                                 outputRole = Constants.OUTPUT_ROLE_KEY,
                                                 transitionAlpha = bibleTransitionAlpha,
                                                 crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                                languageMode = screenAssignment.bibleMode
+                                                bibleTranslations = screenAssignment.bibleTranslations
                                             )
                                         }
 
@@ -4350,7 +4352,7 @@ private fun PresenterWindows(
                                     outputRole = Constants.OUTPUT_ROLE_KEY,
                                     transitionAlpha = bibleTransitionAlpha,
                                     crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    languageMode = screenAssignment.bibleMode
+                                    bibleTranslations = screenAssignment.bibleTranslations
                                 )
                             }
 

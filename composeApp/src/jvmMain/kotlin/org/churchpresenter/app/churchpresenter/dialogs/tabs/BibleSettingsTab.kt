@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +37,10 @@ import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.animation_crossfade
 import churchpresenter.composeapp.generated.resources.bible_catalog_button
 import churchpresenter.composeapp.generated.resources.bible_selection
+import churchpresenter.composeapp.generated.resources.bible_reference
+import churchpresenter.composeapp.generated.resources.bible_multi_layout
+import churchpresenter.composeapp.generated.resources.bible_translation_divider
+import churchpresenter.composeapp.generated.resources.bible_translation_spacing
 import churchpresenter.composeapp.generated.resources.bible_split_browse_mode
 import churchpresenter.composeapp.generated.resources.bible_transition_settings
 import churchpresenter.composeapp.generated.resources.color
@@ -47,6 +52,7 @@ import churchpresenter.composeapp.generated.resources.lower_third_size
 import churchpresenter.composeapp.generated.resources.milliseconds_suffix
 import churchpresenter.composeapp.generated.resources.none
 import churchpresenter.composeapp.generated.resources.position
+import churchpresenter.composeapp.generated.resources.pixels_short
 import churchpresenter.composeapp.generated.resources.primary_bible
 import churchpresenter.composeapp.generated.resources.primary_bible_reference
 import churchpresenter.composeapp.generated.resources.primary_bible_text
@@ -57,6 +63,14 @@ import churchpresenter.composeapp.generated.resources.show_abbreviation
 import churchpresenter.composeapp.generated.resources.show_in_lower_third
 import churchpresenter.composeapp.generated.resources.swap_bibles
 import churchpresenter.composeapp.generated.resources.ic_swap
+import churchpresenter.composeapp.generated.resources.ic_delete
+import churchpresenter.composeapp.generated.resources.ic_arrow_up
+import churchpresenter.composeapp.generated.resources.ic_arrow_down
+import churchpresenter.composeapp.generated.resources.add_bible_translation
+import churchpresenter.composeapp.generated.resources.bible_translation
+import churchpresenter.composeapp.generated.resources.move_translation_up
+import churchpresenter.composeapp.generated.resources.move_translation_down
+import churchpresenter.composeapp.generated.resources.remove
 import churchpresenter.composeapp.generated.resources.vertical_alignment
 import churchpresenter.composeapp.generated.resources.animation_crossfade
 import churchpresenter.composeapp.generated.resources.fade_in
@@ -77,11 +91,13 @@ import androidx.compose.foundation.layout.size
 import org.churchpresenter.app.churchpresenter.composables.ActionIconButton
 import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.DropdownSettingsField
+import org.churchpresenter.app.churchpresenter.composables.rememberDropdownWidthFor
 import org.churchpresenter.app.churchpresenter.composables.FontSettingsDropdown
 import org.churchpresenter.app.churchpresenter.composables.HorizontalAlignmentButtons
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.PositionButtons
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingRowFirstControlOffset
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.ShadowDetailRow
 import org.churchpresenter.app.churchpresenter.composables.SlimSlider
@@ -96,6 +112,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import churchpresenter.composeapp.generated.resources.auto_fit
 import org.churchpresenter.app.churchpresenter.composables.VerticalAlignmentButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.moveBibleTranslation
+import org.churchpresenter.app.churchpresenter.data.settings.removeBibleTranslation
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.dialogs.BibleCatalogBrowserDialog
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
@@ -160,12 +179,57 @@ fun BibleSettingsTab(
                 modifier = Modifier.weight(0.48f).widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PrimaryBibleTextColumn(settings, onSettingsChange, availableFonts, presenterManager)
-                PrimaryBibleReferenceColumn(settings, onSettingsChange, availableFonts, presenterManager)
-                SecondaryBibleTextColumn(settings, onSettingsChange, availableFonts, presenterManager)
-                SecondaryBibleReferenceColumn(settings, onSettingsChange, availableFonts, presenterManager)
+                val translations = settings.bibleSettings.translationList()
+                run {
+                    // Only the first is open on arrival; the rest are one header row each until asked for.
+                    var expandedTranslation by remember { mutableStateOf(0) }
+                    translations.forEachIndexed { index, translation ->
+                        TranslationStyleSection(
+                            settings = settings,
+                            index = index,
+                            translation = translation,
+                            displayName = bibleFileDisplayNames[translation.fileName]
+                                ?: translation.fileName.substringBeforeLast('.'),
+                            expanded = expandedTranslation == index,
+                            onExpandedChange = { open -> expandedTranslation = if (open) index else -1 },
+                            onSettingsChange = onSettingsChange,
+                            availableFonts = availableFonts,
+                            presenterManager = presenterManager,
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun TranslationStyleSection(
+    settings: AppSettings,
+    index: Int,
+    translation: BibleTranslationSettings,
+    displayName: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+    availableFonts: List<String>,
+    presenterManager: PresenterManager? = null,
+) {
+    fun update(transform: (BibleTranslationSettings) -> BibleTranslationSettings) {
+        onSettingsChange { app ->
+            app.copy(bibleSettings = app.bibleSettings.updateTranslation(index, transform))
+        }
+    }
+    // Collapsed by default past the first: each translation carries the full appearance profile a
+    // single Bible used to get, so four of them open at once is an unreadable amount of scrolling.
+    SettingsSection(
+        title = "${stringResource(Res.string.bible_translation, index + 1)} — $displayName",
+        collapsible = true,
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+    ) {
+        TranslationTextSection(settings, translation, ::update, availableFonts, presenterManager)
+        TranslationReferenceSection(settings, translation, ::update, availableFonts, presenterManager)
     }
 }
 
@@ -183,55 +247,144 @@ private fun LeftColumn(
 
     // Bible Selection
     SettingsSection(title = stringResource(Res.string.bible_selection)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DropdownSettingsField(
-                label = stringResource(Res.string.primary_bible),
-                value = if (settings.bibleSettings.primaryBible.isEmpty()) noneStr
-                        else bibleFileDisplayNames[settings.bibleSettings.primaryBible] ?: settings.bibleSettings.primaryBible,
-                options = bibleDisplayOptions,
-                onValueChange = { displayName ->
-                    val fileName = if (displayName == noneStr) ""
-                                   else bibleFileDisplayNames.entries.find { it.value == displayName }?.key ?: displayName
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBible = fileName)) }
+        val translations = settings.bibleSettings.translationList()
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // One width for every picker in the stack, so the reorder and delete buttons beside them
+            // form a straight column instead of stepping in and out with each Bible's name length.
+            val addTranslationLabel = stringResource(Res.string.add_bible_translation)
+            val pickerWidth = rememberDropdownWidthFor(bibleDisplayOptions + addTranslationLabel)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+            translations.forEachIndexed { index, translation ->
+                // Every Bible except the ones other slots already hold. The stack is keyed by file
+                // name, so picking a duplicate used to collapse two slots into one and take the
+                // other's fonts and colours with it, silently and with no undo.
+                val slotOptions = listOf(noneStr) + bibleFilesInDirectory
+                    .filter { candidate ->
+                        candidate == translation.fileName ||
+                            translations.none { it.fileName == candidate }
+                    }
+                    .map { fileName -> bibleFileDisplayNames[fileName] ?: fileName }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DropdownSettingsField(
+                        width = pickerWidth,
+                        label = stringResource(Res.string.bible_translation, index + 1),
+                        value = bibleFileDisplayNames[translation.fileName] ?: translation.fileName,
+                        options = slotOptions,
+                        onValueChange = { displayName ->
+                            val fileName = if (displayName == noneStr) "" else
+                                bibleFileDisplayNames.entries.find { it.value == displayName }?.key ?: displayName
+                            onSettingsChange { app ->
+                                // Setting a slot to None takes a translation out of the stack, so it
+                                // has to carry the output selections with it exactly as the delete
+                                // button does. Swapping which bible a slot holds does not: the
+                                // positions are unchanged.
+                                if (fileName.isEmpty()) {
+                                    app.removeBibleTranslation(index)
+                                } else {
+                                    app.copy(
+                                        bibleSettings = app.bibleSettings
+                                            .updateTranslation(index) { it.copy(fileName = fileName) },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                    if (index > 0) {
+                        ActionIconButton(
+                            onClick = { onSettingsChange { app ->
+                                app.moveBibleTranslation(index, -1)
+                            } },
+                            tooltipText = stringResource(Res.string.move_translation_up),
+                            painter = painterResource(Res.drawable.ic_arrow_up),
+                        )
+                    }
+                    if (index < translations.lastIndex) {
+                        ActionIconButton(
+                            onClick = { onSettingsChange { app ->
+                                app.moveBibleTranslation(index, 1)
+                            } },
+                            tooltipText = stringResource(Res.string.move_translation_down),
+                            painter = painterResource(Res.drawable.ic_arrow_down),
+                        )
+                    }
+                    ActionIconButton(
+                        onClick = { onSettingsChange { app ->
+                            app.removeBibleTranslation(index)
+                        } },
+                        tooltipText = stringResource(Res.string.remove),
+                        painter = painterResource(Res.drawable.ic_delete),
+                    )
                 }
-            )
-            if (settings.bibleSettings.secondaryBible.isNotEmpty()) {
-                ActionIconButton(
-                    onClick = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.swapped()) }
-                    },
-                    tooltipText = stringResource(Res.string.swap_bibles),
-                    painter = painterResource(Res.drawable.ic_swap),
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
+            }
+            val unselectedFiles = bibleFilesInDirectory.filter { candidate ->
+                translations.none { it.fileName == candidate }
+            }
+            if (unselectedFiles.isNotEmpty()) {
+                DropdownSettingsField(
+                    width = pickerWidth,
+                    label = addTranslationLabel,
+                    value = addTranslationLabel,
+                    options = listOf(addTranslationLabel) +
+                        unselectedFiles.map { bibleFileDisplayNames[it] ?: it },
+                    onValueChange = { displayName ->
+                        if (displayName != addTranslationLabel) {
+                            val fileName = bibleFileDisplayNames.entries
+                                .find { it.value == displayName }?.key ?: displayName
+                            onSettingsChange { app ->
+                                app.copy(bibleSettings = app.bibleSettings.addTranslation(fileName))
+                            }
+                        }
+                    }
                 )
             }
-            DropdownSettingsField(
-                label = stringResource(Res.string.secondary_bible),
-                value = if (settings.bibleSettings.secondaryBible.isEmpty()) noneStr
-                        else bibleFileDisplayNames[settings.bibleSettings.secondaryBible] ?: settings.bibleSettings.secondaryBible,
-                options = bibleDisplayOptions,
-                onValueChange = { displayName ->
-                    val fileName = if (displayName == noneStr) ""
-                                   else bibleFileDisplayNames.entries.find { it.value == displayName }?.key ?: displayName
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBible = fileName)) }
-                }
-            )
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        }
+    }
+
+    // Sits with the selection it describes, and on one row: two controls did not warrant two.
+    SettingsSection(title = stringResource(Res.string.bible_multi_layout)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.bible_translation_spacing),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            NumberSettingsTextField(
+                label = stringResource(Res.string.pixels_short),
+                initialText = settings.bibleSettings.multiTranslationSpacing,
+                onValueChange = { value ->
+                    onSettingsChange { app ->
+                        app.copy(bibleSettings = app.bibleSettings.copy(multiTranslationSpacing = value))
+                    }
+                },
+                range = 0..200,
+            )
+            Spacer(Modifier.width(4.dp))
             Checkbox(
-                checked = settings.bibleSettings.secondaryBibleLowerThirdEnabled,
-                onCheckedChange = { checked ->
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdEnabled = checked)) }
-                }
+                checked = settings.bibleSettings.multiTranslationDivider,
+                onCheckedChange = { enabled ->
+                    onSettingsChange { app ->
+                        app.copy(bibleSettings = app.bibleSettings.copy(multiTranslationDivider = enabled))
+                    }
+                },
             )
             Text(
-                text = stringResource(Res.string.show_in_lower_third),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface
+                text = stringResource(Res.string.bible_translation_divider),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
+
 
     // Split Browse Mode
     SettingsSection(title = stringResource(Res.string.bible_split_browse_mode)) {
@@ -329,73 +482,73 @@ private fun LeftColumn(
 }
 
 @Composable
-private fun PrimaryBibleTextColumn(
+private fun TranslationTextSection(
     settings: AppSettings,
-    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+    translation: BibleTranslationSettings,
+    update: ((BibleTranslationSettings) -> BibleTranslationSettings) -> Unit,
     availableFonts: List<String>,
     presenterManager: PresenterManager? = null
 ) {
-    SettingsSection(title = stringResource(Res.string.primary_bible_text)) {
     SettingRow(stringResource(Res.string.color)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ColorPickerField(
                     label = stringResource(Res.string.full_screen),
                     modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.primaryBibleColor,
+                    color = translation.textColor,
                     onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleColor = it)) }
+                        update { t -> t.copy(textColor = it) }
                     }
                 )
                 TextStyleButtons(
-                    bold = settings.bibleSettings.primaryBibleBold,
-                    italic = settings.bibleSettings.primaryBibleItalic,
-                    underline = settings.bibleSettings.primaryBibleUnderline,
-                    shadow = settings.bibleSettings.primaryBibleShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleShadow = it)) } }
+                    bold = translation.textBold,
+                    italic = translation.textItalic,
+                    underline = translation.textUnderline,
+                    shadow = translation.textShadow,
+                    onBoldChange = { update { t -> t.copy(textBold = it) } },
+                    onItalicChange = { update { t -> t.copy(textItalic = it) } },
+                    onUnderlineChange = { update { t -> t.copy(textUnderline = it) } },
+                    onShadowChange = { update { t -> t.copy(textShadow = it) } }
                 )
             }
-            AnimatedVisibility(visible = settings.bibleSettings.primaryBibleShadow) {
+            AnimatedVisibility(visible = translation.textShadow) {
                 ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.primaryBibleShadowColor,
-                    shadowSize = settings.bibleSettings.primaryBibleShadowSize,
-                    shadowOpacity = settings.bibleSettings.primaryBibleShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleShadowOpacity = it)) } }
+                    shadowColor = translation.textShadowColor,
+                    shadowSize = translation.textShadowSize,
+                    shadowOpacity = translation.textShadowOpacity,
+                    onColorChange = { update { t -> t.copy(textShadowColor = it) } },
+                    onSizeChange = { update { t -> t.copy(textShadowSize = it) } },
+                    onOpacityChange = { update { t -> t.copy(textShadowOpacity = it) } }
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ColorPickerField(
                     label = stringResource(Res.string.lower_third_size),
                     modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.primaryBibleLowerThirdColor,
+                    color = translation.lowerThirdTextColor,
                     onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdColor = it)) }
+                        update { t -> t.copy(lowerThirdTextColor = it) }
                     }
                 )
                 TextStyleButtons(
-                    bold = settings.bibleSettings.primaryBibleLowerThirdBold,
-                    italic = settings.bibleSettings.primaryBibleLowerThirdItalic,
-                    underline = settings.bibleSettings.primaryBibleLowerThirdUnderline,
-                    shadow = settings.bibleSettings.primaryBibleLowerThirdShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdShadow = it)) } }
+                    bold = translation.lowerThirdTextBold,
+                    italic = translation.lowerThirdTextItalic,
+                    underline = translation.lowerThirdTextUnderline,
+                    shadow = translation.lowerThirdTextShadow,
+                    onBoldChange = { update { t -> t.copy(lowerThirdTextBold = it) } },
+                    onItalicChange = { update { t -> t.copy(lowerThirdTextItalic = it) } },
+                    onUnderlineChange = { update { t -> t.copy(lowerThirdTextUnderline = it) } },
+                    onShadowChange = { update { t -> t.copy(lowerThirdTextShadow = it) } }
                 )
             }
-            AnimatedVisibility(visible = settings.bibleSettings.primaryBibleLowerThirdShadow) {
+            AnimatedVisibility(visible = translation.lowerThirdTextShadow) {
                 ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.primaryBibleLowerThirdShadowColor,
-                    shadowSize = settings.bibleSettings.primaryBibleLowerThirdShadowSize,
-                    shadowOpacity = settings.bibleSettings.primaryBibleLowerThirdShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdShadowOpacity = it)) } }
+                    shadowColor = translation.lowerThirdTextShadowColor,
+                    shadowSize = translation.lowerThirdTextShadowSize,
+                    shadowOpacity = translation.lowerThirdTextShadowOpacity,
+                    onColorChange = { update { t -> t.copy(lowerThirdTextShadowColor = it) } },
+                    onSizeChange = { update { t -> t.copy(lowerThirdTextShadowSize = it) } },
+                    onOpacityChange = { update { t -> t.copy(lowerThirdTextShadowOpacity = it) } }
                 )
             }
         }
@@ -404,18 +557,18 @@ private fun PrimaryBibleTextColumn(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FontSettingsDropdown(
                 label = stringResource(Res.string.full_screen),
-                value = settings.bibleSettings.primaryBibleFontType,
+                value = translation.textFontType,
                 fonts = availableFonts,
                 onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleFontType = it)) }
+                    update { t -> t.copy(textFontType = it) }
                 }
             )
             FontSettingsDropdown(
                 label = stringResource(Res.string.lower_third_size),
-                value = settings.bibleSettings.primaryBibleLowerThirdFontType,
+                value = translation.lowerThirdTextFontType,
                 fonts = availableFonts,
                 onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdFontType = it)) }
+                    update { t -> t.copy(lowerThirdTextFontType = it) }
                 }
             )
         }
@@ -436,8 +589,8 @@ private fun PrimaryBibleTextColumn(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     NumberSettingsTextField(
                         label = stringResource(Res.string.full_screen),
-                        initialText = settings.bibleSettings.primaryBibleFontSize,
-                        onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleFontSize = it)) } },
+                        initialText = translation.textFontSize,
+                        onValueChange = { update { t -> t.copy(textFontSize = it) } },
                         range = 8..150
                     )
                     if (presenterManager != null) {
@@ -469,7 +622,7 @@ private fun PrimaryBibleTextColumn(
                                 val refText = "${verse.bookName} ${verse.chapter}:${verse.verseNumber}"
                                 val refH = textMeasurer.measure(refText, refStyle.copy(fontSize = bs.primaryReferenceFontSize.sp), density = Density(1f)).size.height
                                 val fullSize = calculateAutoFitFontSize(textMeasurer, text, baseStyle, availW, effectiveH - refH)
-                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleFontSize = fullSize)) }
+                                update { t -> t.copy(textFontSize = fullSize) }
                             },
                             modifier = Modifier.height(32.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp)
@@ -483,8 +636,8 @@ private fun PrimaryBibleTextColumn(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     NumberSettingsTextField(
                         label = stringResource(Res.string.lower_third_size),
-                        initialText = settings.bibleSettings.primaryBibleLowerThirdFontSize,
-                        onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdFontSize = it)) } },
+                        initialText = translation.lowerThirdTextFontSize,
+                        onValueChange = { update { t -> t.copy(lowerThirdTextFontSize = it) } },
                         range = 8..150
                     )
                     if (presenterManager != null) {
@@ -515,7 +668,7 @@ private fun PrimaryBibleTextColumn(
                                 val refText = "${verse.bookName} ${verse.chapter}:${verse.verseNumber}"
                                 val ltRefH = textMeasurer.measure(refText, refStyle.copy(fontSize = bs.primaryReferenceLowerThirdFontSize.sp), density = Density(1f)).size.height
                                 val ltSize = calculateAutoFitFontSize(textMeasurer, text, baseStyle, availW, ltH - ltRefH)
-                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdFontSize = ltSize)) }
+                                update { t -> t.copy(lowerThirdTextFontSize = ltSize) }
                             },
                             modifier = Modifier.height(32.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp)
@@ -532,92 +685,91 @@ private fun PrimaryBibleTextColumn(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.full_screen), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
                 HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.primaryBibleHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleHorizontalAlignment = value)) } },
+                    selectedAlignment = translation.textHorizontalAlignment,
+                    onAlignmentChange = { value -> update { t -> t.copy(textHorizontalAlignment = value) } },
                     leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.lower_third_size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
                 HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.primaryBibleLowerThirdHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryBibleLowerThirdHorizontalAlignment = value)) } },
+                    selectedAlignment = translation.lowerThirdTextHorizontalAlignment,
+                    onAlignmentChange = { value -> update { t -> t.copy(lowerThirdTextHorizontalAlignment = value) } },
                     leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
                 )
             }
         }
     }
-    } // end SettingsSection
 }
 
 @Composable
-private fun PrimaryBibleReferenceColumn(
+private fun TranslationReferenceSection(
     settings: AppSettings,
-    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+    translation: BibleTranslationSettings,
+    update: ((BibleTranslationSettings) -> BibleTranslationSettings) -> Unit,
     availableFonts: List<String>,
     presenterManager: PresenterManager? = null
 ) {
-    SettingsSection(title = stringResource(Res.string.primary_bible_reference)) {
     SettingRow(stringResource(Res.string.color)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ColorPickerField(
                     label = stringResource(Res.string.full_screen),
                     modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.primaryReferenceColor,
+                    color = translation.referenceColor,
                     onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceColor = it)) }
+                        update { t -> t.copy(referenceColor = it) }
                     }
                 )
                 TextStyleButtons(
-                    bold = settings.bibleSettings.primaryReferenceBold,
-                    italic = settings.bibleSettings.primaryReferenceItalic,
-                    underline = settings.bibleSettings.primaryReferenceUnderline,
-                    shadow = settings.bibleSettings.primaryReferenceShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceShadow = it)) } }
+                    bold = translation.referenceBold,
+                    italic = translation.referenceItalic,
+                    underline = translation.referenceUnderline,
+                    shadow = translation.referenceShadow,
+                    onBoldChange = { update { t -> t.copy(referenceBold = it) } },
+                    onItalicChange = { update { t -> t.copy(referenceItalic = it) } },
+                    onUnderlineChange = { update { t -> t.copy(referenceUnderline = it) } },
+                    onShadowChange = { update { t -> t.copy(referenceShadow = it) } }
                 )
             }
-            AnimatedVisibility(visible = settings.bibleSettings.primaryReferenceShadow) {
+            AnimatedVisibility(visible = translation.referenceShadow) {
                 ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.primaryReferenceShadowColor,
-                    shadowSize = settings.bibleSettings.primaryReferenceShadowSize,
-                    shadowOpacity = settings.bibleSettings.primaryReferenceShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceShadowOpacity = it)) } }
+                    shadowColor = translation.referenceShadowColor,
+                    shadowSize = translation.referenceShadowSize,
+                    shadowOpacity = translation.referenceShadowOpacity,
+                    onColorChange = { update { t -> t.copy(referenceShadowColor = it) } },
+                    onSizeChange = { update { t -> t.copy(referenceShadowSize = it) } },
+                    onOpacityChange = { update { t -> t.copy(referenceShadowOpacity = it) } }
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ColorPickerField(
                     label = stringResource(Res.string.lower_third_size),
                     modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.primaryReferenceLowerThirdColor,
+                    color = translation.lowerThirdReferenceColor,
                     onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdColor = it)) }
+                        update { t -> t.copy(lowerThirdReferenceColor = it) }
                     }
                 )
                 TextStyleButtons(
-                    bold = settings.bibleSettings.primaryReferenceLowerThirdBold,
-                    italic = settings.bibleSettings.primaryReferenceLowerThirdItalic,
-                    underline = settings.bibleSettings.primaryReferenceLowerThirdUnderline,
-                    shadow = settings.bibleSettings.primaryReferenceLowerThirdShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdShadow = it)) } }
+                    bold = translation.lowerThirdReferenceBold,
+                    italic = translation.lowerThirdReferenceItalic,
+                    underline = translation.lowerThirdReferenceUnderline,
+                    shadow = translation.lowerThirdReferenceShadow,
+                    onBoldChange = { update { t -> t.copy(lowerThirdReferenceBold = it) } },
+                    onItalicChange = { update { t -> t.copy(lowerThirdReferenceItalic = it) } },
+                    onUnderlineChange = { update { t -> t.copy(lowerThirdReferenceUnderline = it) } },
+                    onShadowChange = { update { t -> t.copy(lowerThirdReferenceShadow = it) } }
                 )
             }
-            AnimatedVisibility(visible = settings.bibleSettings.primaryReferenceLowerThirdShadow) {
+            AnimatedVisibility(visible = translation.lowerThirdReferenceShadow) {
                 ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.primaryReferenceLowerThirdShadowColor,
-                    shadowSize = settings.bibleSettings.primaryReferenceLowerThirdShadowSize,
-                    shadowOpacity = settings.bibleSettings.primaryReferenceLowerThirdShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdShadowOpacity = it)) } }
+                    shadowColor = translation.lowerThirdReferenceShadowColor,
+                    shadowSize = translation.lowerThirdReferenceShadowSize,
+                    shadowOpacity = translation.lowerThirdReferenceShadowOpacity,
+                    onColorChange = { update { t -> t.copy(lowerThirdReferenceShadowColor = it) } },
+                    onSizeChange = { update { t -> t.copy(lowerThirdReferenceShadowSize = it) } },
+                    onOpacityChange = { update { t -> t.copy(lowerThirdReferenceShadowOpacity = it) } }
                 )
             }
         }
@@ -626,18 +778,18 @@ private fun PrimaryBibleReferenceColumn(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FontSettingsDropdown(
                 label = stringResource(Res.string.full_screen),
-                value = settings.bibleSettings.primaryReferenceFontType,
+                value = translation.referenceFontType,
                 fonts = availableFonts,
                 onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceFontType = it)) }
+                    update { t -> t.copy(referenceFontType = it) }
                 }
             )
             FontSettingsDropdown(
                 label = stringResource(Res.string.lower_third_size),
-                value = settings.bibleSettings.primaryReferenceLowerThirdFontType,
+                value = translation.lowerThirdReferenceFontType,
                 fonts = availableFonts,
                 onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdFontType = it)) }
+                    update { t -> t.copy(lowerThirdReferenceFontType = it) }
                 }
             )
         }
@@ -646,14 +798,14 @@ private fun PrimaryBibleReferenceColumn(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NumberSettingsTextField(
                 label = stringResource(Res.string.full_screen),
-                initialText = settings.bibleSettings.primaryReferenceFontSize,
-                onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceFontSize = it)) } },
+                initialText = translation.referenceFontSize,
+                onValueChange = { update { t -> t.copy(referenceFontSize = it) } },
                 range = 8..150
             )
             NumberSettingsTextField(
                 label = stringResource(Res.string.lower_third_size),
-                initialText = settings.bibleSettings.primaryReferenceLowerThirdFontSize,
-                onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdFontSize = it)) } },
+                initialText = translation.lowerThirdReferenceFontSize,
+                onValueChange = { update { t -> t.copy(lowerThirdReferenceFontSize = it) } },
                 range = 8..150
             )
         }
@@ -663,9 +815,9 @@ private fun PrimaryBibleReferenceColumn(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.full_screen), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
                 PositionButtons(
-                    selectedPosition = settings.bibleSettings.primaryReferencePosition,
+                    selectedPosition = translation.referencePosition,
                     onPositionChange = { value ->
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferencePosition = value)) }
+                        update { t -> t.copy(referencePosition = value) }
                     },
                     aboveValue = Constants.POSITION_ABOVE,
                     belowValue = Constants.POSITION_BELOW
@@ -674,9 +826,9 @@ private fun PrimaryBibleReferenceColumn(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.lower_third_size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
                 PositionButtons(
-                    selectedPosition = settings.bibleSettings.primaryReferenceLowerThirdPosition,
+                    selectedPosition = translation.lowerThirdReferencePosition,
                     onPositionChange = { value ->
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdPosition = value)) }
+                        update { t -> t.copy(lowerThirdReferencePosition = value) }
                     },
                     aboveValue = Constants.POSITION_ABOVE,
                     belowValue = Constants.POSITION_BELOW
@@ -689,16 +841,16 @@ private fun PrimaryBibleReferenceColumn(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.full_screen), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
                 HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.primaryReferenceHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceHorizontalAlignment = value)) } },
+                    selectedAlignment = translation.referenceHorizontalAlignment,
+                    onAlignmentChange = { value -> update { t -> t.copy(referenceHorizontalAlignment = value) } },
                     leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.lower_third_size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
                 HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.primaryReferenceLowerThirdHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryReferenceLowerThirdHorizontalAlignment = value)) } },
+                    selectedAlignment = translation.lowerThirdReferenceHorizontalAlignment,
+                    onAlignmentChange = { value -> update { t -> t.copy(lowerThirdReferenceHorizontalAlignment = value) } },
                     leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
                 )
             }
@@ -706,9 +858,9 @@ private fun PrimaryBibleReferenceColumn(
     }
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
         Checkbox(
-            checked = settings.bibleSettings.primaryShowAbbreviation,
+            checked = translation.showAbbreviation,
             onCheckedChange = {
-                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(primaryShowAbbreviation = it)) }
+                update { t -> t.copy(showAbbreviation = it) }
             }
         )
         Text(
@@ -717,397 +869,5 @@ private fun PrimaryBibleReferenceColumn(
             modifier = Modifier.padding(start = 4.dp)
         )
     }
-    } // end SettingsSection
-}
-
-@Composable
-private fun SecondaryBibleTextColumn(
-    settings: AppSettings,
-    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
-    availableFonts: List<String>,
-    presenterManager: PresenterManager? = null
-) {
-    SettingsSection(title = stringResource(Res.string.secondary_bible_text)) {
-    SettingRow(stringResource(Res.string.color)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ColorPickerField(
-                    label = stringResource(Res.string.full_screen),
-                    modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.secondaryBibleColor,
-                    onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleColor = it)) }
-                    }
-                )
-                TextStyleButtons(
-                    bold = settings.bibleSettings.secondaryBibleBold,
-                    italic = settings.bibleSettings.secondaryBibleItalic,
-                    underline = settings.bibleSettings.secondaryBibleUnderline,
-                    shadow = settings.bibleSettings.secondaryBibleShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleShadow = it)) } }
-                )
-            }
-            AnimatedVisibility(visible = settings.bibleSettings.secondaryBibleShadow) {
-                ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.secondaryBibleShadowColor,
-                    shadowSize = settings.bibleSettings.secondaryBibleShadowSize,
-                    shadowOpacity = settings.bibleSettings.secondaryBibleShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleShadowOpacity = it)) } }
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ColorPickerField(
-                    label = stringResource(Res.string.lower_third_size),
-                    modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.secondaryBibleLowerThirdColor,
-                    onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdColor = it)) }
-                    }
-                )
-                TextStyleButtons(
-                    bold = settings.bibleSettings.secondaryBibleLowerThirdBold,
-                    italic = settings.bibleSettings.secondaryBibleLowerThirdItalic,
-                    underline = settings.bibleSettings.secondaryBibleLowerThirdUnderline,
-                    shadow = settings.bibleSettings.secondaryBibleLowerThirdShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdShadow = it)) } }
-                )
-            }
-            AnimatedVisibility(visible = settings.bibleSettings.secondaryBibleLowerThirdShadow) {
-                ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.secondaryBibleLowerThirdShadowColor,
-                    shadowSize = settings.bibleSettings.secondaryBibleLowerThirdShadowSize,
-                    shadowOpacity = settings.bibleSettings.secondaryBibleLowerThirdShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdShadowOpacity = it)) } }
-                )
-            }
-        }
-    }
-    SettingRow(stringResource(Res.string.font_type)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FontSettingsDropdown(
-                label = stringResource(Res.string.full_screen),
-                value = settings.bibleSettings.secondaryBibleFontType,
-                fonts = availableFonts,
-                onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleFontType = it)) }
-                }
-            )
-            FontSettingsDropdown(
-                label = stringResource(Res.string.lower_third_size),
-                value = settings.bibleSettings.secondaryBibleLowerThirdFontType,
-                fonts = availableFonts,
-                onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdFontType = it)) }
-                }
-            )
-        }
-    }
-    val textMeasurer2 = rememberTextMeasurer()
-    val isPresentingSecondary = if (presenterManager != null) {
-        remember { derivedStateOf {
-            presenterManager.presentingMode.value == Presenting.BIBLE &&
-            presenterManager.selectedVerses.value.let { it.size > 1 && it[1].verseText.isNotBlank() }
-        } }.value
-    } else false
-    val activeScreens2 = settings.projectionSettings.screenAssignments
-    val hasFullscreenScreen2 = activeScreens2.any { it.displayMode == Constants.DISPLAY_MODE_FULLSCREEN }
-    val hasLowerThirdScreen2 = activeScreens2.any { it.isLowerThird }
-    SettingRow(stringResource(Res.string.font_size)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    NumberSettingsTextField(
-                        label = stringResource(Res.string.full_screen),
-                        initialText = settings.bibleSettings.secondaryBibleFontSize,
-                        onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleFontSize = it)) } },
-                        range = 8..150
-                    )
-                    if (presenterManager != null) {
-                        TextButton(
-                            shape = RoundedCornerShape(6.dp),
-                            enabled = isPresentingSecondary && hasFullscreenScreen2,
-                            onClick = {
-                                val verses = presenterManager.selectedVerses.value
-                                val verse = verses.getOrNull(1) ?: return@TextButton
-                                val text = verse.verseText
-                                if (text.isBlank()) return@TextButton
-                                val bs = settings.bibleSettings
-                                val proj = settings.projectionSettings
-                                val baseStyle = TextStyle(
-                                    fontFamily = systemFontFamilyOrDefault(bs.secondaryBibleFontType),
-                                    fontWeight = if (bs.secondaryBibleBold) FontWeight.Bold else FontWeight.Normal,
-                                    fontStyle = if (bs.secondaryBibleItalic) FontStyle.Italic else FontStyle.Normal,
-                                    textDecoration = if (bs.secondaryBibleUnderline) TextDecoration.Underline else TextDecoration.None
-                                )
-                                val refStyle = TextStyle(
-                                    fontFamily = systemFontFamilyOrDefault(bs.secondaryReferenceFontType),
-                                    fontWeight = if (bs.secondaryReferenceBold) FontWeight.Bold else FontWeight.Normal,
-                                    fontStyle = if (bs.secondaryReferenceItalic) FontStyle.Italic else FontStyle.Normal
-                                )
-                                val availW = 1920 - proj.windowLeft - proj.windowRight - bs.marginLeft - bs.marginRight
-                                val availH = 1080 - proj.windowTop - proj.windowBottom - bs.marginTop - bs.marginBottom
-                                val effectiveH = availH / 2
-                                val refText = "${verse.bookName} ${verse.chapter}:${verse.verseNumber}"
-                                val refH = textMeasurer2.measure(refText, refStyle.copy(fontSize = bs.secondaryReferenceFontSize.sp), density = Density(1f)).size.height
-                                val fullSize = calculateAutoFitFontSize(textMeasurer2, text, baseStyle, availW, effectiveH - refH)
-                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleFontSize = fullSize)) }
-                            },
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    NumberSettingsTextField(
-                        label = stringResource(Res.string.lower_third_size),
-                        initialText = settings.bibleSettings.secondaryBibleLowerThirdFontSize,
-                        onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdFontSize = it)) } },
-                        range = 8..150
-                    )
-                    if (presenterManager != null) {
-                        TextButton(
-                            shape = RoundedCornerShape(6.dp),
-                            enabled = isPresentingSecondary && hasLowerThirdScreen2,
-                            onClick = {
-                                val verses = presenterManager.selectedVerses.value
-                                val verse = verses.getOrNull(1) ?: return@TextButton
-                                val text = verse.verseText
-                                if (text.isBlank()) return@TextButton
-                                val bs = settings.bibleSettings
-                                val proj = settings.projectionSettings
-                                val baseStyle = TextStyle(
-                                    fontFamily = systemFontFamilyOrDefault(bs.secondaryBibleFontType),
-                                    fontWeight = if (bs.secondaryBibleBold) FontWeight.Bold else FontWeight.Normal,
-                                    fontStyle = if (bs.secondaryBibleItalic) FontStyle.Italic else FontStyle.Normal,
-                                    textDecoration = if (bs.secondaryBibleUnderline) TextDecoration.Underline else TextDecoration.None
-                                )
-                                val refStyle = TextStyle(
-                                    fontFamily = systemFontFamilyOrDefault(bs.secondaryReferenceFontType),
-                                    fontWeight = if (bs.secondaryReferenceBold) FontWeight.Bold else FontWeight.Normal,
-                                    fontStyle = if (bs.secondaryReferenceItalic) FontStyle.Italic else FontStyle.Normal
-                                )
-                                val availW = 1920 - proj.windowLeft - proj.windowRight - bs.marginLeft - bs.marginRight
-                                val availH = 1080 - proj.windowTop - proj.windowBottom - bs.marginTop - bs.marginBottom
-                                val ltH = (availH * proj.lowerThirdHeightPercent / 100f).toInt()
-                                val refText = "${verse.bookName} ${verse.chapter}:${verse.verseNumber}"
-                                val ltRefH = textMeasurer2.measure(refText, refStyle.copy(fontSize = bs.secondaryReferenceLowerThirdFontSize.sp), density = Density(1f)).size.height
-                                val ltSize = calculateAutoFitFontSize(textMeasurer2, text, baseStyle, availW, ltH - ltRefH)
-                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdFontSize = ltSize)) }
-                            },
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    SettingRow(stringResource(Res.string.horizontal_alignment), width = 200.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.full_screen), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-                HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.secondaryBibleHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleHorizontalAlignment = value)) } },
-                    leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.lower_third_size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-                HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.secondaryBibleLowerThirdHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryBibleLowerThirdHorizontalAlignment = value)) } },
-                    leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
-                )
-            }
-        }
-    }
-    } // end SettingsSection
-}
-
-@Composable
-private fun SecondaryBibleReferenceColumn(
-    settings: AppSettings,
-    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
-    availableFonts: List<String>,
-    presenterManager: PresenterManager? = null
-) {
-    SettingsSection(title = stringResource(Res.string.secondary_bible_reference)) {
-    SettingRow(stringResource(Res.string.color)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ColorPickerField(
-                    label = stringResource(Res.string.full_screen),
-                    modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.secondaryReferenceColor,
-                    onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceColor = it)) }
-                    }
-                )
-                TextStyleButtons(
-                    bold = settings.bibleSettings.secondaryReferenceBold,
-                    italic = settings.bibleSettings.secondaryReferenceItalic,
-                    underline = settings.bibleSettings.secondaryReferenceUnderline,
-                    shadow = settings.bibleSettings.secondaryReferenceShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceShadow = it)) } }
-                )
-            }
-            AnimatedVisibility(visible = settings.bibleSettings.secondaryReferenceShadow) {
-                ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.secondaryReferenceShadowColor,
-                    shadowSize = settings.bibleSettings.secondaryReferenceShadowSize,
-                    shadowOpacity = settings.bibleSettings.secondaryReferenceShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceShadowOpacity = it)) } }
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ColorPickerField(
-                    label = stringResource(Res.string.lower_third_size),
-                    modifier = Modifier.width(120.dp),
-                    color = settings.bibleSettings.secondaryReferenceLowerThirdColor,
-                    onColorChange = {
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdColor = it)) }
-                    }
-                )
-                TextStyleButtons(
-                    bold = settings.bibleSettings.secondaryReferenceLowerThirdBold,
-                    italic = settings.bibleSettings.secondaryReferenceLowerThirdItalic,
-                    underline = settings.bibleSettings.secondaryReferenceLowerThirdUnderline,
-                    shadow = settings.bibleSettings.secondaryReferenceLowerThirdShadow,
-                    onBoldChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdBold = it)) } },
-                    onItalicChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdItalic = it)) } },
-                    onUnderlineChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdUnderline = it)) } },
-                    onShadowChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdShadow = it)) } }
-                )
-            }
-            AnimatedVisibility(visible = settings.bibleSettings.secondaryReferenceLowerThirdShadow) {
-                ShadowDetailRow(
-                    shadowColor = settings.bibleSettings.secondaryReferenceLowerThirdShadowColor,
-                    shadowSize = settings.bibleSettings.secondaryReferenceLowerThirdShadowSize,
-                    shadowOpacity = settings.bibleSettings.secondaryReferenceLowerThirdShadowOpacity,
-                    onColorChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdShadowColor = it)) } },
-                    onSizeChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdShadowSize = it)) } },
-                    onOpacityChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdShadowOpacity = it)) } }
-                )
-            }
-        }
-    }
-    SettingRow(stringResource(Res.string.font_type)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FontSettingsDropdown(
-                label = stringResource(Res.string.full_screen),
-                value = settings.bibleSettings.secondaryReferenceFontType,
-                fonts = availableFonts,
-                onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceFontType = it)) }
-                }
-            )
-            FontSettingsDropdown(
-                label = stringResource(Res.string.lower_third_size),
-                value = settings.bibleSettings.secondaryReferenceLowerThirdFontType,
-                fonts = availableFonts,
-                onValueChange = {
-                    onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdFontType = it)) }
-                }
-            )
-        }
-    }
-    SettingRow(stringResource(Res.string.font_size)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumberSettingsTextField(
-                label = stringResource(Res.string.full_screen),
-                initialText = settings.bibleSettings.secondaryReferenceFontSize,
-                onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceFontSize = it)) } },
-                range = 8..150
-            )
-            NumberSettingsTextField(
-                label = stringResource(Res.string.lower_third_size),
-                initialText = settings.bibleSettings.secondaryReferenceLowerThirdFontSize,
-                onValueChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdFontSize = it)) } },
-                range = 8..150
-            )
-        }
-    }
-    SettingRow(stringResource(Res.string.position)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.full_screen), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-                PositionButtons(
-                    selectedPosition = settings.bibleSettings.secondaryReferencePosition,
-                    onPositionChange = { value ->
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferencePosition = value)) }
-                    },
-                    aboveValue = Constants.POSITION_ABOVE,
-                    belowValue = Constants.POSITION_BELOW
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.lower_third_size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-                PositionButtons(
-                    selectedPosition = settings.bibleSettings.secondaryReferenceLowerThirdPosition,
-                    onPositionChange = { value ->
-                        onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdPosition = value)) }
-                    },
-                    aboveValue = Constants.POSITION_ABOVE,
-                    belowValue = Constants.POSITION_BELOW
-                )
-            }
-        }
-    }
-    SettingRow(stringResource(Res.string.horizontal_alignment), width = 200.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.full_screen), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-                HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.secondaryReferenceHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceHorizontalAlignment = value)) } },
-                    leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.lower_third_size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-                HorizontalAlignmentButtons(
-                    selectedAlignment = settings.bibleSettings.secondaryReferenceLowerThirdHorizontalAlignment,
-                    onAlignmentChange = { value -> onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryReferenceLowerThirdHorizontalAlignment = value)) } },
-                    leftValue = Constants.LEFT, centerValue = Constants.CENTER, rightValue = Constants.RIGHT
-                )
-            }
-        }
-    }
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = settings.bibleSettings.secondaryShowAbbreviation,
-            onCheckedChange = {
-                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(secondaryShowAbbreviation = it)) }
-            }
-        )
-        Text(
-            text = stringResource(Res.string.show_abbreviation),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(start = 4.dp)
-        )
-    }
-    } // end SettingsSection
 }
 

@@ -8,6 +8,8 @@ import androidx.compose.ui.test.hasImeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -189,34 +191,41 @@ class ProjectionSettingsTabAudioAndLabelsTest {
     fun `the dialog's preview names both language modes`() = projectionTab { _ ->
         gridButton(Grid.contentOutputs(row = 0)).performScrollTo().performClick()
         waitForIdle()
-        onNodeWithText("Bible · Both").assertExists("the preview must name the Bible mode")
+        // "Bible" appears twice now — the preview chip and the checkbox label in the dialog — so
+        // the chip is counted rather than matched uniquely. It carries a count instead of a mode
+        // name, and with a single translation configured there is nothing to count.
+        onAllNodesWithText("Bible").assertCountEquals(2)
         onNodeWithText("Songs · Both").assertExists("and the Songs mode")
     }
 
     @Test
-    fun `the Bible language dropdown offers every mode`() = projectionTab { get ->
+    fun `the Bible output can be switched off from the dialog`() = projectionTab { get ->
+        // The Bible is a checkbox now, not a mode dropdown: per-translation ticks appear beside it
+        // once more than one translation is configured. The on/off control lives on the master row
+        // inside the translation-picker dropdown, not on the collapsed trigger, so it must be
+        // opened first.
         gridButton(Grid.contentOutputs(row = 0)).performScrollTo().performClick()
         waitForIdle()
-        onAllNodesWithText("Both")[0].performClick()
+        onNodeWithContentDescription("Bible Translations").performClick()
         waitForIdle()
-        for (option in listOf("Off", "Bible 1", "Bible 2")) {
-            onNodeWithText(option).assertExists("the Bible dropdown must offer $option")
-        }
-        onNodeWithText("Bible 1").performClick()
+        onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
         assertEquals(
-            org.churchpresenter.app.churchpresenter.utils.Constants.SONG_LANG_PRIMARY,
+            org.churchpresenter.app.churchpresenter.utils.Constants.SONG_LANG_OFF,
             get().projectionSettings.screenAssignments[0].bibleMode,
-            "picking Bible 1 must be stored",
+            "unticking Bible must switch the output off",
         )
-        onNodeWithText("Bible · Bible 1").assertExists("and be named in the preview")
+        // The preview chip is gone (Bible is off), leaving the trigger's own label plus the master
+        // row's label inside the still-open dropdown -- toggling it does not dismiss the menu.
+        onAllNodesWithText("Bible").assertCountEquals(2)
     }
 
     @Test
     fun `the Songs language dropdown offers every mode`() = projectionTab { _ ->
         gridButton(Grid.contentOutputs(row = 0)).performScrollTo().performClick()
         waitForIdle()
-        onAllNodesWithText("Both")[1].performClick()
+        // Songs keeps its dropdown, and is now the only one in the dialog.
+        onAllNodesWithText("Both")[0].performClick()
         waitForIdle()
         for (option in listOf("Off", "Language 1", "Language 2")) {
             onNodeWithText(option).assertExists("the Songs dropdown must offer $option")

@@ -270,7 +270,7 @@ class ProjectionSettingsTabExclusivityTest {
     }
 
     @Test
-    fun `an unrecognised language mode falls back to the first option`() {
+    fun `an unrecognised song language mode falls back to the first option`() {
         projectionTab(
             initial = settingsWith {
                 copy(
@@ -283,8 +283,9 @@ class ProjectionSettingsTabExclusivityTest {
         ) { _ ->
             gridButton(Grid.contentOutputs(row = 0)).performScrollTo().performClick()
             waitForIdle()
-            // Neither mode is one this build knows, so both dropdowns show the first option.
-            onAllNodesWithText("Off").assertCountAtLeast(2)
+            // Songs is the only dropdown left — Bible is a checkbox — and its mode is not one this
+            // build knows, so it falls back to showing the first option.
+            onAllNodesWithText("Off").assertCountAtLeast(1)
         }
     }
 

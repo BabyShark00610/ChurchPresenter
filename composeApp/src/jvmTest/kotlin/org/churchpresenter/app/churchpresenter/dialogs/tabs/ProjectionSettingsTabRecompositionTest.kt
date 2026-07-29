@@ -208,7 +208,9 @@ class ProjectionSettingsTabRecompositionTest {
         onNodeWithText("Content Outputs — Screen 1").assertExists("the dialog must still be up")
         onNodeWithText("15 of 16 content types enabled on this screen").assertExists()
         onAllNodesWithText("Media").assertCountEquals(2)
-        onNodeWithText("Bible · Both").assertExists("and the preview intact")
+        // The Bible chip is a bare label with one translation configured; it appears alongside the
+        // dialog's own checkbox label, so both are still present.
+        onAllNodesWithText("Bible").assertCountEquals(2)
     }
 
     /**

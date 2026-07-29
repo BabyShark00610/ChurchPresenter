@@ -280,8 +280,10 @@ fun MainDesktop(
     /** How the Bible tab tracks the primary while connected — see BibleSyncMode. */
     instanceLinkBibleSyncMode: BibleSyncMode = BibleSyncMode.FULL_REPLICA,
     instanceLinkFetchSecondaryBibleFile: (suspend () -> ByteArray?)? = null,
+    instanceLinkFetchBibleTranslations: (suspend () -> List<Pair<String, ByteArray>>)? = null,
     /** Reports the secondary bible's local file path to CompanionServer (for GET /api/bible/file/secondary). */
     instanceLinkOnSecondaryBibleFilePathChanged: ((filePath: String) -> Unit)? = null,
+    instanceLinkOnBibleFilePathsChanged: ((filePaths: List<String>) -> Unit)? = null,
     /** Non-null while connected via Instance Link — see MediaTab's instanceLinkMediaStreamUrl. */
     instanceLinkMediaStreamUrl: ((itemId: String) -> String)? = null,
     /** Non-null only when connected AND the operator has enabled pushing items to the primary's
@@ -519,11 +521,13 @@ fun MainDesktop(
     val currentOnPicturesLoaded by rememberUpdatedState(onPicturesLoaded)
     val currentOnBibleLoaded by rememberUpdatedState(onBibleLoaded)
     val currentOnSecondaryBibleFilePathChanged by rememberUpdatedState(instanceLinkOnSecondaryBibleFilePathChanged)
+    val currentOnBibleFilePathsChanged by rememberUpdatedState(instanceLinkOnBibleFilePathsChanged)
     val bibleViewModel = remember {
         BibleViewModel(
             appSettings,
             onBibleLoaded = { bible, translation -> currentOnBibleLoaded?.invoke(bible, translation) },
-            onSecondaryBibleFilePathChanged = { path -> currentOnSecondaryBibleFilePathChanged?.invoke(path) }
+            onSecondaryBibleFilePathChanged = { path -> currentOnSecondaryBibleFilePathChanged?.invoke(path) },
+            onBibleFilePathsChanged = { paths -> currentOnBibleFilePathsChanged?.invoke(paths) },
         )
     }
     DisposableEffect(Unit) { onDispose { bibleViewModel.dispose() } }
@@ -543,7 +547,8 @@ fun MainDesktop(
             active = instanceLinkConnectionStatus == InstanceLinkStatus.CONNECTED && instanceLinkRole == InstanceLinkRole.CONTROLLED,
             mode = instanceLinkBibleSyncMode,
             fetchBibleFile = instanceLinkFetchBibleFile,
-            fetchSecondaryBibleFile = instanceLinkFetchSecondaryBibleFile
+            fetchSecondaryBibleFile = instanceLinkFetchSecondaryBibleFile,
+            fetchBibleTranslations = instanceLinkFetchBibleTranslations,
         )
     }
 
@@ -580,10 +585,8 @@ fun MainDesktop(
     val bibleEngineSettings = appSettings.bibleEngineSettings
     // The SET of bibles to index (sorted, blanks removed). Keying the restart on this means swapping
     // primary↔secondary (same set) does NOT re-index, while changing to a different bible does.
-    val engineBibles = remember(appSettings.bibleSettings.primaryBible, appSettings.bibleSettings.secondaryBible) {
-        listOf(appSettings.bibleSettings.primaryBible, appSettings.bibleSettings.secondaryBible)
-            .filter { it.isNotBlank() }
-            .sorted()
+    val engineBibles = remember(appSettings.bibleSettings.translationList()) {
+        appSettings.bibleSettings.translationList().map { it.fileName }.sorted()
     }
     LaunchedEffect(
         sttConnected, bibleEngineSettings.enabled, bibleEngineSettings.runLocal,
@@ -852,13 +855,11 @@ fun MainDesktop(
 
     // Handle remote Bible verse instant display (POST /api/bible/select or WS select_bible_verse)
     // No approval required — displays the verse immediately like select_picture.
-    // Enriches the bare request with Bible abbreviation/title from loaded Bibles
-    // and includes the secondary Bible verse if one is loaded.
+    // Resolves the request through BibleViewModel so every configured translation follows the same
+    // canonical-code mapping as a local click.
     LaunchedEffect(selectBibleVerseFlow) {
         selectBibleVerseFlow?.collect { req ->
-            val verses = mutableListOf<SelectedVerse>()
             val primaryBible = bibleViewModel.primaryBible.value
-            val secondaryBible = bibleViewModel.secondaryBible.value
 
             // Resolve bookId from book name using the primary Bible's book list
             val bookIndex = primaryBible?.getBooks()
@@ -866,38 +867,22 @@ fun MainDesktop(
                 ?: -1
             val bookId = if (bookIndex >= 0) primaryBible?.getBookId(bookIndex) ?: 0 else 0
 
-            // Primary verse enriched with abbreviation and title
-            verses.add(
-                SelectedVerse(
-                    bibleAbbreviation = primaryBible?.getBibleAbbreviation() ?: "",
-                    bibleName = primaryBible?.getBibleTitle() ?: "",
-                    bookName    = req.bookName,
-                    chapter     = req.chapter,
-                    verseNumber = req.verseNumber,
-                    verseText   = req.verseText,
-                    verseRange  = req.verseRange
+            val resolved = bibleViewModel.getVersesForDisplay(req.bookName, req.chapter, req.verseNumber)
+            val verses = if (resolved.isNotEmpty()) {
+                resolved.map { it.copy(verseRange = req.verseRange) }
+            } else {
+                listOf(
+                    SelectedVerse(
+                        translationFileName = appSettings.bibleSettings.translationList().firstOrNull()?.fileName.orEmpty(),
+                        bibleAbbreviation = primaryBible?.getBibleAbbreviation() ?: "",
+                        bibleName = primaryBible?.getBibleTitle() ?: "",
+                        bookName = req.bookName,
+                        chapter = req.chapter,
+                        verseNumber = req.verseNumber,
+                        verseText = req.verseText,
+                        verseRange = req.verseRange,
+                    ),
                 )
-            )
-
-            // Secondary verse (if a secondary Bible is loaded)
-            if (secondaryBible != null && bookId > 0) {
-                val codeRef = primaryBible?.getCodeReference(bookId, req.chapter, req.verseNumber)
-                val secBook = codeRef?.first ?: bookId
-                val secChapter = codeRef?.second ?: req.chapter
-                val secVerse = codeRef?.third ?: req.verseNumber
-                secondaryBible.getVerseDetailsByCode(secBook, secChapter, secVerse)?.let { result ->
-                    verses.add(
-                        SelectedVerse(
-                            bibleAbbreviation = secondaryBible.getBibleAbbreviation(),
-                            bibleName = secondaryBible.getBibleTitle(),
-                            bookName = result.bookName,
-                            chapter = result.displayChapter,
-                            verseNumber = result.displayVerse,
-                            verseText = result.verseText,
-                            verseRange = req.verseRange
-                        )
-                    )
-                }
             }
 
             presenterManager.setSelectedVerses(verses)

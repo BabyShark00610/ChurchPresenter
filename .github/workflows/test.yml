@@ -23,6 +23,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # The suite takes ~14 minutes. Without a timeout a test that hangs instead of failing holds
+    # the runner until GitHub's 6-hour default kills it, so the deadline is the failure signal.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,6 +47,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: App unit tests
+        # Tighter than the job's own deadline so a hang here is attributed to this step and the
+        # submodule suites below (`if: always()`) and the report upload still get to run.
+        timeout-minutes: 25
         run: ./gradlew :composeApp:jvmTest
 
       # Each submodule is its own Gradle build with its own wrapper, so they cannot be reached

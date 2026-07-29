@@ -355,7 +355,7 @@ private fun SingleDisplayPreview(
                                     outputRole = primaryRole,
                                     transitionAlpha = bibleTransitionAlpha,
                                     crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    languageMode = screenAssignment.bibleMode
+                                    bibleTranslations = screenAssignment.bibleTranslations
                                 )
                             Presenting.LYRICS ->
                                 SongPresenter(

@@ -3,6 +3,12 @@ package org.churchpresenter.app.churchpresenter.viewmodel
 import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -34,12 +40,15 @@ class BibleViewModelSelectedVersesTest {
     }
 
     private fun awaitUntil(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-            Thread.sleep(20)
+        try {
+            runBlocking {
+                withTimeout(timeoutMs) {
+                    while (!condition()) yield()
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
         }
-        throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
     }
 
     /** Primary always holds John 3:1-4; [secondaryVerses] decides what the second language has. */
@@ -83,6 +92,140 @@ class BibleViewModelSelectedVersesTest {
     }
 
     // ── Partial secondary translation ───────────────────────────────────────────
+
+    @Test
+    fun `one selected reference returns every configured translation in order`() {
+        listOf(
+            Triple("p.spb", "Primary", "English"),
+            Triple("s.spb", "Secondary", "Русский"),
+            Triple("t.spb", "Third", "Deutsch"),
+        ).forEach { (file, title, text) ->
+            SpbFixture.spbFile(
+                dir, name = file,
+                content = SpbFixture.buildContent(
+                    title = title,
+                    books = listOf(SpbFixture.Book(43, "John", 1)),
+                    verses = listOf(SpbFixture.Verse(43, 1, 1, "$text 1")),
+                ),
+            )
+        }
+        val model = BibleViewModel(
+            AppSettings(
+                bibleSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+                    listOf("p.spb", "s.spb", "t.spb").map { BibleTranslationSettings(fileName = it) },
+                ),
+            ),
+        )
+        runBlocking { model.isFullyLoadedFlow.first { it } }
+        model.selectVerse(0)
+
+        assertEquals(
+            listOf("English 1", "Русский 1", "Deutsch 1"),
+            model.getSelectedVerses().map { it.verseText },
+        )
+    }
+
+    @Test
+    fun `moving a multi translation to first makes it the navigation bible`() {
+        listOf(
+            Triple("p.spb", "John", "English"),
+            Triple("s.spb", "Иоанна", "Русский"),
+            Triple("t.spb", "Johannes", "Deutsch"),
+        ).forEach { (file, bookName, text) ->
+            SpbFixture.spbFile(
+                dir, name = file,
+                content = SpbFixture.buildContent(
+                    title = file,
+                    books = listOf(SpbFixture.Book(43, bookName, 1)),
+                    verses = listOf(SpbFixture.Verse(43, 1, 1, text)),
+                ),
+            )
+        }
+        val initialSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+            listOf("p.spb", "s.spb", "t.spb").map { BibleTranslationSettings(fileName = it) },
+        )
+        val model = BibleViewModel(AppSettings(bibleSettings = initialSettings))
+        // The modules land partway through the load, before the chapter is read and well before the
+        // load reports itself finished. Reordering from that point raced the first load against the
+        // second and could leave the verses behind, so wait for the whole thing to settle.
+        awaitUntil("initial multi load") {
+            model.loadedTranslations.value.size == 3 && model.isFullyLoaded && model.books.value.isNotEmpty()
+        }
+
+        val tokenBeforeReorder = model.verseSelectionToken.value
+        model.updateSettings(
+            AppSettings(bibleSettings = initialSettings.moveTranslation(2, -2)),
+        )
+        // The token is bumped after the reloaded chapter is published and before the load flags
+        // itself done, so it is the signal that the verses below are the reordered ones rather than
+        // the ones still on screen from a moment ago.
+        awaitUntil("reordered multi load") {
+            model.loadedTranslations.value.firstOrNull()?.fileName == "t.spb" &&
+                model.isFullyLoaded &&
+                model.verseSelectionToken.value != tokenBeforeReorder
+        }
+
+        assertEquals("Johannes", model.books.value.first())
+        assertEquals("Deutsch", model.getSelectedVerses().first().verseText)
+        assertEquals(
+            listOf("t.spb", "p.spb", "s.spb"),
+            model.loadedTranslations.value.map { it.fileName },
+        )
+    }
+
+    @Test
+    fun `a missing middle translation does not change the identity of later verses`() {
+        listOf(
+            Triple("p.spb", "Primary", "English 1"),
+            Triple("s.spb", "Secondary", null),
+            Triple("t.spb", "Third", "Deutsch 1"),
+        ).forEach { (file, title, text) ->
+            SpbFixture.spbFile(
+                dir, name = file,
+                content = SpbFixture.buildContent(
+                    title = title,
+                    books = listOf(SpbFixture.Book(43, "John", 1)),
+                    verses = text?.let { listOf(SpbFixture.Verse(43, 1, 1, it)) }.orEmpty(),
+                ),
+            )
+        }
+        val model = BibleViewModel(
+            AppSettings(
+                bibleSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+                    listOf("p.spb", "s.spb", "t.spb").map { BibleTranslationSettings(fileName = it) },
+                ),
+            ),
+        )
+        runBlocking { model.isFullyLoadedFlow.first { it } }
+        model.selectVerse(0)
+
+        val selected = model.getSelectedVerses()
+        assertEquals(listOf("p.spb", "t.spb"), selected.map { it.translationFileName })
+        assertEquals(listOf("English 1", "Deutsch 1"), selected.map { it.verseText })
+    }
+
+    @Test
+    fun `a missing primary module never promotes a later translation to primary`() {
+        SpbFixture.spbFile(
+            dir, name = "s.spb",
+            content = SpbFixture.buildContent(
+                title = "Secondary",
+                books = listOf(SpbFixture.Book(43, "John", 1)),
+                verses = listOf(SpbFixture.Verse(43, 1, 1, "Secondary 1")),
+            ),
+        )
+        val model = BibleViewModel(
+            AppSettings(
+                bibleSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+                    listOf("missing.spb", "s.spb").map { BibleTranslationSettings(fileName = it) },
+                ),
+            ),
+        )
+        runBlocking { model.isFullyLoadedFlow.first { it } }
+
+        assertEquals(null, model.primaryBible.value)
+        assertTrue(model.books.value.isEmpty())
+    }
 
     @Test
     fun `a verse the secondary lacks still shows the primary alone`() {

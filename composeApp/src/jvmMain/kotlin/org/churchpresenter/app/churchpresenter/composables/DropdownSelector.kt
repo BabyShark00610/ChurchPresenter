@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -42,26 +43,36 @@ fun DropdownSelector(
     value: String,
     options: List<Pair<String, String>>,
     onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    itemTrailingContent: (@Composable RowScope.(key: String, index: Int) -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val displayText = options.firstOrNull { it.first == value }?.second ?: value
+    val sizeModifier = if (compact) modifier.height(34.dp) else modifier.heightIn(min = 42.dp)
 
     Box(
-        modifier = modifier
-            .heightIn(min = 42.dp)
+        modifier = sizeModifier
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { expanded = true }
-            .padding(start = 11.dp, end = 11.dp, top = 4.dp, bottom = 4.dp)
+            .padding(
+                start = 11.dp,
+                end = 11.dp,
+                top = if (compact) 2.dp else 4.dp,
+                bottom = if (compact) 2.dp else 4.dp,
+            )
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(verticalArrangement = Arrangement.Center) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center,
+            ) {
                 if (label.isNotEmpty()) {
                     Text(
                         text = label.uppercase(),
-                        fontSize = 10.sp,
-                        lineHeight = 11.sp,
+                        fontSize = if (compact) 8.sp else 10.sp,
+                        lineHeight = if (compact) 9.sp else 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -73,8 +84,8 @@ fun DropdownSelector(
                 Text(
                     text = displayText,
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
-                        lineHeight = 14.sp,
+                        fontSize = if (compact) 11.sp else 13.sp,
+                        lineHeight = if (compact) 12.sp else 14.sp,
                         fontWeight = FontWeight.Medium
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -95,13 +106,16 @@ fun DropdownSelector(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            options.forEach { (key, display) ->
+            options.forEachIndexed { index, (key, display) ->
                 DropdownMenuItem(
                     text = { Text(display, style = MaterialTheme.typography.bodyMedium) },
                     onClick = {
                         onValueChange(key)
                         expanded = false
-                    }
+                    },
+                    trailingIcon = itemTrailingContent?.let { content ->
+                        { Row { content(key, index) } }
+                    },
                 )
             }
         }
