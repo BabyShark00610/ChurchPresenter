@@ -29,12 +29,14 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Copyright
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -58,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -123,7 +126,6 @@ import churchpresenter.composeapp.generated.resources.ok
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import org.churchpresenter.app.churchpresenter.centeredOnMainWindow
 import org.churchpresenter.app.churchpresenter.composables.DropdownSettingsField
-import org.churchpresenter.app.churchpresenter.composables.SettingsTextField
 import org.churchpresenter.app.churchpresenter.data.BibleModule
 import org.churchpresenter.app.churchpresenter.data.BibleSource
 import org.churchpresenter.app.churchpresenter.data.BibleSourceId
@@ -224,15 +226,18 @@ internal fun BibleCatalogBrowserDialogContent(
             Header(installedCount = viewModels.first().installedFiles.size)
             Spacer(Modifier.height(16.dp))
 
-            SourceSegmentedControl(
-                viewModels = viewModels,
-                tabLabels = tabLabels,
-                selectedTab = selectedTab,
-                onSelect = { selectedTab = it }
-            )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                SourceSegmentedControl(
+                    tabLabels = tabLabels,
+                    selectedTab = selectedTab,
+                    onSelect = { selectedTab = it }
+                )
+                Spacer(Modifier.weight(1f))
+                LanguageDropdown(viewModel)
+            }
             Spacer(Modifier.height(12.dp))
 
-            FilterRow(viewModel)
+            SearchField(viewModel)
             Spacer(Modifier.height(12.dp))
 
             Messages(viewModel)
@@ -447,17 +452,11 @@ private fun Header(installedCount: Int) {
 
 @Composable
 private fun SourceSegmentedControl(
-    viewModels: List<BibleCatalogViewModel>,
     tabLabels: List<String>,
     selectedTab: Int,
     onSelect: (Int) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         tabLabels.forEachIndexed { index, label ->
             val selected = index == selectedTab
             val container = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
@@ -468,44 +467,13 @@ private fun SourceSegmentedControl(
                 color = container,
                 contentColor = content
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    SegmentCountBadge(viewModel = viewModels[index], contentColor = content)
-                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
             }
-        }
-    }
-}
-
-/**
- * A tab not yet loaded shows a small spinner rather than a stale or fabricated count — this
- * dialog deliberately keeps each archive's catalogue lazy, loaded only when its tab is opened.
- */
-@Composable
-private fun SegmentCountBadge(viewModel: BibleCatalogViewModel, contentColor: Color) {
-    val notYetLoaded = viewModel.modules.isEmpty() && viewModel.catalogError == null
-    if (notYetLoaded) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(10.dp),
-            strokeWidth = 1.5.dp,
-            color = contentColor
-        )
-    } else {
-        Surface(shape = CircleShape, color = contentColor.copy(alpha = 0.2f)) {
-            Text(
-                text = viewModel.visibleModules.size.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-            )
         }
     }
 }
@@ -672,7 +640,7 @@ private fun MetadataRow(label: String, value: String) {
 }
 
 @Composable
-private fun FilterRow(viewModel: BibleCatalogViewModel) {
+private fun LanguageDropdown(viewModel: BibleCatalogViewModel) {
     val allLanguagesLabel = stringResource(Res.string.bible_catalog_language_all)
     // Display label -> language code. The label carries the count, so the map is what turns the
     // user's pick back into the code the filter works on.
@@ -683,38 +651,65 @@ private fun FilterRow(viewModel: BibleCatalogViewModel) {
         .firstOrNull { it.value == viewModel.selectedLanguage }?.key
         ?: allLanguagesLabel
 
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        SettingsTextField(
-            value = viewModel.query,
-            onValueChange = { viewModel.query = it },
-            placeholder = { Text(stringResource(Res.string.bible_catalog_search_placeholder)) },
-            leadingIcon = {
+    DropdownSettingsField(
+        value = selectedLabel,
+        options = listOf(allLanguagesLabel) + languageLabels.keys,
+        onValueChange = { label -> viewModel.selectedLanguage = languageLabels[label] },
+        leadingIcon = {
+            Icon(
+                Icons.Default.Language,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        modifier = Modifier.width(220.dp)
+    )
+}
+
+private val SearchFieldShape = RoundedCornerShape(10.dp)
+
+// A bespoke field rather than the shared SettingsTextField — this dialog's search box sits
+// directly on the dialog surface and needs to read as barely-there (a faint tint + hairline
+// border) rather than the settings-form contrast SettingsTextField is tuned for.
+@Composable
+private fun SearchField(viewModel: BibleCatalogViewModel) {
+    BasicTextField(
+        value = viewModel.query,
+        onValueChange = { viewModel.query = it },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), SearchFieldShape)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), SearchFieldShape),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     Icons.Default.Search,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
-            },
-            modifier = Modifier.weight(1f),
-            singleLine = true
-        )
-        Spacer(Modifier.width(12.dp))
-        DropdownSettingsField(
-            value = selectedLabel,
-            options = listOf(allLanguagesLabel) + languageLabels.keys,
-            onValueChange = { label -> viewModel.selectedLanguage = languageLabels[label] },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Language,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            modifier = Modifier.width(220.dp)
-        )
-    }
+                Spacer(Modifier.width(8.dp))
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (viewModel.query.isEmpty()) {
+                        Text(
+                            text = stringResource(Res.string.bible_catalog_search_placeholder),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -860,6 +855,8 @@ private fun ModuleRow(
                     shape = RoundedCornerShape(6.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = stringResource(Res.string.bible_catalog_redownload),
                         style = MaterialTheme.typography.labelMedium
