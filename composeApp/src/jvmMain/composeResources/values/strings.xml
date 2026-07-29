@@ -740,6 +740,8 @@
     <string name="content_outputs_quick_select">Quick Select</string>
     <string name="content_outputs_select_all">Select All</string>
     <string name="content_outputs_clear_all">Clear All</string>
+    <string name="content_outputs_translations_all">All (%1$d)</string>
+    <string name="content_outputs_translations_some">%1$d of %2$d</string>
     <string name="content_outputs_section_content">Content</string>
     <string name="content_outputs_section_backgrounds">Backgrounds</string>
     <string name="content_outputs_done">Done</string>

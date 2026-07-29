@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -29,8 +30,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -107,6 +110,8 @@ import churchpresenter.composeapp.generated.resources.content_outputs_enabled_sh
 import churchpresenter.composeapp.generated.resources.content_outputs_enabled_subtitle
 import churchpresenter.composeapp.generated.resources.content_outputs_quick_select
 import churchpresenter.composeapp.generated.resources.content_outputs_select_all
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_all
+import churchpresenter.composeapp.generated.resources.content_outputs_translations_some
 import churchpresenter.composeapp.generated.resources.content_outputs_clear_all
 import churchpresenter.composeapp.generated.resources.content_outputs_preview
 import churchpresenter.composeapp.generated.resources.content_outputs_preview_empty
@@ -1644,6 +1649,19 @@ private fun ContentToggleCell(
 }
 
 /** Bible/Songs language-mode chip — label + a compact dropdown (Off / 1 / 2 / Both). */
+/**
+ * Bible cell: a checkbox for whether this output shows scripture at all, plus -- once more than one
+ * translation is configured -- a dropdown naming which of them it shows.
+ *
+ * The picks used to be a checkbox per translation, inline. With a stack of any size that made this
+ * the only cell in the dialog taller than one row, and it grew without bound; behind a trigger the
+ * cell now matches [ContentLangCell] beside it, and the count says at a glance what the list of
+ * ticks used to have to be read to learn.
+ *
+ * The menu is hand-built rather than taken from `composables/`: every dropdown there is
+ * single-select and closes on click, which is the one thing a multi-select must not do. If a second
+ * multi-select ever appears, that is the point to extract one.
+ */
 @Composable
 private fun ContentTranslationCell(
     modifier: Modifier,
@@ -1655,54 +1673,146 @@ private fun ContentTranslationCell(
     onShowingChange: (Boolean) -> Unit,
     onSelectedChange: (List<Int>) -> Unit,
 ) {
-    Column(
+    var expanded by remember { mutableStateOf(false) }
+    // An index left behind by a translation that has since been removed is not a selection; the
+    // preview counts them the same way.
+    val effective = selected.filter { it in translations.indices }
+    val everything = effective.isEmpty() || effective.size == translations.size
+
+    // Exactly one callback per event. Both of them are `onApply(assignment.copy(..))` over the same
+    // captured assignment at the call site, so firing two in one event would drop the first.
+    fun toggle(index: Int, want: Boolean) {
+        val current = if (selected.isEmpty()) translations.indices.toList() else effective
+        val next = if (want) (current + index).distinct().sorted() else current - index
+        when {
+            // Showing none of them says the same thing as unticking the cell, so that is where it
+            // goes. Normalising zero to "all" instead is what used to re-tick every box.
+            next.isEmpty() -> {
+                expanded = false
+                onShowingChange(false)
+            }
+            // Everything ticked is stored as "all", so a translation added later shows up here too
+            // rather than needing to be ticked on every output.
+            next.size == translations.size -> onSelectedChange(emptyList())
+            else -> onSelectedChange(next)
+        }
+    }
+
+    Row(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-            .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 6.dp),
+            .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = showing, onCheckedChange = onShowingChange)
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-            )
-        }
-        // Nothing to choose between with a single translation -- the checkbox above already says
-        // whether this output shows it.
+        Checkbox(checked = showing, onCheckedChange = onShowingChange)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            // Weighted, so the trigger measures at its own width and the label takes what is left:
+            // a long label ellipsizes rather than squeezing the count out of the cell.
+            modifier = Modifier.weight(1f),
+        )
+        // Nothing to choose between with a single translation -- the checkbox already says whether
+        // this output shows it.
         if (showing && translations.size > 1) {
-            translations.forEachIndexed { index, name ->
-                val ticked = selected.isEmpty() || index in selected
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 16.dp),
+            Box {
+                OutlinedButton(
+                    shape = RoundedCornerShape(6.dp),
+                    onClick = { expanded = true },
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                 ) {
-                    Checkbox(
-                        checked = ticked,
-                        onCheckedChange = { want ->
-                            val current = if (selected.isEmpty()) translations.indices.toList() else selected
-                            val next = if (want) (current + index).distinct().sorted()
-                                       else current.filterNot { it == index }
-                            // Everything ticked is stored as "all", so a translation added later
-                            // shows up here too rather than needing to be ticked on every output.
-                            onSelectedChange(if (next.size == translations.size) emptyList() else next)
-                        },
-                    )
                     Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = if (everything) {
+                            stringResource(Res.string.content_outputs_translations_all, translations.size)
+                        } else {
+                            stringResource(
+                                Res.string.content_outputs_translations_some,
+                                effective.size,
+                                translations.size,
+                            )
+                        },
+                        style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    // Bibles are named by file stem, which runs long; the menu is capped rather than
+                    // allowed to stretch across the dialog.
+                    modifier = Modifier.widthIn(max = 280.dp),
+                ) {
+                    translations.forEachIndexed { index, name ->
+                        val ticked = selected.isEmpty() || index in selected
+                        // A toggleable Row rather than a DropdownMenuItem: the whole row toggles,
+                        // the row carries the on/off state, and nothing here dismisses the menu, so
+                        // several translations can be picked in one visit.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 32.dp)
+                                .toggleable(
+                                    value = ticked,
+                                    role = Role.Checkbox,
+                                    onValueChange = { want -> toggle(index, want) },
+                                )
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = ticked, onCheckedChange = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(Res.string.content_outputs_select_all),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        // Stored as "all" rather than every index, so a translation added later is
+                        // included without revisiting each output.
+                        onClick = { onSelectedChange(emptyList()) },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(Res.string.content_outputs_clear_all),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        // Showing none of them is the same output state as an unticked cell, so it
+                        // is stored there. The flag is cleared too, or re-ticking Bible would pop
+                        // this menu straight back open.
+                        onClick = {
+                            expanded = false
+                            onShowingChange(false)
+                        },
                     )
                 }
             }
         }
     }
 }
-
 @Composable
 private fun ContentLangCell(
     modifier: Modifier,

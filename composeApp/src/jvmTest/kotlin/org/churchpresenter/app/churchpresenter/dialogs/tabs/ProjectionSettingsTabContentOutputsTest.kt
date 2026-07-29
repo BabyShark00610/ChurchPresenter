@@ -206,8 +206,9 @@ class ProjectionSettingsTabContentOutputsTest {
         openContentOutputs()
         assertEquals(Constants.SONG_LANG_BOTH, row0(get).bibleMode, "Bible starts on")
 
-        // Bible is a checkbox now; its per-translation ticks only appear with more than one
-        // translation configured, which this fixture does not have.
+        // Bible is a checkbox now; the translation picker beside it only appears with more than one
+        // translation configured, which this fixture does not have — see
+        // ProjectionSettingsTabTranslationPickerTest.
         onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
 

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -21,6 +22,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
+import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import kotlin.test.assertEquals
 
@@ -89,6 +93,26 @@ internal fun oneExternalScreen(): List<DetectedScreen> = listOf(
     DetectedScreen(index = 1, isPrimary = false, boundsX = 1920, boundsY = 0, boundsW = 1280, boundsH = 720),
 )
 
+// ── Bible stack fixtures ────────────────────────────────────────────────────────────────────────
+
+/**
+ * Settings carrying a stack of [names], which the content-outputs dialog shows without their
+ * extension. `withTranslations` keeps the legacy primary/secondary names in step, so the stack is
+ * the shape a real install would have rather than one assembled field by field.
+ */
+internal fun withBibleStack(vararg names: String, projection: ProjectionSettings = ProjectionSettings()): AppSettings =
+    AppSettings(
+        bibleSettings = BibleSettings().withTranslations(names.map { BibleTranslationSettings(fileName = it) }),
+        projectionSettings = projection,
+    )
+
+/** Three translations: enough for the per-output translation picker to appear. */
+internal fun threeTranslations(projection: ProjectionSettings = ProjectionSettings()): AppSettings =
+    withBibleStack("KJV.spb", "NIV.spb", "ESV.spb", projection = projection)
+
+/** One translation — the stack size at which the picker must stay hidden. */
+internal fun oneTranslation(): AppSettings = withBibleStack("KJV.spb")
+
 // ── Grid layout ─────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -128,9 +152,27 @@ internal object Grid {
  * Every button on the tab that carries a label. Excludes the stepper arrows, which publish a content
  * description instead of text, and which lay out zero pixels wide in any case.
  */
-private val labelledButton =
+internal val labelledButton =
     SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) and
         SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
+
+/**
+ * A real [Role.Button], as distinct from a dropdown menu item.
+ *
+ * The Bible translation menu carries the same "Select All"/"Clear All" captions as the dialog's
+ * Quick Select buttons, so while that menu is open a plain text lookup matches two nodes. Menu items
+ * publish no role, which is what tells the two apart.
+ */
+internal fun ComposeUiTest.quickSelectButton(label: String): SemanticsNodeInteraction =
+    onNode(labelledButton and hasTextExactly(label))
+
+private val notARoleButton = SemanticsMatcher("has no Button role") { node ->
+    node.config.getOrNull(SemanticsProperties.Role) != Role.Button
+}
+
+/** An item captioned [label] inside an open dropdown menu. See [quickSelectButton]. */
+internal fun ComposeUiTest.openMenuItem(label: String): SemanticsNodeInteraction =
+    onNode(hasClickAction() and hasTextExactly(label) and notARoleButton)
 
 internal fun ComposeUiTest.gridButtons(): SemanticsNodeInteractionCollection = onAllNodes(labelledButton)
 
