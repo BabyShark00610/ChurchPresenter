@@ -4,6 +4,7 @@ package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -57,6 +58,34 @@ class SongSettingsTabTest {
             waitForIdle()
             assertEquals(false, get().songSettings.titleSlideEnabled, "the checkbox must disable the title slide")
             onNodeWithTag("song_titleSlideEnabled").assertIsOff()
+        }
+
+    @Test
+    fun `the title-slide number checkbox is disabled while the title slide is off`() = songTab { get ->
+        onNodeWithTag("song_titleSlideShowSongNumber")
+            .performScrollTo()
+            .assertHasNoClickAction()
+        assertEquals(
+            true,
+            get().songSettings.titleSlideShowSongNumber,
+            "disabling the control must not change the saved preference",
+        )
+    }
+
+    @Test
+    fun `the title-slide number checkbox controls whether the number is included`() =
+        songTab(initial = settingsWith { copy(titleSlideEnabled = true) }) { get ->
+            onNodeWithTag("song_titleSlideShowSongNumber")
+                .performScrollTo()
+                .assertIsOn()
+                .performClick()
+            waitForIdle()
+            assertEquals(
+                false,
+                get().songSettings.titleSlideShowSongNumber,
+                "the checkbox must disable the number on the title slide",
+            )
+            onNodeWithTag("song_titleSlideShowSongNumber").assertIsOff()
         }
 
     // ── Song number ─────────────────────────────────────────────────────────────────────────────
@@ -730,6 +759,8 @@ class SongSettingsTabTest {
     fun `the values the controls write survive a settings json round trip`() = songTab { get ->
         onNodeWithTag("song_titleSlideEnabled").performScrollTo().performClick()
         waitForIdle()
+        onNodeWithTag("song_titleSlideShowSongNumber").performClick()
+        waitForIdle()
         onNodeWithTag("song_crossfade").performScrollTo().performClick()
         waitForIdle()
         chooseShowOption(ShowDropdown.NUMBER_FULLSCREEN, "Every Page")
@@ -742,6 +773,11 @@ class SongSettingsTabTest {
         val restored = json.decodeFromString<AppSettings>(json.encodeToString(get()))
 
         assertEquals(true, restored.songSettings.titleSlideEnabled, "the title-slide flag must survive")
+        assertEquals(
+            false,
+            restored.songSettings.titleSlideShowSongNumber,
+            "the title-slide number preference must survive",
+        )
         assertEquals(true, restored.songSettings.crossfade, "the crossfade flag must survive")
         assertEquals(Constants.EVERY_PAGE, restored.songSettings.showNumber, "the show-number choice must survive")
         assertEquals(5, restored.songSettings.endOfSongIndicatorSpacing, "the spacing must survive")

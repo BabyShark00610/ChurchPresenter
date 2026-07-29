@@ -3,7 +3,11 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
@@ -13,10 +17,16 @@ import io.mockk.coEvery
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import org.churchpresenter.app.churchpresenter.data.PlanningCenterClient
+import org.churchpresenter.app.churchpresenter.data.SettingsManager
 import org.churchpresenter.app.churchpresenter.data.SongItem
+import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.PlanningCenterSettings
 import org.churchpresenter.app.churchpresenter.viewmodel.PlanningCenterImportViewModel
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
+import javax.imageio.ImageIO
 import javax.swing.SwingUtilities
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -26,6 +36,9 @@ import kotlin.test.assertTrue
 
 class PlanningCenterImportContentTest {
 
+    private var home: File? = null
+    private var realHome: String? = null
+
     @BeforeTest
     fun stubClient() {
         mockkObject(PlanningCenterClient)
@@ -34,7 +47,53 @@ class PlanningCenterImportContentTest {
     @AfterTest
     fun cleanUp() {
         unmockkObject(PlanningCenterClient)
+        realHome?.let { System.setProperty("user.home", it) }
+        home?.deleteRecursively()
     }
+
+    /**
+     * Opt-in for the scripture-detection tests only: a real Bible on disk so
+     * `detectScriptureReferences` has something to resolve against. Must run before the
+     * view model in [dialog] is constructed, since it reads `user.home` at construction.
+     * Deliberately not class-wide setup — the other ~35 tests in this file have no use for a
+     * loaded Bible, and giving every one of them the same filesystem I/O and `user.home` swap
+     * only adds risk (AGENT.md flags exactly this — leftover/shared `user.home` state — as a
+     * usual cause of cross-test flakiness) for no benefit.
+     */
+    private fun setUpBibleFixture() {
+        realHome = System.getProperty("user.home")
+        val dir = Files.createTempDirectory("cp-pco-dialog-home").toFile()
+        home = dir
+        System.setProperty("user.home", dir.absolutePath)
+
+        val bibleDir = File(dir, "bibles").also { it.mkdirs() }
+        SpbFixture.spbFile(
+            bibleDir, name = "test.spb",
+            content = SpbFixture.buildContent(
+                title = "Test Bible",
+                books = listOf(SpbFixture.Book(19, "Psalms", 23)),
+                verses = (1..6).map { SpbFixture.Verse(19, 23, it, "Psalm twenty three verse $it") },
+            ),
+        )
+        val manager = SettingsManager()
+        manager.saveSettings(
+            manager.loadSettings().copy(
+                bibleSettings = manager.loadSettings().bibleSettings.copy(
+                    storageDirectory = bibleDir.absolutePath,
+                    primaryBible = "test.spb",
+                ),
+            ),
+        )
+    }
+
+    private fun tinyPngBytes(): ByteArray {
+        val image = BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB)
+        val out = ByteArrayOutputStream()
+        ImageIO.write(image, "png", out)
+        return out.toByteArray()
+    }
+
+    private val progressSpinner = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
 
     private fun settle() = repeat(3) { SwingUtilities.invokeAndWait { } }
 
@@ -79,9 +138,12 @@ class PlanningCenterImportContentTest {
         songTitle: String? = null,
         ccli: String? = null,
         description: String = "",
+        songId: String? = null,
+        arrangementId: String? = null,
     ) = PlanningCenterClient.PlanItem(
         id = id, title = title, description = description, itemType = itemType,
         sequence = 0, songTitle = songTitle, songCcliNumber = ccli,
+        songId = songId, arrangementId = arrangementId,
     )
 
     private class Recorder {
@@ -89,9 +151,14 @@ class PlanningCenterImportContentTest {
         var lastAddSong: List<Any?>? = null
         var addLabelCalls = 0
         var lastAddLabel: List<Any?>? = null
+        var addPresentationCalls = 0
+        var lastAddPresentation: List<Any?>? = null
+        var addMediaCalls = 0
+        var lastAddMedia: List<Any?>? = null
         var addAnnouncementCalls = 0
         var lastAddAnnouncement: String? = null
         var addBibleVerseCalls = 0
+        var lastAddBibleVerse: List<Any?>? = null
         var addPictureCalls = 0
         var lastAddPicture: List<Any?>? = null
         var addSongRequested: Pair<PlanningCenterClient.PlanItem, SongItem>? = null
@@ -139,17 +206,26 @@ class PlanningCenterImportContentTest {
                             recorder.addLabelCalls++
                             recorder.lastAddLabel = listOf(text, textColor, backgroundColor)
                         },
-                        onAddPresentation = { _, _, _, _ -> },
+                        onAddPresentation = { filePath, fileName, slideCount, fileType ->
+                            recorder.addPresentationCalls++
+                            recorder.lastAddPresentation = listOf(filePath, fileName, slideCount, fileType)
+                        },
                         onAddPicture = { folderPath, folderName, imageCount ->
                             recorder.addPictureCalls++
                             recorder.lastAddPicture = listOf(folderPath, folderName, imageCount)
                         },
-                        onAddMedia = { _, _, _ -> },
+                        onAddMedia = { mediaUrl, mediaTitle, mediaType ->
+                            recorder.addMediaCalls++
+                            recorder.lastAddMedia = listOf(mediaUrl, mediaTitle, mediaType)
+                        },
                         onAddAnnouncement = { text ->
                             recorder.addAnnouncementCalls++
                             recorder.lastAddAnnouncement = text
                         },
-                        onAddBibleVerse = { _, _, _, _, _, _ -> recorder.addBibleVerseCalls++ },
+                        onAddBibleVerse = { bookName, chapter, verseNumber, verseText, verseRange, bookId ->
+                            recorder.addBibleVerseCalls++
+                            recorder.lastAddBibleVerse = listOf(bookName, chapter, verseNumber, verseText, verseRange, bookId)
+                        },
                         onAddSongRequested = { pco, prefill -> recorder.addSongRequested = pco to prefill },
                     )
                 }
@@ -367,6 +443,59 @@ class PlanningCenterImportContentTest {
     }
 
     @Test
+    fun `choosing a different plan from its dropdown loads that plan's items`() = dialog { vm, _, _, _ ->
+        coEvery { PlanningCenterClient.listUpcomingPlans(any(), any(), any()) } returns
+            PlanningCenterClient.PlansOutcome.Success(
+                listOf(
+                    PlanningCenterClient.Plan("plan-1", "Sunday Service", "Jul 27"),
+                    PlanningCenterClient.Plan("plan-2", "Wednesday Bible Study", "Jul 30"),
+                ),
+            )
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), "plan-1", any()) } returns
+            PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Sunday Item", itemType = "item")))
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), "plan-2", any()) } returns
+            PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i2", "Wednesday Item", itemType = "item")))
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
+            PlanningCenterClient.AttachmentsOutcome.Success(emptyList())
+
+        vm.selectServiceType("st-1")
+        awaitVm { vm.planItems.any { it.pco.id == "i1" } }
+        assertTextEventually("Sunday Service — Jul 27")
+
+        onNode(hasClickAction() and hasText("Sunday Service — Jul 27")).performClick()
+        onNode(hasClickAction() and hasText("Wednesday Bible Study — Jul 30")).performClick()
+        awaitVm { vm.planItems.any { it.pco.id == "i2" } }
+
+        assertEquals("plan-2", vm.selectedPlanId)
+        assertTextEventually("Wednesday Item")
+    }
+
+    @Test
+    fun `choosing a different service type from its dropdown loads that service type's plans`() = dialog(
+        setup = {
+            coEvery { PlanningCenterClient.listServiceTypes(any(), any()) } returns
+                PlanningCenterClient.ServiceTypesOutcome.Success(
+                    listOf(
+                        PlanningCenterClient.ServiceType("st-1", "Sunday Morning"),
+                        PlanningCenterClient.ServiceType("st-2", "Wednesday Night"),
+                    ),
+                )
+            coEvery { PlanningCenterClient.listUpcomingPlans(any(), "st-1", any()) } returns
+                PlanningCenterClient.PlansOutcome.Success(emptyList())
+            coEvery { PlanningCenterClient.listUpcomingPlans(any(), "st-2", any()) } returns
+                PlanningCenterClient.PlansOutcome.Success(listOf(PlanningCenterClient.Plan("plan-9", "Wednesday Service", "Jul 30")))
+        },
+    ) { vm, _, _, _ ->
+        assertTextEventually("Sunday Morning")
+
+        onNode(hasClickAction() and hasText("Sunday Morning")).performClick()
+        onNode(hasClickAction() and hasText("Wednesday Night")).performClick()
+        awaitVm { vm.selectedServiceTypeId == "st-2" }
+
+        assertTextEventually("Wednesday Service — Jul 30")
+    }
+
+    @Test
     fun `an already-matched song shows the Matched tag instead of Add Song`() = dialog { vm, _, _, _ ->
         withPlan(vm, listOf(planItem("s1", "Amazing Grace", itemType = "song", ccli = "22025")))
         vm.selectServiceType("st-1")
@@ -501,5 +630,234 @@ class PlanningCenterImportContentTest {
         // The unsupported file's checkbox is disabled and starts unchecked.
         val fileCheckboxes = onAllNodes(isToggleable())
         assertTrue(fileCheckboxes.fetchSemanticsNodes().size >= 3)
+    }
+
+    // ── Detected scripture rows ─────────────────────────────────────────────────
+
+    @Test
+    fun `an item with a detected scripture reference shows its verse instead of a row checkbox`() {
+        setUpBibleFixture()
+        dialog { vm, _, _, _ ->
+            withPlan(vm, listOf(planItem("i1", "Scripture Reading", itemType = "item", description = "Psalms 23:1")))
+            vm.selectServiceType("st-1")
+            awaitVm { vm.detectedScripturesByItemId.containsKey("i1") }
+
+            assertTextEventually("Scripture Reading")
+            assertTextEventually("Psalms 23:1")
+            assertEquals(setOf(0), vm.selectedScriptureIndices["i1"])
+        }
+    }
+
+    @Test
+    fun `clicking a detected scripture's own checkbox toggles it off`() {
+        setUpBibleFixture()
+        dialog { vm, _, _, _ ->
+            withPlan(vm, listOf(planItem("i1", "Scripture Reading", itemType = "item", description = "Psalms 23:1")))
+            vm.selectServiceType("st-1")
+            awaitVm { vm.detectedScripturesByItemId.containsKey("i1") }
+            assertTextEventually("Psalms 23:1")
+
+            // index 0 is the "Plan Items" master checkbox; index 1 is this verse's own.
+            onAllNodes(isToggleable())[1].performClick()
+            awaitVm { vm.selectedScriptureIndices["i1"]?.isEmpty() == true }
+
+            assertTrue(vm.selectedScriptureIndices["i1"]!!.isEmpty())
+        }
+    }
+
+    @Test
+    fun `importing a selected scripture calls onAddBibleVerse with the resolved verse`() {
+        setUpBibleFixture()
+        dialog { vm, _, _, recorder ->
+            withPlan(vm, listOf(planItem("i1", "Scripture Reading", itemType = "item", description = "Psalms 23:1")))
+            vm.selectServiceType("st-1")
+            awaitVm { vm.detectedScripturesByItemId.containsKey("i1") }
+            assertTextEventually("Import Selected")
+
+            onNodeWithText("Import Selected", useUnmergedTree = true).performClick()
+            awaitVm { recorder.addBibleVerseCalls == 1 }
+
+            assertEquals(listOf("Psalms", 23, 1, "Psalm twenty three verse 1", "", 19), recorder.lastAddBibleVerse)
+        }
+    }
+
+    @Test
+    fun `deselecting the only detected scripture is not imported`() {
+        setUpBibleFixture()
+        dialog { vm, dismissed, _, recorder ->
+            withPlan(vm, listOf(planItem("i1", "Scripture Reading", itemType = "item", description = "Psalms 23:1")))
+            vm.selectServiceType("st-1")
+            awaitVm { vm.detectedScripturesByItemId.containsKey("i1") }
+
+            vm.toggleScriptureSelected("i1", 0)
+            awaitVm { vm.selectedScriptureIndices["i1"]?.isEmpty() == true }
+
+            // Nothing left importable, so the button stays disabled and there's nothing to click —
+            // this asserts the state the enabled-check itself relies on.
+            assertEquals(0, recorder.addBibleVerseCalls)
+            assertEquals(0, dismissed())
+        }
+    }
+
+    // ── Attachment classification on import ─────────────────────────────────────
+
+    @Test
+    fun `importing a selected item with a supported presentation attachment calls onAddPresentation`() = dialog { vm, _, _, recorder ->
+        val attachment = PlanningCenterClient.PlanAttachment(id = "att-1", filename = "slides.pptx")
+        coEvery { PlanningCenterClient.listUpcomingPlans(any(), any(), any()) } returns
+            PlanningCenterClient.PlansOutcome.Success(listOf(PlanningCenterClient.Plan("plan-1", "Sunday Service", "Jul 27")))
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
+            PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Sermon Slides", itemType = "item")))
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
+            PlanningCenterClient.AttachmentsOutcome.Success(listOf(attachment))
+        coEvery { PlanningCenterClient.resolveAttachmentDownloadUrl(any(), any()) } returns
+            PlanningCenterClient.AttachmentUrlOutcome.Success("https://example.test/slides.pptx")
+        coEvery { PlanningCenterClient.downloadFile(any(), any()) } answers {
+            PlanningCenterClient.FileDownloadOutcome.Success(secondArg<File>())
+        }
+
+        vm.selectServiceType("st-1")
+        awaitVm { vm.attachmentsByItemId["i1"]?.isNotEmpty() == true }
+        assertTextEventually("Import Selected")
+
+        onNodeWithText("Import Selected", useUnmergedTree = true).performClick()
+        awaitVm { recorder.addPresentationCalls == 1 }
+
+        val (_, fileName, _, fileType) = recorder.lastAddPresentation!!
+        assertEquals("Sermon Slides", fileName)
+        assertEquals("pptx", fileType)
+    }
+
+    @Test
+    fun `importing a selected item with a supported media attachment calls onAddMedia`() = dialog { vm, _, _, recorder ->
+        val attachment = PlanningCenterClient.PlanAttachment(id = "att-1", filename = "clip.mp4")
+        coEvery { PlanningCenterClient.listUpcomingPlans(any(), any(), any()) } returns
+            PlanningCenterClient.PlansOutcome.Success(listOf(PlanningCenterClient.Plan("plan-1", "Sunday Service", "Jul 27")))
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
+            PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Intro Clip", itemType = "item")))
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
+            PlanningCenterClient.AttachmentsOutcome.Success(listOf(attachment))
+        coEvery { PlanningCenterClient.resolveAttachmentDownloadUrl(any(), any()) } returns
+            PlanningCenterClient.AttachmentUrlOutcome.Success("https://example.test/clip.mp4")
+        coEvery { PlanningCenterClient.downloadFile(any(), any()) } answers {
+            PlanningCenterClient.FileDownloadOutcome.Success(secondArg<File>())
+        }
+
+        vm.selectServiceType("st-1")
+        awaitVm { vm.attachmentsByItemId["i1"]?.isNotEmpty() == true }
+        assertTextEventually("Import Selected")
+
+        onNodeWithText("Import Selected", useUnmergedTree = true).performClick()
+        awaitVm { recorder.addMediaCalls == 1 }
+
+        val (_, mediaTitle, mediaType) = recorder.lastAddMedia!!
+        assertEquals("Intro Clip", mediaTitle)
+        assertEquals("local", mediaType)
+    }
+
+    // ── Attachment thumbnails ─────────────────────────────────────────────────────
+
+    @Test
+    fun `an image attachment with a decodable thumbnail replaces the loading spinner with the image`() = dialog { vm, _, _, _ ->
+        coEvery { PlanningCenterClient.fetchThumbnailBytes(any(), any()) } returns tinyPngBytes()
+        withPlan(vm, listOf(planItem("i1", "Sermon Notes", itemType = "item")))
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
+            PlanningCenterClient.AttachmentsOutcome.Success(
+                listOf(PlanningCenterClient.PlanAttachment(id = "att-1", filename = "photo.jpg", thumbnailUrl = "https://example.test/thumb.jpg")),
+            )
+
+        vm.selectServiceType("st-1")
+        awaitVm { vm.attachmentsByItemId["i1"]?.size == 1 }
+        assertTextEventually("Sermon Notes")
+
+        onNodeWithText("Sermon Notes").performClick()
+        assertTextEventually("photo.jpg")
+
+        awaitVm { onAllNodes(progressSpinner).fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty() }
+    }
+
+    @Test
+    fun `an image attachment with corrupt thumbnail bytes leaves the loading spinner showing`() = dialog { vm, _, _, _ ->
+        coEvery { PlanningCenterClient.fetchThumbnailBytes(any(), any()) } returns "not a real image".toByteArray()
+        withPlan(vm, listOf(planItem("i1", "Sermon Notes", itemType = "item")))
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
+            PlanningCenterClient.AttachmentsOutcome.Success(
+                listOf(PlanningCenterClient.PlanAttachment(id = "att-1", filename = "photo.jpg", thumbnailUrl = "https://example.test/thumb.jpg")),
+            )
+
+        vm.selectServiceType("st-1")
+        awaitVm { vm.attachmentsByItemId["i1"]?.size == 1 }
+        assertTextEventually("Sermon Notes")
+
+        onNodeWithText("Sermon Notes").performClick()
+        assertTextEventually("photo.jpg")
+        settle()
+        waitForIdle()
+
+        assertTrue(onAllNodes(progressSpinner).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty())
+    }
+
+    @Test
+    fun `clicking Add Song with a linked arrangement fetches it before requesting the add-song dialog`() = dialog { vm, _, _, recorder ->
+        coEvery { PlanningCenterClient.getArrangementDetail(any(), any(), any(), any()) } returns
+            PlanningCenterClient.ArrangementOutcome.Success(PlanningCenterClient.ArrangementDetail(chordChart = "G C D", lyrics = "la la la"))
+        withPlan(
+            vm,
+            listOf(planItem("s1", "Amazing Grace", itemType = "song", songTitle = "Amazing Grace", songId = "song-1", arrangementId = "arr-1")),
+        )
+        vm.selectServiceType("st-1")
+        awaitVm { vm.planItems.isNotEmpty() }
+        assertTextEventually("Add Song")
+
+        onNodeWithText("Add Song", useUnmergedTree = true).performClick()
+        awaitVm { recorder.addSongRequested != null }
+
+        val (pco, prefill) = recorder.addSongRequested!!
+        assertEquals("s1", pco.id)
+        assertTrue(prefill.lyrics.joinToString("\n").contains("la la la"))
+    }
+
+    @Test
+    fun `importing skips a media row and still imports the other selected rows`() = dialog { vm, dismissed, _, recorder ->
+        withPlan(
+            vm,
+            listOf(
+                planItem("m1", "Intro Video", itemType = "media"),
+                planItem("h1", "Welcome", itemType = "header"),
+            ),
+        )
+        vm.selectServiceType("st-1")
+        awaitVm { vm.planItems.size == 2 }
+        assertTextEventually("Import Selected")
+
+        onNodeWithText("Import Selected", useUnmergedTree = true).performClick()
+        awaitVm { dismissed() == 1 }
+
+        assertEquals(1, recorder.addLabelCalls)
+        assertEquals(0, recorder.addSongCalls)
+    }
+
+    @Test
+    fun `a failed attachment download imports nothing for that file but still dismisses`() = dialog { vm, dismissed, _, recorder ->
+        val attachment = PlanningCenterClient.PlanAttachment(id = "att-1", filename = "slide.jpg")
+        coEvery { PlanningCenterClient.listUpcomingPlans(any(), any(), any()) } returns
+            PlanningCenterClient.PlansOutcome.Success(listOf(PlanningCenterClient.Plan("plan-1", "Sunday Service", "Jul 27")))
+        coEvery { PlanningCenterClient.getPlanItems(any(), any(), any(), any()) } returns
+            PlanningCenterClient.PlanItemsOutcome.Success(listOf(planItem("i1", "Sermon Notes", itemType = "item")))
+        coEvery { PlanningCenterClient.getItemAttachments(any(), any(), any(), any(), any()) } returns
+            PlanningCenterClient.AttachmentsOutcome.Success(listOf(attachment))
+        coEvery { PlanningCenterClient.resolveAttachmentDownloadUrl(any(), any()) } returns
+            PlanningCenterClient.AttachmentUrlOutcome.Failure
+
+        vm.selectServiceType("st-1")
+        awaitVm { vm.attachmentsByItemId["i1"]?.isNotEmpty() == true }
+        assertTextEventually("Import Selected")
+
+        onNodeWithText("Import Selected", useUnmergedTree = true).performClick()
+        awaitVm { dismissed() == 1 }
+
+        assertEquals(0, recorder.addPictureCalls)
+        assertEquals(0, recorder.addPresentationCalls)
+        assertEquals(0, recorder.addMediaCalls)
     }
 }

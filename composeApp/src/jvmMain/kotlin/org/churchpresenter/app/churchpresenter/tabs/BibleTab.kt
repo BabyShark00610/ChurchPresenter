@@ -216,6 +216,8 @@ import org.churchpresenter.app.churchpresenter.composables.initialPassClickable
 import org.churchpresenter.app.churchpresenter.composables.initialPassCombinedClickable
 import org.churchpresenter.app.churchpresenter.composables.rememberTokenGate
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.moveBibleTranslation
+import org.churchpresenter.app.churchpresenter.data.settings.swapBibleTranslations
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
@@ -1541,7 +1543,7 @@ fun BibleTab(
                     if (appSettings.bibleSettings.translationList().size == 2) {
                         ActionIconButton(
                             onClick = {
-                                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.swapped()) }
+                                onSettingsChange { s -> s.swapBibleTranslations() }
                                 focusRequester.requestFocus()
                             },
                             tooltipText = swapBiblesStr,
@@ -1586,12 +1588,7 @@ fun BibleTab(
                             onValueChange = { fileName ->
                                 val index = translations.indexOfFirst { it.fileName == fileName }
                                 if (index > 0) {
-                                    onSettingsChange { app ->
-                                        app.copy(
-                                            bibleSettings = app.bibleSettings
-                                                .moveTranslation(index, -index),
-                                        )
-                                    }
+                                    onSettingsChange { app -> app.moveBibleTranslation(index, -index) }
                                 }
                                 focusRequester.requestFocus()
                             },
@@ -1601,12 +1598,7 @@ fun BibleTab(
                             itemTrailingContent = { _, index ->
                                 IconButton(
                                     onClick = {
-                                        onSettingsChange { app ->
-                                            app.copy(
-                                                bibleSettings = app.bibleSettings
-                                                    .moveTranslation(index, -1),
-                                            )
-                                        }
+                                        onSettingsChange { app -> app.moveBibleTranslation(index, -1) }
                                     },
                                     enabled = index > 0,
                                     modifier = Modifier.size(28.dp),
@@ -1619,12 +1611,7 @@ fun BibleTab(
                                 }
                                 IconButton(
                                     onClick = {
-                                        onSettingsChange { app ->
-                                            app.copy(
-                                                bibleSettings = app.bibleSettings
-                                                    .moveTranslation(index, 1),
-                                            )
-                                        }
+                                        onSettingsChange { app -> app.moveBibleTranslation(index, 1) }
                                     },
                                     enabled = index < translations.lastIndex,
                                     modifier = Modifier.size(28.dp),

@@ -1629,11 +1629,18 @@ fun SongsTab(
                     // ── Title slide entry ────────────────────────────────────
                     if (titleSlideEnabled && currentSong != null && sections.isNotEmpty()) {
                         item {
-                            val titleLine = songTitleLine(currentSong)
+                            val titleLine = songTitleLine(
+                                currentSong,
+                                appSettings.songSettings.titleSlideShowSongNumber,
+                            )
                             val creditLine = songCreditLine(currentSong)
 
                             fun buildTitleSection() =
-                                titleSlideSection(currentSong, appSettings.songBpm[currentSong.songId] ?: 0)
+                                titleSlideSection(
+                                    currentSong,
+                                    appSettings.songBpm[currentSong.songId] ?: 0,
+                                    appSettings.songSettings.titleSlideShowSongNumber,
+                                )
 
                             fun sendTitleSlide() {
                                 val ts = buildTitleSection()

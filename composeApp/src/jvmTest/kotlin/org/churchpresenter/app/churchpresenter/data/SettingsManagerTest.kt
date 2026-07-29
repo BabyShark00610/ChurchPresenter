@@ -417,4 +417,31 @@ class SettingsManagerTest {
 
         assertEquals(fresh, remigrated, "the guarded migrations must be idempotent")
     }
+
+    // ── Translation-stack migration reaches every output list ───────────────────────────────────
+
+    @Test
+    fun `a browser source's bible mode is migrated alongside a screen's`() {
+        // Browser sources are the same ScreenAssignment shape driven by the same UI, so they carry
+        // the same legacy mode. Left unmigrated, a stream feed set to one language keeps a mode the
+        // new code cannot read and silently starts showing every translation stacked.
+        writeSettings(
+            """{"settingsVersion":5,"projectionSettings":{
+               "screenAssignments":[{"targetDisplay":1,"bibleMode":"primary"}],
+               "browserSourceOutputs":[{"targetDisplay":0,"bibleMode":"secondary"}]}}""",
+        )
+
+        val projection = SettingsManager().loadSettings().projectionSettings
+
+        assertEquals("both", projection.screenAssignments.single().bibleMode)
+        assertEquals(listOf(0), projection.screenAssignments.single().bibleTranslations)
+        assertEquals(
+            "both", projection.browserSourceOutputs.single().bibleMode,
+            "a browser source must not keep a mode the new code no longer understands",
+        )
+        assertEquals(
+            listOf(1), projection.browserSourceOutputs.single().bibleTranslations,
+            "\"secondary\" names position 1, on a browser source exactly as on a screen",
+        )
+    }
 }

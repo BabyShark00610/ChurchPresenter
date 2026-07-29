@@ -43,6 +43,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun AddLabelDialog(
+    isVisible: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (text: String, textColor: String, backgroundColor: String) -> Unit,
     existingText: String = "",
@@ -50,6 +51,8 @@ fun AddLabelDialog(
     existingBackgroundColor: String = "#2196F3",
     isEdit: Boolean = false
 ) {
+    if (!isVisible) return
+
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
         position = centeredOnMainWindow(mainWindowState, 500.dp, 400.dp),
@@ -80,7 +83,8 @@ fun AddLabelDialog(
  * Held apart from [AddLabelDialog] because that function's only other statement is the
  * `DialogWindow` it opens, which cannot be composed on a headless machine. Keeping the window down
  * to that one call leaves the field defaults, the blank-text guard on OK, and what OK hands back
- * reachable from a test.
+ * reachable from a test — [AddLabelDialog] itself stays reachable too, with `isVisible = false`,
+ * since the `DialogWindow` call sits after that guard.
  */
 @Composable
 internal fun AddLabelDialogContent(

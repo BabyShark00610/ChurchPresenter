@@ -140,6 +140,12 @@ class SettingsManager {
                 projectionSettings = settings.projectionSettings.copy(
                     screenAssignments = settings.projectionSettings.screenAssignments
                         .map(::migrateOutputTranslations),
+                    // Browser sources are the same ScreenAssignment shape driven by the same UI, so
+                    // they carry the same legacy mode and need the same conversion. Left out, a
+                    // stream feed set to one language kept a mode the new code cannot read and
+                    // silently started showing every translation stacked.
+                    browserSourceOutputs = settings.projectionSettings.browserSourceOutputs
+                        .map(::migrateOutputTranslations),
                 ),
             )
         }

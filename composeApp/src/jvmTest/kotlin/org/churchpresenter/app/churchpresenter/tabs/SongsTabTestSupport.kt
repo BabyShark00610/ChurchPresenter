@@ -75,6 +75,7 @@ internal class TabReports {
 @OptIn(ExperimentalTestApi::class)
 internal fun songsTab(
     songs: List<SongFixture> = defaultSongs,
+    songSettings: SongSettings = SongSettings(),
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -93,7 +94,7 @@ internal fun songsTab(
                 File(book, "${s.number} - ${s.title}.song").absolutePath,
             )
         }
-        val settings = AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath))
+        val settings = AppSettings(songSettings = songSettings.copy(storageDirectory = dir.absolutePath))
         val vm = SongsViewModel(
             settings,
             dispatcher = Dispatchers.Unconfined,

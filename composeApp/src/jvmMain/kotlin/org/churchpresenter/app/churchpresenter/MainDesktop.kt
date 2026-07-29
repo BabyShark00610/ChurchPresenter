@@ -2175,27 +2175,26 @@ fun MainDesktop(
         }
     }
 
-    if (showAddLabelDialog) {
-        AddLabelDialog(
-            onDismiss = {
-                showAddLabelDialog = false
-                editingLabelItem = null
-            },
-            onConfirm = { text, textColor, backgroundColor ->
-                if (editingLabelItem != null) {
-                    currentScheduleActions.updateLabel(editingLabelItem?.id ?: return@AddLabelDialog, text, textColor, backgroundColor)
-                } else {
-                    currentScheduleActions.addLabel(text, textColor, backgroundColor)
-                }
-                showAddLabelDialog = false
-                editingLabelItem = null
-            },
-            existingText = editingLabelItem?.text ?: "",
-            existingTextColor = editingLabelItem?.textColor ?: "#FFFFFF",
-            existingBackgroundColor = editingLabelItem?.backgroundColor ?: "#2196F3",
-            isEdit = editingLabelItem != null
-        )
-    }
+    AddLabelDialog(
+        isVisible = showAddLabelDialog,
+        onDismiss = {
+            showAddLabelDialog = false
+            editingLabelItem = null
+        },
+        onConfirm = { text, textColor, backgroundColor ->
+            if (editingLabelItem != null) {
+                currentScheduleActions.updateLabel(editingLabelItem?.id ?: return@AddLabelDialog, text, textColor, backgroundColor)
+            } else {
+                currentScheduleActions.addLabel(text, textColor, backgroundColor)
+            }
+            showAddLabelDialog = false
+            editingLabelItem = null
+        },
+        existingText = editingLabelItem?.text ?: "",
+        existingTextColor = editingLabelItem?.textColor ?: "#FFFFFF",
+        existingBackgroundColor = editingLabelItem?.backgroundColor ?: "#2196F3",
+        isEdit = editingLabelItem != null
+    )
 
     if (showAddWebsiteDialog) {
         AddWebsiteDialog(
