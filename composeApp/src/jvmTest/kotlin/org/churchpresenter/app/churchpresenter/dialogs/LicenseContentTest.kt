@@ -7,8 +7,10 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LicenseContentTest {
 
@@ -56,5 +58,21 @@ class LicenseContentTest {
     fun `the title and prompt are shown`() = dialog {
         onNodeWithText("End User License Agreement (EULA)").assertExists()
         onNodeWithText("Please read and accept the End User License Agreement to use Church Presenter.").assertExists()
+    }
+
+    @Test
+    fun `LicenseDialog renders nothing when not visible`() = runComposeUiTest {
+        setContent {
+            LicenseDialog(isVisible = false, onAccept = {}, onDecline = {})
+        }
+        onNodeWithText("I Accept").assertDoesNotExist()
+    }
+
+    @Test
+    fun `loadEulaText reads the real bundled EULA`() = runBlocking {
+        val text = loadEulaText()
+
+        assertTrue(text.isNotBlank())
+        assertTrue(text.contains("License", ignoreCase = true))
     }
 }

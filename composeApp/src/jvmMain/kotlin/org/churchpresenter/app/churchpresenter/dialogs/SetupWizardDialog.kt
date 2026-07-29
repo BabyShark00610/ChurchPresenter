@@ -816,18 +816,29 @@ private fun ProjectionStep(onOpenSettings: () -> Unit) {
     }
 }
 
+/** A VLC availability probe's three flags together, so [VlcStep] takes only one injection point. */
+internal data class VlcCheckResult(val available: Boolean, val archMismatch: Boolean, val loadFailed: Boolean)
+
+/** The real probe: re-runs [recheckVlcAvailability] and reads the two detail flags it leaves behind. */
+private fun vlcCheckResultFromRecheck(): VlcCheckResult =
+    VlcCheckResult(recheckVlcAvailability(), isVlcArchMismatch, isVlcLoadFailed)
+
 @Composable
-private fun VlcStep() {
-    val osName = remember { System.getProperty("os.name", "").lowercase() }
-    val arch = remember { System.getProperty("os.arch", "").lowercase() }
+internal fun VlcStep(
+    initial: VlcCheckResult = VlcCheckResult(isVlcAvailable, isVlcArchMismatch, isVlcLoadFailed),
+    osName: String = System.getProperty("os.name", "").lowercase(),
+    arch: String = System.getProperty("os.arch", "").lowercase(),
+    onRecheck: suspend () -> VlcCheckResult = { vlcCheckResultFromRecheck() },
+    onOpenDownloadPage: (String) -> Unit = { runCatching { Desktop.getDesktop().browse(URI(it)) } }
+) {
     val isMac = remember { "mac" in osName || "darwin" in osName }
     val isWin = remember { "win" in osName }
     val isArm = remember { "aarch64" in arch || "arm" in arch }
     val isLinux = remember { !isMac && !isWin }
 
-    var vlcOk by remember { mutableStateOf(isVlcAvailable) }
-    var archMismatch by remember { mutableStateOf(isVlcArchMismatch) }
-    var loadFailed by remember { mutableStateOf(isVlcLoadFailed) }
+    var vlcOk by remember { mutableStateOf(initial.available) }
+    var archMismatch by remember { mutableStateOf(initial.archMismatch) }
+    var loadFailed by remember { mutableStateOf(initial.loadFailed) }
     var rechecking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -917,9 +928,8 @@ private fun VlcStep() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 shape = RoundedCornerShape(6.dp),
-                                onClick = {
-                                runCatching { Desktop.getDesktop().browse(URI(downloadUrl)) }
-                            }) {
+                                onClick = { onOpenDownloadPage(downloadUrl) }
+                            ) {
                                 Text(stringResource(when {
                                     isMac && isArm -> Res.string.setup_step5_download_silicon
                                     isMac -> Res.string.setup_step5_download_intel
@@ -931,10 +941,10 @@ private fun VlcStep() {
                                 onClick = {
                                     scope.launch {
                                         rechecking = true
-                                        val result = withContext(Dispatchers.IO) { recheckVlcAvailability() }
-                                        vlcOk = result
-                                        archMismatch = isVlcArchMismatch
-                                        loadFailed = isVlcLoadFailed
+                                        val result = withContext(Dispatchers.IO) { onRecheck() }
+                                        vlcOk = result.available
+                                        archMismatch = result.archMismatch
+                                        loadFailed = result.loadFailed
                                         rechecking = false
                                     }
                                 },

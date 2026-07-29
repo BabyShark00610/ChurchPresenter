@@ -110,23 +110,26 @@ internal fun downloadProgressFraction(bytesRead: Long, contentLength: Long): Flo
     if (contentLength > 0) (bytesRead.toFloat() / contentLength.toFloat()).coerceIn(0f, 1f) else -1f
 
 /**
- * Launches the downloaded installer using the platform's native mechanism.
+ * The native command that launches [path] on [osName] (as reported by the `os.name` system
+ * property), for [launchInstaller].
  *
  * Deliberately avoids [Desktop.open], which on Windows rejects `.msi` files with
  * "Unsupported URI content". [ProcessBuilder] takes its arguments as a list, so
  * installer paths containing spaces need no shell quoting.
  */
+internal fun installerLaunchCommand(osName: String, path: String): List<String> = when {
+    // msiexec is the supported way to run an .msi; /i = install.
+    osName.lowercase().contains("win") -> listOf("msiexec", "/i", path)
+    // mounts the .dmg in Finder; same as what Desktop.open() does on mac.
+    osName.lowercase().contains("mac") -> listOf("open", path)
+    // .deb: hand to the desktop installer Desktop.open() delegates to on Linux.
+    else -> listOf("xdg-open", path)
+}
+
+/** Launches the downloaded installer using the platform's native mechanism. */
 private fun launchInstaller(file: File) {
-    val os = System.getProperty("os.name", "").lowercase()
-    val path = file.absolutePath
-    when {
-        // msiexec is the supported way to run an .msi; /i = install.
-        os.contains("win") -> ProcessBuilder("msiexec", "/i", path).start()
-        // mounts the .dmg in Finder; same as what Desktop.open() does on mac.
-        os.contains("mac") -> ProcessBuilder("open", path).start()
-        // .deb: hand to the desktop installer Desktop.open() delegates to on Linux.
-        else -> ProcessBuilder("xdg-open", path).start()
-    }
+    val command = installerLaunchCommand(System.getProperty("os.name", ""), file.absolutePath)
+    ProcessBuilder(command).start()
 }
 
 @Composable
