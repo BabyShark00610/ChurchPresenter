@@ -875,4 +875,52 @@ class BibleSettingsTabTest {
     fun `the horizontal alignment of the primary reference, lower third`() = runComposeUiTest {
         assertAlignmentGroup("Lower Third", 2) { t(it).lowerThirdReferenceHorizontalAlignment }
     }
+
+    // ── A slot cannot be pointed at a bible another slot already holds ─────────
+
+    @Test
+    fun `a slot picker does not offer a bible another slot already holds`() = runComposeUiTest {
+        // The stack is keyed by file name, so choosing a duplicate collapsed two slots into one and
+        // took the other's ~50 appearance values with it — silently, with no undo. The only safe
+        // answer is not to offer it, which is what the "add" picker already did.
+        val dir = bibleFolder("kjv.spb" to "King James", "rst.spb" to "Synodal", "niv.spb" to "New International")
+        val harness = showTab(
+            AppSettings(
+                bibleSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+                    listOf(
+                        BibleTranslationSettings(fileName = "kjv.spb"),
+                        BibleTranslationSettings(fileName = "rst.spb"),
+                    ),
+                ),
+            ),
+        )
+        waitForIdle()
+
+        // Both names are already on the tab — each slot's own picker shows what it holds, and each
+        // style section is headed by it — so the question is not whether they appear but whether
+        // opening this menu adds one. Counted before and after for exactly that reason.
+        fun shown(text: String) =
+            onAllNodesWithText(text, substring = true).fetchSemanticsNodes(atLeastOneRootRequired = false).size
+
+        val synodalBefore = shown("Synodal")
+        val unusedBefore = shown("New International")
+
+        // The picker, not the style section headed "Translation 1 — King James": a
+        // DropdownSettingsField uppercases its label, so this exact text belongs only to the picker.
+        onAllNodesWithText("TRANSLATION 1").onFirst().performClick()
+        waitForIdle()
+
+        assertEquals(
+            unusedBefore + 1, shown("New International"),
+            "the menu must offer the bible no slot holds yet",
+        )
+        assertEquals(
+            synodalBefore, shown("Synodal"),
+            "slot 2 already holds Synodal, so slot 1 must not be offered it too",
+        )
+        assertEquals(
+            2, harness.current.bibleSettings.translationList().size,
+            "and nothing was changed by looking",
+        )
+    }
 }

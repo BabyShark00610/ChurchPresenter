@@ -259,12 +259,21 @@ private fun LeftColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
             translations.forEachIndexed { index, translation ->
+                // Every Bible except the ones other slots already hold. The stack is keyed by file
+                // name, so picking a duplicate used to collapse two slots into one and take the
+                // other's fonts and colours with it, silently and with no undo.
+                val slotOptions = listOf(noneStr) + bibleFilesInDirectory
+                    .filter { candidate ->
+                        candidate == translation.fileName ||
+                            translations.none { it.fileName == candidate }
+                    }
+                    .map { fileName -> bibleFileDisplayNames[fileName] ?: fileName }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     DropdownSettingsField(
                         width = pickerWidth,
                         label = stringResource(Res.string.bible_translation, index + 1),
                         value = bibleFileDisplayNames[translation.fileName] ?: translation.fileName,
-                        options = bibleDisplayOptions,
+                        options = slotOptions,
                         onValueChange = { displayName ->
                             val fileName = if (displayName == noneStr) "" else
                                 bibleFileDisplayNames.entries.find { it.value == displayName }?.key ?: displayName
