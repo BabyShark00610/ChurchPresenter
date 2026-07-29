@@ -186,6 +186,14 @@ class AboutContentTest {
     }
 
     @Test
+    fun `AboutDialog renders nothing when not visible`() = runComposeUiTest {
+        setContent {
+            AboutDialog(isVisible = false, onDismiss = {}, appSettings = AppSettings())
+        }
+        onNodeWithText("OK").assertDoesNotExist()
+    }
+
+    @Test
     fun `saving diagnostic info reports the failure when the destination folder is gone`() {
         val dir = Files.createTempDirectory("cp-about-save-fail").toFile()
         try {

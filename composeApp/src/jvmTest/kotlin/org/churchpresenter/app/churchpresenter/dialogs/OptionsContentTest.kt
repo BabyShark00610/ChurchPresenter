@@ -81,6 +81,7 @@ class OptionsContentTest {
                     onSave = { result.saved = it },
                     obsManager = obsManager,
                     initialTab = initialTab,
+                    detectScreens = { emptyList() },
                 )
             }
             block(result)
@@ -147,7 +148,7 @@ class OptionsContentTest {
     @Test
     fun `every tab renders its own settings content when selected`() = dialog {
         listOf(
-            "System", "Song", "Background", "Lower Third", "Server",
+            "System", "Song", "Background", "Projection", "Lower Third", "Server",
             "Stage Monitor", "ATEM", "Dictionary",
         ).forEach { label ->
             onNode(hasText(label) and hasClickAction()).performClick()
@@ -271,5 +272,73 @@ class OptionsContentTest {
 
         onNodeWithText("Companion Satellite").performClick()
         onNodeWithText("Companion Satellite").assertIsSelected()
+    }
+
+    @Test
+    fun `OptionsDialog renders nothing when not visible, using only its required parameters`() = runComposeUiTest {
+        setContent {
+            OptionsDialog(
+                isVisible = false,
+                theme = ThemeMode.LIGHT,
+                settingsManager = SettingsManager(),
+                companionServer = CompanionServer(),
+                remoteClientManager = RemoteClientManager(),
+                presenterManager = PresenterManager(),
+                onDismiss = {},
+            )
+        }
+        onNodeWithText("Apply").assertDoesNotExist()
+    }
+
+    @Test
+    fun `OptionsDialog renders nothing when not visible, with every optional parameter supplied`() = runComposeUiTest {
+        setContent {
+            OptionsDialog(
+                isVisible = false,
+                theme = ThemeMode.LIGHT,
+                settingsManager = SettingsManager(),
+                companionServer = CompanionServer(),
+                remoteClientManager = RemoteClientManager(),
+                presenterManager = PresenterManager(),
+                onDismiss = {},
+                onSave = {},
+                onIdentifyScreen = {},
+                onIdentifyBrowserSource = {},
+                onThemeChange = {},
+                scenes = emptyList(),
+                onOpenLottieGen = { _, _ -> },
+                obsManager = null,
+                companionSatelliteViewModel = null,
+                initialTab = 0,
+                initialSettings = AppSettings(),
+            )
+        }
+        onNodeWithText("Apply").assertDoesNotExist()
+    }
+
+    @Test
+    fun `every optional callback can be supplied explicitly instead of defaulted`() = runComposeUiTest {
+        setContent {
+            OptionsDialogContent(
+                theme = ThemeMode.LIGHT,
+                settingsManager = SettingsManager(),
+                companionServer = CompanionServer(),
+                remoteClientManager = RemoteClientManager(),
+                presenterManager = PresenterManager(),
+                onDismiss = {},
+                onSave = {},
+                onIdentifyScreen = {},
+                onIdentifyBrowserSource = {},
+                onThemeChange = {},
+                scenes = emptyList(),
+                onOpenLottieGen = { _, _ -> },
+                obsManager = null,
+                companionSatelliteViewModel = null,
+                initialTab = 0,
+                initialSettings = AppSettings(),
+                detectScreens = { emptyList() },
+            )
+        }
+        onNodeWithText("System").assertIsSelected()
     }
 }

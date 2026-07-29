@@ -137,6 +137,9 @@ class EditSongContentTest {
 
     private fun ComposeUiTest.songbook(): SemanticsNodeInteraction = onNode(readOnlyField)
 
+    private fun ComposeUiTest.titleText(): String =
+        field(Field.TITLE).fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text ?: ""
+
     private fun ComposeUiTest.type(ordinal: Int, text: String) {
         field(ordinal).performTextReplacement(text)
         waitForIdle()
@@ -174,6 +177,20 @@ class EditSongContentTest {
             assertEquals("31", saved.song?.number, "every non-digit is dropped, the digits kept in order")
         }
 
+    @Test
+    fun `typing an all-digit replacement into the number field is accepted`() = editor { saved ->
+        type(Field.NUMBER, "123")
+        save()
+        assertEquals("123", saved.song?.number)
+    }
+
+    @Test
+    fun `typing a letter into the number field is rejected outright`() = editor { saved ->
+        type(Field.NUMBER, "12a")
+        save()
+        assertEquals("42", saved.song?.number, "a keystroke that would introduce a non-digit must leave the field untouched")
+    }
+
     // ── Saving ──────────────────────────────────────────────────────────────────
 
     @Test
@@ -204,6 +221,13 @@ class EditSongContentTest {
             saved.song?.lyrics,
             "each line becomes its own entry, section headers included",
         )
+    }
+
+    @Test
+    fun `a curly-brace section header is saved just like a square-bracket one`() = editor { saved ->
+        type(Field.LYRICS, "{Chorus}\nAmazing grace")
+        save()
+        assertEquals(listOf("{Chorus}", "Amazing grace"), saved.song?.lyrics)
     }
 
     @Test
@@ -277,6 +301,28 @@ class EditSongContentTest {
     }
 
     @Test
+    fun `the same number and songbook with a different title is not a duplicate`() {
+        val existing = aSong(number = "42", title = "Amazing Grace", songbook = "Hymnal", sourceFile = "/a.sps")
+        editor(
+            song = aSong(number = "42", title = "A Different Song", songbook = "Hymnal", sourceFile = "/b.sps"),
+            existingSongs = listOf(existing),
+        ) { _ ->
+            onNodeWithText(Label.SAVE).assertIsEnabled()
+        }
+    }
+
+    @Test
+    fun `the same number and title with a different songbook is not a duplicate`() {
+        val existing = aSong(number = "42", title = "Amazing Grace", songbook = "Hymnal", sourceFile = "/a.sps")
+        editor(
+            song = aSong(number = "42", title = "Amazing Grace", songbook = "Chorus Book", sourceFile = "/b.sps"),
+            existingSongs = listOf(existing),
+        ) { _ ->
+            onNodeWithText(Label.SAVE).assertIsEnabled()
+        }
+    }
+
+    @Test
     fun `a new song cannot be saved until it has both a title and a songbook`() =
         editor(song = blankSong(), isNewSong = true) { _ ->
             onNodeWithText(Label.SAVE).assertIsNotEnabled()
@@ -286,6 +332,16 @@ class EditSongContentTest {
     fun `a new song with a title but no songbook still cannot be saved`() =
         editor(song = blankSong(), isNewSong = true) { _ ->
             type(Field.TITLE, "Something New")
+            onNodeWithText(Label.SAVE).assertIsNotEnabled()
+        }
+
+    @Test
+    fun `a new song with a songbook but no title still cannot be saved`() =
+        editor(song = blankSong(), isNewSong = true, songbooks = listOf("Hymnal")) { _ ->
+            songbook().performClick()
+            waitForIdle()
+            tap("Hymnal")
+
             onNodeWithText(Label.SAVE).assertIsNotEnabled()
         }
 
@@ -311,6 +367,13 @@ class EditSongContentTest {
         }
 
     @Test
+    fun `lyrics with nothing but section headers guess a blank title`() =
+        editor(song = blankSong(), isNewSong = true) { _ ->
+            type(Field.LYRICS, "[Verse 1]\n\n[Chorus]")
+            assertEquals("", titleText())
+        }
+
+    @Test
     fun `a title typed by hand is not overwritten by later lyric edits`() =
         editor(song = blankSong(), isNewSong = true) { _ ->
             type(Field.TITLE, "My Own Title")
@@ -323,6 +386,16 @@ class EditSongContentTest {
         type(Field.LYRICS, "[Verse 1]\nA completely different first line")
         field(Field.TITLE).assertTextContains("Amazing Grace")
     }
+
+    @Test
+    fun `clearing a hand-typed title lets the lyrics guess it again`() =
+        editor(song = blankSong(), isNewSong = true) { _ ->
+            type(Field.TITLE, "My Own Title")
+            type(Field.TITLE, "")
+            type(Field.LYRICS, "[Verse 1]\nA fresh first line")
+
+            field(Field.TITLE).assertTextContains("A fresh first line")
+        }
 
     // ── Choosing a songbook ─────────────────────────────────────────────────────
 

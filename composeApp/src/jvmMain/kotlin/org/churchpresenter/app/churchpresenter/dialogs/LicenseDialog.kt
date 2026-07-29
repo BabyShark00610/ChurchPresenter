@@ -46,21 +46,26 @@ import org.churchpresenter.app.churchpresenter.utils.MacMenuBarActivationFix
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+/** The EULA text shown in [LicenseDialog], read from the bundled resource file. */
+internal suspend fun loadEulaText(): String = Res.readBytes("files/eula.txt").toString(Charsets.UTF_8)
+
 @Composable
 fun LicenseDialog(
+    isVisible: Boolean,
     onAccept: () -> Unit,
     onDecline: () -> Unit
 ) {
+    if (!isVisible) return
+
     val windowState = rememberWindowState(
         width = 760.dp,
         height = 600.dp,
         position = WindowPosition(Alignment.Center)
     )
 
-    // Load license text from resource file
     var licenseText by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
-        licenseText = Res.readBytes("files/eula.txt").toString(Charsets.UTF_8)
+        licenseText = loadEulaText()
     }
 
     Window(

@@ -152,37 +152,7 @@ fun PlanningCenterImportDialog(
                         connectionError = null
                         connectScope.launch {
                             try {
-                                val authUrl = PlanningCenterClient.buildAuthorizationUrl(BuildConfig.PLANNING_CENTER_CLIENT_ID)
-                                Desktop.getDesktop().browse(java.net.URI(authUrl))
-                                when (val callback = PlanningCenterAuthServer.awaitAuthorizationCode()) {
-                                    is PlanningCenterAuthServer.CallbackResult.Success -> {
-                                        when (
-                                            val tokenOutcome = PlanningCenterClient.exchangeCodeForToken(
-                                                BuildConfig.PLANNING_CENTER_CLIENT_ID,
-                                                BuildConfig.PLANNING_CENTER_CLIENT_SECRET,
-                                                callback.code
-                                            )
-                                        ) {
-                                            is PlanningCenterClient.TokenOutcome.Success -> {
-                                                val tokens = tokenOutcome.tokens
-                                                val personOutcome = PlanningCenterClient.getCurrentPerson(tokens.accessToken)
-                                                val name = (personOutcome as? PlanningCenterClient.PersonOutcome.Success)
-                                                    ?.person?.displayName ?: ""
-                                                onConnected(tokens.accessToken, tokens.refreshToken, tokens.expiresAtEpochMs, name)
-                                            }
-                                            PlanningCenterClient.TokenOutcome.InvalidCredentials ->
-                                                connectionError = "Invalid client ID or secret"
-                                            PlanningCenterClient.TokenOutcome.NetworkError ->
-                                                connectionError = "Network error — check your connection"
-                                            PlanningCenterClient.TokenOutcome.Failure ->
-                                                connectionError = "Connection failed"
-                                        }
-                                    }
-                                    is PlanningCenterAuthServer.CallbackResult.Error ->
-                                        connectionError = callback.message
-                                    PlanningCenterAuthServer.CallbackResult.Timeout ->
-                                        connectionError = "Timed out waiting for browser sign-in"
-                                }
+                                connectToPlanningCenter(onConnected = onConnected, onError = { connectionError = it })
                             } finally {
                                 isConnecting = false
                             }
@@ -264,6 +234,48 @@ fun PlanningCenterImportDialog(
             addSongPrefill = null
         }
     )
+}
+
+/**
+ * Runs the Planning Center OAuth round trip: opens the consent page, waits for the local
+ * loopback callback, and exchanges the code for tokens. [browse] stands in for
+ * `Desktop.getDesktop().browse` (which throws under `java.awt.headless=true`) so this can run
+ * headless in tests.
+ */
+internal suspend fun connectToPlanningCenter(
+    browse: (java.net.URI) -> Unit = { Desktop.getDesktop().browse(it) },
+    onConnected: (accessToken: String, refreshToken: String, expiresAtEpochMs: Long, personName: String) -> Unit,
+    onError: (String) -> Unit
+) {
+    val authUrl = PlanningCenterClient.buildAuthorizationUrl(BuildConfig.PLANNING_CENTER_CLIENT_ID)
+    browse(java.net.URI(authUrl))
+    when (val callback = PlanningCenterAuthServer.awaitAuthorizationCode()) {
+        is PlanningCenterAuthServer.CallbackResult.Success -> {
+            when (
+                val tokenOutcome = PlanningCenterClient.exchangeCodeForToken(
+                    BuildConfig.PLANNING_CENTER_CLIENT_ID,
+                    BuildConfig.PLANNING_CENTER_CLIENT_SECRET,
+                    callback.code
+                )
+            ) {
+                is PlanningCenterClient.TokenOutcome.Success -> {
+                    val tokens = tokenOutcome.tokens
+                    val personOutcome = PlanningCenterClient.getCurrentPerson(tokens.accessToken)
+                    val name = (personOutcome as? PlanningCenterClient.PersonOutcome.Success)
+                        ?.person?.displayName ?: ""
+                    onConnected(tokens.accessToken, tokens.refreshToken, tokens.expiresAtEpochMs, name)
+                }
+                PlanningCenterClient.TokenOutcome.InvalidCredentials ->
+                    onError("Invalid client ID or secret")
+                PlanningCenterClient.TokenOutcome.NetworkError ->
+                    onError("Network error — check your connection")
+                PlanningCenterClient.TokenOutcome.Failure ->
+                    onError("Connection failed")
+            }
+        }
+        is PlanningCenterAuthServer.CallbackResult.Error -> onError(callback.message)
+        PlanningCenterAuthServer.CallbackResult.Timeout -> onError("Timed out waiting for browser sign-in")
+    }
 }
 
 @Composable
