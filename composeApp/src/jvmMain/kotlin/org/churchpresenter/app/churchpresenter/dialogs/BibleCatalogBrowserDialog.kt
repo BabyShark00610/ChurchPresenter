@@ -89,6 +89,7 @@ import churchpresenter.composeapp.generated.resources.bible_catalog_installed_co
 import churchpresenter.composeapp.generated.resources.bible_catalog_installed_summary
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_all
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_count
+import churchpresenter.composeapp.generated.resources.bible_catalog_language_named
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_accept
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_badge_redistributable
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_badge_unverified
@@ -125,7 +126,7 @@ import churchpresenter.composeapp.generated.resources.cancel
 import churchpresenter.composeapp.generated.resources.ok
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import org.churchpresenter.app.churchpresenter.centeredOnMainWindow
-import org.churchpresenter.app.churchpresenter.composables.DropdownSettingsField
+import org.churchpresenter.app.churchpresenter.composables.SearchableDropdownField
 import org.churchpresenter.app.churchpresenter.data.BibleModule
 import org.churchpresenter.app.churchpresenter.data.BibleSource
 import org.churchpresenter.app.churchpresenter.data.BibleSourceId
@@ -233,7 +234,11 @@ internal fun BibleCatalogBrowserDialogContent(
                     onSelect = { selectedTab = it }
                 )
                 Spacer(Modifier.weight(1f))
-                LanguageDropdown(viewModel)
+                LanguageDropdown(
+                    languages = viewModel.languages,
+                    selectedLanguage = viewModel.selectedLanguage,
+                    onLanguageChange = { viewModel.selectedLanguage = it },
+                )
             }
             Spacer(Modifier.height(12.dp))
 
@@ -639,22 +644,41 @@ private fun MetadataRow(label: String, value: String) {
     }
 }
 
+/**
+ * Language filter.
+ *
+ * eBible alone lists over a thousand languages, so this types-to-filter rather than asking anyone to
+ * scroll it. The label leads with the English language name where the archive publishes one, but
+ * keeps the code: a few distinct codes share a name (Hebrew is both `HBO` and `HEB`), and the label
+ * is the key that maps a pick back to the code the filter runs on, so duplicates would silently drop
+ * a language from the list. Matching is a plain substring over the whole label, which is what makes
+ * both "english" and "eng" find the same row.
+ */
 @Composable
-private fun LanguageDropdown(viewModel: BibleCatalogViewModel) {
+private fun LanguageDropdown(
+    languages: List<BibleCatalogViewModel.LanguageOption>,
+    selectedLanguage: String?,
+    onLanguageChange: (String?) -> Unit,
+) {
     val allLanguagesLabel = stringResource(Res.string.bible_catalog_language_all)
-    // Display label -> language code. The label carries the count, so the map is what turns the
-    // user's pick back into the code the filter works on.
-    val languageLabels = viewModel.languages.associate { option ->
-        stringResource(Res.string.bible_catalog_language_count, option.code, option.count) to option.code
+    // Display label -> language code. The label carries the name and count, so the map is what turns
+    // the user's pick back into the code the filter works on.
+    val languageLabels = languages.associate { option ->
+        val label = if (option.name.isNotBlank()) {
+            stringResource(Res.string.bible_catalog_language_named, option.name, option.code, option.count)
+        } else {
+            stringResource(Res.string.bible_catalog_language_count, option.code, option.count)
+        }
+        label to option.code
     }
     val selectedLabel = languageLabels.entries
-        .firstOrNull { it.value == viewModel.selectedLanguage }?.key
+        .firstOrNull { it.value == selectedLanguage }?.key
         ?: allLanguagesLabel
 
-    DropdownSettingsField(
+    SearchableDropdownField(
         value = selectedLabel,
         options = listOf(allLanguagesLabel) + languageLabels.keys,
-        onValueChange = { label -> viewModel.selectedLanguage = languageLabels[label] },
+        onValueChange = { label -> onLanguageChange(languageLabels[label]) },
         leadingIcon = {
             Icon(
                 Icons.Default.Language,
@@ -663,6 +687,11 @@ private fun LanguageDropdown(viewModel: BibleCatalogViewModel) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
+        // The field is sized to the header row, but a language name can run to forty characters, so
+        // the menu is allowed to be wider than what it drops from.
+        horizontalPadding = 11.dp,
+        menuWidth = 280.dp,
+        clearOnFocus = true,
         modifier = Modifier.width(220.dp)
     )
 }

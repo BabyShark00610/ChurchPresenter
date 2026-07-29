@@ -27,6 +27,13 @@ data class BibleModule(
     val checksum: String = "",
     val sizeBytes: Long = 0,
     val language: String,
+    /**
+     * English name for [language], when the source publishes one; blank when it doesn't.
+     *
+     * Only eBible carries this. The Zefania archive names its language folders by code alone, so
+     * that path resolves the name through [BibleLanguageNames] instead.
+     */
+    val languageName: String = "",
     val identifier: String,
     val displayName: String,
     /** Blank when the source only reveals it inside the file, as the Zefania archive does. */

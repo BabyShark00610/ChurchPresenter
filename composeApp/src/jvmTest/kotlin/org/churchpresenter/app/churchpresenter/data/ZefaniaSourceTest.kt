@@ -294,6 +294,34 @@ class ZefaniaSourceTest {
 
     // --- the catalogue mapping ---
 
+    private fun indexModule(language: String) = ZefaniaRepositoryIndex.Module(
+        path = "${ZefaniaRepositoryIndex.BIBLES_PREFIX}$language/X/SF_2009-01-20_${language}_ACV_(X).zip",
+        blobSha = "abc123",
+        sizeBytes = 4242,
+        language = language,
+        identifier = "ACV",
+        displayName = "X",
+        releaseDate = "2009-01-20",
+        fileStem = "${language}_ACV",
+    )
+
+    @Test
+    fun `a language name is attached from the lookup when the archive has one`() {
+        // The archive names its folders by code alone, so this is the only place a Zefania module
+        // can acquire a language name.
+        val mapped = with(ZefaniaSource) { indexModule("GER").toBibleModule(mapOf("GER" to "German")) }
+
+        assertEquals("German", mapped.languageName)
+        assertEquals("GER", mapped.language, "the code stays as the archive spelled it")
+    }
+
+    @Test
+    fun `a language absent from the lookup keeps a blank name rather than a guess`() {
+        val mapped = with(ZefaniaSource) { indexModule("XKX").toBibleModule(mapOf("GER" to "German")) }
+
+        assertEquals("", mapped.languageName)
+    }
+
     @Test
     fun `a listed module carries its identity and size into the browse list`() {
         val prefix = ZefaniaRepositoryIndex.BIBLES_PREFIX

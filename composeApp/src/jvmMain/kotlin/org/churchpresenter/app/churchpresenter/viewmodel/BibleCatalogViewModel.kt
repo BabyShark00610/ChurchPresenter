@@ -48,8 +48,14 @@ class BibleCatalogViewModel(
 
     private val viewModelScope = CoroutineScope(dispatcher + SupervisorJob())
 
-    /** One entry per language present in the catalogue, for the filter dropdown. */
-    data class LanguageOption(val code: String, val count: Int)
+    /**
+     * One entry per language present in the catalogue, for the filter dropdown.
+     *
+     * [name] is the English language name where the source publishes one, blank otherwise; the
+     * dropdown shows it alongside [code] rather than instead of it, because a handful of distinct
+     * codes share an English name and the label has to stay unique.
+     */
+    data class LanguageOption(val code: String, val name: String, val count: Int)
 
     var query by mutableStateOf("")
     var selectedLanguage by mutableStateOf<String?>(null)
@@ -105,7 +111,8 @@ class BibleCatalogViewModel(
     private fun BibleModule.matches(needle: String): Boolean =
         displayName.contains(needle, ignoreCase = true) ||
             identifier.contains(needle, ignoreCase = true) ||
-            language.contains(needle, ignoreCase = true)
+            language.contains(needle, ignoreCase = true) ||
+            languageName.contains(needle, ignoreCase = true)
 
     /** Fetches the catalogue. Safe to call again to retry; an in-flight load is not duplicated. */
     fun load() {
@@ -118,8 +125,17 @@ class BibleCatalogViewModel(
                     modules = outcome.modules
                     languages = outcome.modules
                         .groupBy { it.language.uppercase() }
-                        .map { (code, group) -> LanguageOption(code, group.size) }
-                        .sortedBy { it.code }
+                        .map { (code, group) ->
+                            LanguageOption(
+                                code = code,
+                                name = group.firstNotNullOfOrNull { it.languageName.takeIf(String::isNotBlank) }
+                                    .orEmpty(),
+                                count = group.size
+                            )
+                        }
+                        // Alphabetical by what the row actually reads as, so a named language sorts
+                        // under its name and an unnamed one stays findable under its code.
+                        .sortedWith(compareBy({ it.name.ifBlank { it.code }.lowercase() }, { it.code }))
                     duplicateDisplayNames = outcome.modules
                         .groupingBy { it.displayName.trim().lowercase() }
                         .eachCount()

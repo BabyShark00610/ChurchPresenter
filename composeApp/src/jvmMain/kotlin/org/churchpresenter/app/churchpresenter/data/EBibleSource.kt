@@ -44,9 +44,28 @@ object EBibleSource : BibleSource {
 
     internal fun downloadUrlFor(translationId: String): String = "$DOWNLOAD_BASE/${translationId}_usfx.zip"
 
+    @Volatile
+    private var languageNameCache: Map<String, String>? = null
+
     internal fun clearMemoryCache() {
         memoryCache = null
+        languageNameCache = null
     }
+
+    /**
+     * Uppercase language code to English name, for every language this catalogue carries.
+     *
+     * Reads whatever is already known — the parsed catalogue in memory, else the copy on disk — and
+     * **never fetches**: it exists so the Zefania tab can name its languages, and making that tab
+     * reach out to a second host to do so would be a worse trade than showing a bare code.
+     */
+    internal suspend fun cachedLanguageNames(cacheFile: File = defaultCacheFile): Map<String, String> =
+        languageNameCache ?: withContext(Dispatchers.IO) {
+            val modules = memoryCache?.second ?: readCache(cacheFile).orEmpty()
+            modules.filter { it.languageName.isNotBlank() }
+                .associate { it.language to it.languageName }
+                .also { languageNameCache = it }
+        }
 
     override suspend fun catalog(nowMillis: Long): BibleCatalogOutcome =
         fetchCatalog(nowMillis = nowMillis)
@@ -126,6 +145,10 @@ object EBibleSource : BibleSource {
         val redistributableIndex = index("Redistributable")
         val downloadableIndex = index("downloadable")
         val updateIndex = index("UpdateDate")
+        // Deliberately not part of the required-column guard above: a catalogue that stopped
+        // publishing these should lose the names, not the whole list.
+        val languageNameEnglishIndex = index("languageNameInEnglish")
+        val languageNameIndex = index("languageName")
 
         val taken = mutableSetOf<String>()
         return rows.drop(1)
@@ -142,6 +165,9 @@ object EBibleSource : BibleSource {
                     downloadKey = translationId,
                     sizeBytes = 0,
                     language = language,
+                    // English first: the autonym is what the language calls itself ("Miniafia"),
+                    // which is no help to someone typing "english" into the filter.
+                    languageName = cell(languageNameEnglishIndex).ifBlank { cell(languageNameIndex) },
                     identifier = translationId,
                     displayName = title,
                     copyright = cell(copyrightIndex),

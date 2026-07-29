@@ -4,10 +4,13 @@ package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.isEditable
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -67,6 +70,7 @@ class BibleCatalogBrowserContentTest {
         identifier: String = "ACV",
         displayName: String = "A Conservative Version",
         language: String = "ENG",
+        languageName: String = "English",
         fileStem: String = "ENG_ACV",
         copyright: String = "",
         sizeBytes: Long = 0,
@@ -75,6 +79,7 @@ class BibleCatalogBrowserContentTest {
         sourceId = sourceId,
         downloadKey = identifier,
         language = language,
+        languageName = languageName,
         identifier = identifier,
         displayName = displayName,
         fileStem = fileStem,
@@ -281,22 +286,97 @@ class BibleCatalogBrowserContentTest {
         onNodeWithText("2.0 MB", substring = true).assertExists()
     }
 
+    private val twoLanguages = BibleCatalogOutcome.Success(
+        listOf(
+            module(
+                identifier = "ACV", displayName = "A Conservative Version",
+                language = "ENG", languageName = "English", fileStem = "ENG_ACV"
+            ),
+            module(
+                identifier = "RVA", displayName = "Reina Valera",
+                language = "SPA", languageName = "Spanish", fileStem = "SPA_RVA"
+            ),
+        )
+    )
+
     @Test
-    fun `picking a language from the dropdown filters the list`() = dialog(
-        catalogOutcome = BibleCatalogOutcome.Success(
-            listOf(
-                module(identifier = "ACV", displayName = "A Conservative Version", language = "ENG", fileStem = "ENG_ACV"),
-                module(identifier = "RVA", displayName = "Reina Valera", language = "SPA", fileStem = "SPA_RVA"),
-            )
-        ),
-    ) { _, _ ->
-        onNode(hasClickAction() and hasText("All languages")).performClick()
+    fun `picking a language from the dropdown filters the list`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        onNodeWithText("All languages").performClick()
         waitForIdle()
-        onNode(hasTextExactly("SPA (1)") and hasClickAction()).performClick()
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).performClick()
         waitForIdle()
 
         onNodeWithText("Reina Valera").assertExists()
         onNodeWithText("A Conservative Version").assertDoesNotExist()
+    }
+
+    /**
+     * Opens the language menu and returns its text field.
+     *
+     * "All languages" is on screen twice once the menu is open — the field and the first option —
+     * and the dialog's own search box is editable too, so the field is identified as the editable
+     * one holding focus, which the click just gave it.
+     */
+    private fun ComposeUiTest.openLanguageMenu(): SemanticsNodeInteraction {
+        onNodeWithText("All languages").performClick()
+        waitForIdle()
+        return onNode(isEditable() and isFocused())
+    }
+
+    @Test
+    fun `the language dropdown lists every language until something is typed`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu()
+
+        // Focus clears the field, so the menu opens on the whole list rather than on the one row
+        // the current pick happens to match.
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun `typing the English name narrows the language dropdown`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu().performTextInput("span")
+        waitForIdle()
+
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun `typing the language code narrows the dropdown just as the name does`() = dialog(catalogOutcome = twoLanguages) { _, _ ->
+        openLanguageMenu().performTextInput("spa")
+        waitForIdle()
+
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).assertExists()
+        onNode(hasTextExactly("English · ENG (1)") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun `typing into the language field replaces the current pick rather than editing it`() = dialog(
+        catalogOutcome = twoLanguages,
+    ) { _, _ ->
+        // Clicking places a caret mid-word, so a field that kept its text would splice the
+        // keystrokes into "All languages" and match nothing.
+        openLanguageMenu().performTextInput("spanish")
+        waitForIdle()
+
+        onNode(hasTextExactly("Spanish · SPA (1)") and hasClickAction()).performClick()
+        waitForIdle()
+
+        onNodeWithText("Reina Valera").assertExists()
+        onNodeWithText("A Conservative Version").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a language with no published name falls back to its bare code`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(module(identifier = "CSP", displayName = "Cesky", language = "CZE", languageName = "", fileStem = "CZE_CSP"))
+        ),
+    ) { _, _ ->
+        onNodeWithText("All languages").performClick()
+        waitForIdle()
+
+        onNode(hasTextExactly("CZE (1)") and hasClickAction()).assertExists()
     }
 
     @Test

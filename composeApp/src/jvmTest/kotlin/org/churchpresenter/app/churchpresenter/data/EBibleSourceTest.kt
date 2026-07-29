@@ -80,6 +80,39 @@ class EBibleSourceTest {
 
     private fun modulesOf(body: String) = EBibleSource.parseCatalog(body)
 
+    // --- language names ---
+
+    /** The real catalogue publishes both an English name and the language's own name for itself. */
+    private val namedHeader =
+        "languageCode,translationId,languageName,languageNameInEnglish,shortTitle,title,Copyright,Redistributable,downloadable,UpdateDate"
+
+    private fun namedCsv(vararg rows: String) = (listOf(namedHeader) + rows).joinToString("\n")
+
+    @Test
+    fun `the English language name is read off the catalogue`() {
+        val modules = modulesOf(namedCsv("deu,luther,Deutsch,German,Luther,Luther Bible,PD,True,True,2020-01-01"))
+
+        assertEquals("German", modules.single().languageName)
+    }
+
+    @Test
+    fun `a missing English name falls back to the language's own name for itself`() {
+        val modules = modulesOf(namedCsv("aai,aaiNT,Miniafia,,Miniafia NT,Miniafia,PD,True,True,2020-01-01"))
+
+        assertEquals("Miniafia", modules.single().languageName)
+    }
+
+    @Test
+    fun `a catalogue with no name columns still parses, just without names`() {
+        // The columns are deliberately outside the required-column guard: a catalogue that stopped
+        // publishing them should cost the names, not the whole list.
+        val modules = modulesOf(csv("eng,acv,ACV,A Conservative Version,PD,True,True,2020-01-01"))
+
+        assertEquals(1, modules.size)
+        assertEquals("", modules.single().languageName)
+        assertEquals("ENG", modules.single().language, "everything else still parses")
+    }
+
     @Test
     fun `the source identifies itself as eBible`() {
         assertEquals(BibleSourceId.EBIBLE, EBibleSource.sourceId)

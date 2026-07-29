@@ -1409,6 +1409,7 @@
     <string name="bible_catalog_search_placeholder">Filter by name or language…</string>
     <string name="bible_catalog_language_all">All languages</string>
     <string name="bible_catalog_language_count">%1$s (%2$d)</string>
+    <string name="bible_catalog_language_named">%1$s · %2$s (%3$d)</string>
     <string name="bible_catalog_loading">Loading the list of Bibles…</string>
     <string name="bible_catalog_empty">No Bibles match this filter</string>
     <string name="bible_catalog_retry">Retry</string>
