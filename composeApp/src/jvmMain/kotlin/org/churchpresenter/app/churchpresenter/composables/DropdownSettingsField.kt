@@ -88,7 +88,6 @@ fun DropdownSettingsField(
     width: Dp? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var currentValue by remember(value) { mutableStateOf(value) }
 
     Box(
         modifier = modifier
@@ -124,7 +123,7 @@ fun DropdownSettingsField(
                     Spacer(Modifier.height(1.dp))
                 }
                 Text(
-                    text = currentValue,
+                    text = value,
                     style = dropdownValueStyle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     // Clip rather than grow: an over-long value used to widen the whole field and
@@ -151,7 +150,6 @@ fun DropdownSettingsField(
                     text = { Text(option, style = MaterialTheme.typography.bodySmall) },
                     onClick = {
                         onValueChange(option)
-                        currentValue = option
                         expanded = false
                     }
                 )

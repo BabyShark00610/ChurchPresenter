@@ -745,6 +745,17 @@
     <string name="content_outputs_done">Done</string>
     <string name="content_outputs_preview">This Output Shows</string>
     <string name="content_outputs_preview_empty">Nothing enabled — this output stays blank</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Bible Translations</string>
+    <string name="content_bible_translations_all">All</string>
+    <string name="content_bible_translations_enabled">%1$d of %2$d translations enabled</string>
+    <string name="content_bible_translations_footer">Multiple translations show stacked on screen, primary first.</string>
+    <string name="content_bible_translation_portion_ot_nt">OT+NT</string>
+    <string name="content_bible_translation_portion_nt">NT</string>
+    <string name="content_bible_translation_portion_ot">OT</string>
+    <string name="content_bible_translations_more">+%1$d more</string>
+    <string name="content_bible_translations_all_selected">All Bibles</string>
+    <string name="content_bible_translations_count_enabled">%1$d enabled</string>
 
     <!-- Browser Source Outputs (OBS/vMix overlay) -->
     <string name="browser_source_outputs">Browser Source Outputs</string>

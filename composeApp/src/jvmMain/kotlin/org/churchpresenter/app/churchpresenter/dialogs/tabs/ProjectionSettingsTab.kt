@@ -7,16 +7,23 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.triStateToggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -110,9 +117,22 @@ import churchpresenter.composeapp.generated.resources.content_outputs_select_all
 import churchpresenter.composeapp.generated.resources.content_outputs_clear_all
 import churchpresenter.composeapp.generated.resources.content_outputs_preview
 import churchpresenter.composeapp.generated.resources.content_outputs_preview_empty
+import churchpresenter.composeapp.generated.resources.content_outputs_preview_translations
 import churchpresenter.composeapp.generated.resources.content_outputs_section_content
 import churchpresenter.composeapp.generated.resources.content_outputs_section_backgrounds
 import churchpresenter.composeapp.generated.resources.content_outputs_done
+import churchpresenter.composeapp.generated.resources.content_bible_translations_header
+import churchpresenter.composeapp.generated.resources.content_bible_translations_all
+import churchpresenter.composeapp.generated.resources.content_bible_translations_enabled
+import churchpresenter.composeapp.generated.resources.content_bible_translations_footer
+import churchpresenter.composeapp.generated.resources.content_bible_translation_portion_ot_nt
+import churchpresenter.composeapp.generated.resources.content_bible_translation_portion_nt
+import churchpresenter.composeapp.generated.resources.content_bible_translation_portion_ot
+import churchpresenter.composeapp.generated.resources.content_bible_translations_more
+import churchpresenter.composeapp.generated.resources.content_bible_translations_all_selected
+import churchpresenter.composeapp.generated.resources.content_bible_translations_count_enabled
+import churchpresenter.composeapp.generated.resources.clear
+import churchpresenter.composeapp.generated.resources.song_language_primary
 import churchpresenter.composeapp.generated.resources.detected_screens
 import churchpresenter.composeapp.generated.resources.dev_window_label
 import churchpresenter.composeapp.generated.resources.display_fullscreen
@@ -169,6 +189,7 @@ import org.churchpresenter.app.churchpresenter.composables.listVlcAudioDevices
 import org.churchpresenter.app.churchpresenter.composables.recheckVlcAvailability
 import org.churchpresenter.app.churchpresenter.composables.vlcCustomPath
 import org.churchpresenter.app.churchpresenter.BuildConfig
+import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
@@ -191,6 +212,18 @@ data class DetectedScreen(
     val boundsY: Int = Int.MIN_VALUE,
     val boundsW: Int = 0,
     val boundsH: Int = 0
+)
+
+/**
+ * One row of the Bible Translations picker: [code] is the file stem (also the selection key,
+ * matching [BibleSettings.translationList] order), [title] and [portion] come from
+ * [Bible.readTranslationSummary]'s cheap header-only read and fall back to [code] / blank when a
+ * file can't be read.
+ */
+data class BibleTranslationDisplay(
+    val code: String,
+    val title: String,
+    val portion: String,
 )
 
 /**
@@ -404,11 +437,36 @@ fun ProjectionSettingsTab(
     val bothLabel = stringResource(Res.string.song_language_both)
     val lang1Label = stringResource(Res.string.screen_lang_language_1)
     val lang2Label = stringResource(Res.string.screen_lang_language_2)
-    // Named by file stem rather than by the title inside the module: the projection tab does not
-    // otherwise read the bible folder, and opening every .spb here to render a settings row would be
-    // a lot of I/O for a label.
+    // translationNames stays the plain file-stem list: it's what every count/index computation
+    // below keys off (selection indices, "N of M" summaries) and must line up 1:1 with
+    // translationList()'s order regardless of whether a title could be read.
     val translationNames = settings.bibleSettings.translationList()
         .map { it.fileName.substringBeforeLast('.') }
+    // Richer per-row display info for the Bible Translations picker only. Reads just the header
+    // block of each .spb (title + which book IDs are present) via Bible.readTranslationSummary --
+    // not the full verse parse -- so this stays cheap even with many translations installed.
+    val otNtPortionLabel = stringResource(Res.string.content_bible_translation_portion_ot_nt)
+    val ntPortionLabel = stringResource(Res.string.content_bible_translation_portion_nt)
+    val otPortionLabel = stringResource(Res.string.content_bible_translation_portion_ot)
+    val translationDisplays = remember(settings.bibleSettings.translations, settings.bibleSettings.storageDirectory, otNtPortionLabel, ntPortionLabel, otPortionLabel) {
+        settings.bibleSettings.translationList().map { t ->
+            val code = t.fileName.substringBeforeLast('.')
+            val storageDir = settings.bibleSettings.storageDirectory
+            val path = if (storageDir.isNotEmpty()) java.io.File(storageDir, t.fileName).absolutePath else t.fileName
+            val summary = Bible.readTranslationSummary(path)
+            val portion = when {
+                summary?.hasOldTestament == true && summary.hasNewTestament -> otNtPortionLabel
+                summary?.hasNewTestament == true -> ntPortionLabel
+                summary?.hasOldTestament == true -> otPortionLabel
+                else -> ""
+            }
+            BibleTranslationDisplay(
+                code = code,
+                title = summary?.title?.takeIf { it.isNotBlank() } ?: code,
+                portion = portion,
+            )
+        }
+    }
     val songLangModes = listOf(Constants.SONG_LANG_OFF to offLabel, Constants.SONG_LANG_PRIMARY to lang1Label, Constants.SONG_LANG_SECONDARY to lang2Label, Constants.SONG_LANG_BOTH to bothLabel)
 
     // Shared column widths — used by both the Screen Assignment table (Card 1) and the
@@ -904,6 +962,7 @@ fun ProjectionSettingsTab(
                         bibleLabel = bibleLabel,
                         songsLabel = songsLabel,
                         translationNames = translationNames,
+                        translationDisplays = translationDisplays,
                         songLangModes = songLangModes,
                         webDeckLinkTooltip = stringResource(Res.string.projection_web_decklink_tooltip),
                         webSnapshotTooltip = stringResource(Res.string.browser_source_website_snapshot_tooltip),
@@ -1280,6 +1339,7 @@ fun ProjectionSettingsTab(
                                     bibleLabel = bibleLabel,
                                     songsLabel = songsLabel,
                                     translationNames = translationNames,
+                                    translationDisplays = translationDisplays,
                                     songLangModes = songLangModes,
                                     webDeckLinkTooltip = stringResource(Res.string.projection_web_decklink_tooltip),
                                     webSnapshotTooltip = stringResource(Res.string.browser_source_website_snapshot_tooltip),
@@ -1578,13 +1638,14 @@ private fun contentOutputsEnabledCount(
 }
 
 @Composable
-private fun ContentOutputsSectionHeader(text: String) {
+private fun ContentOutputsSectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.sp
+        letterSpacing = 1.sp,
+        modifier = modifier,
     )
 }
 
@@ -1643,66 +1704,412 @@ private fun ContentToggleCell(
     }
 }
 
-/** Bible/Songs language-mode chip — label + a compact dropdown (Off / 1 / 2 / Both). */
+/**
+ * Bible content cell: a compact two-segment trigger button (on/off, then the current translation
+ * pick) that opens a floating panel with the full translation list -- collapsed by default rather
+ * than always showing the full picker inline, so it reads the same as any other content-outputs
+ * row until the operator actually needs to change translations.
+ */
 @Composable
 private fun ContentTranslationCell(
     modifier: Modifier,
     label: String,
-    /** Display names of the configured stack, in order. */
-    translations: List<String>,
+    /** The configured stack, in order; selection indices below refer to this order. */
+    translations: List<BibleTranslationDisplay>,
     showing: Boolean,
     selected: List<Int>,
     onShowingChange: (Boolean) -> Unit,
     onSelectedChange: (List<Int>) -> Unit,
+    /**
+     * Turns this output's Bible content on AND sets its selection, atomically.
+     *
+     * [onShowingChange] and [onSelectedChange] each round-trip through the caller's own
+     * `assignment.copy(...)` closure. Calling two of them back to back in one handler -- as
+     * "turn on and select everything" needs -- has both read the *same* pre-click `assignment`
+     * snapshot, since Compose does not recompose between two synchronous calls in one handler; the
+     * second call's `.copy(...)` then overwrites the first's change instead of building on it. This
+     * callback exists so callers can apply both fields in a single `assignment.copy(...)`.
+     */
+    onShowAndSelect: (List<Int>) -> Unit,
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-            .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 6.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = showing, onCheckedChange = onShowingChange)
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-            )
-        }
-        // Nothing to choose between with a single translation -- the checkbox above already says
-        // whether this output shows it.
-        if (showing && translations.size > 1) {
-            translations.forEachIndexed { index, name ->
-                val ticked = selected.isEmpty() || index in selected
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 16.dp),
-                ) {
-                    Checkbox(
-                        checked = ticked,
-                        onCheckedChange = { want ->
-                            val current = if (selected.isEmpty()) translations.indices.toList() else selected
-                            val next = if (want) (current + index).distinct().sorted()
-                                       else current.filterNot { it == index }
-                            // Everything ticked is stored as "all", so a translation added later
-                            // shows up here too rather than needing to be ticked on every output.
-                            onSelectedChange(if (next.size == translations.size) emptyList() else next)
-                        },
-                    )
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+    val allSelected = selected.isEmpty() || selected.size == translations.size
+    val enabledCount = if (!showing) 0 else if (selected.isEmpty()) translations.size else selected.size
+    val selectAll: () -> Unit = { onShowAndSelect(emptyList()) }
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    var dropdownOpen by remember { mutableStateOf(false) }
+
+    val selectionCount = if (selected.isEmpty()) translations.size else selected.size
+    val primaryIndex = selected.minOrNull() ?: 0
+    // null while off, not just when there's nothing configured: otherwise this kept previewing
+    // the last-selected translation's code/portion after Bible was switched off for this output,
+    // instead of reflecting that nothing is actually showing right now.
+    val primaryInfo = if (showing) translations.getOrNull(primaryIndex) else null
+    // No fallback to `label` here: with zero translations configured there is nothing to name in
+    // this segment, and falling back to `label` would repeat the left segment's own text.
+    val allTranslationsSelected = selectionCount > 1 && selectionCount == translations.size
+    val primaryLabel = when {
+        primaryInfo == null -> ""
+        allTranslationsSelected -> stringResource(Res.string.content_bible_translations_all_selected)
+        else -> primaryInfo.code
+    }
+    val secondaryLabel = when {
+        primaryInfo == null -> ""
+        allTranslationsSelected -> stringResource(Res.string.content_bible_translations_count_enabled, selectionCount)
+        selectionCount > 1 -> stringResource(Res.string.content_bible_translations_more, selectionCount - 1)
+        else -> primaryInfo.portion
+    }
+
+    Box(modifier = modifier) {
+        // Collapsed trigger: the left segment is a status indicator only (on/off lives on the
+        // master row's checkbox inside the dropdown below); the whole rest of the button opens
+        // that dropdown, regardless of whether Bible content is currently on or off, so a
+        // translation can be picked before switching it on.
+        val triggerShape = RoundedCornerShape(10.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .alpha(if (showing) 1f else 0.55f)
+                .clip(triggerShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+            Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(dividerColor))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(enabled = translations.isNotEmpty()) { dropdownOpen = true }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // fill = true (the default): the label column claims all the leftover width so
+                // the chevron lands flush against the button's trailing edge instead of sitting
+                // right after however wide the label happens to be.
+                Column(modifier = Modifier.weight(1f)) {
+                    if (primaryLabel.isNotEmpty()) {
+                        Text(
+                            text = primaryLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            // Monospace suits a file-stem code like "kjv1769" but not a plain
+                            // phrase like "All Bibles".
+                            fontFamily = if (allTranslationsSelected) FontFamily.Default else FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (secondaryLabel.isNotEmpty()) {
+                        Text(
+                            text = secondaryLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (translations.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
         }
-    }
+
+        DropdownMenu(
+            expanded = dropdownOpen && translations.isNotEmpty(),
+            onDismissRequest = { dropdownOpen = false },
+            modifier = Modifier.width(320.dp),
+            // Style the menu's own surface directly rather than nesting a second background
+            // inside it -- DropdownMenu's default container has its own vertical inset around
+            // whatever content() renders, which showed through as a visible band above and below
+            // an inner Column that tried to draw its own separately-shaped/colored background.
+            shape = RoundedCornerShape(12.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 0.dp,
+        ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ContentOutputsSectionHeader(stringResource(Res.string.content_bible_translations_header))
+            Spacer(modifier = Modifier.weight(1f))
+            // Plain clickable Text pills rather than Button/OutlinedButton: those enforce a 58dp
+            // minWidth floor that, in this narrow card, starved whichever pill measured last down
+            // to ~0dp and made its label wrap one letter per line.
+            Text(
+                text = stringResource(Res.string.content_bible_translations_all),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                    .clickable(onClick = selectAll)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(Res.string.clear),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                    .clickable(onClick = { onShowingChange(false) })
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
+        HorizontalDivider(color = dividerColor)
+
+        // Master "Bible" row
+        val masterCheckShape = RoundedCornerShape(5.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (enabledCount > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else Color.Transparent)
+                // triStateToggleable (not plain clickable) so this still publishes the
+                // ToggleableState semantics TriStateCheckbox used to -- tests locate this
+                // control via isToggleable().
+                .triStateToggleable(
+                    state = when {
+                        !showing -> ToggleableState.Off
+                        allSelected -> ToggleableState.On
+                        else -> ToggleableState.Indeterminate
+                    },
+                    onClick = { if (showing) onShowingChange(false) else selectAll() },
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Book,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = stringResource(Res.string.content_bible_translations_enabled, enabledCount, translations.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(masterCheckShape)
+                    .background(if (enabledCount > 0) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .border(1.dp, if (enabledCount > 0) Color.Transparent else MaterialTheme.colorScheme.outline, masterCheckShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (allSelected && showing) {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(11.dp))
+                } else if (enabledCount > 0) {
+                    Box(modifier = Modifier.size(width = 8.dp, height = 2.dp).background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(1.dp)))
+                }
+            }
+        }
+
+        // Nothing to choose between with a single translation -- the row above already says
+        // whether this output shows it. Shown regardless of `showing`: picking translations must
+        // work whether or not Bible content is currently switched on for this output.
+        if (translations.size > 1) {
+            HorizontalDivider(color = dividerColor)
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                translations.forEachIndexed { index, info ->
+                    val selectedIn = selected.isEmpty() || index in selected
+                    // Off means every row reads as unticked, matching the master row's own
+                    // checkbox -- the underlying selection is still remembered in `selected`,
+                    // just not shown as active while Bible is off for this output.
+                    val ticked = showing && selectedIn
+                    val toggle: () -> Unit = {
+                        if (!showing) {
+                            // Starting fresh from off, a click means "show just this one" -- it must
+                            // NOT fold in whatever `selected` happened to hold before Bible was
+                            // switched off. `selected` is frequently the empty-list "all" sentinel
+                            // at that point (e.g. right after "Clear", which only flips `showing`),
+                            // and building the new selection from "all indices" + this one collapses
+                            // straight back to that same sentinel -- every row re-selecting itself
+                            // the moment any one of them was clicked.
+                            onShowAndSelect(listOf(index))
+                        } else if (!selectedIn) {
+                            val next = (selected + index).distinct().sorted()
+                            // Everything ticked is stored as "all", so a translation added later
+                            // shows up here too rather than needing to be ticked on every output.
+                            onSelectedChange(if (next.size == translations.size) emptyList() else next)
+                        } else {
+                            val current = if (selected.isEmpty()) translations.indices.toList() else selected
+                            val next = current.filterNot { it == index }
+                            if (next.isEmpty()) {
+                                // Unchecking the last remaining translation would store the same
+                                // empty list that means "all" everywhere else in this cell -- next
+                                // render, every row would read back as ticked again. Turning Bible
+                                // off instead is what "nothing selected" actually means, and leaves
+                                // `selected` untouched (every "turn on" path already resets it, so
+                                // nothing is lost).
+                                onShowingChange(false)
+                            } else {
+                                onSelectedChange(next)
+                            }
+                        }
+                    }
+                    val chipShape = RoundedCornerShape(6.dp)
+                    val rowCheckShape = RoundedCornerShape(5.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (ticked) MaterialTheme.colorScheme.primary.copy(alpha = 0.09f) else Color.Transparent)
+                            .clickable(onClick = toggle)
+                            .padding(start = 30.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            // Fixed width (not just a minimum): a longer code like "kjv1769"
+                            // must not push its row's title column further right than every
+                            // other row's, which is what a min-only width let happen.
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(26.dp)
+                                .clip(chipShape)
+                                .background(if (ticked) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, if (ticked) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant, chipShape)
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = info.code,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = if (ticked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        // fill = true (the default): the title column claims all the leftover
+                        // width so the checkbox lands flush against the row's trailing edge
+                        // instead of sitting right after however wide the title happens to be.
+                        // Safe here (unlike the header pills earlier) because this wraps plain
+                        // Text with maxLines=1 + ellipsis, not a component with a mandatory
+                        // min-width that could be squeezed to zero.
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = info.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (ticked) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (ticked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            // PRIMARY sits on its own line with the portion rather than competing
+                            // with the title for width -- a long title (e.g. "King James Version")
+                            // was getting cut to "King James V..." to make room for the tag.
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (info.portion.isNotEmpty()) {
+                                    Text(
+                                        text = info.portion,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                }
+                                if (index == 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    ) {
+                                        Text(
+                                            text = stringResource(Res.string.song_language_primary),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(rowCheckShape)
+                                .background(if (ticked) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .border(1.dp, if (ticked) Color.Transparent else MaterialTheme.colorScheme.outline, rowCheckShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (ticked) {
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(11.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = dividerColor)
+        Text(
+            text = stringResource(Res.string.content_bible_translations_footer),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+        )
+        } // DropdownMenu
+    } // outer Box
 }
 
+/**
+ * Songs content cell: a collapsed trigger (current mode + chevron) that opens a floating panel
+ * listing every mode -- styled to match [ContentTranslationCell] so the two cells read as one
+ * family rather than two different pickers side by side. Unlike Bible's checklist, mode selection
+ * is single-choice (Off counts as a mode, not a separate on/off dimension), so each row is a plain
+ * radio-style pick that both selects and closes the panel.
+ */
 @Composable
 private fun ContentLangCell(
     modifier: Modifier,
@@ -1711,48 +2118,115 @@ private fun ContentLangCell(
     currentMode: String,
     onSelect: (String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var dropdownOpen by remember { mutableStateOf(false) }
     val currentLabel = modes.find { it.first == currentMode }?.second ?: modes.first().second
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-            .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            modifier = Modifier.weight(1f)
-        )
-        Box {
-            OutlinedButton(
-                shape = RoundedCornerShape(6.dp),
-                onClick = { expanded = true },
-                // Explicit primary-tinted border: the default outline is easy to miss against the
-                // cell's surfaceVariant background, so the dropdown reads as plain text.
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+    val isOff = currentMode == Constants.SONG_LANG_OFF
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+
+    Box(modifier = modifier) {
+        // Left segment is a plain label, not a click target -- matching Bible's trigger, where
+        // only the value/chevron side opens anything.
+        val triggerShape = RoundedCornerShape(10.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .alpha(if (isOff) 0.55f else 1f)
+                .clip(triggerShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxHeight().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = currentLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                Spacer(modifier = Modifier.width(2.dp))
-                Icon(
-                    Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                modes.forEach { (value, l) ->
-                    DropdownMenuItem(
-                        text = { Text(l, style = MaterialTheme.typography.bodySmall) },
-                        onClick = {
-                            expanded = false
-                            onSelect(value)
+            Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(dividerColor))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { dropdownOpen = true }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = currentLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = dropdownOpen,
+            onDismissRequest = { dropdownOpen = false },
+            modifier = Modifier.width(220.dp),
+            shape = RoundedCornerShape(12.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 0.dp,
+        ) {
+            ContentOutputsSectionHeader(
+                text = label,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            )
+            HorizontalDivider(color = dividerColor)
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                modes.forEach { (value, modeLabel) ->
+                    val isSelected = value == currentMode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.09f) else Color.Transparent)
+                            .clickable {
+                                dropdownOpen = false
+                                onSelect(value)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = modeLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // Radio, not checkbox: modes are mutually exclusive (a single pick, Off
+                        // included), unlike Bible's independently-toggleable translations.
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .border(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isSelected) {
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                            }
                         }
-                    )
+                    }
                 }
             }
         }
@@ -1777,12 +2251,17 @@ private fun ContentOutputsMonitorPreview(
     translationNames: List<String>,
     songLangModes: List<Pair<String, String>>,
 ) {
+    val bibleListFormat = stringResource(Res.string.content_outputs_preview_translations)
     val chips = buildList {
         if (assignment.showBible) {
-            // An empty selection means every translation, so the count is the whole stack.
-            val shown = if (assignment.bibleTranslations.isEmpty()) translationNames.size
-                        else assignment.bibleTranslations.count { it in translationNames.indices }
-            add(if (translationNames.size > 1) "$bibleLabel · $shown" else bibleLabel)
+            // An empty selection means every translation, so the whole stack is shown.
+            val shownNames = if (assignment.bibleTranslations.isEmpty()) translationNames
+                              else assignment.bibleTranslations.filter { it in translationNames.indices }.map { translationNames[it] }
+            add(
+                if (translationNames.size > 1 && shownNames.isNotEmpty())
+                    bibleListFormat.format(bibleLabel, shownNames.joinToString(", "))
+                else bibleLabel
+            )
         }
         if (assignment.songMode != Constants.SONG_LANG_OFF) {
             val mode = songLangModes.find { it.first == assignment.songMode }?.second
@@ -1915,6 +2394,7 @@ private fun ContentOutputsDialog(
     bibleLabel: String,
     songsLabel: String,
     translationNames: List<String>,
+    translationDisplays: List<BibleTranslationDisplay>,
     songLangModes: List<Pair<String, String>>,
     webDeckLinkTooltip: String,
     webSnapshotTooltip: String,
@@ -1982,7 +2462,11 @@ private fun ContentOutputsDialog(
                             var a = assignment
                             (contentGroup + backgroundGroup).forEach { a = it.setter(a, true) }
                             a = a.copy(
-                                bibleMode = if (a.bibleMode == Constants.SONG_LANG_OFF) Constants.SONG_LANG_BOTH else a.bibleMode,
+                                bibleMode = Constants.SONG_LANG_BOTH,
+                                // An empty list means "every translation" -- Select All must reset
+                                // this too, or a translation deselected earlier stays deselected
+                                // even though the button says "all".
+                                bibleTranslations = emptyList(),
                                 songMode = if (a.songMode == Constants.SONG_LANG_OFF) Constants.SONG_LANG_BOTH else a.songMode
                             )
                             onApply(a)
@@ -2012,7 +2496,7 @@ private fun ContentOutputsDialog(
                     ContentTranslationCell(
                         modifier = Modifier.weight(1f),
                         label = bibleLabel,
-                        translations = translationNames,
+                        translations = translationDisplays,
                         showing = assignment.showBible,
                         selected = assignment.bibleTranslations,
                         onShowingChange = { on ->
@@ -2023,6 +2507,14 @@ private fun ContentOutputsDialog(
                             )
                         },
                         onSelectedChange = { next -> onApply(assignment.copy(bibleTranslations = next)) },
+                        onShowAndSelect = { next ->
+                            onApply(
+                                assignment.copy(
+                                    bibleMode = Constants.SONG_LANG_BOTH,
+                                    bibleTranslations = next,
+                                ),
+                            )
+                        },
                     )
                     ContentLangCell(
                         modifier = Modifier.weight(1f),

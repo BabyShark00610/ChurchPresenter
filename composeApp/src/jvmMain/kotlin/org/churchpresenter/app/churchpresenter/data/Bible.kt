@@ -610,4 +610,55 @@ class Bible {
     fun getBibleTitle(): String {
         return bibleTitle
     }
+
+    companion object {
+        /** Title and testament coverage of an SPB file, read without parsing any verse data. */
+        data class TranslationSummary(val title: String?, val hasOldTestament: Boolean, val hasNewTestament: Boolean)
+
+        // Canonical book numbering used throughout the .spb format: 1-39 = Old Testament,
+        // 40-66 = New Testament (see the header book-list lines this reads).
+        private val OLD_TESTAMENT_BOOK_IDS = 1..39
+        private val NEW_TESTAMENT_BOOK_IDS = 40..66
+
+        /**
+         * Fast path like [loadBooksOnly]: reads only the header block of an SPB file -- its
+         * `##Title:` line and which book IDs appear -- stopping at the first verse line, so a
+         * caller can show a translation's title and OT/NT coverage without the full verse parse
+         * [loadFromSpb] requires.
+         */
+        fun readTranslationSummary(resourcePath: String): TranslationSummary? {
+            try {
+                val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
+                val reader = if (inputStream != null) {
+                    inputStream.bufferedReader(StandardCharsets.UTF_8)
+                } else {
+                    val path = Paths.get(resourcePath)
+                    if (!Files.exists(path)) return null
+                    Files.newBufferedReader(path, StandardCharsets.UTF_8)
+                }
+                val bookHeaderRegex = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
+                var title: String? = null
+                var hasOld = false
+                var hasNew = false
+                reader.use { r ->
+                    for (rawLine in r.lineSequence()) {
+                        val line = rawLine.trimEnd('\r', '\n')
+                        if (line.startsWith("##Title:")) {
+                            title = line.substring(8).trim()
+                            continue
+                        }
+                        if (line.startsWith("##")) continue
+                        if (line.startsWith("-----") || line.startsWith("B")) break
+                        if (line.isEmpty()) continue
+                        val bookId = bookHeaderRegex.matchEntire(line)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+                        if (bookId in OLD_TESTAMENT_BOOK_IDS) hasOld = true
+                        if (bookId in NEW_TESTAMENT_BOOK_IDS) hasNew = true
+                    }
+                }
+                return TranslationSummary(title, hasOld, hasNew)
+            } catch (_: Exception) {
+                return null
+            }
+        }
+    }
 }
