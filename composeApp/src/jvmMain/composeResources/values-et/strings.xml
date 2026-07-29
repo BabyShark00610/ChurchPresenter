@@ -2142,6 +2142,17 @@
     <string name="content_outputs_done">Valmis</string>
     <string name="content_outputs_preview">See väljund kuvab</string>
     <string name="content_outputs_preview_empty">Midagi pole lubatud — see väljund jääb tühjaks</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Piiblitõlked</string>
+    <string name="content_bible_translations_all">Kõik</string>
+    <string name="content_bible_translations_enabled">%1$d/%2$d tõlget lubatud</string>
+    <string name="content_bible_translations_footer">Mitu tõlget kuvatakse ekraanil üksteise all, esmane esimesena.</string>
+    <string name="content_bible_translation_portion_ot_nt">VT+UT</string>
+    <string name="content_bible_translation_portion_nt">UT</string>
+    <string name="content_bible_translation_portion_ot">VT</string>
+    <string name="content_bible_translations_more">+%1$d veel</string>
+    <string name="content_bible_translations_all_selected">Kõik Piiblid</string>
+    <string name="content_bible_translations_count_enabled">%1$d lubatud</string>
     <string name="bible_translation">Tõlge %1$d</string>
     <string name="add_bible_translation">Lisa tõlge</string>
     <string name="bible_reference">Piibliviide</string>

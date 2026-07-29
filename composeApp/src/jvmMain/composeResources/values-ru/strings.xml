@@ -2112,6 +2112,17 @@
     <string name="content_outputs_done">Готово</string>
     <string name="content_outputs_preview">Этот выход показывает</string>
     <string name="content_outputs_preview_empty">Ничего не включено — выход останется пустым</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Переводы Библии</string>
+    <string name="content_bible_translations_all">Все</string>
+    <string name="content_bible_translations_enabled">%1$d из %2$d переводов включено</string>
+    <string name="content_bible_translations_footer">Несколько переводов отображаются друг под другом на экране, основной — первым.</string>
+    <string name="content_bible_translation_portion_ot_nt">ВЗ+НЗ</string>
+    <string name="content_bible_translation_portion_nt">НЗ</string>
+    <string name="content_bible_translation_portion_ot">ВЗ</string>
+    <string name="content_bible_translations_more">+ещё %1$d</string>
+    <string name="content_bible_translations_all_selected">Все Библии</string>
+    <string name="content_bible_translations_count_enabled">%1$d включено</string>
     <string name="bible_translation">Перевод %1$d</string>
     <string name="add_bible_translation">Добавить перевод</string>
     <string name="bible_reference">Библейская ссылка</string>

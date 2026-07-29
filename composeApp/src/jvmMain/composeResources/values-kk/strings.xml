@@ -2110,6 +2110,17 @@
     <string name="content_outputs_done">Дайын</string>
     <string name="content_outputs_preview">Бұл шығыс көрсетеді</string>
     <string name="content_outputs_preview_empty">Ештеңе қосылмаған — бұл шығыс бос қалады</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Киелі кітап аудармалары</string>
+    <string name="content_bible_translations_all">Барлығы</string>
+    <string name="content_bible_translations_enabled">%2$d аудармадан %1$d қосылған</string>
+    <string name="content_bible_translations_footer">Бірнеше аударма экранда бір-бірінің астында көрсетіледі, негізгісі бірінші.</string>
+    <string name="content_bible_translation_portion_ot_nt">ЕК+ЖК</string>
+    <string name="content_bible_translation_portion_nt">ЖК</string>
+    <string name="content_bible_translation_portion_ot">ЕК</string>
+    <string name="content_bible_translations_more">+тағы %1$d</string>
+    <string name="content_bible_translations_all_selected">Барлық Киелі кітаптар</string>
+    <string name="content_bible_translations_count_enabled">%1$d қосылған</string>
     <string name="bible_translation">Аударма %1$d</string>
     <string name="add_bible_translation">Аударма қосу</string>
     <string name="bible_reference">Киелі кітап сілтемесі</string>

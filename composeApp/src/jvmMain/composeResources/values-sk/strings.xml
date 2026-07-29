@@ -2139,6 +2139,17 @@
     <string name="content_outputs_done">Hotovo</string>
     <string name="content_outputs_preview">Tento výstup zobrazuje</string>
     <string name="content_outputs_preview_empty">Nič nie je zapnuté — tento výstup zostane prázdny</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Preklady Biblie</string>
+    <string name="content_bible_translations_all">Všetky</string>
+    <string name="content_bible_translations_enabled">%1$d z %2$d prekladov zapnutých</string>
+    <string name="content_bible_translations_footer">Viacero prekladov sa zobrazuje na obrazovke nad sebou, primárny ako prvý.</string>
+    <string name="content_bible_translation_portion_ot_nt">SZ+NZ</string>
+    <string name="content_bible_translation_portion_nt">NZ</string>
+    <string name="content_bible_translation_portion_ot">SZ</string>
+    <string name="content_bible_translations_more">+%1$d ďalších</string>
+    <string name="content_bible_translations_all_selected">Všetky Biblie</string>
+    <string name="content_bible_translations_count_enabled">%1$d zapnutých</string>
     <string name="bible_translation">Preklad %1$d</string>
     <string name="add_bible_translation">Pridať preklad</string>
     <string name="bible_reference">Biblický odkaz</string>

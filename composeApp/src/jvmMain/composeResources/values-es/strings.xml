@@ -2137,6 +2137,17 @@
     <string name="content_outputs_done">Listo</string>
     <string name="content_outputs_preview">Esta salida muestra</string>
     <string name="content_outputs_preview_empty">Nada activado: esta salida permanecerá en blanco</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Traducciones de la Biblia</string>
+    <string name="content_bible_translations_all">Todas</string>
+    <string name="content_bible_translations_enabled">%1$d de %2$d traducciones activadas</string>
+    <string name="content_bible_translations_footer">Varias traducciones se muestran apiladas en pantalla, la principal primero.</string>
+    <string name="content_bible_translation_portion_ot_nt">AT+NT</string>
+    <string name="content_bible_translation_portion_nt">NT</string>
+    <string name="content_bible_translation_portion_ot">AT</string>
+    <string name="content_bible_translations_more">+%1$d más</string>
+    <string name="content_bible_translations_all_selected">Todas las Biblias</string>
+    <string name="content_bible_translations_count_enabled">%1$d activadas</string>
     <string name="bible_translation">Traducción %1$d</string>
     <string name="add_bible_translation">Añadir traducción</string>
     <string name="bible_reference">Referencia bíblica</string>

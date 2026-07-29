@@ -1794,7 +1794,11 @@ private fun ContentTranslationCell(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable(enabled = translations.isNotEmpty()) { dropdownOpen = true }
+                    // Always clickable, even with zero translations configured: the master on/off
+                    // row now lives inside this dropdown (not on the collapsed trigger), so gating
+                    // this on translations.isNotEmpty() would leave no way at all to reach it in
+                    // that case.
+                    .clickable { dropdownOpen = true }
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1826,19 +1830,20 @@ private fun ContentTranslationCell(
                         )
                     }
                 }
-                if (translations.isNotEmpty()) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDropDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.ArrowDropDown,
+                    // Otherwise unlabelled when there's nothing configured to name (primary/
+                    // secondary text both blank) -- this is also what tests target to open the
+                    // dropdown in that case.
+                    contentDescription = stringResource(Res.string.content_bible_translations_header),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
 
         DropdownMenu(
-            expanded = dropdownOpen && translations.isNotEmpty(),
+            expanded = dropdownOpen,
             onDismissRequest = { dropdownOpen = false },
             modifier = Modifier.width(320.dp),
             // Style the menu's own surface directly rather than nesting a second background

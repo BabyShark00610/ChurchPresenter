@@ -2139,6 +2139,17 @@
     <string name="content_outputs_done">Gata</string>
     <string name="content_outputs_preview">Această ieșire afișează</string>
     <string name="content_outputs_preview_empty">Nimic activat — această ieșire rămâne goală</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Traduceri ale Bibliei</string>
+    <string name="content_bible_translations_all">Toate</string>
+    <string name="content_bible_translations_enabled">%1$d din %2$d traduceri activate</string>
+    <string name="content_bible_translations_footer">Mai multe traduceri sunt afișate suprapuse pe ecran, cea principală prima.</string>
+    <string name="content_bible_translation_portion_ot_nt">VT+NT</string>
+    <string name="content_bible_translation_portion_nt">NT</string>
+    <string name="content_bible_translation_portion_ot">VT</string>
+    <string name="content_bible_translations_more">+%1$d în plus</string>
+    <string name="content_bible_translations_all_selected">Toate Bibliile</string>
+    <string name="content_bible_translations_count_enabled">%1$d activate</string>
     <string name="bible_translation">Traducere %1$d</string>
     <string name="add_bible_translation">Adaugă traducere</string>
     <string name="bible_reference">Referință biblică</string>

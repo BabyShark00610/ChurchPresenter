@@ -206,8 +206,11 @@ class ProjectionSettingsTabContentOutputsTest {
         openContentOutputs()
         assertEquals(Constants.SONG_LANG_BOTH, row0(get).bibleMode, "Bible starts on")
 
-        // Bible is a checkbox now; its per-translation ticks only appear with more than one
-        // translation configured, which this fixture does not have.
+        // The on/off control lives on the master row inside the translation-picker dropdown, not
+        // on the collapsed trigger, so it must be opened first. Per-translation ticks only appear
+        // with more than one translation configured, which this fixture does not have.
+        onNodeWithContentDescription("Bible Translations").performClick()
+        waitForIdle()
         onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
 
@@ -232,13 +235,17 @@ class ProjectionSettingsTabContentOutputsTest {
     @Test
     fun `switching Bible off drops it from the count and the preview`() = projectionTab { get ->
         openContentOutputs()
+        onNodeWithContentDescription("Bible Translations").performClick()
+        waitForIdle()
         onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
 
         assertEquals(Constants.SONG_LANG_OFF, row0(get).bibleMode, "unticking must be stored")
         onNodeWithText("14 of 16 content types enabled on this screen").assertExists()
-        // Only the dialog's own checkbox label is left; the preview chip is gone.
-        onAllNodesWithText("Bible").assertCountEquals(1)
+        // The preview chip is gone (Bible is off), leaving the trigger's own label plus the master
+        // row's label inside the still-open dropdown -- toggling it does not dismiss the menu, so
+        // more can be picked without reopening it.
+        onAllNodesWithText("Bible").assertCountEquals(2)
     }
 
     // ── Back on the tab ─────────────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -200,8 +201,12 @@ class ProjectionSettingsTabAudioAndLabelsTest {
     @Test
     fun `the Bible output can be switched off from the dialog`() = projectionTab { get ->
         // The Bible is a checkbox now, not a mode dropdown: per-translation ticks appear beside it
-        // once more than one translation is configured.
+        // once more than one translation is configured. The on/off control lives on the master row
+        // inside the translation-picker dropdown, not on the collapsed trigger, so it must be
+        // opened first.
         gridButton(Grid.contentOutputs(row = 0)).performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithContentDescription("Bible Translations").performClick()
         waitForIdle()
         onAllNodes(isToggleable())[0].performScrollTo().performClick()
         waitForIdle()
@@ -210,8 +215,9 @@ class ProjectionSettingsTabAudioAndLabelsTest {
             get().projectionSettings.screenAssignments[0].bibleMode,
             "unticking Bible must switch the output off",
         )
-        // Switched off it drops out of the preview, leaving only the dialog's own checkbox label.
-        onAllNodesWithText("Bible").assertCountEquals(1)
+        // The preview chip is gone (Bible is off), leaving the trigger's own label plus the master
+        // row's label inside the still-open dropdown -- toggling it does not dismiss the menu.
+        onAllNodesWithText("Bible").assertCountEquals(2)
     }
 
     @Test

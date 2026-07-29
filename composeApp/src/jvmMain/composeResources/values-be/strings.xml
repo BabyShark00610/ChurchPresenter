@@ -2109,6 +2109,17 @@
     <string name="content_outputs_done">Гатова</string>
     <string name="content_outputs_preview">Гэты выхад паказвае</string>
     <string name="content_outputs_preview_empty">Нічога не ўключана — выхад застанецца пустым</string>
+    <string name="content_outputs_preview_translations">%1$s (%2$s)</string>
+    <string name="content_bible_translations_header">Пераклады Бібліі</string>
+    <string name="content_bible_translations_all">Усе</string>
+    <string name="content_bible_translations_enabled">%1$d з %2$d перакладаў уключана</string>
+    <string name="content_bible_translations_footer">Некалькі перакладаў паказваюцца адзін пад адным на экране, першасны наверсе.</string>
+    <string name="content_bible_translation_portion_ot_nt">СЗ+НЗ</string>
+    <string name="content_bible_translation_portion_nt">НЗ</string>
+    <string name="content_bible_translation_portion_ot">СЗ</string>
+    <string name="content_bible_translations_more">+%1$d яшчэ</string>
+    <string name="content_bible_translations_all_selected">Усе Бібліі</string>
+    <string name="content_bible_translations_count_enabled">%1$d уключана</string>
     <string name="bible_translation">Пераклад %1$d</string>
     <string name="add_bible_translation">Дадаць пераклад</string>
     <string name="bible_reference">Біблейская спасылка</string>
