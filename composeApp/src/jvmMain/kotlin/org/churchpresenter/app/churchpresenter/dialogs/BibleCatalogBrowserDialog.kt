@@ -3,12 +3,14 @@ package org.churchpresenter.app.churchpresenter.dialogs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,16 +27,25 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Copyright
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,13 +58,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.bible_catalog_attribution
+import churchpresenter.composeapp.generated.resources.bible_catalog_done
 import churchpresenter.composeapp.generated.resources.bible_catalog_download
 import churchpresenter.composeapp.generated.resources.bible_catalog_download_error_archive
 import churchpresenter.composeapp.generated.resources.bible_catalog_download_error_convert
@@ -61,17 +77,25 @@ import churchpresenter.composeapp.generated.resources.bible_catalog_download_err
 import churchpresenter.composeapp.generated.resources.bible_catalog_download_error_network
 import churchpresenter.composeapp.generated.resources.bible_catalog_download_error_write
 import churchpresenter.composeapp.generated.resources.bible_catalog_empty
+import churchpresenter.composeapp.generated.resources.bible_catalog_empty_hint
 import churchpresenter.composeapp.generated.resources.bible_catalog_error_generic
 import churchpresenter.composeapp.generated.resources.bible_catalog_error_network
 import churchpresenter.composeapp.generated.resources.bible_catalog_error_rate_limited
 import churchpresenter.composeapp.generated.resources.bible_catalog_installed
+import churchpresenter.composeapp.generated.resources.bible_catalog_installed_count
 import churchpresenter.composeapp.generated.resources.bible_catalog_installed_summary
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_all
 import churchpresenter.composeapp.generated.resources.bible_catalog_language_count
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_accept
+import churchpresenter.composeapp.generated.resources.bible_catalog_license_badge_redistributable
+import churchpresenter.composeapp.generated.resources.bible_catalog_license_badge_unverified
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_body
+import churchpresenter.composeapp.generated.resources.bible_catalog_license_field_copyright
+import churchpresenter.composeapp.generated.resources.bible_catalog_license_field_identifier
+import churchpresenter.composeapp.generated.resources.bible_catalog_license_field_source
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_source_ebible
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_source_zefania
+import churchpresenter.composeapp.generated.resources.bible_catalog_license_subtitle
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_title
 import churchpresenter.composeapp.generated.resources.bible_catalog_license_unknown
 import churchpresenter.composeapp.generated.resources.bible_catalog_loading
@@ -89,6 +113,10 @@ import churchpresenter.composeapp.generated.resources.bible_catalog_size_mb
 import churchpresenter.composeapp.generated.resources.bible_catalog_source_ebible
 import churchpresenter.composeapp.generated.resources.bible_catalog_source_zefania
 import churchpresenter.composeapp.generated.resources.bible_catalog_stale_notice
+import churchpresenter.composeapp.generated.resources.bible_catalog_subtitle
+import churchpresenter.composeapp.generated.resources.bible_catalog_testament_full
+import churchpresenter.composeapp.generated.resources.bible_catalog_testament_new
+import churchpresenter.composeapp.generated.resources.bible_catalog_testament_old
 import churchpresenter.composeapp.generated.resources.bible_catalog_title
 import churchpresenter.composeapp.generated.resources.cancel
 import churchpresenter.composeapp.generated.resources.ok
@@ -101,6 +129,7 @@ import org.churchpresenter.app.churchpresenter.data.BibleSource
 import org.churchpresenter.app.churchpresenter.data.BibleSourceId
 import org.churchpresenter.app.churchpresenter.data.EBibleSource
 import org.churchpresenter.app.churchpresenter.data.InstallPhase
+import org.churchpresenter.app.churchpresenter.data.Testament
 import org.churchpresenter.app.churchpresenter.data.ZefaniaSource
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleCatalogError
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleCatalogViewModel
@@ -142,9 +171,9 @@ fun BibleCatalogBrowserDialog(
 
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
-        position = centeredOnMainWindow(mainWindowState, 720.dp, 700.dp),
-        width = 720.dp,
-        height = 700.dp
+        position = centeredOnMainWindow(mainWindowState, 860.dp, 780.dp),
+        width = 860.dp,
+        height = 780.dp
     )
 
     DialogWindow(
@@ -172,7 +201,15 @@ internal fun BibleCatalogBrowserDialogContent(
     var selectedTab by remember { mutableStateOf(0) }
     val viewModel = viewModels[selectedTab]
 
-    // Each tab loads the first time it is opened, so the second archive costs nothing unless asked for.
+    // Only a directory listing, not a network fetch, so every tab's installed set is known up
+    // front — otherwise the header's total-installed count would only reflect whichever tab
+    // happens to be active.
+    LaunchedEffect(viewModels) {
+        viewModels.forEach { it.refreshInstalled() }
+    }
+
+    // Each tab's catalogue loads the first time it is opened, so the second archive costs nothing
+    // unless asked for.
     LaunchedEffect(viewModel) {
         viewModel.refreshInstalled()
         viewModel.load()
@@ -182,146 +219,296 @@ internal fun BibleCatalogBrowserDialogContent(
     // translation, so an acknowledgement given for one says nothing about the next.
     var pendingInstall by remember { mutableStateOf<BibleModule?>(null) }
 
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-                Text(
-                    text = stringResource(Res.string.bible_catalog_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(12.dp))
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+            Header(installedCount = viewModels.first().installedFiles.size)
+            Spacer(Modifier.height(16.dp))
 
-                PrimaryTabRow(selectedTabIndex = selectedTab) {
-                    tabLabels.forEachIndexed { index, label ->
-                        Tab(
-                            selected = selectedTab == index,
-                            onClick = { selectedTab = index },
-                            text = { Text(label) }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-
-                FilterRow(viewModel)
-                Spacer(Modifier.height(12.dp))
-
-                Messages(viewModel)
-
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    when {
-                        viewModel.isLoading && viewModel.modules.isEmpty() -> {
-                            Column(
-                                modifier = Modifier.align(Alignment.Center),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                CircularProgressIndicator()
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = stringResource(Res.string.bible_catalog_loading),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                        viewModel.catalogError != null && viewModel.modules.isEmpty() -> {
-                            TextButton(
-                                onClick = { viewModel.load() },
-                                modifier = Modifier.align(Alignment.Center)
-                            ) {
-                                Text(stringResource(Res.string.bible_catalog_retry))
-                            }
-                        }
-                        viewModel.visibleModules.isEmpty() -> {
-                            Text(
-                                text = stringResource(Res.string.bible_catalog_empty),
-                                modifier = Modifier.align(Alignment.Center),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                        else -> {
-                            val listState = rememberLazyListState()
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize().padding(end = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                items(viewModel.visibleModules, key = { it.key }) { module ->
-                                    ModuleRow(
-                                        module = module,
-                                        showDate = module.displayName.trim().lowercase() in viewModel.duplicateDisplayNames,
-                                        isInstalled = viewModel.isInstalled(module),
-                                        isInstalling = viewModel.installingKey == module.key,
-                                        phase = viewModel.installPhase,
-                                        progress = viewModel.installProgress,
-                                        anyInstallRunning = viewModel.installingKey != null,
-                                        onInstall = { pendingInstall = module }
-                                    )
-                                }
-                            }
-                            VerticalScrollbar(
-                                adapter = rememberScrollbarAdapter(listState),
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(Res.string.bible_catalog_attribution),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    // Not "Cancel": each install has already happened by the time this is pressed,
-                    // so there is nothing here to call off.
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(Res.string.ok))
-                    }
-                }
-            }
-        }
-
-        pendingInstall?.let { module ->
-            LicenceConfirmation(
-                module = module,
-                isReinstall = viewModel.isInstalled(module),
-                onConfirm = {
-                    pendingInstall = null
-                    viewModel.install(module, onBibleInstalled)
-                },
-                onDismiss = { pendingInstall = null }
+            SourceSegmentedControl(
+                viewModels = viewModels,
+                tabLabels = tabLabels,
+                selectedTab = selectedTab,
+                onSelect = { selectedTab = it }
             )
-        }
+            Spacer(Modifier.height(12.dp))
 
-        viewModel.lastInstalled?.let { installed ->
-            AlertDialog(
-                onDismissRequest = { viewModel.dismissInstalledNotice() },
-                title = { Text(stringResource(Res.string.bible_catalog_installed)) },
-                text = {
-                    Column {
-                        Text(stringResource(Res.string.bible_catalog_installed_summary, installed.title, installed.books))
-                        if (installed.rights.isNotBlank()) {
-                            Spacer(Modifier.height(8.dp))
+            FilterRow(viewModel)
+            Spacer(Modifier.height(12.dp))
+
+            Messages(viewModel)
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    viewModel.isLoading && viewModel.modules.isEmpty() -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(12.dp))
                             Text(
-                                text = stringResource(Res.string.bible_catalog_rights, installed.rights),
-                                style = MaterialTheme.typography.bodySmall,
+                                text = stringResource(Res.string.bible_catalog_loading),
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
                     }
-                },
-                confirmButton = {
-                    TextButton(onClick = { viewModel.dismissInstalledNotice() }) {
-                        Text(stringResource(Res.string.ok))
+                    viewModel.catalogError != null && viewModel.modules.isEmpty() -> {
+                        TextButton(
+                            onClick = { viewModel.load() },
+                            modifier = Modifier.align(Alignment.Center)
+                        ) {
+                            Text(stringResource(Res.string.bible_catalog_retry))
+                        }
+                    }
+                    viewModel.visibleModules.isEmpty() -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(Res.string.bible_catalog_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(Res.string.bible_catalog_empty_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                    else -> {
+                        val listState = rememberLazyListState()
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().padding(end = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(viewModel.visibleModules, key = { it.key }) { module ->
+                                ModuleRow(
+                                    module = module,
+                                    showDate = module.displayName.trim().lowercase() in viewModel.duplicateDisplayNames,
+                                    isInstalled = viewModel.isInstalled(module),
+                                    isInstalling = viewModel.installingKey == module.key,
+                                    phase = viewModel.installPhase,
+                                    progress = viewModel.installProgress,
+                                    anyInstallRunning = viewModel.installingKey != null,
+                                    onInstall = { pendingInstall = module }
+                                )
+                            }
+                        }
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(listState),
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                        )
                     }
                 }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(Res.string.bible_catalog_attribution),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(12.dp))
+                // Not "Cancel": each install has already happened by the time this is pressed,
+                // so there is nothing here to call off.
+                Button(onClick = onDismiss, shape = RoundedCornerShape(6.dp)) {
+                    Text(stringResource(Res.string.bible_catalog_done))
+                }
+            }
+        }
+    }
+
+    pendingInstall?.let { module ->
+        LicenceConfirmation(
+            module = module,
+            isReinstall = viewModel.isInstalled(module),
+            onConfirm = {
+                pendingInstall = null
+                viewModel.install(module, onBibleInstalled)
+            },
+            onDismiss = { pendingInstall = null }
+        )
+    }
+
+    viewModel.lastInstalled?.let { installed ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissInstalledNotice() },
+            title = { Text(stringResource(Res.string.bible_catalog_installed)) },
+            text = {
+                Column {
+                    Text(stringResource(Res.string.bible_catalog_installed_summary, installed.title, installed.books))
+                    if (installed.rights.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(Res.string.bible_catalog_rights, installed.rights),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissInstalledNotice() }) {
+                    Text(stringResource(Res.string.ok))
+                }
+            }
+        )
+    }
+}
+
+/** Rounded-square icon swatch shared by the dialog header and the licence-confirmation header. */
+@Composable
+private fun IconBadge(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    container: Color = MaterialTheme.colorScheme.primaryContainer,
+    content: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    size: Dp = 40.dp
+) {
+    Surface(
+        modifier = modifier.size(size),
+        shape = MaterialTheme.shapes.small,
+        color = container,
+        contentColor = content
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(size / 2))
+        }
+    }
+}
+
+@Composable
+private fun Header(installedCount: Int) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        IconBadge(icon = Icons.Filled.Book)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(Res.string.bible_catalog_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = stringResource(Res.string.bible_catalog_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(MaterialTheme.colorScheme.inverseOnSurface, CircleShape)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(Res.string.bible_catalog_installed_count, installedCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceSegmentedControl(
+    viewModels: List<BibleCatalogViewModel>,
+    tabLabels: List<String>,
+    selectedTab: Int,
+    onSelect: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        tabLabels.forEachIndexed { index, label ->
+            val selected = index == selectedTab
+            val container = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+            val content = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            Surface(
+                onClick = { onSelect(index) },
+                shape = MaterialTheme.shapes.small,
+                color = container,
+                contentColor = content
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    SegmentCountBadge(viewModel = viewModels[index], contentColor = content)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A tab not yet loaded shows a small spinner rather than a stale or fabricated count — this
+ * dialog deliberately keeps each archive's catalogue lazy, loaded only when its tab is opened.
+ */
+@Composable
+private fun SegmentCountBadge(viewModel: BibleCatalogViewModel, contentColor: Color) {
+    val notYetLoaded = viewModel.modules.isEmpty() && viewModel.catalogError == null
+    if (notYetLoaded) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(10.dp),
+            strokeWidth = 1.5.dp,
+            color = contentColor
+        )
+    } else {
+        Surface(shape = CircleShape, color = contentColor.copy(alpha = 0.2f)) {
+            Text(
+                text = viewModel.visibleModules.size.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
             )
         }
     }
+}
 
 /**
  * Shown before every download.
@@ -331,7 +518,10 @@ internal fun BibleCatalogBrowserDialogContent(
  * and it says so plainly when the translation declares none, which is the case that most warrants
  * a look before the text goes on a screen in front of a congregation.
  *
- * Re-downloading folds into the same dialog rather than stacking a second one on top.
+ * Re-downloading folds into the same dialog rather than stacking a second one on top. The
+ * redistributable/unverified badge is chosen from which archive the module came from, not from
+ * whether its copyright string happens to be blank — eBible always states redistribution rights,
+ * Zefania never publishes licence details up front, regardless of any one module's copyright text.
  */
 @Composable
 private fun LicenceConfirmation(
@@ -340,41 +530,104 @@ private fun LicenceConfirmation(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isRedistributable = module.sourceId == BibleSourceId.EBIBLE
+    val badgeContainer = if (isRedistributable) MaterialTheme.colorScheme.inverseSurface else MaterialTheme.colorScheme.errorContainer
+    val badgeContent = if (isRedistributable) MaterialTheme.colorScheme.inverseOnSurface else MaterialTheme.colorScheme.onErrorContainer
+    val badgeLabel = stringResource(
+        if (isRedistributable) Res.string.bible_catalog_license_badge_redistributable
+        else Res.string.bible_catalog_license_badge_unverified
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.bible_catalog_license_title)) },
+        icon = { IconBadge(icon = Icons.Filled.Copyright) },
+        title = {
+            Column {
+                Text(stringResource(Res.string.bible_catalog_license_title), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = stringResource(Res.string.bible_catalog_license_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
         text = {
             // Some copyright statements run to several lines, and the notice sits below them, so
             // this can outgrow a short window.
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    text = module.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = if (module.copyright.isNotBlank()) {
-                        stringResource(Res.string.bible_catalog_rights, module.copyright)
-                    } else {
-                        stringResource(Res.string.bible_catalog_license_unknown)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-                )
-                Spacer(Modifier.height(8.dp))
-                // What the archive itself vouches for differs sharply between the two, and that is
-                // the part someone deciding whether they may project this text actually needs.
-                Text(
-                    text = stringResource(sourceLicenceStringRes(module.sourceId)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = module.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f, fill = false),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Surface(shape = MaterialTheme.shapes.extraSmall, color = badgeContainer, contentColor = badgeContent) {
+                            Text(
+                                text = badgeLabel.uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    MetadataRow(
+                        label = stringResource(Res.string.bible_catalog_license_field_source),
+                        value = stringResource(sourceLabelStringRes(module.sourceId))
+                    )
+                    MetadataRow(
+                        label = stringResource(Res.string.bible_catalog_license_field_identifier),
+                        value = module.identifier
+                    )
+                    MetadataRow(
+                        label = stringResource(Res.string.bible_catalog_license_field_copyright),
+                        value = if (module.copyright.isNotBlank()) {
+                            module.copyright
+                        } else {
+                            stringResource(Res.string.bible_catalog_license_unknown)
+                        }
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(Res.string.bible_catalog_license_body),
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
+                        .padding(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        // What the archive itself vouches for differs sharply between the two, and
+                        // that is the part someone deciding whether they may project this text
+                        // actually needs.
+                        Text(
+                            text = stringResource(sourceLicenceStringRes(module.sourceId)),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(Res.string.bible_catalog_license_body),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
                 if (isReinstall) {
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -386,16 +639,36 @@ private fun LicenceConfirmation(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            Button(onClick = onConfirm, shape = RoundedCornerShape(6.dp)) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
                 Text(stringResource(Res.string.bible_catalog_license_accept))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(6.dp)) {
                 Text(stringResource(Res.string.cancel))
             }
         }
     )
+}
+
+@Composable
+private fun MetadataRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(90.dp)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+    }
 }
 
 @Composable
@@ -415,6 +688,14 @@ private fun FilterRow(viewModel: BibleCatalogViewModel) {
             value = viewModel.query,
             onValueChange = { viewModel.query = it },
             placeholder = { Text(stringResource(Res.string.bible_catalog_search_placeholder)) },
+            leadingIcon = {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            },
             modifier = Modifier.weight(1f),
             singleLine = true
         )
@@ -423,6 +704,14 @@ private fun FilterRow(viewModel: BibleCatalogViewModel) {
             value = selectedLabel,
             options = listOf(allLanguagesLabel) + languageLabels.keys,
             onValueChange = { label -> viewModel.selectedLanguage = languageLabels[label] },
+            leadingIcon = {
+                Icon(
+                    Icons.Default.Language,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
             modifier = Modifier.width(220.dp)
         )
     }
@@ -458,10 +747,10 @@ private fun Messages(viewModel: BibleCatalogViewModel) {
 
 /**
  * Narrow enough that the button reads as the row's action rather than a column of its own, and wide
- * enough for "Installed  Re-download" and the progress bar to sit in the same footprint — so a row
- * doesn't reflow when an install starts.
+ * enough for the phase label and progress bar to sit in the same footprint as the buttons — so a
+ * row doesn't reflow when an install starts.
  */
-private val ACTION_COLUMN_WIDTH = 148.dp
+private val ACTION_COLUMN_WIDTH = 160.dp
 
 @Composable
 private fun ModuleRow(
@@ -495,26 +784,43 @@ private fun ModuleRow(
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        ModuleAvatar(module)
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            // Above the name, not below it: eBible states each translation's licence in its
-            // catalogue, and what someone may legally project matters before the title does.
-            if (module.copyright.isNotBlank()) {
+            // Name is the headline; everything else sits beneath it as progressively fainter meta,
+            // with copyright last and mutest — what someone may legally project matters, but the
+            // name is what they're actually looking for in this list.
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = module.copyright,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    text = module.displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+                if (isInstalled) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = MaterialTheme.shapes.extraSmall,
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        contentColor = MaterialTheme.colorScheme.inverseOnSurface
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(11.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                text = stringResource(Res.string.bible_catalog_installed),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                }
             }
-            Text(
-                text = module.displayName,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
             Text(
                 text = moduleSubtitle(module, showDate),
                 style = MaterialTheme.typography.bodySmall,
@@ -522,6 +828,15 @@ private fun ModuleRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (module.copyright.isNotBlank()) {
+                Text(
+                    text = module.copyright,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Box(modifier = Modifier.width(ACTION_COLUMN_WIDTH), contentAlignment = Alignment.CenterEnd) {
@@ -539,24 +854,16 @@ private fun ModuleRow(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                isInstalled -> Row(verticalAlignment = Alignment.CenterVertically) {
+                isInstalled -> OutlinedButton(
+                    onClick = onInstall,
+                    enabled = !anyInstallRunning,
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
                     Text(
-                        text = stringResource(Res.string.bible_catalog_installed),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        text = stringResource(Res.string.bible_catalog_redownload),
+                        style = MaterialTheme.typography.labelMedium
                     )
-                    Spacer(Modifier.width(6.dp))
-                    TextButton(
-                        onClick = onInstall,
-                        enabled = !anyInstallRunning,
-                        shape = RoundedCornerShape(6.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            text = stringResource(Res.string.bible_catalog_redownload),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
                 }
                 else -> Button(
                     onClick = onInstall,
@@ -564,6 +871,8 @@ private fun ModuleRow(
                     shape = RoundedCornerShape(6.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = stringResource(Res.string.bible_catalog_download),
                         style = MaterialTheme.typography.labelMedium
@@ -573,6 +882,52 @@ private fun ModuleRow(
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+}
+
+/**
+ * Small rounded-square swatch leading each row: the module's identifier plus a colored testament
+ * chip. Colors come straight from the theme's primary/secondary/tertiary roles (the same pattern
+ * `SearchModeChip` in `BibleTab.kt` uses), which is what keeps them correct across all app themes
+ * instead of copying the redesign mockup's hardcoded dark-theme palette.
+ */
+@Composable
+private fun ModuleAvatar(module: BibleModule) {
+    val (container, content) = when (module.testament) {
+        Testament.NEW -> MaterialTheme.colorScheme.secondary to MaterialTheme.colorScheme.onSecondary
+        Testament.OLD -> MaterialTheme.colorScheme.tertiary to MaterialTheme.colorScheme.onTertiary
+        Testament.FULL -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
+    }
+    val testamentLabel = stringResource(
+        when (module.testament) {
+            Testament.NEW -> Res.string.bible_catalog_testament_new
+            Testament.OLD -> Res.string.bible_catalog_testament_old
+            Testament.FULL -> Res.string.bible_catalog_testament_full
+        }
+    )
+    Surface(
+        modifier = Modifier.size(44.dp),
+        shape = MaterialTheme.shapes.small,
+        color = container,
+        contentColor = content
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = module.identifier.take(3).uppercase(),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = testamentLabel,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable
@@ -594,6 +949,11 @@ private fun phaseStringRes(phase: InstallPhase?): StringResource = when (phase) 
     InstallPhase.CONVERTING -> Res.string.bible_catalog_phase_converting
     InstallPhase.INSTALLING -> Res.string.bible_catalog_phase_installing
     else -> Res.string.bible_catalog_phase_downloading
+}
+
+private fun sourceLabelStringRes(sourceId: BibleSourceId): StringResource = when (sourceId) {
+    BibleSourceId.EBIBLE -> Res.string.bible_catalog_source_ebible
+    BibleSourceId.ZEFANIA -> Res.string.bible_catalog_source_zefania
 }
 
 private fun sourceLicenceStringRes(sourceId: BibleSourceId): StringResource = when (sourceId) {

@@ -4,10 +4,10 @@ package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -198,8 +198,8 @@ class BibleCatalogBrowserContentTest {
     }
 
     @Test
-    fun `the OK button dismisses the dialog`() = dialog { dismissed, _ ->
-        onAllNodes(hasText("OK")).onFirst().performClick()
+    fun `the Done button dismisses the dialog`() = dialog { dismissed, _ ->
+        onNodeWithText("Done").performClick()
         assertEquals(1, dismissed())
     }
 
@@ -304,7 +304,10 @@ class BibleCatalogBrowserContentTest {
         catalogOutcome = BibleCatalogOutcome.Success(listOf(module(copyright = "Public Domain"))),
     ) { _, _ ->
         onNodeWithText("Download").performClick()
-        onNodeWithText("Copyright: Public Domain").assertExists()
+        onNodeWithText("Copyright").assertExists()
+        // The row behind the dialog still shows its own copyright line, so this text now
+        // appears twice: once in the list row, once in the dialog's metadata field.
+        onAllNodes(hasText("Public Domain")).assertCountEquals(2)
         onNodeWithText(
             "eBible.org lists this translation as redistributable and publishes the copyright shown above."
         ).assertExists()

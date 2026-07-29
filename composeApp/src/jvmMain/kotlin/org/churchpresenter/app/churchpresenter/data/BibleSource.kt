@@ -6,6 +6,12 @@ import java.io.File
 /** The archives the downloader can install from, in the order they are offered. */
 enum class BibleSourceId { EBIBLE, ZEFANIA }
 
+/** Which portion of scripture a translation covers. */
+enum class Testament { OLD, NEW, FULL }
+
+private val NT_TOKEN = Regex("\\bNT\\b")
+private val OT_TOKEN = Regex("\\bOT\\b")
+
 /**
  * One downloadable translation, as shown in the browse list.
  *
@@ -32,6 +38,21 @@ data class BibleModule(
 
     /** Stable across sources, so an install in one tab can't be confused with one in another. */
     val key: String get() = "${sourceId.name}:$downloadKey"
+
+    /**
+     * Neither archive publishes a testament field, so this is inferred from the name itself: a
+     * standalone "NT" or "OT" token names the portion; a name with neither names the full Bible.
+     */
+    val testament: Testament
+        get() {
+            val hasNt = NT_TOKEN.containsMatchIn(displayName)
+            val hasOt = OT_TOKEN.containsMatchIn(displayName)
+            return when {
+                hasNt && !hasOt -> Testament.NEW
+                hasOt && !hasNt -> Testament.OLD
+                else -> Testament.FULL
+            }
+        }
 }
 
 sealed interface BibleCatalogOutcome {
