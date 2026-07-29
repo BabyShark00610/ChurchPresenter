@@ -603,13 +603,19 @@ fun ScheduleTab(
                 )
             }
 
+            val rows = scheduleItems.toList()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(end = 12.dp)
             ) {
-                itemsIndexed(scheduleItems, key = { _, item -> item.id }) { index, item ->
+                // A fixed copy, not the live list. `itemsIndexed` reads `items[index]` inside the key
+                // and content-type lambdas it builds, and those run when the lazy layout rebuilds its
+                // key map — which can be after a delete or an undo has already shortened the list,
+                // leaving it indexing past the end and taking the whole tab down. Copying at
+                // composition gives those lambdas a list that cannot shrink under them.
+                itemsIndexed(rows, key = { _, item -> item.id }) { index, item ->
                     val isDraggingThis = isDragActive && draggingFromIndex == index
 
                     Column(modifier = Modifier.animateItem()) {
@@ -664,7 +670,9 @@ fun ScheduleTab(
                         }
                     }
 
-                    if (index < scheduleItems.size - 1) {
+                    // Against the same fixed copy `index` came from, so a row cannot ask whether it is
+                    // last against a list of a different length.
+                    if (index < rows.size - 1) {
                         HorizontalDivider(
                             thickness = 1.dp,
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
