@@ -1531,6 +1531,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Song Title Slide</string>
+    <string name="show_song_number_before_title">Show song number before title</string>
     <string name="enabled">Enabled</string>
 
     <!-- Stage Monitor Settings -->

@@ -1368,6 +1368,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Liedtitel-dia</string>
+    <string name="show_song_number_before_title">Liednummer vóór de titel weergeven</string>
     <string name="enabled">Ingeschakeld</string>
 
     <!-- Stage Monitor Settings -->

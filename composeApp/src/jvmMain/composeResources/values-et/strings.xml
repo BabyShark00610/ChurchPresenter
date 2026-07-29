@@ -1427,6 +1427,7 @@
 
     <!-- Song Title Slide -->
     <string name="song_title_slide">Laulu pealkirja slaid</string>
+    <string name="show_song_number_before_title">Kuva laulu number enne pealkirja</string>
     <string name="enabled">Lubatud</string>
 
     <!-- Stage Monitor Settings -->

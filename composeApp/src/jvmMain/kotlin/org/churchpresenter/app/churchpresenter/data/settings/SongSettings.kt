@@ -75,6 +75,7 @@ data class SongSettings(
 
     // Song Title Slide settings
     val titleSlideEnabled: Boolean = false,
+    val titleSlideShowSongNumber: Boolean = true,
 
     // Song number settings
     val songNumberFontSize: Int = 70,

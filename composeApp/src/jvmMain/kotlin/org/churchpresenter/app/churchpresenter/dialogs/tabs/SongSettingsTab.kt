@@ -77,6 +77,7 @@ import churchpresenter.composeapp.generated.resources.song_language_secondary
 import churchpresenter.composeapp.generated.resources.enabled
 import churchpresenter.composeapp.generated.resources.song_number
 import churchpresenter.composeapp.generated.resources.song_title_slide
+import churchpresenter.composeapp.generated.resources.show_song_number_before_title
 import churchpresenter.composeapp.generated.resources.title
 import churchpresenter.composeapp.generated.resources.vertical_alignment
 import churchpresenter.composeapp.generated.resources.word_wrap
@@ -182,16 +183,45 @@ private fun TitleSlideColumn(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
 ) {
     SettingsSection(title = stringResource(Res.string.song_title_slide)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = settings.songSettings.titleSlideEnabled,
-                onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(titleSlideEnabled = it)) } },
-                modifier = Modifier.size(24.dp).testTag("song_titleSlideEnabled")
-            )
-            Text(stringResource(Res.string.enabled), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = settings.songSettings.titleSlideEnabled,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(titleSlideEnabled = it)) } },
+                    modifier = Modifier.size(24.dp).testTag("song_titleSlideEnabled")
+                )
+                Text(stringResource(Res.string.enabled), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = settings.songSettings.titleSlideShowSongNumber,
+                    onCheckedChange = if (settings.songSettings.titleSlideEnabled) {
+                        { checked ->
+                            onSettingsChange { s ->
+                                s.copy(songSettings = s.songSettings.copy(titleSlideShowSongNumber = checked))
+                            }
+                        }
+                    } else null,
+                    enabled = settings.songSettings.titleSlideEnabled,
+                    modifier = Modifier.size(24.dp).testTag("song_titleSlideShowSongNumber")
+                )
+                Text(
+                    text = stringResource(Res.string.show_song_number_before_title),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (settings.songSettings.titleSlideEnabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    },
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
         }
     }
 }
@@ -1462,4 +1492,3 @@ private fun segmentedItemShape(index: Int, count: Int): Shape {
         else -> RoundedCornerShape(0.dp)
     }
 }
-

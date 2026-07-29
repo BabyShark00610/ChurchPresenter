@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
+import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -68,6 +69,21 @@ class SongsTabSelectionTest {
             "and the lyric pane follows it, carrying that song's own section",
         )
     }
+
+    @Test
+    fun `the title-slide card omits the number when that setting is disabled`() =
+        songsTab(
+            songSettings = SongSettings(
+                titleSlideEnabled = true,
+                titleSlideShowSongNumber = false,
+            ),
+        ) { _, _ ->
+            assertTrue(shows("Amazing Grace"), "the stored song title must still be shown")
+            assertTrue(
+                !shows("1 – Amazing Grace"),
+                "the preview must match the number-free title slide sent to the presenter",
+            )
+        }
 
     @Test
     fun `selecting a row does NOT push anything to the presenter`() = songsTab { _, reports ->
