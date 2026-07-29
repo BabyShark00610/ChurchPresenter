@@ -128,6 +128,30 @@ class EBibleSourceTest {
     }
 
     @Test
+    fun `the published book counts are read so the testament need not be guessed`() {
+        val header = "languageCode,translationId,shortTitle,OTbooks,NTbooks,Copyright,Redistributable,downloadable,UpdateDate"
+        val body = listOf(
+            header,
+            "ach,achNT,New Testament in Achi,0,27,PD,True,True,2020-01-01",
+            "eng,acv,A Conservative Version,39,27,PD,True,True,2020-01-01",
+        ).joinToString("\n")
+
+        val modules = modulesOf(body).associateBy { it.identifier }
+
+        // The name spells the words out, so the old name-only rule called this a whole Bible.
+        assertEquals(Testament.NEW, modules.getValue("achNT").testament)
+        assertEquals(Testament.FULL, modules.getValue("acv").testament)
+    }
+
+    @Test
+    fun `a catalogue with no book counts falls back to reading the name`() {
+        val modules = modulesOf(csv("eng,kjvNT,KJV NT,King James NT,PD,True,True,2020-01-01"))
+
+        assertEquals(0, modules.single().ntBookCount)
+        assertEquals(Testament.NEW, modules.single().testament)
+    }
+
+    @Test
     fun `the cached lookup carries both spellings for the Zefania tab to borrow`() {
         cacheFile.parentFile?.mkdirs()
         cacheFile.writeText(namedCsv("rus,synodal,русский,Russian,Synodal,Synodal Bible,PD,True,True,2020-01-01"))

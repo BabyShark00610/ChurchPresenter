@@ -45,7 +45,6 @@ fun SettingsTextField(
     singleLine: Boolean = true,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     placeholder: @Composable (() -> Unit)? = null,
-    leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     isError: Boolean = false,
     supportingText: @Composable (() -> Unit)? = null,
@@ -72,7 +71,7 @@ fun SettingsTextField(
                     .widthIn(min = 60.dp)
                     .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier.width(IntrinsicSize.Max))
                     .height(42.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, FieldShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, FieldShape)
                     .border(1.dp, borderColor, FieldShape)
                     .padding(horizontal = 9.dp, vertical = 4.dp)
             ) {
@@ -91,9 +90,6 @@ fun SettingsTextField(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (leadingIcon != null) {
-                        Box(modifier = Modifier.padding(end = 4.dp)) { leadingIcon() }
-                    }
                     BasicTextField(
                         value = value,
                         onValueChange = onValueChange,
@@ -136,7 +132,7 @@ fun SettingsTextField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (singleLine) Modifier.height(28.dp) else Modifier.padding(vertical = 5.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant, FieldShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, FieldShape)
                     .border(1.dp, borderColor, FieldShape),
                 enabled = enabled,
                 readOnly = readOnly,
@@ -158,9 +154,6 @@ fun SettingsTextField(
                             .padding(horizontal = 9.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (leadingIcon != null) {
-                            Box(modifier = Modifier.padding(end = 4.dp)) { leadingIcon() }
-                        }
                         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                             if (placeholder != null && value.isEmpty()) {
                                 CompositionLocalProvider(

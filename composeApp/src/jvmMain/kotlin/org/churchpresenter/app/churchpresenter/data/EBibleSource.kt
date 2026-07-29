@@ -150,6 +150,8 @@ object EBibleSource : BibleSource {
         // publishing these should lose the names, not the whole list.
         val languageNameEnglishIndex = index("languageNameInEnglish")
         val languageNameIndex = index("languageName")
+        val otBooksIndex = index("OTbooks")
+        val ntBooksIndex = index("NTbooks")
 
         val taken = mutableSetOf<String>()
         return rows.drop(1)
@@ -176,6 +178,10 @@ object EBibleSource : BibleSource {
                     displayName = title,
                     copyright = cell(copyrightIndex),
                     releaseDate = cell(updateIndex),
+                    // What the translation actually contains, so the browse list doesn't have to
+                    // read it off the title.
+                    otBookCount = cell(otBooksIndex).toIntOrNull() ?: 0,
+                    ntBookCount = cell(ntBooksIndex).toIntOrNull() ?: 0,
                     fileStem = BibleCatalogNaming.fileStem(language, translationId)
                 )
             }

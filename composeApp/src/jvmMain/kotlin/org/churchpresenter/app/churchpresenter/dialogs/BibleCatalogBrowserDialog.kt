@@ -223,6 +223,14 @@ internal fun BibleCatalogBrowserDialogContent(
     // translation, so an acknowledgement given for one says nothing about the next.
     var pendingInstall by remember { mutableStateOf<BibleModule?>(null) }
 
+    // An install only marks the file installed on the tab that ran it, but every tab lists the same
+    // Bible folder — so without this the header's count and the other tab's "Installed" badges stay
+    // stale until the dialog is reopened.
+    val markInstalledEverywhere: (String) -> Unit = { fileName ->
+        viewModels.forEach { it.markInstalled(fileName) }
+        onBibleInstalled(fileName)
+    }
+
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
             Header(installedCount = viewModels.first().installedFiles.size)
@@ -359,7 +367,7 @@ internal fun BibleCatalogBrowserDialogContent(
             isReinstall = viewModel.isInstalled(module),
             onConfirm = {
                 pendingInstall = null
-                viewModel.install(module, onBibleInstalled)
+                viewModel.install(module, markInstalledEverywhere)
             },
             onDismiss = { pendingInstall = null }
         )

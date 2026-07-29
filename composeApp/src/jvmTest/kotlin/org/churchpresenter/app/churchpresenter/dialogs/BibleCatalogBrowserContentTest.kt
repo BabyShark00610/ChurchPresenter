@@ -58,12 +58,25 @@ class BibleCatalogBrowserContentTest {
         var parkedCatalog: CompletableDeferred<BibleCatalogOutcome>? = null,
         var parkedInstall: CompletableDeferred<BibleInstallOutcome>? = null,
         var emitProgress: InstallProgress? = null,
+        /**
+         * Puts the installed file in the target folder, as a real source does.
+         *
+         * Off by default because most tests here only care about what the dialog says. It matters
+         * wherever something re-reads the folder afterwards — switching tabs does — since a fake
+         * that reported success without leaving a file would look like an install that vanished.
+         */
+        var writesInstalledFile: Boolean = false,
     ) : BibleSource {
         override val sourceId = BibleSourceId.EBIBLE
         override suspend fun catalog(nowMillis: Long) = parkedCatalog?.await() ?: catalogOutcome
         override suspend fun install(module: BibleModule, targetDir: File, onProgress: (InstallProgress) -> Unit): BibleInstallOutcome {
             emitProgress?.let(onProgress)
-            return parkedInstall?.await() ?: installOutcome
+            val outcome = parkedInstall?.await() ?: installOutcome
+            if (writesInstalledFile && outcome is BibleInstallOutcome.Success) {
+                targetDir.mkdirs()
+                File(targetDir, module.fileName).writeText("##Title:\t${module.displayName}")
+            }
+            return outcome
         }
     }
 
@@ -115,6 +128,88 @@ class BibleCatalogBrowserContentTest {
             settle()
             waitForIdle()
             block({ dismissed }, { installedFileName })
+        }
+    }
+
+    /**
+     * The browser with both archives as tabs, each backed by its own view model over the same Bible
+     * folder — which is what makes an install on one of them everyone's business.
+     */
+    private fun twoTabDialog(
+        firstTab: BibleCatalogOutcome,
+        secondTab: BibleCatalogOutcome,
+        block: ComposeUiTest.(selectSecondTab: ComposeUiTest.() -> Unit) -> Unit,
+    ) {
+        fun vm(outcome: BibleCatalogOutcome) = BibleCatalogViewModel(
+            FakeSource(outcome, writesInstalledFile = true), dir.absolutePath, dispatcher = Dispatchers.Unconfined
+        ).also { created.add(it) }
+
+        val models = listOf(vm(firstTab), vm(secondTab))
+        runComposeUiTest {
+            setContent {
+                MaterialTheme {
+                    BibleCatalogBrowserDialogContent(
+                        viewModels = models,
+                        tabLabels = listOf("eBible.org", "Zefania"),
+                        onDismiss = {},
+                        onBibleInstalled = {},
+                    )
+                }
+            }
+            settle()
+            waitForIdle()
+            block {
+                onNodeWithText("Zefania").performClick()
+                settle()
+                waitForIdle()
+            }
+        }
+    }
+
+    @Test
+    fun `installing on one tab counts towards the header straight away`() {
+        // Every tab lists the same Bible folder, so the count must not wait for the tab that ran the
+        // install to be the one being looked at.
+        twoTabDialog(
+            firstTab = BibleCatalogOutcome.Success(listOf(module(identifier = "ACV", fileStem = "ENG_ACV"))),
+            secondTab = BibleCatalogOutcome.Success(
+                listOf(module(identifier = "SYN", displayName = "Synodal", language = "RUS", fileStem = "RUS_SYN"))
+            ),
+        ) { selectSecondTab ->
+            onNodeWithText("0 installed").assertExists()
+
+            selectSecondTab()
+            onNodeWithText("Download").performClick()
+            onNodeWithText("I understand — Download").performClick()
+            settle()
+            waitForIdle()
+
+            onNodeWithText("1 installed").assertExists()
+        }
+    }
+
+    @Test
+    fun `a Bible installed on one tab shows as installed on the other`() {
+        val shared = module(identifier = "ACV", fileStem = "ENG_ACV")
+        twoTabDialog(
+            firstTab = BibleCatalogOutcome.Success(listOf(shared)),
+            secondTab = BibleCatalogOutcome.Success(listOf(shared)),
+        ) { selectSecondTab ->
+            selectSecondTab()
+            onNodeWithText("Download").performClick()
+            onNodeWithText("I understand — Download").performClick()
+            settle()
+            waitForIdle()
+            onNodeWithText("OK").performClick()
+            waitForIdle()
+
+            // Back on the first tab the same file is on disk, so it must not still offer to download it.
+            onNodeWithText("eBible.org").performClick()
+            settle()
+            waitForIdle()
+
+            onNodeWithText("Re-download").assertExists()
+            onNodeWithText("Download").assertDoesNotExist()
         }
     }
 

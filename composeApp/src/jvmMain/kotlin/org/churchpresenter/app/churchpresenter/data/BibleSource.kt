@@ -47,6 +47,12 @@ data class BibleModule(
     /** Blank when the source only reveals it inside the file, as the Zefania archive does. */
     val copyright: String = "",
     val releaseDate: String = "",
+    /**
+     * How many books of each testament the translation contains, where the source publishes counts;
+     * both zero when it doesn't, which is the Zefania archive's case.
+     */
+    val otBookCount: Int = 0,
+    val ntBookCount: Int = 0,
     val fileStem: String
 ) {
     val fileName: String get() = "$fileStem.${Constants.EXTENSION_SPB}"
@@ -55,11 +61,27 @@ data class BibleModule(
     val key: String get() = "${sourceId.name}:$downloadKey"
 
     /**
-     * Neither archive publishes a testament field, so this is inferred from the name itself: a
-     * standalone "NT" or "OT" token names the portion; a name with neither names the full Bible.
+     * Which portion of scripture this covers.
+     *
+     * Taken from [otBookCount]/[ntBookCount] where the source publishes them, since that is the
+     * translation's actual contents rather than a reading of its title. Only where it doesn't is
+     * the name consulted: a standalone "NT" or "OT" token names the portion, and a name with
+     * neither is assumed to be a whole Bible.
+     *
+     * The fallback is a guess and reads like one — it takes "New Testament in Achi" for a complete
+     * Bible, because that name spells the words out instead of using the token. Roughly a fifth of
+     * eBible's catalogue is misread that way, which is why the published counts win wherever they
+     * exist.
      */
     val testament: Testament
         get() {
+            if (otBookCount > 0 || ntBookCount > 0) {
+                return when {
+                    otBookCount > 0 && ntBookCount > 0 -> Testament.FULL
+                    ntBookCount > 0 -> Testament.NEW
+                    else -> Testament.OLD
+                }
+            }
             val hasNt = NT_TOKEN.containsMatchIn(displayName)
             val hasOt = OT_TOKEN.containsMatchIn(displayName)
             return when {

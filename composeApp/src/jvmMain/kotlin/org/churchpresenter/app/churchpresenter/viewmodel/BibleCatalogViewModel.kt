@@ -185,6 +185,18 @@ class BibleCatalogViewModel(
     fun isInstalled(module: BibleModule): Boolean = module.fileName in installedFiles
 
     /**
+     * Records [fileName] as present without re-reading the folder.
+     *
+     * Every tab of the browser lists the same Bible folder, so an install done on one is installed
+     * for all of them — but only the tab that ran it learns so from [install]. Re-scanning the
+     * others would work and would also undo that tab's own entry on any machine where the write has
+     * not yet settled, so the name is handed over directly instead.
+     */
+    fun markInstalled(fileName: String) {
+        installedFiles = installedFiles + fileName
+    }
+
+    /**
      * Downloads and converts [module], handing the installed file name — the same value
      * [org.churchpresenter.app.churchpresenter.data.settings.BibleSettings.primaryBible] stores —
      * to [onInstalled].
@@ -211,7 +223,7 @@ class BibleCatalogViewModel(
             }
             when (outcome) {
                 is BibleInstallOutcome.Success -> {
-                    installedFiles = installedFiles + module.fileName
+                    markInstalled(module.fileName)
                     lastInstalled = InstalledBible(module.fileName, outcome.title, outcome.books, outcome.rights)
                     onInstalled(module.fileName)
                 }
