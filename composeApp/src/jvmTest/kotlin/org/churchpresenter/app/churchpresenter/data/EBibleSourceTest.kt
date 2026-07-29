@@ -80,6 +80,87 @@ class EBibleSourceTest {
 
     private fun modulesOf(body: String) = EBibleSource.parseCatalog(body)
 
+    // --- language names ---
+
+    /** The real catalogue publishes both an English name and the language's own name for itself. */
+    private val namedHeader =
+        "languageCode,translationId,languageName,languageNameInEnglish,shortTitle,title,Copyright,Redistributable,downloadable,UpdateDate"
+
+    private fun namedCsv(vararg rows: String) = (listOf(namedHeader) + rows).joinToString("\n")
+
+    @Test
+    fun `the English language name is read off the catalogue`() {
+        val modules = modulesOf(namedCsv("deu,luther,Deutsch,German,Luther,Luther Bible,PD,True,True,2020-01-01"))
+
+        assertEquals("German", modules.single().languageName)
+        assertEquals("Deutsch", modules.single().languageNativeName)
+    }
+
+    @Test
+    fun `the autonym is kept even when an English name is published too`() {
+        // Both spellings are wanted: "русский" is the only one a Russian speaker would type, and
+        // this row publishes an English name, so a fallback would never reach it.
+        val modules = modulesOf(namedCsv("rus,synodal,русский,Russian,Synodal,Synodal Bible,PD,True,True,2020-01-01"))
+
+        assertEquals("Russian", modules.single().languageName)
+        assertEquals("русский", modules.single().languageNativeName)
+    }
+
+    @Test
+    fun `a missing English name falls back to the language's own name for itself`() {
+        val modules = modulesOf(namedCsv("aai,aaiNT,Miniafia,,Miniafia NT,Miniafia,PD,True,True,2020-01-01"))
+
+        // Both fields end up the same, which is what collapses the label back to a single name.
+        assertEquals("Miniafia", modules.single().languageName)
+        assertEquals("Miniafia", modules.single().languageNativeName)
+    }
+
+    @Test
+    fun `a catalogue with no name columns still parses, just without names`() {
+        // The columns are deliberately outside the required-column guard: a catalogue that stopped
+        // publishing them should cost the names, not the whole list.
+        val modules = modulesOf(csv("eng,acv,ACV,A Conservative Version,PD,True,True,2020-01-01"))
+
+        assertEquals(1, modules.size)
+        assertEquals("", modules.single().languageName)
+        assertEquals("", modules.single().languageNativeName)
+        assertEquals("ENG", modules.single().language, "everything else still parses")
+    }
+
+    @Test
+    fun `the published book counts are read so the testament need not be guessed`() {
+        val header = "languageCode,translationId,shortTitle,OTbooks,NTbooks,Copyright,Redistributable,downloadable,UpdateDate"
+        val body = listOf(
+            header,
+            "ach,achNT,New Testament in Achi,0,27,PD,True,True,2020-01-01",
+            "eng,acv,A Conservative Version,39,27,PD,True,True,2020-01-01",
+        ).joinToString("\n")
+
+        val modules = modulesOf(body).associateBy { it.identifier }
+
+        // The name spells the words out, so the old name-only rule called this a whole Bible.
+        assertEquals(Testament.NEW, modules.getValue("achNT").testament)
+        assertEquals(Testament.FULL, modules.getValue("acv").testament)
+    }
+
+    @Test
+    fun `a catalogue with no book counts falls back to reading the name`() {
+        val modules = modulesOf(csv("eng,kjvNT,KJV NT,King James NT,PD,True,True,2020-01-01"))
+
+        assertEquals(0, modules.single().ntBookCount)
+        assertEquals(Testament.NEW, modules.single().testament)
+    }
+
+    @Test
+    fun `the cached lookup carries both spellings for the Zefania tab to borrow`() {
+        cacheFile.parentFile?.mkdirs()
+        cacheFile.writeText(namedCsv("rus,synodal,русский,Russian,Synodal,Synodal Bible,PD,True,True,2020-01-01"))
+
+        val names = runBlocking { EBibleSource.cachedLanguageNames(cacheFile) }
+
+        assertEquals(LanguageNaming("Russian", "русский"), names["RUS"])
+    }
+
     @Test
     fun `the source identifies itself as eBible`() {
         assertEquals(BibleSourceId.EBIBLE, EBibleSource.sourceId)

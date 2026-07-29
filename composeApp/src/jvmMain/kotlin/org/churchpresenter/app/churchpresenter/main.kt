@@ -2102,12 +2102,11 @@ fun main() {
                                         canvasHeight = screenBounds.height
                                     )
                                 }
-                                if (showMemoryMonitorWindow) {
-                                    MemoryMonitorWindow(
-                                        theme = theme,
-                                        onClose = { showMemoryMonitorWindow = false }
-                                    )
-                                }
+                                MemoryMonitorWindow(
+                                    isVisible = showMemoryMonitorWindow,
+                                    theme = theme,
+                                    onClose = { showMemoryMonitorWindow = false }
+                                )
                                 if (showStyleEditorWindow) {
                                     StyleEditorWindow(
                                         theme = theme,
@@ -2272,17 +2271,16 @@ fun main() {
             )
         }
 
-        if (appReady && !eulaAccepted) {
-            LicenseDialog(
-                onAccept = {
-                    val updated = appSettings.copy(eulaAcceptedVersion = CURRENT_EULA_VERSION)
-                    settingsManager.saveSettings(updated)
-                    appSettings = updated
-                    eulaAccepted = true
-                },
-                onDecline = { exitApplication() }
-            )
-        }
+        LicenseDialog(
+            isVisible = appReady && !eulaAccepted,
+            onAccept = {
+                val updated = appSettings.copy(eulaAcceptedVersion = CURRENT_EULA_VERSION)
+                settingsManager.saveSettings(updated)
+                appSettings = updated
+                eulaAccepted = true
+            },
+            onDecline = { exitApplication() }
+        )
     }
 }
 

@@ -19,20 +19,30 @@ object ZefaniaSource : BibleSource {
 
     override suspend fun catalog(nowMillis: Long): BibleCatalogOutcome =
         when (val outcome = ZefaniaRepositoryIndex.fetch(nowMillis = nowMillis)) {
-            is ZefaniaRepositoryIndex.IndexOutcome.Success ->
-                BibleCatalogOutcome.Success(outcome.index.modules.map { it.toBibleModule() }, outcome.stale)
+            is ZefaniaRepositoryIndex.IndexOutcome.Success -> {
+                // The archive names its folders by code alone, so the names come from elsewhere.
+                val languageNames = BibleLanguageNames.table()
+                BibleCatalogOutcome.Success(
+                    outcome.index.modules.map { it.toBibleModule(languageNames) },
+                    outcome.stale
+                )
+            }
             is ZefaniaRepositoryIndex.IndexOutcome.RateLimited ->
                 BibleCatalogOutcome.RateLimited(outcome.resetEpochSeconds)
             ZefaniaRepositoryIndex.IndexOutcome.NetworkError -> BibleCatalogOutcome.NetworkError
             ZefaniaRepositoryIndex.IndexOutcome.Failure -> BibleCatalogOutcome.Failure
         }
 
-    private fun ZefaniaRepositoryIndex.Module.toBibleModule() = BibleModule(
+    internal fun ZefaniaRepositoryIndex.Module.toBibleModule(
+        languageNames: Map<String, LanguageNaming> = emptyMap()
+    ) = BibleModule(
         sourceId = BibleSourceId.ZEFANIA,
         downloadKey = path,
         checksum = blobSha,
         sizeBytes = sizeBytes,
         language = language,
+        languageName = languageNames[language]?.english.orEmpty(),
+        languageNativeName = languageNames[language]?.native.orEmpty(),
         identifier = identifier,
         displayName = displayName,
         releaseDate = releaseDate,

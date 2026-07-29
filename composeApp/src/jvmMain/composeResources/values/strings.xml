@@ -1419,6 +1419,8 @@
     <string name="bible_catalog_search_placeholder">Filter by name or language…</string>
     <string name="bible_catalog_language_all">All languages</string>
     <string name="bible_catalog_language_count">%1$s (%2$d)</string>
+    <string name="bible_catalog_language_named">%1$s · %2$s (%3$d)</string>
+    <string name="bible_catalog_language_named_native">%1$s · %2$s · %3$s (%4$d)</string>
     <string name="bible_catalog_loading">Loading the list of Bibles…</string>
     <string name="bible_catalog_empty">No Bibles match this filter</string>
     <string name="bible_catalog_retry">Retry</string>
@@ -1453,6 +1455,19 @@
     <string name="bible_catalog_license_source_ebible">eBible.org lists this translation as redistributable and publishes the copyright shown above.</string>
     <string name="bible_catalog_license_source_zefania">The Zefania archive publishes no licence details, so this translation’s copyright only becomes visible once it is installed. Its modules are community-contributed and have not been checked.</string>
     <string name="bible_catalog_license_accept">I understand — Download</string>
+    <string name="bible_catalog_subtitle">Browse free translations and add them to your library</string>
+    <string name="bible_catalog_installed_count">%1$d installed</string>
+    <string name="bible_catalog_empty_hint">Try a different search term or language.</string>
+    <string name="bible_catalog_testament_new">NT</string>
+    <string name="bible_catalog_testament_old">OT</string>
+    <string name="bible_catalog_testament_full">OT+NT</string>
+    <string name="bible_catalog_license_subtitle">Confirm you may use this translation</string>
+    <string name="bible_catalog_license_field_source">Source</string>
+    <string name="bible_catalog_license_field_identifier">Identifier</string>
+    <string name="bible_catalog_license_field_copyright">Copyright</string>
+    <string name="bible_catalog_license_badge_redistributable">Redistributable</string>
+    <string name="bible_catalog_license_badge_unverified">Licence unverified</string>
+    <string name="bible_catalog_done">Done</string>
 
     <string name="conversion_complete">Conversion Complete</string>
     <string name="conversion_complete_message">Converted %1$d songs to folder: %2$s</string>

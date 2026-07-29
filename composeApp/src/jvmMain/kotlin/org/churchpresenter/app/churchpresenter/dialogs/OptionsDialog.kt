@@ -62,7 +62,9 @@ import org.churchpresenter.app.churchpresenter.dialogs.tabs.OBSSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.SystemSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.BackgroundSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.BibleSettingsTab
+import org.churchpresenter.app.churchpresenter.dialogs.tabs.DetectedScreen
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.ProjectionSettingsTab
+import org.churchpresenter.app.churchpresenter.dialogs.tabs.detectScreensFromAwt
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.ServerSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.SongSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.LowerThirdSettingsTab
@@ -145,7 +147,8 @@ internal fun OptionsDialogContent(
     obsManager: OBSWebSocketManager? = null,
     companionSatelliteViewModel: CompanionSatelliteViewModel? = null,
     initialTab: Int = 0,
-    initialSettings: AppSettings? = null
+    initialSettings: AppSettings? = null,
+    detectScreens: () -> List<DetectedScreen> = ::detectScreensFromAwt
 ) {
     var currentSettings by remember { mutableStateOf(initialSettings ?: settingsManager.loadSettings()) }
     val companionSatelliteTabIndex = if (obsManager != null) 11 else 10
@@ -275,7 +278,8 @@ internal fun OptionsDialogContent(
                                 companionServer = companionServer,
                                 onIdentifyScreen = { onIdentifyScreen() },
                                 onIdentifyBrowserSource = { index -> onIdentifyBrowserSource(index) },
-                                scenes = scenes
+                                scenes = scenes,
+                                detectScreens = detectScreens
                             )
                             5 -> LowerThirdSettingsTab(
                                 settings = currentSettings,
@@ -327,7 +331,7 @@ internal fun OptionsDialogContent(
                                     viewModel = companionSatelliteViewModel
                                 )
                             }
-                            11 -> if (obsManager != null) CompanionSatelliteSettingsTab(
+                            11 -> CompanionSatelliteSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)

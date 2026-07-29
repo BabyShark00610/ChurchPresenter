@@ -16,12 +16,28 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
+import io.mockk.coEvery
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import kotlinx.coroutines.runBlocking
 import org.churchpresenter.app.churchpresenter.utils.ContactReporter
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ContactUsContentTest {
+
+    @BeforeTest
+    fun stubReporter() {
+        mockkObject(ContactReporter)
+    }
+
+    @AfterTest
+    fun cleanUp() {
+        unmockkObject(ContactReporter)
+    }
 
     private val types = listOf(
         "Feature Request" to "featureRequest",
@@ -246,5 +262,80 @@ class ContactUsContentTest {
         )
 
         assertEquals(SendStatus.Error("error"), status)
+    }
+
+    @Test
+    fun `submitContactRequest maps a successful submission to Sent`() = runBlocking {
+        coEvery { ContactReporter.submit(any()) } returns ContactReporter.Outcome.Success
+
+        val status = submitContactRequest(
+            type = "bugReport",
+            name = "A Church",
+            email = "pastor@church.org",
+            message = "Something's broken",
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Sent, status)
+    }
+
+    @Test
+    fun `submitContactRequest sends the trimmed request built from its arguments`() = runBlocking {
+        var captured: ContactReporter.ContactRequest? = null
+        coEvery { ContactReporter.submit(any()) } answers {
+            captured = firstArg()
+            ContactReporter.Outcome.Success
+        }
+
+        submitContactRequest(
+            type = "bugReport",
+            name = "  A Church  ",
+            email = " pastor@church.org ",
+            message = "  Something's broken  ",
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals("bugReport", captured?.type)
+        assertEquals("A Church", captured?.name)
+        assertEquals("pastor@church.org", captured?.email)
+        assertEquals("Something's broken", captured?.message)
+    }
+
+    @Test
+    fun `submitContactRequest maps a network error to the caller-supplied text`() = runBlocking {
+        coEvery { ContactReporter.submit(any()) } returns ContactReporter.Outcome.NetworkError
+
+        val status = submitContactRequest(
+            type = "feedback",
+            name = "A Church",
+            email = "",
+            message = "Loving the app!",
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("network"), status)
+    }
+
+    @Test
+    fun `submitContactRequest maps rate limiting to the caller-supplied text`() = runBlocking {
+        coEvery { ContactReporter.submit(any()) } returns ContactReporter.Outcome.RateLimited
+
+        val status = submitContactRequest(
+            type = "feedback",
+            name = "A Church",
+            email = "",
+            message = "Loving the app!",
+            errorText = "error",
+            networkText = "network",
+            rateLimitedText = "rate limited",
+        )
+
+        assertEquals(SendStatus.Error("rate limited"), status)
     }
 }

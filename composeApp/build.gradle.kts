@@ -700,6 +700,10 @@ tasks.register<JacocoReport>("jacocoTestReport") {
             // Compose + AWT startup side-effect (delayed window activation) with no headless-testable
             // body; only its os gate is unit-tested (see MacWindowActivationTest).
             exclude("**/MacWindowActivationKt*")
+            // Whole file is a DialogWindow-wrapped fun easter egg with an infinite
+            // `while (true) { withFrameNanos { ... } }` confetti animation loop — can't be composed
+            // headless and has no terminating state to assert on.
+            exclude("**/KonamiEasterEggDialogKt*")
         }
     )
     sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
