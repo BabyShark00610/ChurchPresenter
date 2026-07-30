@@ -2,11 +2,23 @@ name: Tests
 
 # The three build workflows are all workflow_dispatch-only, so until this existed nothing ran
 # automatically on a push or a pull request -- including the submodule test suites, which were
-# green but unenforced. This runs the whole suite on every push and PR.
-# Every branch, not just main: a branch whose PR has already merged stops matching `pull_request`,
-# so work pushed to it afterwards ran nothing at all until this was widened.
+# green but unenforced. This runs the whole suite on every PR, and on main after a merge.
+#
+# `push` is main-only again, and that is deliberate. Widening it to every branch meant a PR commit
+# matched BOTH events, and the two runs then had to be reconciled somehow -- neither way works here:
+#
+#   * let both run: two 15-minute runs of the same commit, for nothing;
+#   * dedupe them with a shared concurrency group: whichever is cancelled still posts a check named
+#     `test`, and `test` is the required context on main (strict). A cancelled required check is not
+#     a passing one, so EVERY pull request sat at BLOCKED with a green run beside a cancelled one.
+#     #106, #107 and #108 all hit this.
+#
+# What the widening was for -- commits pushed to a branch whose PR had already merged running
+# nothing -- is real but much smaller, and it only happens by pushing to a merged PR's branch, which
+# is a mistake worth catching with `gh pr view` rather than with a second CI run per commit.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -17,14 +29,13 @@ permissions:
   contents: read
 
 concurrency:
-  # A newer push to the same branch makes an in-flight run redundant. Keyed on the bare branch name
-  # so a branch's own push run and its PR run share one group instead of both building the same
-  # commit -- now that every branch push triggers this.
+  # A newer push to the same branch makes an in-flight run redundant. With `push` back to main only,
+  # a commit matches one event, so this no longer has two runs to reconcile -- it just keeps the
+  # newest run per branch.
   #
-  # ref_name, not ref: the two events spell the same branch differently. On push, head_ref is empty
-  # and ref is `refs/heads/<branch>`; on pull_request, head_ref is `<branch>`. Those are different
-  # strings, so `head_ref || ref` put the two events in different groups and ran both -- 15 minutes
-  # of runner per commit, twice. ref_name drops the prefix, so both spell it `<branch>`.
+  # Still keyed on the bare branch name rather than `ref`: the two events spell the same branch
+  # differently (on push `ref` is `refs/heads/<branch>`, on pull_request `head_ref` is `<branch>`),
+  # so anything that has to hold for both wants `ref_name`.
   group: tests-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
