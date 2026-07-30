@@ -110,7 +110,10 @@ class LottieFrameStream(
         }
     }
 
-    private fun decodeAndPublish(index: Int) {
+    // internal (not private): lets tests drive a single decode+publish step synchronously,
+    // deterministically exercising the RETAIN_FRAMES eviction and decode-failure branches
+    // without racing the conflated request channel's single-slot buffer.
+    internal fun decodeAndPublish(index: Int) {
         val r = reader ?: return
         try {
             val pixels = r.frameArgb(index)
@@ -135,7 +138,7 @@ class LottieFrameStream(
      * Roughly estimates whether a frame is meaningfully blank (near-fully transparent).
      * Samples pixels at a stride rather than scanning the whole frame to stay cheap.
      */
-    private fun isFrameBlank(frame: IntArray): Boolean {
+    internal fun isFrameBlank(frame: IntArray): Boolean {
         if (frame.isEmpty()) return true
         val sampleStep = maxOf(1, frame.size / 500)
         var sampled = 0

@@ -111,18 +111,167 @@ class BrowserSourceVideoRenderer(
 ) {
     // Sampling cadence from the per-output fps setting; only changed frames are actually
     // encoded/emitted, so this is a ceiling, not a constant cost.
-    private val tickDelayMs = 1000L / fps.coerceIn(1, 60)
+    internal val tickDelayMs = 1000L / fps.coerceIn(1, 60)
     // Keep the virtual animation clock in step with real sampling time
     private val frameNanos = tickDelayMs * 1_000_000L
 
-    private companion object {
+    internal companion object {
         // DROP_OLDEST (below) is only safe for dirty-rect deltas because of this: each delta is
         // only valid applied on top of the exact state the previous delta produced, so a silently
         // dropped intermediate delta leaves a connected client permanently wrong in that region
         // with no way to detect it. Forcing a fresh full-frame recapture on this schedule (not
         // just on new-subscriber) bounds how long that drift can persist.
-        const val FULL_FRAME_RESEED_MS = 5_000L
+        private const val FULL_FRAME_RESEED_MS = 5_000L
+
+        /**
+         * Pure per-tick decision of whether this frame is worth sending and, if so, which
+         * rectangle: a dirty-rect delta on plain content change, or the full canvas when a
+         * client needs reseeding (first frame, a newly-attached subscriber, or the periodic
+         * reseed schedule). Returns null when nothing changed and no reseed is due. Split out
+         * from [start] so the decision is testable without an [ImageComposeScene].
+         */
+        internal fun decideTick(
+            intBuf: IntArray,
+            previous: IntArray?,
+            width: Int,
+            height: Int,
+            newSubscriberJoined: Boolean,
+            elapsedMs: Long,
+            lastFullFrameAtMs: Long,
+        ): TickDecision? {
+            val contentChanged = previous == null || !intBuf.contentEquals(previous)
+            val periodicReseedDue = elapsedMs - lastFullFrameAtMs >= FULL_FRAME_RESEED_MS
+            if (!contentChanged && !newSubscriberJoined && !periodicReseedDue) return null
+            val forceFullFrame = previous == null || newSubscriberJoined || periodicReseedDue
+            val rect = if (forceFullFrame) DirtyRect(0, 0, width, height) else computeDirtyRect(intBuf, previous, width, height)
+            return TickDecision(rect, forceFullFrame, contentChanged)
+        }
+
+        /**
+         * Tight bounding box of pixels that differ between [current] and [previous] (both row-major
+         * width*height IntArrays). Only called when the buffers are already known to differ, so a
+         * diff always exists. Two-phase for cheapness: first shrink top/bottom via whole-row
+         * comparisons to skip unchanged rows cheaply (the common case — a small moving region, e.g.
+         * a blinking cursor or a Lottie lower-third, against an otherwise static frame), then scan
+         * columns only within the surviving row band. A full-screen crossfade (nearly every pixel
+         * changes) degrades to close to the full frame — expected, not a regression.
+         */
+        internal fun computeDirtyRect(current: IntArray, previous: IntArray, width: Int, height: Int): DirtyRect {
+            var minRow = 0
+            while (minRow < height && rowsEqual(current, previous, minRow, width)) minRow++
+            var maxRow = height - 1
+            while (maxRow > minRow && rowsEqual(current, previous, maxRow, width)) maxRow--
+
+            var minCol = width
+            var maxCol = -1
+            for (row in minRow..maxRow) {
+                val rowStart = row * width
+                for (col in 0 until width) {
+                    val idx = rowStart + col
+                    if (current[idx] != previous[idx]) {
+                        if (col < minCol) minCol = col
+                        if (col > maxCol) maxCol = col
+                    }
+                }
+            }
+            // Defensive fallback — the caller guarantees a diff exists, so this shouldn't trigger,
+            // but never emit an inverted rect.
+            if (minCol > maxCol) {
+                minCol = 0
+                maxCol = width - 1
+            }
+
+            return DirtyRect(x = minCol, y = minRow, w = maxCol - minCol + 1, h = maxRow - minRow + 1)
+        }
+
+        private fun rowsEqual(a: IntArray, b: IntArray, row: Int, width: Int): Boolean {
+            val start = row * width
+            return java.util.Arrays.equals(a, start, start + width, b, start, start + width)
+        }
+
+        internal fun cropPixels(src: IntArray, srcWidth: Int, x: Int, y: Int, w: Int, h: Int): IntArray {
+            val out = IntArray(w * h)
+            for (row in 0 until h) {
+                System.arraycopy(src, (y + row) * srcWidth + x, out, row * w, w)
+            }
+            return out
+        }
+
+        /**
+         * Encodes a frame rectangle: JPEG when every pixel is fully opaque (several times faster
+         * to encode and far smaller — what keeps continuously-changing MEDIA video sustainable at
+         * the tick rate), PNG whenever any transparency is present (JPEG has no alpha channel and
+         * transparency is the whole point of an overlay). The client sniffs the payload's first
+         * byte (0x89 = PNG, 0xFF = JPEG) — see browserSourceOverlayPageHtml in CompanionServer.
+         */
+        internal fun encodeFrame(argb: IntArray, w: Int, h: Int): ByteArray {
+            // Early exit on the first non-opaque pixel — overlay-style frames bail almost
+            // immediately; a fully opaque frame (pictures, slides, video) costs one linear scan.
+            var fullyOpaque = true
+            for (px in argb) {
+                if (px ushr 24 != 0xFF) {
+                    fullyOpaque = false
+                    break
+                }
+            }
+            val out = ByteArrayOutputStream()
+            if (fullyOpaque) {
+                val image = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+                image.setRGB(0, 0, w, h, argb, 0, w)
+                ImageIO.write(image, "jpg", out)
+            } else {
+                val image = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
+                image.setRGB(0, 0, w, h, argb, 0, w)
+                ImageIO.write(image, "png", out)
+            }
+            return out.toByteArray()
+        }
+
+        /** Same formula as the real output windows (main.kt): fades only when a crossfade is enabled. */
+        internal fun crossfadeDurationMs(
+            bibleCrossfadeEnabled: Boolean,
+            bibleTransitionDurationMs: Int,
+            songCrossfadeEnabled: Boolean,
+            songTransitionDurationMs: Int,
+        ): Int = maxOf(
+            if (bibleCrossfadeEnabled) bibleTransitionDurationMs else 0,
+            if (songCrossfadeEnabled) songTransitionDurationMs else 0
+        ).coerceAtLeast(100)
+
+        /** Fades only when a crossfade is enabled AND neither the outgoing nor incoming mode is NONE. */
+        internal fun isScreenCrossfadeActive(
+            bibleCrossfadeEnabled: Boolean,
+            songCrossfadeEnabled: Boolean,
+            currentMode: Presenting,
+            previousMode: Presenting,
+        ): Boolean = (bibleCrossfadeEnabled || songCrossfadeEnabled) &&
+            currentMode != Presenting.NONE && previousMode != Presenting.NONE
+
+        /** Per-content-type visibility gate — the same mapping [main.kt]'s own output windows use. */
+        internal fun showsContentFor(mode: Presenting, screenAssignment: ScreenAssignment): Boolean = when (mode) {
+            Presenting.BIBLE -> screenAssignment.showBible
+            Presenting.LYRICS -> screenAssignment.showSongs
+            Presenting.PICTURES, Presenting.PRESENTATION -> screenAssignment.showPictures
+            Presenting.ANNOUNCEMENTS -> screenAssignment.showAnnouncements
+            Presenting.LOWER_THIRD -> screenAssignment.showStreaming
+            Presenting.MEDIA -> screenAssignment.showMedia
+            Presenting.WEBSITE -> screenAssignment.showWebsite
+            Presenting.CANVAS -> screenAssignment.showCanvas
+            Presenting.QA -> screenAssignment.showQA
+            Presenting.STT -> screenAssignment.showSTT
+            Presenting.DICTIONARY -> screenAssignment.showDictionary
+            else -> false
+        }
     }
+
+    internal data class DirtyRect(val x: Int, val y: Int, val w: Int, val h: Int)
+
+    /** What [decideTick] decided for one tick: send [rect] (the full canvas when [forceFullFrame]), or nothing. */
+    internal data class TickDecision(
+        val rect: DirtyRect,
+        val forceFullFrame: Boolean,
+        val contentChanged: Boolean,
+    )
 
     /**
      * Latest frame delta, replayed to any newly-subscribed HTTP client. Uses [BufferOverflow.DROP_OLDEST]
@@ -208,32 +357,21 @@ class BrowserSourceVideoRenderer(
                             // Mode-to-mode crossfade — same behavior and duration formula as the
                             // real output windows (main.kt): fades only when bible/song crossfade
                             // is enabled and neither the outgoing nor incoming mode is NONE.
-                            val modeCrossfadeDuration = maxOf(
-                                if (appSettings.bibleSettings.crossfade) appSettings.bibleSettings.transitionDuration.toInt() else 0,
-                                if (appSettings.songSettings.crossfade) appSettings.songSettings.transitionDuration.toInt() else 0
-                            ).coerceAtLeast(100)
+                            val modeCrossfadeDuration = crossfadeDurationMs(
+                                appSettings.bibleSettings.crossfade, appSettings.bibleSettings.transitionDuration.toInt(),
+                                appSettings.songSettings.crossfade, appSettings.songSettings.transitionDuration.toInt()
+                            )
                             var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                            val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) &&
-                                effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                            val screenCrossfadeActive = isScreenCrossfadeActive(
+                                appSettings.bibleSettings.crossfade, appSettings.songSettings.crossfade,
+                                effectiveMode, prevEffectiveMode
+                            )
                             if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                             Crossfade(
                                 targetState = effectiveMode,
                                 animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()
                             ) { mode ->
-                                val showsContent = when (mode) {
-                                    Presenting.BIBLE -> screenAssignment.showBible
-                                    Presenting.LYRICS -> screenAssignment.showSongs
-                                    Presenting.PICTURES, Presenting.PRESENTATION -> screenAssignment.showPictures
-                                    Presenting.ANNOUNCEMENTS -> screenAssignment.showAnnouncements
-                                    Presenting.LOWER_THIRD -> screenAssignment.showStreaming
-                                    Presenting.MEDIA -> screenAssignment.showMedia
-                                    Presenting.WEBSITE -> screenAssignment.showWebsite
-                                    Presenting.CANVAS -> screenAssignment.showCanvas
-                                    Presenting.QA -> screenAssignment.showQA
-                                    Presenting.STT -> screenAssignment.showSTT
-                                    Presenting.DICTIONARY -> screenAssignment.showDictionary
-                                    else -> false
-                                }
+                                val showsContent = showsContentFor(mode, screenAssignment)
                                 if (mode != Presenting.NONE && showsContent) {
                                     when (mode) {
                                         Presenting.BIBLE -> BiblePresenter(
@@ -391,22 +529,14 @@ class BrowserSourceVideoRenderer(
                     val newSubscriberJoined = subscriberCount > lastSeenSubscriberCount
                     lastSeenSubscriberCount = subscriberCount
 
-                    val previous = lastBuf
-                    val contentChanged = previous == null || !intBuf.contentEquals(previous)
-
-                    // Independent of contentChanged: this must fire on its own schedule, not only
-                    // when content happens to be changing, since drift from a dropped delta can
-                    // persist forever otherwise once content settles into a static state (nothing
-                    // left to trigger a corrective resend).
                     val elapsedMs = timeNanos / 1_000_000
-                    val periodicReseedDue = elapsedMs - lastFullFrameAtMs >= FULL_FRAME_RESEED_MS
+                    val decision = decideTick(intBuf, lastBuf, width, height, newSubscriberJoined, elapsedMs, lastFullFrameAtMs)
 
-                    if (contentChanged || newSubscriberJoined || periodicReseedDue) {
-                        val forceFullFrame = previous == null || newSubscriberJoined || periodicReseedDue
-                        val frame = if (forceFullFrame) {
-                            BrowserSourceFrame(0, 0, width, height, width, height, encodeFrame(intBuf, width, height))
+                    if (decision != null) {
+                        val rect = decision.rect
+                        val frame = if (decision.forceFullFrame) {
+                            BrowserSourceFrame(rect.x, rect.y, rect.w, rect.h, width, height, encodeFrame(intBuf, width, height))
                         } else {
-                            val rect = computeDirtyRect(intBuf, previous, width, height)
                             val cropped = cropPixels(intBuf, width, rect.x, rect.y, rect.w, rect.h)
                             BrowserSourceFrame(
                                 rect.x, rect.y, rect.w, rect.h, width, height,
@@ -414,8 +544,8 @@ class BrowserSourceVideoRenderer(
                             )
                         }
                         frames.emit(frame)
-                        if (forceFullFrame) lastFullFrameAtMs = elapsedMs
-                        if (contentChanged) lastBuf = intBuf.copyOf()
+                        if (decision.forceFullFrame) lastFullFrameAtMs = elapsedMs
+                        if (decision.contentChanged) lastBuf = intBuf.copyOf()
                     }
                     delay(tickDelayMs)
                 }
@@ -428,87 +558,5 @@ class BrowserSourceVideoRenderer(
     fun stop() {
         job?.cancel()
         job = null
-    }
-
-    private data class DirtyRect(val x: Int, val y: Int, val w: Int, val h: Int)
-
-    /**
-     * Tight bounding box of pixels that differ between [current] and [previous] (both row-major
-     * width*height IntArrays). Only called when the buffers are already known to differ, so a
-     * diff always exists. Two-phase for cheapness: first shrink top/bottom via whole-row
-     * comparisons to skip unchanged rows cheaply (the common case — a small moving region, e.g.
-     * a blinking cursor or a Lottie lower-third, against an otherwise static frame), then scan
-     * columns only within the surviving row band. A full-screen crossfade (nearly every pixel
-     * changes) degrades to close to the full frame — expected, not a regression.
-     */
-    private fun computeDirtyRect(current: IntArray, previous: IntArray, width: Int, height: Int): DirtyRect {
-        var minRow = 0
-        while (minRow < height && rowsEqual(current, previous, minRow, width)) minRow++
-        var maxRow = height - 1
-        while (maxRow > minRow && rowsEqual(current, previous, maxRow, width)) maxRow--
-
-        var minCol = width
-        var maxCol = -1
-        for (row in minRow..maxRow) {
-            val rowStart = row * width
-            for (col in 0 until width) {
-                val idx = rowStart + col
-                if (current[idx] != previous[idx]) {
-                    if (col < minCol) minCol = col
-                    if (col > maxCol) maxCol = col
-                }
-            }
-        }
-        // Defensive fallback — the caller guarantees a diff exists, so this shouldn't trigger,
-        // but never emit an inverted rect.
-        if (minCol > maxCol) {
-            minCol = 0
-            maxCol = width - 1
-        }
-
-        return DirtyRect(x = minCol, y = minRow, w = maxCol - minCol + 1, h = maxRow - minRow + 1)
-    }
-
-    private fun rowsEqual(a: IntArray, b: IntArray, row: Int, width: Int): Boolean {
-        val start = row * width
-        return java.util.Arrays.equals(a, start, start + width, b, start, start + width)
-    }
-
-    private fun cropPixels(src: IntArray, srcWidth: Int, x: Int, y: Int, w: Int, h: Int): IntArray {
-        val out = IntArray(w * h)
-        for (row in 0 until h) {
-            System.arraycopy(src, (y + row) * srcWidth + x, out, row * w, w)
-        }
-        return out
-    }
-
-    /**
-     * Encodes a frame rectangle: JPEG when every pixel is fully opaque (several times faster
-     * to encode and far smaller — what keeps continuously-changing MEDIA video sustainable at
-     * the tick rate), PNG whenever any transparency is present (JPEG has no alpha channel and
-     * transparency is the whole point of an overlay). The client sniffs the payload's first
-     * byte (0x89 = PNG, 0xFF = JPEG) — see browserSourceOverlayPageHtml in CompanionServer.
-     */
-    private fun encodeFrame(argb: IntArray, w: Int, h: Int): ByteArray {
-        // Early exit on the first non-opaque pixel — overlay-style frames bail almost
-        // immediately; a fully opaque frame (pictures, slides, video) costs one linear scan.
-        var fullyOpaque = true
-        for (px in argb) {
-            if (px ushr 24 != 0xFF) {
-                fullyOpaque = false
-                break
-            }
-        }
-        val out = ByteArrayOutputStream()
-        if (fullyOpaque) {
-            val image = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
-            image.setRGB(0, 0, w, h, argb, 0, w)
-            ImageIO.write(image, "jpg", out)
-        } else {
-            val image = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
-            image.setRGB(0, 0, w, h, argb, 0, w)
-            ImageIO.write(image, "png", out)
-        }
-        return out.toByteArray()
     }
 }

@@ -310,6 +310,25 @@ class WebNavController {
 @Composable
 fun rememberWebNavController() = remember { WebNavController() }
 
+/** Iframe navigations must not overwrite the address bar / title with a sub-frame's URL. */
+internal fun handleAddressChange(frame: CefFrame, url: String, onUrlChanged: ((String) -> Unit)?) {
+    if (frame.isMain) onUrlChanged?.invoke(url)
+}
+
+/** A blank/null target (e.g. `window.open()` with no URL yet) has nothing to navigate to. */
+internal fun handlePopupTarget(browser: CefBrowser, targetUrl: String?) {
+    if (!targetUrl.isNullOrBlank()) {
+        browser.loadURL(targetUrl)
+    }
+}
+
+/** Only override the User-Agent while mobile emulation is on; a real page load has no request to tag. */
+internal fun applyMobileUserAgent(mobileModeEnabled: Boolean, request: CefRequest?) {
+    if (mobileModeEnabled && request != null) {
+        request.setHeaderByName("User-Agent", WebNavController.MOBILE_USER_AGENT, true)
+    }
+}
+
 /**
  * Embeds a Chromium browser (via JCEF) in a Compose SwingPanel.
  *
@@ -342,7 +361,7 @@ fun EmbeddedWebView(
     DisposableEffect(Unit) {
         val displayHandler = object : CefDisplayHandlerAdapter() {
             override fun onAddressChange(browser: CefBrowser, frame: CefFrame, url: String) {
-                if (frame.isMain) onUrlChanged?.invoke(url)
+                handleAddressChange(frame, url, onUrlChanged)
             }
             override fun onTitleChange(browser: CefBrowser, title: String) {
                 onTitleChanged?.invoke(title)
@@ -355,9 +374,7 @@ fun EmbeddedWebView(
             override fun onBeforePopup(
                 browser: CefBrowser, frame: CefFrame, targetUrl: String?, targetFrameName: String?
             ): Boolean {
-                if (!targetUrl.isNullOrBlank()) {
-                    browser.loadURL(targetUrl)
-                }
+                handlePopupTarget(browser, targetUrl)
                 return true // cancel the popup
             }
         }
@@ -372,9 +389,7 @@ fun EmbeddedWebView(
             ): CefResourceRequestHandler {
                 return object : CefResourceRequestHandlerAdapter() {
                     override fun onBeforeResourceLoad(browser: CefBrowser?, frame: CefFrame?, request: CefRequest?): Boolean {
-                        if (navController?.mobileMode == true && request != null) {
-                            request.setHeaderByName("User-Agent", WebNavController.MOBILE_USER_AGENT, true)
-                        }
+                        applyMobileUserAgent(navController?.mobileMode == true, request)
                         return false
                     }
                 }
