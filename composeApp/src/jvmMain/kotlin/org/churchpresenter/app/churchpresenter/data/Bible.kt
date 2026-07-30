@@ -621,12 +621,33 @@ class Bible {
         private val NEW_TESTAMENT_BOOK_IDS = 40..66
 
         /**
+         * How far in to keep looking for header content: the `##` block plus a full 66-book list,
+         * with room to spare. The stop conditions below (`-----`, a verse line) are what normally
+         * ends the scan; this is the backstop for a module that has neither, where without it a
+         * "header scan" would read the whole multi-megabyte file.
+         */
+        const val HEADER_SCAN_LINE_LIMIT = 120
+
+        /**
+         * Far enough to pass the `##` block of any real module, and the limit the title-only callers
+         * use. A title further in than this is not looked for -- scanning a folder of large modules
+         * for one would stall the pickers that do it per file.
+         */
+        const val TITLE_SCAN_LINE_LIMIT = 10
+
+        /**
          * Fast path like [loadBooksOnly]: reads only the header block of an SPB file -- its
          * `##Title:` line and which book IDs appear -- stopping at the first verse line, so a
          * caller can show a translation's title and OT/NT coverage without the full verse parse
          * [loadFromSpb] requires.
+         *
+         * [maxLines] bounds how far in it will look. A caller that only wants the title can pass
+         * [TITLE_SCAN_LINE_LIMIT] and skip the book list entirely.
          */
-        fun readTranslationSummary(resourcePath: String): TranslationSummary? {
+        fun readTranslationSummary(
+            resourcePath: String,
+            maxLines: Int = HEADER_SCAN_LINE_LIMIT,
+        ): TranslationSummary? {
             try {
                 val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
                 val reader = if (inputStream != null) {
@@ -640,11 +661,15 @@ class Bible {
                 var title: String? = null
                 var hasOld = false
                 var hasNew = false
+                var scanned = 0
                 reader.use { r ->
                     for (rawLine in r.lineSequence()) {
+                        if (++scanned > maxLines) break
                         val line = rawLine.trimEnd('\r', '\n')
                         if (line.startsWith("##Title:")) {
-                            title = line.substring(8).trim()
+                            // The converter writes a TAB after the colon and hand-made modules often
+                            // write a space, so the separator is trimmed rather than counted.
+                            title = line.removePrefix("##Title:").trim()
                             continue
                         }
                         if (line.startsWith("##")) continue

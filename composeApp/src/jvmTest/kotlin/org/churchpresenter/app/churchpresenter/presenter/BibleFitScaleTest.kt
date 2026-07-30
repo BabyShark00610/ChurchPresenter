@@ -8,13 +8,23 @@ import kotlin.test.assertTrue
  * Shrinking a verse until it fits the screen.
  *
  * A long passage in a large font does not fit, and the presenter cannot ask "what scale would fit?"
- * — it can only lay text out at a given scale and ask whether the result overflowed. So it
- * bisects: eight probes between a floor and full size, keeping the largest scale that still fit.
+ * — it can only lay text out at a given scale and ask whether the result overflowed. So it bisects,
+ * keeping the largest scale that still fit.
  *
- * Two properties matter and neither is visible from the call site. The answer must always be one
- * that FITS — returning a scale that overflows puts a verse on screen with its last line cut off,
- * which is exactly what auto-fit exists to prevent — and the probe count must stay fixed, because
- * each probe is a full text layout of the whole passage and this runs on every verse change.
+ * The property that matters, and is invisible from the call site: **the answer must always be one
+ * that FITS**. A scale that overflows puts a verse on screen with its last line cut off, which is
+ * exactly what auto-fit exists to prevent.
+ *
+ * That used to be only half true. The search took a floor, and when nothing at or above the floor
+ * fitted it returned the floor anyway, unprobed — so the caller could not tell a fit from a failure
+ * and drew the overflow. This suite asserted that behaviour as `text that fits nowhere still returns
+ * the floor`, which contradicted its own opening paragraph. The floor is now a *starting point*: when
+ * it does not fit, the search halves below it until something does.
+ *
+ * The cost of that is bounded but no longer identical for every passage — halving is what makes it
+ * text-dependent — so `the number of layout probes stays bounded` replaces the old fixed-count
+ * assertion. Each probe is a full layout of the whole passage and this runs on every verse change,
+ * so the ceiling is the thing worth holding.
  *
  * The search is private to `BiblePresenter`, so it is reached by reflection on the file class.
  */
@@ -65,20 +75,24 @@ class BibleFitScaleTest {
     }
 
     @Test
-    fun `text that fits nowhere still returns the floor rather than nothing`() {
-        val scale = fitScale(fitsUpTo = 0f)
+    fun `text that fits nowhere is shrunk further rather than drawn overflowing`() {
+        // fitsUpTo = 0.02 is far below the 0.15 the search starts from: nothing in its original range
+        // fits, which used to be answered with the floor and an overflowing screen.
+        val scale = fitScale(fitsUpTo = 0.02f)
 
-        assertEquals(
-            0.15f,
-            scale,
-            "an unreadably long passage is shown small; showing nothing at all would be worse",
-        )
+        assertTrue(scale <= 0.02f, "the answer must fit, not sit at the floor overflowing: $scale")
+        assertTrue(scale > 0f, "and it must still be a usable scale, not nothing")
     }
 
     @Test
-    fun `the answer never drops below the floor it was given`() {
-        listOf(0.15f, 0.3f, 0.5f).forEach { floor ->
-            assertTrue(fitScale(fitsUpTo = 0f, minScale = floor) >= floor, "the floor is a legibility limit")
+    fun `the starting scale is a starting point, not a limit`() {
+        listOf(0.15f, 0.3f, 0.5f).forEach { start ->
+            val scale = fitScale(fitsUpTo = 0.05f, minScale = start)
+
+            assertTrue(
+                scale <= 0.05f,
+                "starting at $start, the search must go below it to find a scale that fits: $scale",
+            )
         }
     }
 
@@ -114,36 +128,41 @@ class BibleFitScaleTest {
     // ── It costs a fixed amount ─────────────────────────────────────────────────
 
     @Test
-    fun `the number of layout probes is fixed rather than driven by the text`() {
+    fun `the number of layout probes stays bounded however badly the text overflows`() {
         fitScale(fitsUpTo = 0.62f)
         val forAMediumVerse = probed.size
         probed.clear()
 
-        fitScale(fitsUpTo = 0.01f)
+        // The worst case this can be handed: nothing fits at any scale, so the halving runs its full
+        // course before the bisection.
+        fitScale(fitsUpTo = 0f)
+        val forAHopelessOne = probed.size
 
-        assertEquals(
-            forAMediumVerse,
-            probed.size,
-            "each probe lays the whole passage out again — a passage-dependent count would stall on long ones",
+        assertTrue(
+            forAMediumVerse <= 12,
+            "the ordinary case must stay close to the bisection budget: $forAMediumVerse probes",
         )
-        assertEquals(8, forAMediumVerse, "eight is the budget this runs on for every verse change")
+        assertTrue(
+            forAHopelessOne <= 24,
+            "each probe lays the whole passage out again, so even the hopeless case needs a ceiling: " +
+                "$forAHopelessOne probes",
+        )
     }
 
     @Test
-    fun `no probe falls outside the range it was given`() {
+    fun `no probe is wasted on a scale larger than full size`() {
         fitScale(fitsUpTo = 0.62f, minScale = 0.2f)
 
         assertTrue(
-            probed.all { it in 0.2f..1f },
-            "laying text out at a scale outside the range wastes a probe on an answer that cannot be used: $probed",
+            probed.all { it <= 1f },
+            "laying text out above full size wastes a probe on an answer that cannot be used: \$probed",
         )
     }
 
     @Test
-    fun `zero probes returns the floor untouched`() {
-        val scale = fitScale(fitsUpTo = 1f, iterations = 0)
+    fun `with no bisection budget the starting scale is still made to fit`() {
+        val scale = fitScale(fitsUpTo = 0.05f, iterations = 0)
 
-        assertEquals(0.15f, scale)
-        assertTrue(probed.isEmpty(), "no probes means no layout work at all")
+        assertTrue(scale <= 0.05f, "iterations only fund the bisection; fitting is not optional: \$scale")
     }
 }

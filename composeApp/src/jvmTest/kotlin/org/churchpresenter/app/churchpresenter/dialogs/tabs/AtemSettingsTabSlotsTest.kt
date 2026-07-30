@@ -175,7 +175,7 @@ class AtemSettingsTabSlotsTest {
     fun `a slot the switcher does not have is marked in error`() = atemTab(
         initial = atemSettings { copy(defaultStillSlot = 4, detectedStillSlots = 20) },
     ) { _ ->
-        val ok = fieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
+        val ok = focusedFieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
 
         type(atemFieldUnder(AtemLabel.STILL_SLOT), "99")
         val bad = fieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
@@ -189,7 +189,7 @@ class AtemSettingsTabSlotsTest {
     fun `a slot that is not a number is marked in error too`() = atemTab(
         initial = atemSettings { copy(defaultStillSlot = 4, detectedStillSlots = 20) },
     ) { _ ->
-        val ok = fieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
+        val ok = focusedFieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
 
         type(atemFieldUnder(AtemLabel.STILL_SLOT), "first")
 
@@ -203,7 +203,7 @@ class AtemSettingsTabSlotsTest {
     /** With nothing detected there is no range to judge against, so nothing is flagged. */
     @Test
     fun `no slot is flagged before a Test Connection has run`() = atemTab { _ ->
-        val ok = fieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
+        val ok = focusedFieldBorderColour(atemFieldUnder(AtemLabel.STILL_SLOT))
 
         type(atemFieldUnder(AtemLabel.STILL_SLOT), "99")
 
@@ -218,7 +218,10 @@ class AtemSettingsTabSlotsTest {
     fun `a background slot outside the still store is marked in error`() = atemTab(
         initial = atemSettings { copy(backgroundSlot1 = 1, detectedStillSlots = 20) },
     ) { _ ->
-        val ok = fieldBorderColour(atemFieldUnder(AtemLabel.BACKGROUND_SLOT_1))
+        // Slot 2 is never touched, so its baseline is a resting one; slot 1's is taken focused
+        // because it is read again after being typed into.
+        val restingNeighbour = fieldBorderColour(atemFieldUnder(AtemLabel.BACKGROUND_SLOT_2))
+        val ok = focusedFieldBorderColour(atemFieldUnder(AtemLabel.BACKGROUND_SLOT_1))
 
         type(atemFieldUnder(AtemLabel.BACKGROUND_SLOT_1), "40")
 
@@ -228,7 +231,7 @@ class AtemSettingsTabSlotsTest {
             "a background upload to a slot the still store does not have must be flagged",
         )
         assertEquals(
-            ok,
+            restingNeighbour,
             fieldBorderColour(atemFieldUnder(AtemLabel.BACKGROUND_SLOT_2)),
             "and its neighbour, still in range, must not be",
         )
@@ -238,7 +241,7 @@ class AtemSettingsTabSlotsTest {
     fun `a clip slot outside the clip banks is marked in error`() = atemTab(
         initial = atemSettings { copy(defaultClipSlot = 0, detectedClipSlots = 2) },
     ) { _ ->
-        val ok = fieldBorderColour(atemFieldUnder(AtemLabel.CLIP_SLOT))
+        val ok = focusedFieldBorderColour(atemFieldUnder(AtemLabel.CLIP_SLOT))
 
         type(atemFieldUnder(AtemLabel.CLIP_SLOT), "5")
 

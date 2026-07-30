@@ -209,6 +209,13 @@ object Constants {
     // and used as the fallback target when a download is started before a folder has been picked.
     const val DEFAULT_BIBLES_DIR = ".churchpresenter/Bibles"
 
+    // How many translations the parallel Bible stack may hold. Full screen gives each one an equal
+    // band of the output height, and auto-fit shrinks the text until it fits its band -- with no
+    // floor, so a deeper stack does not overflow, it just goes on getting smaller. Six bands is
+    // already past what an audience can read; the cap is where that stops being the operator's
+    // problem to notice.
+    const val MAX_BIBLE_TRANSLATIONS = 6
+
     // File Extensions
     const val EXTENSION_SPS = "sps"
     const val EXTENSION_SPB = "spb"

@@ -18,7 +18,7 @@ import org.churchpresenter.app.churchpresenter.data.InterlinearVerse
 import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import java.io.File
-import java.nio.charset.StandardCharsets
+import org.churchpresenter.app.churchpresenter.data.readTranslationTitle
 
 enum class DictionaryLanguageFilter { ALL, HEBREW, GREEK }
 
@@ -213,7 +213,7 @@ class DictionaryViewModel {
                 dir.walkTopDown().maxDepth(FileManager.MAX_BIBLE_SCAN_DEPTH)
                     .filter { it.isFile && it.extension.lowercase() == "spb" }
                     .sortedBy { it.absolutePath }
-                    .map { f -> f.absolutePath to extractBibleTitle(f) }
+                    .map { f -> f.absolutePath to readTranslationTitle(f) }
                     .toList()
             }
         }
@@ -232,20 +232,6 @@ class DictionaryViewModel {
             } finally {
                 isDictBibleLoading = false
             }
-        }
-    }
-
-    private fun extractBibleTitle(file: File): String {
-        return try {
-            file.bufferedReader(StandardCharsets.UTF_8).use { reader ->
-                repeat(10) {
-                    val line = reader.readLine() ?: return@use file.nameWithoutExtension
-                    if (line.startsWith("##Title:")) return@use line.substring(8).trim()
-                }
-                file.nameWithoutExtension
-            }
-        } catch (_: Exception) {
-            file.nameWithoutExtension
         }
     }
 

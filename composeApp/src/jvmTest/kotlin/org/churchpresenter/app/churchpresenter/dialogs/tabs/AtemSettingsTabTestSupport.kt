@@ -22,6 +22,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -296,6 +297,21 @@ internal fun ComposeUiTest.fieldBorderColour(field: SemanticsNodeInteraction): I
         if (pixel != fill) return pixel
     }
     error("no border drawn to the left of the box at $bounds")
+}
+
+/**
+ * The outline colour of [field] with the field focused.
+ *
+ * The border carries two states, not one: `SettingsTextField` also draws it in the accent colour while
+ * it holds focus, so that a keyboard user can see which of a screenful of boxes they are typing into.
+ * A baseline read before a field is typed into is therefore unfocused, and comparing it with a reading
+ * taken after typing would differ on focus alone — passing whether or not the error state being tested
+ * does anything. Anything comparing a field against itself across an edit takes its baseline here.
+ */
+internal fun ComposeUiTest.focusedFieldBorderColour(field: SemanticsNodeInteraction): Int {
+    field.performClick()
+    waitForIdle()
+    return fieldBorderColour(field)
 }
 
 /**

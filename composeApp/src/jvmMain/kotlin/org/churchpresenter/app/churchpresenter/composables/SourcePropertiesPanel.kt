@@ -199,6 +199,7 @@ import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.FileManager
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import org.jetbrains.compose.resources.painterResource
@@ -206,6 +207,7 @@ import java.io.File
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
+import org.churchpresenter.app.churchpresenter.data.readTranslationTitle
 
 @Composable
 fun SourcePropertiesPanel(
@@ -1853,24 +1855,17 @@ private fun BibleProperties(
 ) {
     val availableFonts = remember { Utils.getAvailableSystemFonts() }
 
-    // Available bible files
+    // Available bible files, each paired with the name to show for it.
+    //
+    // Listing the folder and reading a `##Title:` out of every module in it are both file I/O, and
+    // neither belongs in composition: this panel recomposes on every canvas selection and property
+    // edit, and the folder can hold a hundred modules. The selector below simply waits for the list.
     val storageDir = appSettings?.bibleSettings?.storageDirectory ?: ""
-    val bibleFiles = remember(storageDir) {
-        if (storageDir.isEmpty()) emptyList()
-        else FileManager()
-            .getBibleFilesInDirectory(storageDir)
-    }
-    val bibleDisplayNames = remember(storageDir, bibleFiles) {
-        bibleFiles.associateWith { fileName ->
-            try {
-                File(storageDir, fileName).bufferedReader(java.nio.charset.StandardCharsets.UTF_8).use { reader ->
-                    repeat(10) {
-                        val line = reader.readLine() ?: return@use fileName.removeSuffix(".spb")
-                        if (line.startsWith("##Title:")) return@use line.substring(8).trim()
-                    }
-                    fileName.removeSuffix(".spb")
-                }
-            } catch (_: Exception) { fileName.removeSuffix(".spb") }
+    val bibleOptions by produceState(emptyList<Pair<String, String>>(), storageDir) {
+        value = withContext(Dispatchers.IO) {
+            if (storageDir.isEmpty()) emptyList()
+            else FileManager().getBibleFilesInDirectory(storageDir)
+                .map { fileName -> fileName to readTranslationTitle(File(storageDir, fileName)) }
         }
     }
 
@@ -1894,11 +1889,11 @@ private fun BibleProperties(
     Text(stringResource(Res.string.canvas_source_bible), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
     // Bible version selector
-    if (bibleFiles.isNotEmpty()) {
+    if (bibleOptions.isNotEmpty()) {
         DropdownSelector(
             label = stringResource(Res.string.canvas_bible_version),
             value = selectedBibleFile,
-            options = bibleFiles.map { it to (bibleDisplayNames[it] ?: it.removeSuffix(".spb")) },
+            options = bibleOptions,
             onValueChange = { selectedBibleFile = it },
             modifier = Modifier.fillMaxWidth()
         )

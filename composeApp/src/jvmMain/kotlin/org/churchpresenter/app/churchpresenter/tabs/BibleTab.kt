@@ -52,13 +52,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -76,6 +79,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondary
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
+import org.churchpresenter.app.churchpresenter.data.bibleDisplayNames
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import java.awt.Cursor
@@ -223,7 +227,6 @@ import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleSearchMode
 import org.churchpresenter.app.churchpresenter.utils.highlightRanges
-import org.churchpresenter.app.churchpresenter.viewmodel.BibleSettingsViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -269,9 +272,10 @@ fun BibleTab(
     bibleEngineClient: BibleEngineClient? = null,
     dialogDismissSignal: Int = 0,
 ) {
-    // Reload the Bible modules whenever the active mode or its ordered file list changes.
-    // Multi mode deliberately leaves legacy primary/secondary fields untouched, so those fields
-    // cannot be used as the only effect keys.
+    // Hand the Bible modules any change to the active mode or its ordered file list. Multi mode
+    // deliberately leaves legacy primary/secondary fields untouched, so those fields cannot be used
+    // as the only effect keys. Whether a given change needs a re-read off disk or just a rearrange
+    // of what is already loaded is BibleViewModel.updateSettings's call, not this key's.
     val isFirstComposition = remember { mutableStateOf(true) }
     val translationSelectionKey = appSettings.bibleSettings.translationSelectionKey()
     LaunchedEffect(
@@ -1566,13 +1570,18 @@ fun BibleTab(
                         )
                     } else if (appSettings.bibleSettings.translationList().size > 2) {
                         val translations = appSettings.bibleSettings.translationList()
-                        val translationDisplayNames = remember(
-                            appSettings.bibleSettings.storageDirectory,
+                        // One header read per translation, so it does not belong in a `remember`
+                        // (which runs it during composition) and it certainly does not need a whole
+                        // BibleSettingsViewModel built to reach the helper. Until it lands, the
+                        // options below fall back to file stems on their own.
+                        val storageDirectory = appSettings.bibleSettings.storageDirectory
+                        val translationDisplayNames by produceState(
+                            initialValue = emptyMap<String, String>(),
+                            storageDirectory,
                             translationSelectionKey,
                         ) {
-                            BibleSettingsViewModel().run {
-                                setDirectory(appSettings.bibleSettings.storageDirectory)
-                                fileDisplayNames(translations.map { it.fileName })
+                            value = withContext(Dispatchers.IO) {
+                                bibleDisplayNames(storageDirectory, translations.map { it.fileName })
                             }
                         }
                         DropdownSelector(

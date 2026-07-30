@@ -89,10 +89,20 @@ class SourcePropertiesBibleTest {
         )
     }
 
-    /** Waits for the module to finish loading, which is what puts the book picker on screen. */
+    /**
+     * Waits for both asynchronous halves of this panel to land.
+     *
+     * The module load is what puts the book picker on screen. The version picker is separate: it is
+     * filled from a listing of the bible folder plus a header read per module, which happen off the
+     * composition thread and so arrive independently — waiting on the book picker alone would leave
+     * every assertion about the version picker racing that read.
+     */
     private fun ComposeUiTest.awaitBibleLoaded() {
         waitUntil("the Bible module must load and put a book picker on screen", timeoutMillis = 5_000) {
             countOf("BOOK") == 1
+        }
+        waitUntil("the bible folder listing must reach the version picker", timeoutMillis = 5_000) {
+            countOf("BIBLE VERSION") == 1
         }
     }
 

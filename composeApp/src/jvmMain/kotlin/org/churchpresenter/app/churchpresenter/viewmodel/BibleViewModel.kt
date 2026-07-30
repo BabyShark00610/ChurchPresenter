@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogSide
@@ -431,9 +432,67 @@ class BibleViewModel(
         loadBibles()
     }
 
+    /**
+     * Takes a settings change, reloading from disk only when the change actually calls for it.
+     *
+     * Reordering the stack does not. Every .spb in it is already parsed and held in memory, so a new
+     * order can be applied by permuting what is loaded — see [applyTranslationOrder]. Reloading
+     * instead re-parsed every translation, and because [loadBibles] republishes a books-only bible
+     * while it works, the verse list went blank under whatever was live for as long as that took
+     * (issue #96).
+     */
     fun updateSettings(newSettings: AppSettings) {
+        val previous = appSettings
         appSettings = newSettings
-        loadBibles()
+        if (translationReloadRequired(previous.bibleSettings, newSettings.bibleSettings)) {
+            loadBibles()
+        } else {
+            applyTranslationOrder()
+        }
+    }
+
+    /**
+     * Whether going from [previous] to [next] needs the translations read off disk again.
+     *
+     * Only two things do: a different set of files, and a different navigation bible — the first of
+     * the stack, which supplies the book/chapter/verse lists and the canonical code every other
+     * translation's verse is looked up by, so swapping it is a genuine reload rather than a
+     * rearrangement. Anything else about the stack, its order included, is the same files already in
+     * memory.
+     */
+    internal fun translationReloadRequired(previous: BibleSettings, next: BibleSettings): Boolean {
+        if (previous.storageDirectory != next.storageDirectory) return true
+        val before = previous.translationSelectionKey()
+        val after = next.translationSelectionKey()
+        if (before.firstOrNull() != after.firstOrNull()) return true
+        return before.toSet() != after.toSet()
+    }
+
+    /**
+     * Rearranges the loaded translations to the configured order without touching the filesystem.
+     *
+     * Bails out to a full [loadBibles] if the two cannot be matched up one to one, which would mean
+     * the loaded set and the configured set had drifted apart — the case [updateSettings] reloads
+     * for, reached by some path that did not check.
+     */
+    private fun applyTranslationOrder() {
+        val current = _loadedTranslations.value
+        if (current.isEmpty()) return
+        val desired = appSettings.bibleSettings.translationSelectionKey()
+        val reordered = desired.mapNotNull { fileName -> current.firstOrNull { it.fileName == fileName } }
+        if (reordered.size != current.size) {
+            loadBibles()
+            return
+        }
+        if (reordered == current) return
+        _loadedTranslations.value = reordered
+        _loadedBibles.value = reordered.map { it.bible }
+        // Kept in step for the benefit of everything still reading the legacy pair; the navigation
+        // bible cannot have moved, or this would have been a reload.
+        _secondaryBible.value = reordered.getOrNull(1)?.bible
+        // Re-emits the live selection so what is on screen restacks in the new order. Same bump
+        // loadBibles() ends on, and for the same reason.
+        if (_verses.value.isNotEmpty()) _verseSelectionToken.value++
     }
 
     // ── Instance Link — remote bible ─────────────────────────────────────────
