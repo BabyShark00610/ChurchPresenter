@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -249,7 +250,7 @@ fun StageMonitorScreen(
                 bpm = currentLyricSection.bpm,
                 active = true,
                 size = 36.dp,
-                modifier = Modifier.align(metronomeAlignment).padding(24.dp)
+                modifier = Modifier.align(metronomeAlignment).padding(24.dp).testTag("stage_metronome")
             )
         }
     }
@@ -401,7 +402,9 @@ private fun SlideContent(bitmap: ImageBitmap?) {
             bitmap = bitmap,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize()
+            // Tagged rather than described: it is decorative to a screen reader, but a test has no
+            // other handle on "the slide is on the monitor" than a semantics node.
+            modifier = Modifier.fillMaxSize().testTag("stage_slide")
         )
     }
 }

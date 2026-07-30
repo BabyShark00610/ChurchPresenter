@@ -52,6 +52,15 @@ jobs:
         timeout-minutes: 25
         run: ./gradlew :composeApp:jvmTest
 
+      # The 75% line-coverage floor, off the execution data the tests above just produced (so this
+      # adds no test time). Its denominator excludes the app-entry wiring that only runs under a real
+      # display -- see jacocoTestCoverageVerification in composeApp/build.gradle.kts. `if: always()`
+      # so a coverage regression is reported alongside test failures rather than hidden behind them.
+      - name: Coverage floor
+        if: always()
+        timeout-minutes: 10
+        run: ./gradlew :composeApp:jacocoTestCoverageVerification
+
       # Each submodule is its own Gradle build with its own wrapper, so they cannot be reached
       # from the root build and are invoked individually. `if: always()` keeps a failure in one
       # suite from hiding the results of the others.

@@ -322,7 +322,7 @@ fun STTTab(
     }
 }
 
-private fun applyHighlighting(
+internal fun applyHighlighting(
     text: String,
     highlightedWords: List<HighlightedWord>,
     enabled: Boolean,

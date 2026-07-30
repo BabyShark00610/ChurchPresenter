@@ -63,6 +63,15 @@ internal class TabReports {
     var sectionIndex: Int? = null
     val scheduled = mutableListOf<String>()
     var settingsChanges = 0
+
+    /**
+     * The settings the tab's most recent change would produce.
+     *
+     * The tab never holds settings — it hands the host a transform — so the harness applies that
+     * transform to the settings it was composed with and keeps the result, letting a test assert the
+     * intended settings rather than that a callback fired.
+     */
+    var settingsAfterChange: AppSettings? = null
 }
 
 /**
@@ -76,6 +85,11 @@ internal class TabReports {
 internal fun songsTab(
     songs: List<SongFixture> = defaultSongs,
     songSettings: SongSettings = SongSettings(),
+    /**
+     * Which table columns are hidden, or null for the app's own default (tune, plays, author,
+     * composer). Lives on [AppSettings] rather than [SongSettings], so it is its own parameter.
+     */
+    hiddenCols: Set<String>? = null,
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -95,6 +109,7 @@ internal fun songsTab(
             )
         }
         val settings = AppSettings(songSettings = songSettings.copy(storageDirectory = dir.absolutePath))
+            .let { if (hiddenCols != null) it.copy(songHiddenCols = hiddenCols) else it }
         val vm = SongsViewModel(
             settings,
             dispatcher = Dispatchers.Unconfined,
@@ -108,7 +123,10 @@ internal fun songsTab(
                     SongsTab(
                         viewModel = vm,
                         appSettings = settings,
-                        onSettingsChange = { reports.settingsChanges++ },
+                        onSettingsChange = { transform ->
+                            reports.settingsChanges++
+                            reports.settingsAfterChange = transform(reports.settingsAfterChange ?: settings)
+                        },
                         onAddToSchedule = { _, title, _, _ -> reports.scheduled += title },
                         onSongItemSelected = { reports.selectedSection = it },
                         onAllSectionsChanged = { reports.allSections += it },

@@ -60,4 +60,35 @@ class DictionaryPresenterRenderTest {
         onNodeWithText("ʼĕlôhîym", substring = true)
             .assertDoesNotExist()
     }
+
+    @Test
+    fun `shadows do not cost the entry its text`() = runDict(
+        elohim,
+        DictionarySettings(
+            showKjvUsage = true,
+            wordShadow = true,
+            wordShadowColor = "#102030",
+            wordShadowSize = 140,
+            wordShadowOpacity = 70,
+            referenceShadow = true,
+            referenceShadowColor = "#405060",
+            referenceShadowSize = 60,
+            referenceShadowOpacity = 40,
+        ),
+    ) {
+        // The shadows are built per text run from the colour, size and opacity settings; what a test
+        // can hold the presenter to is that turning them on changes nothing about what is legible.
+        onNodeWithText("ʼĕlôhîym", substring = true).assertExists()
+        onNodeWithText("the supreme God", substring = true).assertExists()
+        onNodeWithText("el-o-heem'", substring = true).assertExists()
+        onNodeWithText("God (2346x)", substring = true).assertExists()
+    }
+
+    @Test
+    fun `an unparseable shadow colour still renders the entry`() = runDict(
+        elohim,
+        DictionarySettings(wordShadow = true, wordShadowColor = "not a colour", referenceShadow = true),
+    ) {
+        onNodeWithText("ʼĕlôhîym", substring = true).assertExists()
+    }
 }
