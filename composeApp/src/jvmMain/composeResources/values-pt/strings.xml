@@ -2153,6 +2153,11 @@
     <string name="add_bible_translation">Adicionar tradução</string>
     <string name="bible_reference">Referência bíblica</string>
     <string name="bible_translation_order">Ordem das traduções</string>
+    <string name="bible_translation_order_panel_title">Ordem de exibição</string>
+    <string name="bible_translation_order_panel_subtitle">Os versículos se empilham de cima para baixo na tela</string>
+    <string name="bible_translation_order_hint">Arraste uma linha ou use as setas para reordenar.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Arrastar para reordenar</string>
     <string name="bible_multi_layout">Disposição das traduções</string>
     <string name="bible_translation_spacing">Espaço entre traduções</string>
     <string name="bible_translation_divider">Mostrar separador entre traduções</string>

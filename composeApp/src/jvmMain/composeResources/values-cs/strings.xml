@@ -2134,6 +2134,11 @@
     <string name="add_bible_translation">Přidat překlad</string>
     <string name="bible_reference">Biblický odkaz</string>
     <string name="bible_translation_order">Pořadí překladů</string>
+    <string name="bible_translation_order_panel_title">Pořadí zobrazení</string>
+    <string name="bible_translation_order_panel_subtitle">Verše se na obrazovce skládají shora dolů</string>
+    <string name="bible_translation_order_hint">Přetáhněte řádek nebo použijte šipky ke změně pořadí.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Přetažením změníte pořadí</string>
     <string name="bible_multi_layout">Rozložení více překladů</string>
     <string name="bible_translation_spacing">Mezera mezi překlady</string>
     <string name="bible_translation_divider">Zobrazit oddělovač mezi překlady</string>

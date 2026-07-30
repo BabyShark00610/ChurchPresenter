@@ -2157,6 +2157,11 @@
     <string name="add_bible_translation">Lisa tõlge</string>
     <string name="bible_reference">Piibliviide</string>
     <string name="bible_translation_order">Tõlgete järjekord</string>
+    <string name="bible_translation_order_panel_title">Kuvamisjärjekord</string>
+    <string name="bible_translation_order_panel_subtitle">Salmid virnastuvad ekraanil ülevalt alla</string>
+    <string name="bible_translation_order_hint">Lohista rida või kasuta ümberjärjestamiseks nooli.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Lohista ümberjärjestamiseks</string>
     <string name="bible_multi_layout">Tõlgete paigutus</string>
     <string name="bible_translation_spacing">Tõlgete vahe</string>
     <string name="bible_translation_divider">Näita tõlgete vahel eraldajat</string>
