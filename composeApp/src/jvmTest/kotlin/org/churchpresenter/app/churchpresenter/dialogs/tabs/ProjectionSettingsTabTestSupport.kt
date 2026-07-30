@@ -16,11 +16,15 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
+import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import kotlin.test.assertEquals
 
@@ -88,6 +92,46 @@ internal fun oneExternalScreen(): List<DetectedScreen> = listOf(
     DetectedScreen(index = 0, isPrimary = true, boundsX = 0, boundsY = 0, boundsW = 1920, boundsH = 1080),
     DetectedScreen(index = 1, isPrimary = false, boundsX = 1920, boundsY = 0, boundsW = 1280, boundsH = 720),
 )
+
+// ── Bible stack fixtures ────────────────────────────────────────────────────────────────────────
+
+/**
+ * Settings carrying a stack of [names]. `withTranslations` keeps the legacy primary/secondary names
+ * in step, so the stack is the shape a real install would have rather than one assembled field by
+ * field.
+ *
+ * No `storageDirectory` is set, so `Bible.readTranslationSummary` finds nothing to read and each
+ * row falls back to naming itself by its file stem — which is also what an install whose .spb
+ * carries no `##Title:` header does.
+ */
+internal fun withBibleStack(vararg names: String, projection: ProjectionSettings = ProjectionSettings()): AppSettings =
+    AppSettings(
+        bibleSettings = BibleSettings().withTranslations(names.map { BibleTranslationSettings(fileName = it) }),
+        projectionSettings = projection,
+    )
+
+/** Three translations: enough for the per-output translation picker to list rows at all. */
+internal fun threeTranslations(projection: ProjectionSettings = ProjectionSettings()): AppSettings =
+    withBibleStack("ENG_KJV.spb", "RUS_SYN.spb", "DEU_LUT.spb", projection = projection)
+
+// ── Translation picker locators ─────────────────────────────────────────────────────────────────
+
+/**
+ * The collapsed trigger that opens the translation picker.
+ *
+ * Addressed by tag: every caption this segment can show is derived from the current selection, and
+ * a cleared trigger reads "None" — which is also what an unassigned target-display dropdown reads.
+ */
+internal fun ComposeUiTest.translationTrigger(): SemanticsNodeInteraction =
+    onNodeWithTag(TranslationPickerTags.TRIGGER)
+
+/** The open picker's master on/off row, which publishes a tri-state toggle. */
+internal fun ComposeUiTest.translationMaster(): SemanticsNodeInteraction =
+    onNodeWithTag(TranslationPickerTags.MASTER)
+
+/** The picker row for stack position [index]. */
+internal fun ComposeUiTest.translationRow(index: Int): SemanticsNodeInteraction =
+    onNodeWithTag(TranslationPickerTags.row(index))
 
 // ── Grid layout ─────────────────────────────────────────────────────────────────────────────────
 

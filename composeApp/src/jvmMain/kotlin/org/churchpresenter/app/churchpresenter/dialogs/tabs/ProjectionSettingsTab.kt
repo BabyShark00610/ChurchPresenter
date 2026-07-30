@@ -72,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1705,6 +1706,24 @@ private fun ContentToggleCell(
 }
 
 /**
+ * Test tags for the per-output Bible translation picker.
+ *
+ * Every part of this cell names itself with derived text — the trigger shows a summary of the
+ * current selection, and each row shows a code and title read out of the .spb file — so a caption
+ * is not a stable way to address any of them. These tags name what a control *is* instead.
+ */
+internal object TranslationPickerTags {
+    /** The collapsed trigger segment that opens the picker. */
+    const val TRIGGER = "contentOutputs_bibleTranslationTrigger"
+
+    /** The master on/off row at the top of the open picker. */
+    const val MASTER = "contentOutputs_bibleTranslationMaster"
+
+    /** The row for the translation at stack position [index]. */
+    fun row(index: Int) = "contentOutputs_bibleTranslationRow_$index"
+}
+
+/**
  * Bible content cell: a compact two-segment trigger button (on/off, then the current translation
  * pick) that opens a floating panel with the full translation list -- collapsed by default rather
  * than always showing the full picker inline, so it reads the same as any other content-outputs
@@ -1799,6 +1818,10 @@ private fun ContentTranslationCell(
                     // this on translations.isNotEmpty() would leave no way at all to reach it in
                     // that case.
                     .clickable { dropdownOpen = true }
+                    // Tagged rather than found by caption: this segment's text is a derived summary
+                    // ("All Bibles", a code, "+N more") that changes with the selection, and a
+                    // single-selection caption repeats the code its own menu row shows.
+                    .testTag(TranslationPickerTags.TRIGGER)
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1911,6 +1934,7 @@ private fun ContentTranslationCell(
                     },
                     onClick = { if (showing) onShowingChange(false) else selectAll() },
                 )
+                .testTag(TranslationPickerTags.MASTER)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(11.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -2004,6 +2028,9 @@ private fun ContentTranslationCell(
                             .fillMaxWidth()
                             .background(if (ticked) MaterialTheme.colorScheme.primary.copy(alpha = 0.09f) else Color.Transparent)
                             .clickable(onClick = toggle)
+                            // Tagged by stack position, which is what a selection actually stores;
+                            // the code and title beside it are file-derived and repeat elsewhere.
+                            .testTag(TranslationPickerTags.row(index))
                             .padding(start = 30.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
