@@ -28,12 +28,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import churchpresenter.composeapp.generated.resources.Res
@@ -49,11 +52,35 @@ import org.jetbrains.compose.resources.stringResource
 /** The EULA text shown in [LicenseDialog], read from the bundled resource file. */
 internal suspend fun loadEulaText(): String = Res.readBytes("files/eula.txt").toString(Charsets.UTF_8)
 
+/**
+ * Hosts the EULA window content. Overridable so tests can reach the state/effect logic around it
+ * (window title, icon, when the license text becomes available) without opening a real AWT window
+ * in headless mode.
+ */
+internal typealias LicenseWindowHost = @Composable (
+    title: String,
+    icon: Painter,
+    state: WindowState,
+    onCloseRequest: () -> Unit,
+    content: @Composable FrameWindowScope.() -> Unit
+) -> Unit
+
 @Composable
 fun LicenseDialog(
     isVisible: Boolean,
     onAccept: () -> Unit,
-    onDecline: () -> Unit
+    onDecline: () -> Unit,
+    windowHost: LicenseWindowHost = { title, icon, state, onCloseRequest, content ->
+        Window(
+            onCloseRequest = onCloseRequest,
+            title = title,
+            icon = icon,
+            state = state,
+            resizable = true,
+            alwaysOnTop = true,
+            content = content
+        )
+    }
 ) {
     if (!isVisible) return
 
@@ -68,13 +95,11 @@ fun LicenseDialog(
         licenseText = loadEulaText()
     }
 
-    Window(
-        onCloseRequest = onDecline,
-        title = stringResource(Res.string.license_title),
-        icon = painterResource(Res.drawable.ic_app_icon),
-        state = windowState,
-        resizable = true,
-        alwaysOnTop = true
+    windowHost(
+        stringResource(Res.string.license_title),
+        painterResource(Res.drawable.ic_app_icon),
+        windowState,
+        onDecline
     ) {
         MacMenuBarActivationFix()
         LicenseDialogContent(licenseText = licenseText, onAccept = onAccept, onDecline = onDecline)

@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
@@ -67,6 +68,9 @@ import java.io.File
 private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "bmp")
 private val VIDEO_EXTENSIONS = setOf("mp4", "mov", "avi", "mkv", "webm")
 private const val BUNDLED_BACKGROUNDS_PATH = "files/backgrounds"
+
+/** Tags the decoded thumbnail [Image] so tests can wait for the async load to finish. */
+internal const val LIBRARY_THUMBNAIL_IMAGE_TAG = "library_thumbnail_image"
 
 /** An entry in the local library grid — either a file the user already downloaded, or one shipped with the app. */
 internal sealed interface LibraryEntry {
@@ -98,6 +102,27 @@ internal fun libraryEntries(
     return if (searchQuery.isBlank()) combined else combined.filter { it.name.contains(searchQuery, ignoreCase = true) }
 }
 
+/** Lists the user's already-downloaded stock files of [mediaType] from [storageDir], newest first. */
+internal fun scanDownloadedFiles(storageDir: File, mediaType: StockMediaClient.StockMediaType): List<File> {
+    val extensions = if (mediaType == StockMediaClient.StockMediaType.PHOTO) IMAGE_EXTENSIONS else VIDEO_EXTENSIONS
+    return storageDir.listFiles { file -> file.isFile && file.extension.lowercase() in extensions }
+        ?.sortedByDescending { it.lastModified() }
+        ?: emptyList()
+}
+
+/** Names of the bundled backgrounds shipped with the app for [mediaType] (only photos ship any; videos never do). */
+internal suspend fun loadBundledFileNames(mediaType: StockMediaClient.StockMediaType): List<String> {
+    if (mediaType != StockMediaClient.StockMediaType.PHOTO) return emptyList()
+    return try {
+        Res.readBytes("$BUNDLED_BACKGROUNDS_PATH/index.txt")
+            .toString(Charsets.UTF_8)
+            .lines()
+            .filter { it.isNotBlank() }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
 /** Copies a bundled background out of app resources into the stock library folder the first time it's picked. */
 internal suspend fun materializeBundledEntry(fileName: String): File = withContext(Dispatchers.IO) {
     val dir = File(System.getProperty("user.home"), ".churchpresenter/stock-backgrounds")
@@ -126,27 +151,13 @@ fun LocalLibraryDialog(
     }
 
     val allFiles = remember(mediaType) {
-        val extensions = if (mediaType == StockMediaClient.StockMediaType.PHOTO) IMAGE_EXTENSIONS else VIDEO_EXTENSIONS
         val dir = File(System.getProperty("user.home"), ".churchpresenter/stock-backgrounds")
-        dir.listFiles { file -> file.isFile && file.extension.lowercase() in extensions }
-            ?.sortedByDescending { it.lastModified() }
-            ?: emptyList()
+        scanDownloadedFiles(dir, mediaType)
     }
 
     var bundledFileNames by remember(mediaType) { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(mediaType) {
-        bundledFileNames = if (mediaType == StockMediaClient.StockMediaType.PHOTO) {
-            try {
-                Res.readBytes("$BUNDLED_BACKGROUNDS_PATH/index.txt")
-                    .toString(Charsets.UTF_8)
-                    .lines()
-                    .filter { it.isNotBlank() }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        } else {
-            emptyList()
-        }
+        bundledFileNames = loadBundledFileNames(mediaType)
     }
 
     val mainWindowState = LocalMainWindowState.current
@@ -324,7 +335,7 @@ private fun LibraryThumbnail(
                     bitmap = bitmap!!,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().testTag(LIBRARY_THUMBNAIL_IMAGE_TAG)
                 )
             }
             else -> {
