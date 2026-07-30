@@ -12,6 +12,8 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
@@ -46,6 +48,12 @@ internal class ScheduleReports {
     var addLabelRequests = 0
     var addWebsiteRequests = 0
     val zoomChanges = mutableListOf<Int>()
+
+    /**
+     * The action set the tab hands its parent, so the menu and keyboard paths — which never touch a
+     * button in this tab — can be driven the way `MainDesktop` drives them.
+     */
+    var actions: ScheduleTabActions? = null
 }
 
 /**
@@ -81,6 +89,7 @@ internal fun scheduleTab(
                         onItemClick = { reports.clicked += it },
                         onEditLabel = { reports.editedLabels += it },
                         onSelectedItemChanged = { reports.selectionChanges += it },
+                        onActionsReady = { reports.actions = it },
                         onAddLabel = { reports.addLabelRequests++ },
                         onAddWebsite = { reports.addWebsiteRequests++ },
                         onPresentSong = { reports.presented += it },
@@ -102,7 +111,46 @@ internal fun scheduleTab(
     }
 }
 
+/**
+ * The registered [ScheduleTabActions], once the tab's `LaunchedEffect` has published them.
+ *
+ * Registration happens in an effect rather than during composition, so the wait is on the effect
+ * having run — `waitForIdle` returns on that positive signal, not on a duration.
+ */
+internal fun ComposeUiTest.registeredActions(reports: ScheduleReports): ScheduleTabActions {
+    waitForIdle()
+    return requireNotNull(reports.actions) { "the tab must publish its actions to the parent" }
+}
+
 // ── Fixtures ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Writes an autosave the tab will offer to restore, into the temp `user.home` the harness has
+ * already installed. Call from `seed`, which runs after the view model is built (so the path is
+ * fixed) and before the first frame (so the prompt is decided against a file that exists).
+ *
+ * Plain JSON rather than the encrypted form: the encryption helpers are on a private companion, and
+ * `restoreAutoSave` falls back to the raw text when decryption fails, which is the branch this
+ * takes. What the file contains is beside the point here — `ScheduleAutoSaveTest` covers the
+ * restore itself; these tests are about the dialog in front of it.
+ */
+internal fun plantAutoSave(vararg titles: String) {
+    val items = titles.mapIndexed { i, title ->
+        ScheduleItem.SongItem(id = "auto-$i", songNumber = i + 1, title = title, songbook = "Hymnal")
+    }
+    // Serialized through the real ScheduleItem serializer so the polymorphic discriminator is
+    // whatever the model actually declares, rather than a string this fixture guesses at.
+    val itemsJson = Json { encodeDefaults = true }
+        .encodeToString(ListSerializer(ScheduleItem.serializer()), items)
+    val file = File(System.getProperty("user.home"), ".churchpresenter/autosave_schedule.tmp")
+    file.parentFile.mkdirs()
+    file.writeText("""{"version":2,"items":$itemsJson,"notes":{}}""")
+}
+
+/** Whether the autosave the tab was offered is still on disk. */
+internal fun autoSaveExists(): Boolean =
+    File(System.getProperty("user.home"), ".churchpresenter/autosave_schedule.tmp").exists()
+
 
 /** A service order with one of each item type the row renderer draws differently. */
 internal fun ScheduleViewModel.seedService() {

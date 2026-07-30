@@ -123,27 +123,17 @@ class DictionarySettingsTabStructureTest {
     // ── The stepper arrows ──────────────────────────────────────────────────────────────────────
 
     /**
-     * Every stepper field publishes increment/decrement arrows and every one of them lays out zero
-     * pixels wide, so they draw nothing and cannot be clicked. The cause is in
-     * `NumberSettingsTextField` itself — its `BasicTextField` takes `fillMaxWidth()`, leaving the
-     * arrow column no room — so it affects every numeric field in the app rather than this tab.
-     * Pinned as present-but-unusable rather than driven: a test that clicked them would be asserting
-     * a defect works.
+     * Every stepper field publishes increment/decrement arrows, and each is laid out at a size a
+     * click can reach.
+     *
+     * These arrows used to collapse to zero pixels wide on every tab in the app — a defect in the
+     * shared `NumberSettingsTextField`, which this test pinned as present-but-unusable while it
+     * stood. Now that it is fixed, the same test guards the fix.
      */
     @Test
-    fun `the stepper arrows are published but laid out unusably`() {
+    fun `the stepper arrows are laid out where they can be clicked`() {
         dictionaryTab(initial = dictionarySettings { copy(wordShadow = true, referenceShadow = true) }) { _ ->
-            for (description in listOf("Increment", "Decrement")) {
-                val widths = onAllNodesWithContentDescription(description)
-                    .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                    .map { it.boundsInRoot.width }
-                assertEquals(8, widths.size, "one $description arrow per number field")
-                assertEquals(
-                    true,
-                    widths.all { it == 0f },
-                    "every $description arrow is zero pixels wide, so none of them can be clicked",
-                )
-            }
+            assertStepperArrowsUsable(expected = 8)
         }
     }
 }

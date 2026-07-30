@@ -16,14 +16,8 @@ import kotlin.test.assertTrue
  * url, the website bar, the Q&A entry all rely on it — and it lives in a `decorationBox` that draws it
  * only while the value is empty, so it is its own branch rather than a property of the field.
  *
- * **Not covered: `NumberSettingsTextField`'s arrows.** Both `IconButton`s measure to a zero-size rect
- * in a headless composition — under the parameter's own default modifier
- * (`widthIn(min = 60.dp).width(IntrinsicSize.Max)`) and equally when the component is given a fixed
- * 200dp width — so no click can be delivered to either one and the range clamp behind them is
- * unreachable from a test. Worth a look in the real UI: if the arrow column really does collapse once
- * the text field takes the row's width, those arrows are undeliverable there too and the clamp they
- * guard never runs (every caller feeds the value straight into a setting). Flagged rather than
- * asserted around, since a test written against the collapsed layout would pin the bug in place.
+ * `NumberSettingsTextField` lives in `NumberSettingsTextFieldTest` — its arrows were undeliverable
+ * (a zero-width arrow column) until the layout was fixed, and that test now guards it.
  */
 class SettingsFieldEdgeTest {
 

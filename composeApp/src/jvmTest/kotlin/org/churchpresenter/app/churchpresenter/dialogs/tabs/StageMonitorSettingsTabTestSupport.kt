@@ -55,8 +55,9 @@ import kotlin.test.assertEquals
  *
  * Known gaps — what these tests do not reach, and why:
  *
- *  * **The stepper arrows** on all 18 number fields lay out zero pixels wide and cannot be clicked;
- *    a defect in the shared `NumberSettingsTextField`, pinned rather than driven.
+ *  * **The stepper arrows** on all 18 number fields are asserted clickable but the fields are driven
+ *    by typing. What the arrows do with a value — the range clamp at either end — belongs to the
+ *    shared `NumberSettingsTextField` and is covered by `NumberSettingsTextFieldTest`.
  *  * **`MetronomeDot`** is not asserted at all. It is a bare `Box` with no semantics — nothing to
  *    locate — and its only visible property is an alpha driven by a `delay` loop, so the one way to
  *    see it is a pixel capture whose result depends on where that loop happens to be. Asserting on

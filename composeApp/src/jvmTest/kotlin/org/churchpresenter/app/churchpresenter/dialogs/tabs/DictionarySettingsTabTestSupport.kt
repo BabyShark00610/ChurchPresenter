@@ -48,9 +48,9 @@ import kotlin.test.assertTrue
  *
  * Known gaps — what these tests do not reach, and why:
  *
- *  * **The stepper arrows** on every `NumberSettingsTextField` lay out zero pixels wide and cannot
- *    be clicked. That is a defect in the shared control, not this tab, and is pinned as
- *    present-but-unusable rather than driven.
+ *  * **The stepper arrows** on every `NumberSettingsTextField` are asserted clickable but the fields
+ *    are driven by typing. What the arrows do with a value — the range clamp at either end — belongs
+ *    to the shared control and is covered by `NumberSettingsTextFieldTest`.
  *  * **`GraphicsEnvironment.availableFontFamilyNames`** is called at composition. Unlike
  *    `screenDevices` it works headless, so it needs no seam — but it means the font dropdowns offer
  *    whatever the running machine has installed, which is why [uniquelyNamedFont] is used rather

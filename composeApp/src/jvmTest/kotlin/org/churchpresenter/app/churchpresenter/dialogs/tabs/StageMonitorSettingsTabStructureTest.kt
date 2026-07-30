@@ -151,18 +151,14 @@ class StageMonitorSettingsTabStructureTest {
     // ── The stepper arrows ──────────────────────────────────────────────────────────────────────
 
     /**
-     * Every stepper arrow on the tab lays out zero pixels wide and so cannot be clicked — the same
-     * `NumberSettingsTextField` defect the Song, Projection and Dictionary tabs record. Pinned as
-     * present-but-unusable rather than driven: a test that clicked them would assert a defect works.
+     * Every stepper arrow on the tab is laid out at a size a click can reach.
+     *
+     * They used to collapse to zero pixels wide on every tab in the app — a defect in the shared
+     * `NumberSettingsTextField`, which this test pinned as present-but-unusable while it stood. Now
+     * that it is fixed, the same test guards the fix.
      */
     @Test
-    fun `the stepper arrows are published but laid out unusably`() = stageMonitorTab { _ ->
-        for (description in listOf("Increment", "Decrement")) {
-            val widths = onAllNodesWithContentDescription(description)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .map { it.boundsInRoot.width }
-            assertEquals(ZoneOrdinal.COUNT * 3, widths.size, "one $description arrow per number field")
-            assertEquals(true, widths.all { it == 0f }, "every $description arrow is zero pixels wide")
-        }
+    fun `the stepper arrows are laid out where they can be clicked`() = stageMonitorTab { _ ->
+        assertStepperArrowsUsable(expected = ZoneOrdinal.COUNT * 3)
     }
 }
