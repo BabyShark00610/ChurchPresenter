@@ -37,6 +37,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import java.security.MessageDigest
@@ -51,6 +52,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -3357,6 +3359,29 @@ class CompanionServer {
                         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "follower_connected", mapOf("deviceId" to wsClientId))
                     }
 
+                    // Subscribed to the broadcast flow BEFORE the connect snapshot is written, and
+                    // released only once it has been: broadcastChannel has no replay, so a change
+                    // emitted while the snapshot was still being sent used to land on a flow this
+                    // session had not subscribed to yet and was lost outright -- the client then
+                    // showed stale content until its next reconnect. Broadcasts that arrive during
+                    // the snapshot queue in the flow's own buffer instead, so the whole snapshot
+                    // still reaches the client ahead of any of them.
+                    val snapshotSent = CompletableDeferred<Unit>()
+                    val subscribed = CompletableDeferred<Unit>()
+                    val broadcastJob = scope.launch {
+                        broadcastChannel
+                            .onSubscription { subscribed.complete(Unit) }
+                            .collect { message ->
+                                snapshotSent.await()
+                                send(Frame.Text(message))
+                            }
+                    }
+                    // A scope already cancelled (server stopping) never runs the block above, so the
+                    // wait is released by the job ending too rather than hanging the handler; the
+                    // fallback is exactly the old behaviour, a snapshot and no broadcasts.
+                    broadcastJob.invokeOnCompletion { subscribed.complete(Unit) }
+                    subscribed.await()
+
                     val catalog = _catalog.value
                     val schedule = _schedule.value
                     send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
@@ -3400,9 +3425,8 @@ class CompanionServer {
                                 json.encodeToString(LiveStateDto.serializer(), state)))))
                     }
 
-                    val broadcastJob = scope.launch {
-                        broadcastChannel.collect { message -> send(Frame.Text(message)) }
-                    }
+                    // The snapshot is complete; anything the collector queued during it now flows.
+                    snapshotSent.complete(Unit)
 
                     // Ack for commands that carried a commandId (InstanceLink controller mode) —
                     // no-op for clients that don't send one, so mobile behavior is unchanged.

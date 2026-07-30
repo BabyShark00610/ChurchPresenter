@@ -232,7 +232,10 @@ class CompanionServerTest {
         withTimeoutOrNull(15_000) {
             client.webSocket(urlString = "ws://127.0.0.1:$port${Constants.ENDPOINT_WS}") {
                 // The first snapshot frame is the positive signal that this session is registered
-                // for broadcasts — pushing the change before that could race the registration.
+                // for broadcasts — pushing the change before that could race the registration. That
+                // holds because the server subscribes to its broadcast flow before writing any
+                // snapshot frame; it did not always, which is what made this test drop a broadcast
+                // on a loaded CI runner.
                 incoming.receive()
 
                 server.updateSchedule(
