@@ -8,12 +8,16 @@ import androidx.compose.ui.unit.sp
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 
 /**
- * The smallest font size any auto-fit in the app will settle on, in settings units at the 1920×1080
- * reference resolution.
+ * The floor the two searches in this file settle on, in settings units at the 1920×1080 reference
+ * resolution. Named rather than repeated at the five places that had it inline.
  *
- * Text below this is not readable from a pew, so a fit that cannot be reached without going under it
- * stops here and lets the content overflow (clipped) instead — an obviously-too-long verse reads
- * better cut off than rendered at a size nobody can make out.
+ * These fit song lyrics, announcements and Q&A text, all of which are authored for the screen: a
+ * section that cannot be made to fit at 8sp is one nobody would put up, so stopping here and letting
+ * the rest overflow is the useful answer, and it keeps the search cost fixed.
+ *
+ * Scripture is not fitted through here and deliberately has no equivalent floor — a verse is as long
+ * as it is, so `BiblePresenter.binarySearchFitScale` shrinks until the whole of it is inside its
+ * frame however small that gets (issue #97). Don't read this constant as an app-wide policy.
  */
 const val MIN_AUTO_FIT_FONT_SIZE = 8
 

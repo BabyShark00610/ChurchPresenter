@@ -31,6 +31,11 @@ import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
 
+/** The white key-output's alpha for [PicturePresenter]/[SlidePresenter] — a slide's own translation
+ *  carries the transition, not a fade, so slides always key fully opaque. */
+internal fun pictureKeyAlpha(animationType: AnimationType, transitionAlpha: Float): Float =
+    if (animationType == AnimationType.SLIDE_LEFT || animationType == AnimationType.SLIDE_RIGHT) 1f else transitionAlpha
+
 @Composable
 fun PicturePresenter(
     modifier: Modifier = Modifier,
@@ -48,12 +53,7 @@ fun PicturePresenter(
     when {
         // Key mode: always solid white at the appropriate alpha
         isKey -> {
-            val keyAlpha = when {
-                animationType == AnimationType.CROSSFADE -> transitionAlpha
-                animationType == AnimationType.SLIDE_LEFT || animationType == AnimationType.SLIDE_RIGHT -> 1f
-                else -> transitionAlpha
-            }
-            Box(modifier = modifier.fillMaxSize().background(Color.White).alpha(keyAlpha))
+            Box(modifier = modifier.fillMaxSize().background(Color.White).alpha(pictureKeyAlpha(animationType, transitionAlpha)))
         }
 
         // Crossfade: both images visible simultaneously, old fades out as new fades in
@@ -153,7 +153,7 @@ private fun ImageContent(currentImagePath: String?) {
     }
 }
 
-private fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxHeight: Int = 1080): ImageBitmap? {
+internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxHeight: Int = 1080): ImageBitmap? {
     return try {
         val file = File(imagePath)
         if (!file.exists()) return null
@@ -225,11 +225,7 @@ fun SlidePresenter(
 
     when {
         isKey -> {
-            val keyAlpha = when {
-                animationType == AnimationType.SLIDE_LEFT || animationType == AnimationType.SLIDE_RIGHT -> 1f
-                else -> transitionAlpha
-            }
-            Box(modifier = modifier.fillMaxSize().background(Color.White).alpha(keyAlpha))
+            Box(modifier = modifier.fillMaxSize().background(Color.White).alpha(pictureKeyAlpha(animationType, transitionAlpha)))
         }
 
         animationType == AnimationType.CROSSFADE && previousSlide != null -> {

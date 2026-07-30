@@ -122,13 +122,16 @@ fun WebTab(
     appSettings: AppSettings = AppSettings(),
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit = {},
     onAddToSchedule: ((url: String, title: String) -> Unit)? = null,
-    onUpdateScheduleTitle: ((url: String, title: String) -> Unit)? = null
+    onUpdateScheduleTitle: ((url: String, title: String) -> Unit)? = null,
+    /** Overridable so tests can reach both branches without touching the real JCEF singleton. */
+    cefInitialized: Boolean = CefManager.initialized,
+    cefMacOsUnsupported: Boolean = CefManager.macOsUnsupported
 ) {
     // JCEF's native engine can fail to load at startup (broken chrome_elf.dll, missing
     // VC++ runtime, etc.). CefManager.init() catches that and leaves the engine down for
     // the whole session, so show an actionable panel instead of dead browser chrome.
-    if (!CefManager.initialized) {
-        WebEngineUnavailable(modifier)
+    if (!cefInitialized) {
+        WebEngineUnavailable(modifier, cefMacOsUnsupported)
         return
     }
 
@@ -851,7 +854,10 @@ fun WebTab(
  * Points the user at the Microsoft Visual C++ Redistributable, the most common cause.
  */
 @Composable
-private fun WebEngineUnavailable(modifier: Modifier = Modifier) {
+internal fun WebEngineUnavailable(
+    modifier: Modifier = Modifier,
+    macOsUnsupported: Boolean = CefManager.macOsUnsupported
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -869,7 +875,7 @@ private fun WebEngineUnavailable(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(
-                if (CefManager.macOsUnsupported) Res.string.web_engine_unavailable_macos_title
+                if (macOsUnsupported) Res.string.web_engine_unavailable_macos_title
                 else Res.string.web_engine_unavailable_title
             ),
             style = MaterialTheme.typography.titleMedium,
@@ -879,7 +885,7 @@ private fun WebEngineUnavailable(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = stringResource(
-                if (CefManager.macOsUnsupported) Res.string.web_engine_unavailable_macos_body
+                if (macOsUnsupported) Res.string.web_engine_unavailable_macos_body
                 else Res.string.web_engine_unavailable_body
             ),
             style = MaterialTheme.typography.bodyMedium,
@@ -998,7 +1004,7 @@ private fun findMethod(obj: Any, name: String, vararg paramTypes: Class<*>): jav
 }
 
 /** Prepend https:// if the user forgot the scheme. */
-private fun normaliseUrl(raw: String): String {
+internal fun normaliseUrl(raw: String): String {
     val trimmed = raw.trim()
     return when {
         trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
@@ -1023,7 +1029,7 @@ private fun normaliseUrl(raw: String): String {
 // cross-window forward. The JS_FOCUS_FIRST_INPUT helper covers the common case.
 // ─────────────────────────────────────────────────────────────────────────────
 
-private fun commonPrefixLength(a: String, b: String): Int {
+internal fun commonPrefixLength(a: String, b: String): Int {
     val n = minOf(a.length, b.length)
     var i = 0
     while (i < n && a[i] == b[i]) i++

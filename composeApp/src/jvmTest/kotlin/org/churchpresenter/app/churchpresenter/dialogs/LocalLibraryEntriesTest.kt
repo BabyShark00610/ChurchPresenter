@@ -2,6 +2,7 @@ package org.churchpresenter.app.churchpresenter.dialogs
 
 import churchpresenter.composeapp.generated.resources.Res
 import kotlinx.coroutines.runBlocking
+import org.churchpresenter.app.churchpresenter.data.StockMediaClient
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -178,5 +179,77 @@ class LocalLibraryEntriesTest {
         val bitmap = loadThumbnailBitmap(BundledEntry("does-not-exist.jpg"))
 
         assertNull(bitmap)
+    }
+
+    // ── scanDownloadedFiles ──────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `scanDownloadedFiles only picks up files matching the media type's extensions`() {
+        File(tempHome, "photo.jpg").writeBytes(ByteArray(1))
+        File(tempHome, "clip.mp4").writeBytes(ByteArray(1))
+        File(tempHome, "notes.txt").writeBytes(ByteArray(1))
+
+        val photos = scanDownloadedFiles(tempHome, StockMediaClient.StockMediaType.PHOTO)
+        val videos = scanDownloadedFiles(tempHome, StockMediaClient.StockMediaType.VIDEO)
+
+        assertEquals(listOf("photo.jpg"), photos.map { it.name })
+        assertEquals(listOf("clip.mp4"), videos.map { it.name })
+    }
+
+    @Test
+    fun `scanDownloadedFiles matches extensions case-insensitively`() {
+        File(tempHome, "photo.JPG").writeBytes(ByteArray(1))
+
+        val photos = scanDownloadedFiles(tempHome, StockMediaClient.StockMediaType.PHOTO)
+
+        assertEquals(listOf("photo.JPG"), photos.map { it.name })
+    }
+
+    @Test
+    fun `scanDownloadedFiles excludes subdirectories`() {
+        File(tempHome, "some-folder.jpg").mkdirs()
+
+        val photos = scanDownloadedFiles(tempHome, StockMediaClient.StockMediaType.PHOTO)
+
+        assertTrue(photos.isEmpty())
+    }
+
+    @Test
+    fun `scanDownloadedFiles sorts newest file first`() {
+        val older = File(tempHome, "older.jpg").apply { writeBytes(ByteArray(1)) }
+        val newer = File(tempHome, "newer.jpg").apply { writeBytes(ByteArray(1)) }
+        older.setLastModified(1_000L)
+        newer.setLastModified(2_000L)
+
+        val photos = scanDownloadedFiles(tempHome, StockMediaClient.StockMediaType.PHOTO)
+
+        assertEquals(listOf("newer.jpg", "older.jpg"), photos.map { it.name })
+    }
+
+    @Test
+    fun `scanDownloadedFiles returns an empty list for a directory that does not exist`() {
+        val missingDir = File(tempHome, "does-not-exist")
+
+        val photos = scanDownloadedFiles(missingDir, StockMediaClient.StockMediaType.PHOTO)
+
+        assertTrue(photos.isEmpty())
+    }
+
+    // ── loadBundledFileNames ─────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `loadBundledFileNames returns the real bundled background names for photos`() = runBlocking {
+        val names = loadBundledFileNames(StockMediaClient.StockMediaType.PHOTO)
+
+        assertTrue(names.isNotEmpty())
+        assertTrue(REAL_BUNDLED_IMAGE in names)
+        assertTrue(names.none { it.isBlank() }, "blank lines from the index file must be filtered out")
+    }
+
+    @Test
+    fun `loadBundledFileNames is always empty for videos, since none are bundled`() = runBlocking {
+        val names = loadBundledFileNames(StockMediaClient.StockMediaType.VIDEO)
+
+        assertTrue(names.isEmpty())
     }
 }
