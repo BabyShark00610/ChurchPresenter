@@ -199,6 +199,7 @@ import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.FileManager
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import org.jetbrains.compose.resources.painterResource
@@ -1854,15 +1855,18 @@ private fun BibleProperties(
 ) {
     val availableFonts = remember { Utils.getAvailableSystemFonts() }
 
-    // Available bible files
+    // Available bible files, each paired with the name to show for it.
+    //
+    // Listing the folder and reading a `##Title:` out of every module in it are both file I/O, and
+    // neither belongs in composition: this panel recomposes on every canvas selection and property
+    // edit, and the folder can hold a hundred modules. The selector below simply waits for the list.
     val storageDir = appSettings?.bibleSettings?.storageDirectory ?: ""
-    val bibleFiles = remember(storageDir) {
-        if (storageDir.isEmpty()) emptyList()
-        else FileManager()
-            .getBibleFilesInDirectory(storageDir)
-    }
-    val bibleDisplayNames = remember(storageDir, bibleFiles) {
-        bibleFiles.associateWith { fileName -> readTranslationTitle(File(storageDir, fileName)) }
+    val bibleOptions by produceState(emptyList<Pair<String, String>>(), storageDir) {
+        value = withContext(Dispatchers.IO) {
+            if (storageDir.isEmpty()) emptyList()
+            else FileManager().getBibleFilesInDirectory(storageDir)
+                .map { fileName -> fileName to readTranslationTitle(File(storageDir, fileName)) }
+        }
     }
 
     // Selected bible version
@@ -1885,11 +1889,11 @@ private fun BibleProperties(
     Text(stringResource(Res.string.canvas_source_bible), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
     // Bible version selector
-    if (bibleFiles.isNotEmpty()) {
+    if (bibleOptions.isNotEmpty()) {
         DropdownSelector(
             label = stringResource(Res.string.canvas_bible_version),
             value = selectedBibleFile,
-            options = bibleFiles.map { it to (bibleDisplayNames[it] ?: it.removeSuffix(".spb")) },
+            options = bibleOptions,
             onValueChange = { selectedBibleFile = it },
             modifier = Modifier.fillMaxWidth()
         )
