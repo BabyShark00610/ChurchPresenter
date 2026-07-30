@@ -666,7 +666,7 @@ fun BiblePresenter(
                             return (constraints.maxHeight - gaps) / visible.size.coerceAtLeast(1)
                         }
                         // One scale for the whole stack, so every translation reads at the same size,
-                        // and no floor: eight translations shrink until the whole of every one of them
+                        // and no floor: a full stack of six shrinks until the whole of every one of them
                         // is inside its band. Everything measured here scales with the argument bar the
                         // 1dp dividers, so a fitting scale always exists to be found.
                         //
@@ -677,9 +677,10 @@ fun BiblePresenter(
                             val band = bandHeight(scale)
                             return visible.all { (verse, item) -> blockHeight(verse, item, scale) <= band }
                         }
-                        val fitScale = if (everyBlockFits(1f)) 1f else {
-                            binarySearchFitScale(iterations = 10) { scale -> everyBlockFits(scale) }
-                        }
+                        // No full-size gate in front of the search: its own opening probe is that same
+                        // measurement and returns 1f when it fits, so gating here measured every
+                        // translation twice over.
+                        val fitScale = binarySearchFitScale(iterations = 10) { scale -> everyBlockFits(scale) }
                         Column(modifier = Modifier.fillMaxSize()) {
                             visible.forEachIndexed { index, (verse, item) ->
                                 val textSize = (item.textFontSize * scaleFactor * fitScale).sp
@@ -813,55 +814,30 @@ fun BiblePresenter(
                         // Auto-scale bible text if it overflows the available height
                         val widthConstraint = Constraints(maxWidth = constraints.maxWidth)
                         val primaryRefText = buildRefText(primary, t0.showAbbreviation)
-                        val primaryRefH = textMeasurer.measure(
-                            text = primaryRefText,
-                            style = primaryReferenceTextStyle.copy(fontFamily = primaryBibleReferenceFontStyle, fontSize = scaledPrimaryReferenceSize),
-                            constraints = widthConstraint
-                        ).size.height
-                        val primaryVerseH = textMeasurer.measure(
-                            text = primary.verseText,
-                            style = primaryBibleTextStyle.copy(fontFamily = primaryBibleFontStyle, fontSize = scaledPrimaryBibleSize),
-                            constraints = widthConstraint
-                        ).size.height
-
-                        // Hoisted out of the height calculation below so the fit search can re-measure
-                        // it at each candidate scale. Empty when there is no second language, which is
-                        // the same as the zero height that branch contributes.
+                        // Empty when there is no second language, which is the same as the zero height
+                        // that branch contributes.
                         val secondaryRefText = secondary?.let { buildRefText(it, t1.showAbbreviation) } ?: ""
-                        val secondaryRefH = if (showSecondary) {
-                            textMeasurer.measure(
-                                text = secondaryRefText,
-                                style = secondaryReferenceTextStyle.copy(fontFamily = secondaryBibleReferenceFontStyle, fontSize = scaledSecondaryReferenceSize),
-                                constraints = widthConstraint
-                            ).size.height
-                        } else 0
-                        val secondaryVerseH = if (showSecondary) {
-                            textMeasurer.measure(
-                                text = secondary.verseText,
-                                style = secondaryBibleTextStyle.copy(fontFamily = secondaryBibleFontStyle, fontSize = scaledSecondaryBibleSize),
-                                constraints = widthConstraint
-                            ).size.height
-                        } else 0
 
-                        val totalH = primaryRefH + primaryVerseH + secondaryRefH + secondaryVerseH
                         val maxH = constraints.maxHeight
                         // The reference lines scale with the verse rather than staying at full size.
                         // Held fixed, they were a floor the search could not get under: a band whose
                         // references alone overfill it had no fitting scale to find, so the text ran off
                         // the bottom however far the verse shrank. This is also the lower third's path.
-                        val fitScale = if (totalH > maxH) {
-                            binarySearchFitScale { scale ->
-                                val pRefH = textMeasurer.measure(primaryRefText, primaryReferenceTextStyle.copy(fontFamily = primaryBibleReferenceFontStyle, fontSize = scaledPrimaryReferenceSize * scale), constraints = widthConstraint).size.height
-                                val pH = textMeasurer.measure(primary.verseText, primaryBibleTextStyle.copy(fontFamily = primaryBibleFontStyle, fontSize = scaledPrimaryBibleSize * scale), constraints = widthConstraint).size.height
-                                val sRefH = if (showSecondary) {
-                                    textMeasurer.measure(secondaryRefText, secondaryReferenceTextStyle.copy(fontFamily = secondaryBibleReferenceFontStyle, fontSize = scaledSecondaryReferenceSize * scale), constraints = widthConstraint).size.height
-                                } else 0
-                                val sH = if (showSecondary) {
-                                    textMeasurer.measure(secondary.verseText, secondaryBibleTextStyle.copy(fontFamily = secondaryBibleFontStyle, fontSize = scaledSecondaryBibleSize * scale), constraints = widthConstraint).size.height
-                                } else 0
-                                pRefH + pH + sRefH + sH <= maxH
-                            }
-                        } else 1f
+                        //
+                        // Handed straight to the search rather than gated on a full-size measurement
+                        // first: the search's own opening probe is that same measurement and returns 1f
+                        // when it fits, so a gate here only measured the whole passage twice.
+                        val fitScale = binarySearchFitScale { scale ->
+                            val pRefH = textMeasurer.measure(primaryRefText, primaryReferenceTextStyle.copy(fontFamily = primaryBibleReferenceFontStyle, fontSize = scaledPrimaryReferenceSize * scale), constraints = widthConstraint).size.height
+                            val pH = textMeasurer.measure(primary.verseText, primaryBibleTextStyle.copy(fontFamily = primaryBibleFontStyle, fontSize = scaledPrimaryBibleSize * scale), constraints = widthConstraint).size.height
+                            val sRefH = if (showSecondary) {
+                                textMeasurer.measure(secondaryRefText, secondaryReferenceTextStyle.copy(fontFamily = secondaryBibleReferenceFontStyle, fontSize = scaledSecondaryReferenceSize * scale), constraints = widthConstraint).size.height
+                            } else 0
+                            val sH = if (showSecondary) {
+                                textMeasurer.measure(secondary.verseText, secondaryBibleTextStyle.copy(fontFamily = secondaryBibleFontStyle, fontSize = scaledSecondaryBibleSize * scale), constraints = widthConstraint).size.height
+                            } else 0
+                            pRefH + pH + sRefH + sH <= maxH
+                        }
                         val fittedPrimaryRefSize = scaledPrimaryReferenceSize * fitScale
                         val fittedSecondaryRefSize = scaledSecondaryReferenceSize * fitScale
                         val fittedPrimaryBibleSize = scaledPrimaryBibleSize * fitScale
