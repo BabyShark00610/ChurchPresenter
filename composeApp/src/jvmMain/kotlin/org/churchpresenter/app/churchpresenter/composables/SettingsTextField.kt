@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.composables
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,11 +56,19 @@ fun SettingsTextField(
     fillWidth: Boolean = false,
 ) {
     val hasLabel = label.isNotEmpty()
-    val borderColor = if (isError) MaterialTheme.colorScheme.error
-                      else MaterialTheme.colorScheme.outlineVariant
+    val interactionSource = remember { MutableInteractionSource() }
+    // The one thing on this field that says which of the two dozen boxes on a settings screen a
+    // keystroke is about to land in. Both branches below draw the same 1dp outline whatever the
+    // state, so without this, tabbing through a settings tab moved an invisible caret: the
+    // interaction source was built and handed to BasicTextField, and then never read.
+    val focused by interactionSource.collectIsFocusedAsState()
+    val borderColor = when {
+        isError -> MaterialTheme.colorScheme.error
+        focused -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.outlineVariant
+    }
     val textColor = if (enabled) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    val interactionSource = remember { MutableInteractionSource() }
 
     Column(modifier = modifier) {
         if (hasLabel) {

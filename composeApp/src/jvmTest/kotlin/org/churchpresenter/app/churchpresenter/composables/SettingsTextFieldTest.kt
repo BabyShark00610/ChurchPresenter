@@ -13,21 +13,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -292,5 +297,98 @@ class SettingsTextFieldTest {
             "fillWidth = true must expand to the parent's width (wide=$wideWidth) rather than wrap to the " +
                 "label's intrinsic width (narrow=$narrowWidth)",
         )
+    }
+
+    // ── Focus ───────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Whether any pixel along the node's top edge is [color], within a tolerance for the blending of
+     * a 1dp line.
+     *
+     * The edge is sampled rather than one chosen pixel: which column of it is pure border depends on
+     * the corner radius and on font metrics that differ across the three target platforms, so an
+     * exact coordinate would be a fragile way to ask a question about the whole outline.
+     */
+    private fun ComposeUiTest.topEdgeHas(tag: String, color: Color): Boolean {
+        val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()
+        return (0 until pixels.width).any { x ->
+            val p = pixels[x, 0]
+            abs(p.red - color.red) < 0.02f && abs(p.green - color.green) < 0.02f && abs(p.blue - color.blue) < 0.02f
+        }
+    }
+
+    @Test
+    fun `a field's outline switches to the accent while it holds focus`() = runComposeUiTest {
+        var accent: Color? = null
+        var resting: Color? = null
+        setContent {
+            MaterialTheme {
+                accent = MaterialTheme.colorScheme.primary
+                resting = MaterialTheme.colorScheme.outlineVariant
+                SettingsTextField(
+                    value = "16",
+                    onValueChange = { },
+                    label = "Font size",
+                    modifier = Modifier.testTag("field").width(200.dp),
+                )
+            }
+        }
+
+        assertTrue(topEdgeHas("field", resting!!), "an unfocused field must draw its resting outline")
+        assertTrue(!topEdgeHas("field", accent!!), "an unfocused field must not already look focused")
+
+        onNodeWithText("16").performClick()
+        waitForIdle()
+
+        // Which of two dozen boxes on a settings screen the next keystroke lands in is otherwise
+        // invisible: both variants draw the same 1dp outline in every other state.
+        assertTrue(topEdgeHas("field", accent!!), "a focused field must draw its outline in the accent colour")
+    }
+
+    @Test
+    fun `an invalid field keeps its error outline even while focused`() = runComposeUiTest {
+        var error: Color? = null
+        setContent {
+            MaterialTheme {
+                error = MaterialTheme.colorScheme.error
+                SettingsTextField(
+                    value = "nope",
+                    onValueChange = { },
+                    label = "Port",
+                    isError = true,
+                    modifier = Modifier.testTag("field").width(200.dp),
+                )
+            }
+        }
+
+        onNodeWithText("nope").performClick()
+        waitForIdle()
+
+        // Focus is transient and the error is the thing that needs fixing, so it outranks it.
+        assertTrue(topEdgeHas("field", error!!), "an errored field must keep its error outline when focused")
+    }
+
+    @Test
+    fun `an unlabeled field takes the focus outline too`() = runComposeUiTest {
+        var accent: Color? = null
+        setContent {
+            MaterialTheme {
+                accent = MaterialTheme.colorScheme.primary
+                SettingsTextField(
+                    value = "abc",
+                    onValueChange = { },
+                    modifier = Modifier.testTag("bare").width(200.dp),
+                )
+            }
+        }
+
+        assertTrue(!topEdgeHas("bare", accent!!), "the bare variant must start unfocused")
+
+        onNodeWithText("abc").performClick()
+        waitForIdle()
+
+        // Both variants share one borderColor, but they are separate BasicTextField call sites and
+        // the bare one is what the inline settings rows use.
+        assertTrue(topEdgeHas("bare", accent!!), "the bare variant must show focus as well")
     }
 }
