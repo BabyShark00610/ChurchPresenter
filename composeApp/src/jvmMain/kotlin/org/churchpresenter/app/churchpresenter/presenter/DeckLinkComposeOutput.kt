@@ -240,7 +240,7 @@ fun DeckLinkComposeOutput(
  * Takes the max of R,G,B (luminance) as the key value.
  * Content on black background → white where content is, black where it isn't.
  */
-private fun convertToKeySignal(pixels: IntArray) {
+internal fun convertToKeySignal(pixels: IntArray) {
     for (i in pixels.indices) {
         val r = (pixels[i] shr 16) and 0xFF
         val g = (pixels[i] shr 8) and 0xFF
