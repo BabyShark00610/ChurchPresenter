@@ -127,6 +127,8 @@ import org.jetbrains.compose.resources.stringResource
 import java.awt.GraphicsEnvironment
 import java.io.File
 
+/** [ActionIconButton]'s own default size, which the reorder buttons take and their gaps stand in for. */
+private val REORDER_BUTTON_SIZE = 34.dp
 
 @Composable
 fun BibleSettingsTab(
@@ -295,6 +297,12 @@ private fun LeftColumn(
                             }
                         },
                     )
+                    // The first row has no "up" and the last no "down", so from three rows up a gap
+                    // has to stand in for the missing button or the delete buttons step in and out
+                    // along the column instead of forming one straight edge. One or two rows need
+                    // no gap: every row is already short of the same one button, so they line up as
+                    // they are and a placeholder would only add dead space.
+                    val padsReorderButtons = translations.size > 2
                     if (index > 0) {
                         ActionIconButton(
                             onClick = { onSettingsChange { app ->
@@ -303,6 +311,8 @@ private fun LeftColumn(
                             tooltipText = stringResource(Res.string.move_translation_up),
                             painter = painterResource(Res.drawable.ic_arrow_up),
                         )
+                    } else if (padsReorderButtons) {
+                        Spacer(modifier = Modifier.size(REORDER_BUTTON_SIZE))
                     }
                     if (index < translations.lastIndex) {
                         ActionIconButton(
@@ -312,6 +322,8 @@ private fun LeftColumn(
                             tooltipText = stringResource(Res.string.move_translation_down),
                             painter = painterResource(Res.drawable.ic_arrow_down),
                         )
+                    } else if (padsReorderButtons) {
+                        Spacer(modifier = Modifier.size(REORDER_BUTTON_SIZE))
                     }
                     ActionIconButton(
                         onClick = { onSettingsChange { app ->
@@ -325,7 +337,9 @@ private fun LeftColumn(
             val unselectedFiles = bibleFilesInDirectory.filter { candidate ->
                 translations.none { it.fileName == candidate }
             }
-            if (unselectedFiles.isNotEmpty()) {
+            // Hidden at the cap as well as when nothing is left to add: `addTranslation` refuses past
+            // it, and a picker that answers a selection by doing nothing is worse than no picker.
+            if (unselectedFiles.isNotEmpty() && translations.size < Constants.MAX_BIBLE_TRANSLATIONS) {
                 DropdownSettingsField(
                     width = pickerWidth,
                     label = addTranslationLabel,

@@ -923,4 +923,84 @@ class BibleSettingsTabTest {
             "and nothing was changed by looking",
         )
     }
+
+    // ── The stack is bounded, and its rows line up ─────────────────────────────
+
+    /** A folder of [count] bibles, and a tab showing the first [stacked] of them as the stack. */
+    private fun ComposeUiTest.showStackOf(count: Int, stacked: Int): Harness {
+        val files = (1..count).map { "bible$it.spb" to "Bible $it" }
+        val dir = bibleFolder(*files.toTypedArray())
+        return showTab(
+            AppSettings(
+                bibleSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+                    files.take(stacked).map { BibleTranslationSettings(fileName = it.first) },
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `the add picker is withdrawn once the stack is full`() = runComposeUiTest {
+        // `addTranslation` refuses past the cap, so offering the add anyway would answer a selection
+        // by doing nothing at all.
+        showStackOf(count = Constants.MAX_BIBLE_TRANSLATIONS + 2, stacked = Constants.MAX_BIBLE_TRANSLATIONS)
+        waitForIdle()
+
+        onAllNodesWithText("Add translation", substring = true)
+            .assertCountEquals(0)
+    }
+
+    @Test
+    fun `the add picker is offered while the stack has room`() = runComposeUiTest {
+        showStackOf(count = Constants.MAX_BIBLE_TRANSLATIONS + 2, stacked = Constants.MAX_BIBLE_TRANSLATIONS - 1)
+        waitForIdle()
+
+        onAllNodesWithText("Add translation", substring = true).onFirst()
+            .assertExists("one short of the cap there is still room, so the add must be offered")
+    }
+
+    /** The left edge of every row's delete button, top row first. */
+    private fun ComposeUiTest.deleteButtonEdges(): List<Float> =
+        onAllNodesWithContentDescription("Remove").fetchSemanticsNodes().map { it.boundsInRoot.left }
+
+    @Test
+    fun `every row's delete button sits at the same edge`() = runComposeUiTest {
+        // The first row has no "up" and the last no "down". Without a gap standing in for the missing
+        // button, delete stepped left on those two rows and the column of buttons came out ragged.
+        showStackOf(count = 3, stacked = 3)
+        waitForIdle()
+
+        val lefts = deleteButtonEdges()
+
+        assertEquals(3, lefts.size, "one delete button per translation")
+        lefts.forEach { left ->
+            assertEquals(
+                lefts.first(), left, 0.5f,
+                "every delete button must share one left edge, got $lefts",
+            )
+        }
+    }
+
+    @Test
+    fun `two rows line up without a placeholder holding space open`() = runComposeUiTest {
+        // Two rows are short of one reorder button each -- the first of "up", the second of "down" --
+        // so they align on their own. Padding them anyway would only open a gap nothing can ever
+        // fill, which is why the placeholder starts at three rows.
+        showStackOf(count = 3, stacked = 2)
+        waitForIdle()
+
+        val lefts = deleteButtonEdges()
+        assertEquals(2, lefts.size, "one delete button per translation")
+        assertEquals(lefts.first(), lefts.last(), 0.5f, "two rows must already share one edge: $lefts")
+
+        // Alignment alone cannot see a placeholder — padding both rows keeps them aligned, just
+        // wider. What it does change is the second row, where the missing button is the last one:
+        // its delete would sit a whole button further from "up" instead of the row's 6dp spacing.
+        val up = onNodeWithContentDescription("Move translation up").fetchSemanticsNode().boundsInRoot
+        val gap = lefts.last() - up.right
+        assertTrue(
+            gap < 34f,
+            "delete must follow the reorder button directly, not across a button-sized gap: $gap",
+        )
+    }
 }

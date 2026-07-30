@@ -246,7 +246,11 @@ data class BibleSettings(
         }
 
     fun withTranslations(value: List<BibleTranslationSettings>): BibleSettings {
-        val cleaned = value.filter { it.fileName.isNotBlank() }.distinctBy { it.fileName }
+        // Capped here rather than only at [addTranslation], so a hand-edited or rolled-forward
+        // settings file is bounded by the same rule the UI is.
+        val cleaned = value.filter { it.fileName.isNotBlank() }
+            .distinctBy { it.fileName }
+            .take(Constants.MAX_BIBLE_TRANSLATIONS)
         // The retained legacy names track the first two of the stack. Their styling is deliberately
         // left frozen at whatever the conversion wrote -- but keeping the *selection* current is
         // cheap, and it is what makes the rollback story true rather than nominal: an older build
@@ -265,8 +269,14 @@ data class BibleSettings(
     }
 
     fun addTranslation(fileName: String): BibleSettings {
-        if (fileName.isBlank() || translationList().any { it.fileName == fileName }) return this
-        return withTranslations(translationList() + BibleTranslationSettings(fileName = fileName))
+        val current = translationList()
+        // Refused rather than added-and-truncated: dropping the entry the operator just picked while
+        // the picker reports success is the one outcome worse than not offering the add at all.
+        if (fileName.isBlank() ||
+            current.size >= Constants.MAX_BIBLE_TRANSLATIONS ||
+            current.any { it.fileName == fileName }
+        ) return this
+        return withTranslations(current + BibleTranslationSettings(fileName = fileName))
     }
 
     fun removeTranslation(index: Int): BibleSettings =

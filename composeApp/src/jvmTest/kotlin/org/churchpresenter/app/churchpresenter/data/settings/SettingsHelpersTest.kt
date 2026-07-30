@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.data.settings
 
 import org.churchpresenter.app.churchpresenter.models.CompanionSurfacePlacement
+import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -329,6 +330,36 @@ class BibleTranslationListTest {
             .addTranslation("first.spb")
 
         assertEquals(listOf("first.spb"), settings.translationList().map { it.fileName })
+    }
+
+    @Test
+    fun `the stack stops accepting translations at the cap`() {
+        val full = (1..Constants.MAX_BIBLE_TRANSLATIONS).fold(BibleSettings()) { settings, index ->
+            settings.addTranslation("bible$index.spb")
+        }
+        val refused = full.addTranslation("one-too-many.spb")
+
+        assertEquals(Constants.MAX_BIBLE_TRANSLATIONS, full.translationList().size)
+        assertEquals(
+            full.translationList().map { it.fileName },
+            refused.translationList().map { it.fileName },
+            "past the cap the add must be refused outright, not applied and then truncated",
+        )
+    }
+
+    @Test
+    fun `a stack written past the cap is trimmed to it, in order`() {
+        val overfull = BibleSettings().withTranslations(
+            (1..Constants.MAX_BIBLE_TRANSLATIONS + 2).map {
+                BibleTranslationSettings(fileName = "bible$it.spb")
+            },
+        )
+
+        assertEquals(
+            (1..Constants.MAX_BIBLE_TRANSLATIONS).map { "bible$it.spb" },
+            overfull.translationList().map { it.fileName },
+            "a hand-edited file keeps its first translations rather than an arbitrary subset",
+        )
     }
 
     @Test
