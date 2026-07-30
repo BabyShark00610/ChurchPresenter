@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import org.churchpresenter.app.churchpresenter.data.SongFileParser
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
@@ -94,6 +96,13 @@ internal fun songsTab(
     /** Metronome tempo per song id, which lives on [AppSettings] rather than [SongSettings]. */
     songBpm: Map<String, Int>? = null,
     /**
+     * Whether a stage monitor screen is configured.
+     *
+     * The metronome-tempo tile is drawn only when one is — the tempo exists to drive that screen's
+     * flashing dot — so a test for the tile has to turn this on.
+     */
+    stageMonitor: Boolean = false,
+    /**
      * True when the tab is what is live on the output.
      *
      * It changes what the arrow keys do: while presenting they step *within* the live song and push
@@ -121,6 +130,16 @@ internal fun songsTab(
         val settings = AppSettings(songSettings = songSettings.copy(storageDirectory = dir.absolutePath))
             .let { if (hiddenCols != null) it.copy(songHiddenCols = hiddenCols) else it }
             .let { if (songBpm != null) it.copy(songBpm = songBpm) else it }
+            .let {
+                if (!stageMonitor) it
+                else it.copy(
+                    projectionSettings = it.projectionSettings.copy(
+                        screenAssignments = listOf(
+                            ScreenAssignment(displayMode = Constants.DISPLAY_MODE_STAGE_MONITOR),
+                        ),
+                    ),
+                )
+            }
         val vm = SongsViewModel(
             settings,
             dispatcher = Dispatchers.Unconfined,
