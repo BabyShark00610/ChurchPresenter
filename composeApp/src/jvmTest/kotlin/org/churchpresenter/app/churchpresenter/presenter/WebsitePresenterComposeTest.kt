@@ -12,10 +12,81 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import org.cef.browser.CefBrowser
+import org.cef.browser.CefFrame
+import org.cef.network.CefRequest
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class WebsitePresenterComposeTest {
+
+    @Test
+    fun `a main-frame address change is forwarded`() {
+        val frame = mockk<CefFrame> { every { isMain } returns true }
+        var forwarded: String? = null
+
+        handleAddressChange(frame, "https://example.com/page", { forwarded = it })
+
+        assertEquals("https://example.com/page", forwarded)
+    }
+
+    @Test
+    fun `an iframe address change is not forwarded`() {
+        val frame = mockk<CefFrame> { every { isMain } returns false }
+        var forwarded: String? = null
+
+        handleAddressChange(frame, "https://example.com/ad-frame", { forwarded = it })
+
+        assertNull(forwarded)
+    }
+
+    @Test
+    fun `a popup with a real target url is loaded in the current browser`() {
+        val browser = mockk<CefBrowser>(relaxed = true)
+
+        handlePopupTarget(browser, "https://example.com/popup")
+
+        verify { browser.loadURL("https://example.com/popup") }
+    }
+
+    @Test
+    fun `a popup with a blank or null target url is not loaded`() {
+        val browser = mockk<CefBrowser>(relaxed = true)
+
+        handlePopupTarget(browser, null)
+        handlePopupTarget(browser, "")
+        handlePopupTarget(browser, "   ")
+
+        verify(exactly = 0) { browser.loadURL(any()) }
+    }
+
+    @Test
+    fun `mobile emulation on sets the mobile user agent header`() {
+        val request = mockk<CefRequest>(relaxed = true)
+
+        applyMobileUserAgent(mobileModeEnabled = true, request = request)
+
+        verify { request.setHeaderByName("User-Agent", WebNavController.MOBILE_USER_AGENT, true) }
+    }
+
+    @Test
+    fun `mobile emulation off leaves the request untouched`() {
+        val request = mockk<CefRequest>(relaxed = true)
+
+        applyMobileUserAgent(mobileModeEnabled = false, request = request)
+
+        verify(exactly = 0) { request.setHeaderByName(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a null request is a safe no-op even with mobile emulation on`() {
+        applyMobileUserAgent(mobileModeEnabled = true, request = null)
+    }
 
     @Test
     fun `EmbeddedWebView with a blank url renders nothing and does not crash`() = runComposeUiTest {

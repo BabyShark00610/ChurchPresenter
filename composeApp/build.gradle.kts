@@ -775,28 +775,65 @@ tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
 // nothing. This task declares no outputs, so it never goes up-to-date and always prints.
 tasks.register("printCoverageLink") {
     val reportDir = layout.buildDirectory.dir("reports/jacoco/jacocoTestReport")
+    val testResultsDir = layout.buildDirectory.dir("test-results/jvmTest")
     doLast {
         val dir = reportDir.get().asFile
         val htmlIndex = dir.resolve("html/index.html")
         if (!htmlIndex.exists()) return@doLast
 
+        // Each per-suite TEST-*.xml carries its own totals on the root <testsuite> tag; sum them
+        // for the whole-run figure rather than reading jvmTest's own summary (Gradle doesn't write
+        // one -- only the per-suite files land under test-results).
+        val testSummary = runCatching {
+            val suiteAttrs = Regex("""tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"""")
+            val files = testResultsDir.get().asFile.listFiles { f -> f.name.endsWith(".xml") }
+            if (files.isNullOrEmpty()) return@runCatching null
+            var tests = 0; var skipped = 0; var failures = 0; var errors = 0
+            files.forEach { file ->
+                val match = suiteAttrs.find(file.readText().lineSequence().take(2).joinToString("\n"))
+                    ?: return@forEach
+                tests += match.groupValues[1].toInt()
+                skipped += match.groupValues[2].toInt()
+                failures += match.groupValues[3].toInt()
+                errors += match.groupValues[4].toInt()
+            }
+            "$tests run, ${failures + errors} failed, $skipped skipped"
+        }.getOrNull()
+
         // Regex rather than a DOM parse: the JaCoCo XML declares an external DTD, which a
         // DocumentBuilder tries to resolve over the network. The report-wide totals are the LAST
-        // counter elements in the document, so the final LINE match is the overall figure.
-        val summary = runCatching {
+        // <counter> of each type in the document (they appear per-package/-class first, then once
+        // more on the closing </report> element), so the final match per type is the overall figure.
+        val lines = runCatching {
             val xml = dir.resolve("jacocoTestReport.xml")
             if (!xml.exists()) return@runCatching null
-            val last = Regex("""<counter type="LINE" missed="(\d+)" covered="(\d+)"/>""")
-                .findAll(xml.readText()).lastOrNull() ?: return@runCatching null
-            val missed = last.groupValues[1].toInt()
-            val covered = last.groupValues[2].toInt()
-            val total = covered + missed
-            if (total == 0) null
-            else "%.1f%% of lines (%d/%d)".format(100.0 * covered / total, covered, total)
+            val text = xml.readText()
+            // Order matches the JaCoCo HTML overview table's own column order.
+            val labels = listOf(
+                "INSTRUCTION" to "instructions",
+                "BRANCH" to "branches",
+                "LINE" to "lines",
+                "COMPLEXITY" to "complexity",
+                "METHOD" to "methods",
+                "CLASS" to "classes",
+            )
+            labels.mapNotNull { (type, label) ->
+                val last = Regex("""<counter type="$type" missed="(\d+)" covered="(\d+)"/>""")
+                    .findAll(text).lastOrNull() ?: return@mapNotNull null
+                val missed = last.groupValues[1].toInt()
+                val covered = last.groupValues[2].toInt()
+                val total = covered + missed
+                if (total == 0) null
+                else "%.1f%% of %s (%d/%d)".format(100.0 * covered / total, label, covered, total)
+            }
         }.getOrNull()
 
         logger.lifecycle("")
-        if (summary != null) logger.lifecycle("Coverage: $summary")
+        if (testSummary != null) logger.lifecycle("Tests:    $testSummary")
+        if (lines != null) {
+            logger.lifecycle("Coverage:")
+            lines.forEach { logger.lifecycle("  $it") }
+        }
         // Three slashes: File.toURI() yields "file:/path", which many terminals refuse to linkify.
         logger.lifecycle("Report:   file://${htmlIndex.absolutePath}")
     }
