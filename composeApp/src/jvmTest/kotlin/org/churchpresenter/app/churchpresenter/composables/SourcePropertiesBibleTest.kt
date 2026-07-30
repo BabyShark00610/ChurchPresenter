@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.recolor
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import java.io.File
@@ -376,6 +377,50 @@ class SourcePropertiesBibleTest {
             onNodeWithText("BOOK").assertExists()
             onNodeWithText("CHAPTER").assertExists()
             assertEquals(0, countOf("No Primary Bible Configured"), "and the notice is gone")
+        }
+    }
+
+    /**
+     * Two modules with no book in common, and a settings file whose stack is real.
+     *
+     * [settingsWithBible] deliberately builds the legacy shape — `primaryBible` with an empty
+     * `translations` — which is the one configuration where the version picker used to appear to
+     * work. `BibleViewModel` reads `translationList()`, and that only falls back to the legacy field
+     * while the stack is empty, so a panel that hands its choice over as `primaryBible` moves nothing
+     * at all on a machine that has been through the Bible settings tab. This fixture is that machine.
+     */
+    private fun settingsWithTwoBibles(): AppSettings {
+        val dir = storage ?: Files.createTempDirectory("cp-canvas-bible").toFile().also { storage = it }
+        SpbFixture.spbFile(dir, name = "kjv.spb", content = SpbFixture.sampleContent(title = "King James"))
+        SpbFixture.spbFile(
+            dir,
+            name = "rst.spb",
+            content = SpbFixture.buildContent(
+                title = "Synodal",
+                books = listOf(SpbFixture.Book(40, "Matthew", 1)),
+                verses = listOf(SpbFixture.Verse(40, 1, 1, "The book of the generation of Jesus Christ.")),
+            ),
+        )
+        return AppSettings(
+            bibleSettings = BibleSettings(storageDirectory = dir.absolutePath).withTranslations(
+                listOf(BibleTranslationSettings(fileName = "kjv.spb")),
+            ),
+        )
+    }
+
+    @Test
+    fun `choosing another version loads that module`() {
+        sourcePanel(Fixture.bible(), appSettings = settingsWithTwoBibles()) { _ ->
+            awaitBibleLoaded()
+            onNodeWithText("Genesis").assertExists("the stack's own bible is what loads first")
+
+            chooseFromDropdown(showing = "King James", option = "Synodal")
+
+            // Matthew belongs only to the second module, Psalms only to the first, so this cannot
+            // pass on the first module still being loaded.
+            waitUntil("the picked module's books must replace the previous module's", timeoutMillis = 5_000) {
+                countOf("Matthew") >= 1 && countOf("Psalms") == 0 && countOf("Genesis") == 0
+            }
         }
     }
 

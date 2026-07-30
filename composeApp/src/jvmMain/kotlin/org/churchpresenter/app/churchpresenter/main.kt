@@ -85,6 +85,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.data.settings.withBundledBible
 import org.churchpresenter.app.churchpresenter.data.Language
 import org.churchpresenter.app.churchpresenter.data.RemoteClientManager
 import org.churchpresenter.app.churchpresenter.data.SettingsManager
@@ -236,12 +237,7 @@ fun main() {
                 targetFile.writeBytes(runBlocking { Res.readBytes("files/bible_samples/kjv1769.spb") })
             }
             SettingsManager().saveSettings(
-                startupSettings.copy(
-                    bibleSettings = startupSettings.bibleSettings.copy(
-                        storageDirectory = defaultBibleDir.absolutePath,
-                        primaryBible = "kjv1769.spb"
-                    )
-                )
+                startupSettings.withBundledBible(defaultBibleDir.absolutePath, "kjv1769.spb")
             )
         } catch (e: Exception) {
             CrashReporter.reportException(e, "Bundling default KJV Bible")

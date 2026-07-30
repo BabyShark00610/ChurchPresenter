@@ -86,7 +86,9 @@ class PlanningCenterImportViewModel(
         triedLoadingPrimaryBible = true
         try {
             val bibleSettings = SettingsManager().loadSettings().bibleSettings
-            val fileName = bibleSettings.primaryBible
+            // The navigation bible, read from the stack rather than from the legacy field it
+            // mirrors -- the same thing today, but the stack is what is actually maintained.
+            val fileName = bibleSettings.translationList().firstOrNull()?.fileName.orEmpty()
             val storageDir = bibleSettings.storageDirectory
             if (fileName.isBlank() || storageDir.isBlank()) return@withContext null
             val path = File(storageDir, fileName).absolutePath

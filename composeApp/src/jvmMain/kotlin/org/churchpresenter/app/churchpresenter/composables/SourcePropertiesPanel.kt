@@ -192,6 +192,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.models.SourceTransform
 import org.churchpresenter.app.churchpresenter.utils.Utils
@@ -1870,12 +1871,22 @@ private fun BibleProperties(
     }
 
     // Selected bible version
-    var selectedBibleFile by remember { mutableStateOf(appSettings?.bibleSettings?.primaryBible ?: "") }
+    var selectedBibleFile by remember {
+        mutableStateOf(appSettings?.bibleSettings?.translationList()?.firstOrNull()?.fileName ?: "")
+    }
 
-    // Bible data loading — keyed on the selected bible file
+    // Bible data loading — keyed on the selected bible file. The picked version is handed over as a
+    // one-entry stack, not as the legacy `primaryBible` field: BibleViewModel loads whatever
+    // `translationList()` returns, and that ignores the legacy field entirely once the stack is
+    // populated. Written the old way this dropdown moved nothing at all on a configured machine --
+    // it only appeared to work on a settings file still falling back to the legacy pair.
     val bibleVm = remember(appSettings, selectedBibleFile) {
         appSettings?.let {
-            val settings = it.copy(bibleSettings = it.bibleSettings.copy(primaryBible = selectedBibleFile))
+            val settings = it.copy(
+                bibleSettings = it.bibleSettings.withTranslations(
+                    listOf(BibleTranslationSettings(fileName = selectedBibleFile)),
+                ),
+            )
             BibleViewModel(settings)
         }
     }
