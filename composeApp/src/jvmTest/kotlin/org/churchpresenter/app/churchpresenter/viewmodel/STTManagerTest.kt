@@ -13,10 +13,9 @@ import kotlin.test.assertTrue
  * field shows the congregation a blank line, and a mis-read `in_progress` leaves the half-spoken
  * sentence stuck on screen after the speaker has moved on.
  *
- * The three handlers are private and only reachable from a socket callback, so — as with
- * `CrashReporter.scrubPii` — they are invoked directly by reflection rather than left untested
- * behind a Socket.IO server that would have to be stood up for every case. Everything else here
- * goes through the public API.
+ * In production the three handlers are only reachable from a socket callback, so they are `internal`
+ * and called directly here rather than left untested behind a Socket.IO server that would have to be
+ * stood up for every case. Everything else here goes through the public API.
  */
 class STTManagerTest {
 
@@ -39,17 +38,10 @@ class STTManagerTest {
         throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
     }
 
-    /** Invokes one of the private `handle*Update(JSONObject)` parsers. */
-    private fun STTManager.handle(method: String, payload: String) {
-        STTManager::class.java
-            .getDeclaredMethod(method, JSONObject::class.java)
-            .apply { isAccessible = true }
-            .invoke(this, JSONObject(payload))
-    }
-
-    private fun STTManager.transcription(payload: String) = handle("handleTranscriptionUpdate", payload)
-    private fun STTManager.translation(payload: String) = handle("handleTranslationUpdate", payload)
-    private fun STTManager.highlighting(payload: String) = handle("handleWordHighlightingUpdate", payload)
+    // The `handle*Update(JSONObject)` parsers are `internal`, so they are called straight from here.
+    private fun STTManager.transcription(payload: String) = handleTranscriptionUpdate(JSONObject(payload))
+    private fun STTManager.translation(payload: String) = handleTranslationUpdate(JSONObject(payload))
+    private fun STTManager.highlighting(payload: String) = handleWordHighlightingUpdate(JSONObject(payload))
 
     // ── Baseline ────────────────────────────────────────────────────────────────
 
