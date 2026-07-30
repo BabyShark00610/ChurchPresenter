@@ -127,6 +127,25 @@ val AppTypography = Typography(
     )
 )
 
+/*
+ * Every scheme below sets `surfaceContainer` and `surfaceContainerHigh` explicitly, because the
+ * settings screens are built out of exactly three layers and all three have to be told apart:
+ *
+ *   surfaceVariant       the page a settings tab paints edge to edge
+ *   surfaceContainer     the cards on it (`SettingsSection`)
+ *   surfaceContainerHigh the input fields on those cards (`SettingsTextField`)
+ *
+ * None of the nine schemes used to declare the container roles at all, so both came from the M3
+ * baseline palette instead of the theme's own — a lavender-tinted card and field on a navy or green
+ * page, identical in all nine themes. The contrast that resulted was accidental rather than chosen,
+ * and in the Studio theme the card was *exactly* the luminance of its own page (issue #95).
+ *
+ * The values are derived from each scheme's own `surface`, stepped toward white (dark) or white then
+ * black (light) far enough that the card clears its page and the field clears its card by at least
+ * ~1.12:1 in every theme — the invariant `ThemeSurfaceRampTest` holds them to. Keep any new theme in
+ * that shape: adding one without these two roles silently falls back to the baseline lavender again.
+ */
+
 // Light theme colors — neutral grey palette
 private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF4A5568),           // muted slate-grey
@@ -149,6 +168,8 @@ private val LightColorScheme = lightColorScheme(
     onSurface = Color(0xFF1A1A1A),
     surfaceVariant = Color(0xFFE2E2E5),    // slightly darker grey, no purple
     onSurfaceVariant = Color(0xFF44444A),
+    surfaceContainer = Color(0xFFF9F9FA),
+    surfaceContainerHigh = Color(0xFFEDEDEE),
     outline = Color(0xFF8A8A94),
     outlineVariant = Color(0xFFCCCCD0),
     // Custom colors for buttons
@@ -178,6 +199,8 @@ private val WarmColorScheme = lightColorScheme(
     onSurface = Color(0xFF1E150A),
     surfaceVariant = Color(0xFFEBDFC8),
     onSurfaceVariant = Color(0xFF4A3820),
+    surfaceContainer = Color(0xFFFBF8F0),
+    surfaceContainerHigh = Color(0xFFEEECE4),
     outline = Color(0xFF9C8060),
     outlineVariant = Color(0xFFD9C8A8),
     inverseSurface = Color(0xFF4CAF50),
@@ -206,6 +229,8 @@ private val OceanColorScheme = lightColorScheme(
     onSurface = Color(0xFF0A1A22),
     surfaceVariant = Color(0xFFCCE2EE),
     onSurfaceVariant = Color(0xFF1E3D50),
+    surfaceContainer = Color(0xFFF3F9FC),
+    surfaceContainerHigh = Color(0xFFE7EDEF),
     outline = Color(0xFF5A8FAA),
     outlineVariant = Color(0xFFAAD0E0),
     inverseSurface = Color(0xFF4CAF50),
@@ -234,6 +259,8 @@ private val RoseColorScheme = lightColorScheme(
     onSurface = Color(0xFF1E0A10),
     surfaceVariant = Color(0xFFEDD5DA),
     onSurfaceVariant = Color(0xFF4A2030),
+    surfaceContainer = Color(0xFFFBF6F7),
+    surfaceContainerHigh = Color(0xFFEEEAEB),
     outline = Color(0xFFA06070),
     outlineVariant = Color(0xFFDDB8C0),
     inverseSurface = Color(0xFF4CAF50),
@@ -262,6 +289,8 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = Color(0xFFE6E1E5),
     surfaceVariant = Color(0xFF49454F),
     onSurfaceVariant = Color(0xFFCAC4D0),
+    surfaceContainer = Color(0xFF2E2E2E),
+    surfaceContainerHigh = Color(0xFF363636),
     outline = Color(0xFF938F99),
     outlineVariant = Color(0xFF49454F),
     inverseSurface = Color(0xFF66BB6A),
@@ -292,6 +321,8 @@ private val StudioColorScheme = darkColorScheme(
     onSurface = Color(0xFFE8E4D8),
     surfaceVariant = Color(0xFF182030),
     onSurfaceVariant = Color(0xFFBFBCB0),
+    surfaceContainer = Color(0xFF272A32),
+    surfaceContainerHigh = Color(0xFF30333A),
     outline = Color(0xFF555868),
     outlineVariant = Color(0xFF252830),
     inverseSurface = Color(0xFF66BB6A),
@@ -320,6 +351,8 @@ private val MidnightColorScheme = darkColorScheme(
     onSurface = Color(0xFFDDE4F0),
     surfaceVariant = Color(0xFF1E2A3A),
     onSurfaceVariant = Color(0xFFB0BDD0),
+    surfaceContainer = Color(0xFF2D333D),
+    surfaceContainerHigh = Color(0xFF353B45),
     outline = Color(0xFF5A7090),
     outlineVariant = Color(0xFF1E2A3A),
     inverseSurface = Color(0xFF66BB6A),
@@ -348,6 +381,8 @@ private val ForestColorScheme = darkColorScheme(
     onSurface = Color(0xFFD0E8D8),
     surfaceVariant = Color(0xFF1A2A1E),
     onSurfaceVariant = Color(0xFFA8C8B0),
+    surfaceContainer = Color(0xFF29312A),
+    surfaceContainerHigh = Color(0xFF323933),
     outline = Color(0xFF486858),
     outlineVariant = Color(0xFF1A2A1E),
     inverseSurface = Color(0xFF66BB6A),
@@ -376,6 +411,8 @@ private val MochaColorScheme = darkColorScheme(
     onSurface = Color(0xFFCDD6F4),
     surfaceVariant = Color(0xFF302840),
     onSurfaceVariant = Color(0xFFBAC2E8),
+    surfaceContainer = Color(0xFF36343F),
+    surfaceContainerHigh = Color(0xFF3E3C47),
     outline = Color(0xFF6C7086),
     outlineVariant = Color(0xFF302840),
     inverseSurface = Color(0xFF66BB6A),
