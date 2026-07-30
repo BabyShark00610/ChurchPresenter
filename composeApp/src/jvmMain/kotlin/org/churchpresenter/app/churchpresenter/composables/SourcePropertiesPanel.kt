@@ -206,6 +206,7 @@ import java.io.File
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
+import org.churchpresenter.app.churchpresenter.data.readTranslationTitle
 
 @Composable
 fun SourcePropertiesPanel(
@@ -1861,17 +1862,7 @@ private fun BibleProperties(
             .getBibleFilesInDirectory(storageDir)
     }
     val bibleDisplayNames = remember(storageDir, bibleFiles) {
-        bibleFiles.associateWith { fileName ->
-            try {
-                File(storageDir, fileName).bufferedReader(java.nio.charset.StandardCharsets.UTF_8).use { reader ->
-                    repeat(10) {
-                        val line = reader.readLine() ?: return@use fileName.removeSuffix(".spb")
-                        if (line.startsWith("##Title:")) return@use line.substring(8).trim()
-                    }
-                    fileName.removeSuffix(".spb")
-                }
-            } catch (_: Exception) { fileName.removeSuffix(".spb") }
-        }
+        bibleFiles.associateWith { fileName -> readTranslationTitle(File(storageDir, fileName)) }
     }
 
     // Selected bible version
