@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -3380,6 +3381,14 @@ class CompanionServer {
                     // wait is released by the job ending too rather than hanging the handler; the
                     // fallback is exactly the old behaviour, a snapshot and no broadcasts.
                     broadcastJob.invokeOnCompletion { subscribed.complete(Unit) }
+                    // Tied to this session rather than only to the `finally` below, because the
+                    // snapshot sends between here and there are outside it: a client that vanishes
+                    // mid-snapshot throws out of the handler before that `try` is ever entered, and
+                    // the collector -- launched on the server-lifetime scope, not this session's --
+                    // would be left parked on snapshotSent.await() for as long as the server runs,
+                    // holding this session with it. One leaked coroutine per aborted connect, in
+                    // exactly the reconnect churn this whole change is about.
+                    coroutineContext.job.invokeOnCompletion { broadcastJob.cancel() }
                     subscribed.await()
 
                     val catalog = _catalog.value

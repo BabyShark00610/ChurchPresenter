@@ -32,6 +32,14 @@ import kotlin.test.assertTrue
  * Starting it on a free port and driving it over real HTTP/WebSocket tests the same pipeline a
  * phone or a follower instance actually talks to — including the connect snapshot, which is the
  * source of a whole class of "follower shows stale content" bugs.
+ *
+ * Not covered, deliberately: that a session which dies *during* its snapshot still releases its
+ * broadcast collector. The collector is launched before the snapshot so nothing emitted meanwhile is
+ * lost, which puts it outside the handler's own `try`/`finally` — it is cancelled from the session
+ * job's completion instead. Reaching that path means making a snapshot `send` fail, and the only
+ * lever a test has is closing the client early, which races the snapshot rather than landing inside
+ * it: sometimes the frames are already buffered and nothing throws. A test that only sometimes
+ * exercises what it claims to is worse than this note.
  */
 class CompanionServerTest {
 
