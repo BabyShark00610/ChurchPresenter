@@ -721,11 +721,9 @@ tasks.register<JacocoReport>("jacocoTestReport") {
 // goal here: the View layer (tabs/dialogs/composables) is a large share of the lines but low-logic,
 // so chasing the last slices means render-testing near-pure UI wiring. 75% is the honest ceiling.
 //
-// Deliberately NOT wired into `check` yet: overall coverage is still climbing toward 75%, and a
-// failing gate would block every build in the meantime. Run it on demand:
+// Wired into `check` (see the bottom of this file) as of 2026-07-30, when the gated scope first
+// cleared the floor. Run it on its own with:
 //   ./gradlew :composeApp:jacocoTestCoverageVerification
-// Once this task passes, enforce it in CI by adding:
-//   tasks.named("check") { dependsOn("jacocoTestCoverageVerification") }
 // Same execution/class/source wiring as jacocoTestReport (app package only; submodules measured by
 // their own builds), with ONE deliberate difference: the app-entry wiring is excluded here but NOT
 // from the report. The report stays all-inclusive so nothing is hidden -- its HTML still shows
@@ -752,6 +750,11 @@ tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             exclude("org/churchpresenter/app/churchpresenter/MainKt*")
             exclude("org/churchpresenter/app/churchpresenter/MainDesktopKt*")
             exclude("org/churchpresenter/app/churchpresenter/NavigationTopBarKt*")
+            // Declared in MainDesktop.kt but not named after it, so the glob above misses it: a
+            // holder for the schedule callbacks the root composable wires up. Named explicitly
+            // because leaving it in keeps every one of MainDesktop.kt's 1,521 lines in the
+            // denominator — JaCoCo drops a source file only once every class in it is excluded.
+            exclude("org/churchpresenter/app/churchpresenter/ScheduleActions*")
         }
     )
     sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
@@ -800,9 +803,11 @@ tasks.register("printCoverageLink") {
 }
 
 // `check` runs the tests anyway, so generating the coverage report from the same run is nearly
-// free -- and it makes the link appear at the end of the standard pre-commit command.
+// free -- and it makes the link appear at the end of the standard pre-commit command. The gate runs
+// off the same execution data, so enforcing the floor here costs nothing beyond the check itself.
 tasks.named("check") {
     dependsOn("jacocoTestReport")
+    dependsOn("jacocoTestCoverageVerification")
 }
 
 tasks.named("compileKotlinJvm") {
@@ -938,4 +943,5 @@ tasks.matching {
 }.configureEach {
     dependsOn(syncCrosswordFiles)
 }
+
 

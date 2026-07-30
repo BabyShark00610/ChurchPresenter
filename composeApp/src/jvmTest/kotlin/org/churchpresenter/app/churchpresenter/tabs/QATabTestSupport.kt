@@ -123,6 +123,8 @@ internal object QALabel {
     const val CLEAR_ALL = "Clear All Questions"
     /** The confirm button inside the clear-all dialog. */
     const val CLEAR = "Clear"
+    const val BACK_TO_INCOMING = "Back to Incoming"
+    const val CONFIRM_GO_LIVE = "Confirm Go Live"
 }
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────
