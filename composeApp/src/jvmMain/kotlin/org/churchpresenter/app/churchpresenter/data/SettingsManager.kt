@@ -116,11 +116,11 @@ class SettingsManager {
             // keeps its higher number: the newer build's own migrations have already run against
             // this data and must not run a second time when it is loaded there again.
             backupSource?.let { backupBeforeRewrite(it, fromVersion) }
-            return jsonFormat.decodeFromString<AppSettings>(raw)
+            return jsonFormat.decodeFromString<AppSettings>(raw).repaired()
         }
 
         if (fromVersion == CURRENT_SETTINGS_VERSION) {
-            return jsonFormat.decodeFromString<AppSettings>(raw)
+            return jsonFormat.decodeFromString<AppSettings>(raw).repaired()
         }
 
         backupSource?.let { backupBeforeRewrite(it, fromVersion) }
@@ -135,8 +135,10 @@ class SettingsManager {
             // than raw, because the conversion is a field-by-field restructure the data class
             // already knows how to do. The old fields are left in the document on purpose so a
             // downgrade still finds a configured bible.
+            //
+            // Only the *output* half of that conversion belongs behind this version gate. The stack
+            // itself is repaired by `repaired()` on every load, whatever the version says.
             settings = settings.copy(
-                bibleSettings = settings.bibleSettings.migrateTranslations(),
                 projectionSettings = settings.projectionSettings.copy(
                     screenAssignments = settings.projectionSettings.screenAssignments
                         .map(::migrateOutputTranslations),
@@ -149,8 +151,27 @@ class SettingsManager {
                 ),
             )
         }
-        return settings.copy(settingsVersion = CURRENT_SETTINGS_VERSION)
+        return settings.copy(settingsVersion = CURRENT_SETTINGS_VERSION).repaired()
     }
+
+    /**
+     * Puts the translation stack back in step with the legacy bible pair it mirrors.
+     *
+     * An invariant, not a migration, which is why it runs on every load and not behind a version
+     * gate. `primaryBible`/`secondaryBible` are only kept so an older build can still read the file;
+     * anything that sets one of them without going through [BibleSettings.withTranslations] leaves a
+     * current-version document with a configured pair and an empty stack. That document is never
+     * migrated — it is already at the current version — so before this it stayed broken for good.
+     * Nothing shows it either: [BibleSettings.translationList] falls back to the pair, so the app
+     * presents correctly right up until the first stack edit rewrites the pair from a list that
+     * never held those bibles, and the operator's translations disappear.
+     *
+     * Safe on a stack that is empty on purpose: emptying it through `withTranslations` clears the
+     * legacy pair too, so there is nothing to put back. Idempotent, by
+     * [BibleSettings.migrateTranslations]'s own guard.
+     */
+    private fun AppSettings.repaired(): AppSettings =
+        copy(bibleSettings = bibleSettings.migrateTranslations())
 
     /**
      * An output used to name which of two bibles it showed. With a stack of any length it names

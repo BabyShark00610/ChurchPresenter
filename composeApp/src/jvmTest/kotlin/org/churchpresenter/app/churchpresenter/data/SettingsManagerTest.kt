@@ -369,6 +369,62 @@ class SettingsManagerTest {
         assertTrue(!outputs[3].showBible, "and an output that was off stays off")
     }
 
+    // ── The stack is repaired on every load, not only on the version-6 upgrade ──
+    //
+    // `primaryBible`/`secondaryBible` are legacy mirrors of the first two of the stack. Anything that
+    // writes one of them without going through `withTranslations` leaves a document at the *current*
+    // version whose stack is empty and whose pair is not — and a current-version document takes the
+    // early return above, so before this it was never repaired and never would be. Nothing surfaces
+    // it either: `translationList()` falls back to the pair, so the app presents correctly until the
+    // first stack edit rewrites the pair from a list that never held those bibles.
+
+    @Test
+    fun `a current-version file whose stack never got filled is repaired on load`() {
+        val current = AppSettings.CURRENT_SETTINGS_VERSION
+        val loaded = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":$current,"bibleSettings":{"primaryBible":"kjv.spb","secondaryBible":"rst.spb","translations":[]}}""",
+        )
+
+        assertEquals(
+            listOf("kjv.spb", "rst.spb"),
+            loaded.bibleSettings.translations.map { it.fileName },
+            "the pair has to reach the stack, in order, or the first stack edit erases both bibles",
+        )
+    }
+
+    @Test
+    fun `a stack emptied on purpose is not refilled`() {
+        // The other half of the repair, and what stops it being wrong: clearing the last translation
+        // goes through `withTranslations`, which clears the legacy pair with it. An empty stack
+        // beside an empty pair is a deliberate state, not drift, and must survive a reload.
+        val current = AppSettings.CURRENT_SETTINGS_VERSION
+        val loaded = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":$current,"bibleSettings":{"primaryBible":"","secondaryBible":"","translations":[]}}""",
+        )
+
+        assertTrue(
+            loaded.bibleSettings.translations.isEmpty(),
+            "nothing to put back, so nothing may be invented",
+        )
+    }
+
+    @Test
+    fun `a repaired load leaves a configured stack exactly as it was`() {
+        val current = AppSettings.CURRENT_SETTINGS_VERSION
+        val loaded = SettingsManager().migrateAndDecode(
+            """{"settingsVersion":$current,"bibleSettings":{"primaryBible":"kjv.spb","secondaryBible":"rst.spb",
+                "translations":[{"fileName":"rst.spb","textColor":"#ABCDEF"},{"fileName":"kjv.spb"}]}}"""
+                .trimIndent().replace("\n", ""),
+        )
+
+        assertEquals(
+            listOf("rst.spb", "kjv.spb"),
+            loaded.bibleSettings.translations.map { it.fileName },
+            "the stack is the source of truth; the repair must not reorder it to match the mirror",
+        )
+        assertEquals("#ABCDEF", loaded.bibleSettings.translations[0].textColor)
+    }
+
     // ── Import path ─────────────────────────────────────────────────────────────
 
     @Test

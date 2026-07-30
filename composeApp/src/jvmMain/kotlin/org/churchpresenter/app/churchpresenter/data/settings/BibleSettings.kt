@@ -230,7 +230,11 @@ data class BibleSettings(
     fun translationSelectionKey(): List<String> = translationList().map { it.fileName }
 
     /**
-     * Moves a pre-list settings file onto [translations], once, at load.
+     * Fills [translations] from the legacy primary/secondary pair when it is empty.
+     *
+     * Both the one-time conversion of a pre-list settings file and, since it is idempotent, the
+     * repair the load path applies on every read to keep the two in step — see
+     * `SettingsManager.repaired`.
      *
      * The old primary/secondary fields are deliberately left in place rather than cleared: they are
      * what an older build reads, so a user who rolls back keeps their setup instead of opening a
