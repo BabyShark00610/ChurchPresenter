@@ -57,10 +57,12 @@ object CefManager {
      */
     private const val MIN_MACOS_MAJOR = 12
 
-    private fun isUnsupportedMacOS(): Boolean {
-        val osName = System.getProperty("os.name", "").lowercase()
-        if (!osName.contains("mac")) return false
-        val major = System.getProperty("os.version", "").substringBefore('.').toIntOrNull() ?: return false
+    internal fun isUnsupportedMacOS(
+        osName: String = System.getProperty("os.name", ""),
+        osVersion: String = System.getProperty("os.version", "")
+    ): Boolean {
+        if (!osName.lowercase().contains("mac")) return false
+        val major = osVersion.substringBefore('.').toIntOrNull() ?: return false
         return major < MIN_MACOS_MAJOR
     }
 
@@ -83,7 +85,7 @@ object CefManager {
      *    module — including Module.implAddExportsToAllUnnamed.
      *    This is the same technique used by ByteBuddy and Mockito for JDK 9–21.
      */
-    private fun patchJcefModuleAccess() {
+    internal fun patchJcefModuleAccess() {
         val packages = listOf("sun.awt", "sun.lwawt", "sun.lwawt.macosx")
         val javaDesktop = ModuleLayer.boot().findModule("java.desktop").orElse(null) ?: return
 
@@ -132,17 +134,20 @@ object CefManager {
      *
      * On macOS/Linux the home directory is used unchanged — no accent problem, no ProgramData.
      */
-    private fun jcefRootDir(): File {
-        val isWindows = System.getProperty("os.name", "").lowercase().contains("win")
+    internal fun jcefRootDir(
+        osName: String = System.getProperty("os.name", ""),
+        programData: String? = System.getenv("ProgramData"),
+        homeDir: String = System.getProperty("user.home")
+    ): File {
+        val isWindows = osName.lowercase().contains("win")
         if (isWindows) {
-            val programData = System.getenv("ProgramData") ?: "C:\\ProgramData"
-            val candidate = File(programData, "ChurchPresenter")
+            val candidate = File(programData ?: "C:\\ProgramData", "ChurchPresenter")
             // Only use it if we can actually create and write to it (ProgramData ACLs vary).
             val usable = runCatching { candidate.mkdirs(); candidate.isDirectory && candidate.canWrite() }
                 .getOrDefault(false)
             if (usable) return candidate
         }
-        return File(System.getProperty("user.home"), ".churchpresenter")
+        return File(homeDir, ".churchpresenter")
     }
 
     /**
@@ -154,8 +159,8 @@ object CefManager {
      * Best-effort on a daemon thread: ~100 MB recursive delete shouldn't block startup, and
      * locked files are simply skipped and retried on a future launch.
      */
-    private fun cleanupLegacyJcef(activeRoot: File) {
-        val homeRoot = File(System.getProperty("user.home"), ".churchpresenter")
+    internal fun cleanupLegacyJcef(activeRoot: File, homeDir: String = System.getProperty("user.home")) {
+        val homeRoot = File(homeDir, ".churchpresenter")
         if (activeRoot.absolutePath == homeRoot.absolutePath) return
         val legacyDirs = listOf(File(homeRoot, "jcef"), File(homeRoot, "webview-cache"))
         if (legacyDirs.none { it.isDirectory }) return
@@ -192,11 +197,7 @@ object CefManager {
             val dmiTexts = listOf("product_name", "sys_vendor").mapNotNull { file ->
                 runCatching { File("/sys/class/dmi/id/$file").readText().trim() }.getOrNull()
             }
-            val vmKeywords = listOf("Virtual", "QEMU", "VMware", "VirtualBox", "KVM", "Xen", "Hyper-V", "Standard PC")
-            val isVirtualized = dmiTexts.any { text ->
-                vmKeywords.any { keyword -> text.contains(keyword, ignoreCase = true) }
-            }
-            if (isVirtualized) {
+            if (isVirtualizedEnvironment(dmiTexts)) {
                 builder.addJcefArgs("--disable-gpu")
                 builder.addJcefArgs("--disable-gpu-compositing")
                 builder.addJcefArgs("--enable-unsafe-swiftshader")
@@ -248,21 +249,7 @@ object CefManager {
             val output = proc.inputStream.bufferedReader().readText()
             proc.waitFor()
 
-            val indices = mutableListOf<String>()
-            var currentIndex: String? = null
-            var isOurProcess = false
-            for (line in output.lines()) {
-                val trimmed = line.trim()
-                if (trimmed.startsWith("Sink Input #")) {
-                    if (isOurProcess && currentIndex != null) indices.add(currentIndex)
-                    currentIndex = trimmed.removePrefix("Sink Input #").trim()
-                    isOurProcess = false
-                }
-                if (trimmed.contains("application.process.id") && trimmed.contains("\"$pid\"")) {
-                    isOurProcess = true
-                }
-            }
-            if (isOurProcess && currentIndex != null) indices.add(currentIndex)
+            val indices = sinkInputIndicesForProcess(output, pid)
 
             for (idx in indices) {
                 ProcessBuilder("pactl", "move-sink-input", idx, deviceId)
@@ -271,6 +258,32 @@ object CefManager {
         } catch (_: Exception) {
         }
     }
+}
+
+private val VM_DMI_KEYWORDS = listOf("Virtual", "QEMU", "VMware", "VirtualBox", "KVM", "Xen", "Hyper-V", "Standard PC")
+
+/** True when any of [dmiTexts] (`/sys/class/dmi/id/product_name`, `sys_vendor`) names a known VM/hypervisor. */
+internal fun isVirtualizedEnvironment(dmiTexts: List<String>): Boolean =
+    dmiTexts.any { text -> VM_DMI_KEYWORDS.any { keyword -> text.contains(keyword, ignoreCase = true) } }
+
+/** Parses `pactl list sink-inputs` output for the sink input indexes belonging to [pid]. */
+internal fun sinkInputIndicesForProcess(pactlOutput: String, pid: Long): List<String> {
+    val indices = mutableListOf<String>()
+    var currentIndex: String? = null
+    var isOurProcess = false
+    for (line in pactlOutput.lines()) {
+        val trimmed = line.trim()
+        if (trimmed.startsWith("Sink Input #")) {
+            if (isOurProcess && currentIndex != null) indices.add(currentIndex)
+            currentIndex = trimmed.removePrefix("Sink Input #").trim()
+            isOurProcess = false
+        }
+        if (trimmed.contains("application.process.id") && trimmed.contains("\"$pid\"")) {
+            isOurProcess = true
+        }
+    }
+    if (isOurProcess && currentIndex != null) indices.add(currentIndex)
+    return indices
 }
 
 /** Navigation controller for an [EmbeddedWebView]. */
