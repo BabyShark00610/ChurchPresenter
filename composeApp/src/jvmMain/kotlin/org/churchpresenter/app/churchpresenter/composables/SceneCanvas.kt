@@ -448,6 +448,66 @@ internal fun computeSnap(
 
 // --- Resize Handles ---
 
+/**
+ * One of the eight resize grips around a selected source: where it sits on the source's box, the
+ * cursor it shows, and what a drag of it does to the transform.
+ */
+internal data class ResizeHandleDef(
+    /** 0, 0.5 or 1 along the source's width — 0 is its left edge. */
+    val anchorX: Float,
+    /** 0, 0.5 or 1 along the source's height — 0 is its top edge. */
+    val anchorY: Float,
+    val cursor: Int,
+    val onDrag: (SourceTransform, Offset) -> SourceTransform
+)
+
+/**
+ * The eight resize handles, in the order they are drawn: NW, N, NE, W, E, SW, S, SE.
+ *
+ * Each `onDrag` takes a pixel drag and returns the new transform in normalised 0..1 coordinates,
+ * which is why it needs the canvas size. Which edges move and which stay anchored differs per
+ * handle: dragging the west edge moves `x` *and* shrinks `width`, while dragging the east edge only
+ * grows `width`. Getting that backwards makes a source jump across the screen as it is resized.
+ *
+ * Declared here rather than inside the composable so the arithmetic can be exercised directly —
+ * driving it through the grips themselves would mean a test reproducing the handle-placement maths
+ * to find out where each 8dp box landed, which asserts the test's own arithmetic rather than this.
+ */
+internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<ResizeHandleDef> = listOf(
+    ResizeHandleDef(0f, 0f, Cursor.NW_RESIZE_CURSOR) { t, d ->
+        val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
+        t.copy(x = t.x + dx, y = t.y + dy, width = t.width - dx, height = t.height - dy)
+    },
+    ResizeHandleDef(0.5f, 0f, Cursor.N_RESIZE_CURSOR) { t, d ->
+        val dy = d.y / canvasHeight
+        t.copy(y = t.y + dy, height = t.height - dy)
+    },
+    ResizeHandleDef(1f, 0f, Cursor.NE_RESIZE_CURSOR) { t, d ->
+        val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
+        t.copy(y = t.y + dy, width = t.width + dx, height = t.height - dy)
+    },
+    ResizeHandleDef(0f, 0.5f, Cursor.W_RESIZE_CURSOR) { t, d ->
+        val dx = d.x / canvasWidth
+        t.copy(x = t.x + dx, width = t.width - dx)
+    },
+    ResizeHandleDef(1f, 0.5f, Cursor.E_RESIZE_CURSOR) { t, d ->
+        val dx = d.x / canvasWidth
+        t.copy(width = t.width + dx)
+    },
+    ResizeHandleDef(0f, 1f, Cursor.SW_RESIZE_CURSOR) { t, d ->
+        val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
+        t.copy(x = t.x + dx, width = t.width - dx, height = t.height + dy)
+    },
+    ResizeHandleDef(0.5f, 1f, Cursor.S_RESIZE_CURSOR) { t, d ->
+        val dy = d.y / canvasHeight
+        t.copy(height = t.height + dy)
+    },
+    ResizeHandleDef(1f, 1f, Cursor.SE_RESIZE_CURSOR) { t, d ->
+        val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
+        t.copy(width = t.width + dx, height = t.height + dy)
+    }
+)
+
 @Composable
 private fun ResizeHandles(
     transform: SourceTransform,
@@ -460,47 +520,7 @@ private fun ResizeHandles(
     val scale = density.density
     val currentTransform by rememberUpdatedState(transform)
 
-    data class HandleDef(
-        val anchorX: Float,
-        val anchorY: Float,
-        val cursor: Int,
-        val onDrag: (SourceTransform, Offset) -> SourceTransform
-    )
-
-    val handles = listOf(
-        HandleDef(0f, 0f, Cursor.NW_RESIZE_CURSOR) { t, d ->
-            val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
-            t.copy(x = t.x + dx, y = t.y + dy, width = t.width - dx, height = t.height - dy)
-        },
-        HandleDef(0.5f, 0f, Cursor.N_RESIZE_CURSOR) { t, d ->
-            val dy = d.y / canvasHeight
-            t.copy(y = t.y + dy, height = t.height - dy)
-        },
-        HandleDef(1f, 0f, Cursor.NE_RESIZE_CURSOR) { t, d ->
-            val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
-            t.copy(y = t.y + dy, width = t.width + dx, height = t.height - dy)
-        },
-        HandleDef(0f, 0.5f, Cursor.W_RESIZE_CURSOR) { t, d ->
-            val dx = d.x / canvasWidth
-            t.copy(x = t.x + dx, width = t.width - dx)
-        },
-        HandleDef(1f, 0.5f, Cursor.E_RESIZE_CURSOR) { t, d ->
-            val dx = d.x / canvasWidth
-            t.copy(width = t.width + dx)
-        },
-        HandleDef(0f, 1f, Cursor.SW_RESIZE_CURSOR) { t, d ->
-            val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
-            t.copy(x = t.x + dx, width = t.width - dx, height = t.height + dy)
-        },
-        HandleDef(0.5f, 1f, Cursor.S_RESIZE_CURSOR) { t, d ->
-            val dy = d.y / canvasHeight
-            t.copy(height = t.height + dy)
-        },
-        HandleDef(1f, 1f, Cursor.SE_RESIZE_CURSOR) { t, d ->
-            val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
-            t.copy(width = t.width + dx, height = t.height + dy)
-        }
-    )
+    val handles = resizeHandles(canvasWidth, canvasHeight)
 
     val centerPx = Offset(
         (transform.x + transform.width / 2f) * canvasWidth,
