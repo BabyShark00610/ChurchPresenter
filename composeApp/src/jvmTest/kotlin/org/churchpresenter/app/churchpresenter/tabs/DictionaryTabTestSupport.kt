@@ -20,6 +20,7 @@ import io.mockk.mockkConstructor
 import io.mockk.unmockkConstructor
 import io.mockk.unmockkObject
 import org.churchpresenter.app.churchpresenter.data.InterlinearRepository
+import org.churchpresenter.app.churchpresenter.data.InterlinearVerse
 import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.churchpresenter.app.churchpresenter.viewmodel.DictionaryFixture
 import org.churchpresenter.app.churchpresenter.viewmodel.DictionaryViewModel
@@ -61,6 +62,17 @@ internal class DictionaryReports {
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun dictionaryTab(
+    /**
+     * Interlinear verses per Strong's number, for the "In Scripture" section.
+     *
+     * Empty by default — that is the state every other suite here runs in, and it keeps the stubbed
+     * repository returning nothing for every entry. Passing verses is what makes the section draw.
+     */
+    verses: Map<String, List<InterlinearVerse>> = emptyMap(),
+    /** Resolves the verse text a row shows; null models a Bible that is not loaded. */
+    getVerseText: ((bookId: Int, chapter: Int, verse: Int) -> String?)? = null,
+    /** Resolves a book's name; null makes rows fall back to "Book <id>". */
+    getBookName: ((bookId: Int) -> String?)? = null,
     block: ComposeUiTest.(vm: DictionaryViewModel, reports: DictionaryReports) -> Unit,
 ) {
     DictionaryFixture.stubResources()
@@ -68,6 +80,9 @@ internal fun dictionaryTab(
     coEvery { anyConstructed<InterlinearRepository>().ensureGreekLoaded() } returns Unit
     coEvery { anyConstructed<InterlinearRepository>().ensureHebrewLoaded() } returns Unit
     every { anyConstructed<InterlinearRepository>().getVersesForEntry(any()) } returns emptyList()
+    verses.forEach { (number, forEntry) ->
+        every { anyConstructed<InterlinearRepository>().getVersesForEntry(number) } returns forEntry
+    }
     every { anyConstructed<InterlinearRepository>().getBooksWithGreekData() } returns emptyList()
     every { anyConstructed<InterlinearRepository>().getBooksWithHebrewData() } returns emptyList()
     every { anyConstructed<InterlinearRepository>().getChaptersForBook(any()) } returns emptyList()
@@ -85,6 +100,8 @@ internal fun dictionaryTab(
                             reports.scheduled += listOf(number, word, transliteration, definition)
                         },
                         onGoLive = { reports.live += it },
+                        getVerseText = getVerseText,
+                        getBookName = getBookName,
                         onWordClick = { reports.wordClicks += it },
                         onVerseClick = { book, chapter, verse ->
                             reports.verseClicks += Triple(book, chapter, verse)
@@ -120,6 +137,9 @@ internal object DictionaryLabel {
     const val FORWARD = "Forward"
     const val GO_LIVE = "Go Live"
     const val ADD_TO_SCHEDULE = "Add to Schedule"
+    const val IN_SCRIPTURE = "In Scripture"
+    const val NO_TAGGED_VERSES = "No tagged verses found for this entry"
+    const val GO_TO_VERSE = "Go to verse"
 }
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────
