@@ -3,7 +3,9 @@ package org.churchpresenter.app.churchpresenter.presenter
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithText
@@ -219,6 +221,34 @@ class BiblePresenterLayoutRenderTest {
         onNodeWithText("Denn also hat Gott die Welt geliebt", substring = true).assertExists()
     }
 
+    // ── The full-screen stack divides the output, it does not hug one edge of it ─────────────────
+    //
+    // Each translation gets an equal band of the height and is aligned inside it by the global
+    // verticalAlignment — what the 50/50 split this replaced did for two, generalised to any number.
+    // The stack that landed with #91 wrapped its content instead, so with the default bottom
+    // alignment two short verses bunched against the bottom edge and left the whole top half of the
+    // output empty: a blank band an operator reads as a section of its own.
+
+    /** A settings stack of [count] translations, matching the file names [stackVerses] hands out. */
+    private fun stackOf(count: Int): AppSettings = AppSettings(
+        bibleSettings = BibleSettings().withTranslations(
+            (0 until count).map { BibleTranslationSettings(fileName = "bible$it.spb") },
+        ),
+    )
+
+    private fun stackVerses(vararg markers: String) = markers.mapIndexed { index, marker ->
+        verse(marker, 16, fileName = "bible$index.spb")
+    }
+
+    /**
+     * The height the presenter actually drew into.
+     *
+     * Not [screen]'s 1080: the test harness roots these at its own window size and clips to it, so a
+     * band worked out from the requested size lands in the wrong place. Read it back instead.
+     */
+    private fun ComposeUiTest.outputHeight(): Float =
+        onRoot().fetchSemanticsNode().size.height.toFloat()
+
     @Test
     fun `four long translations stay inside the output bounds`() = runComposeUiTest {
         val files = listOf("one.spb", "two.spb", "three.spb", "four.spb")
@@ -248,6 +278,88 @@ class BiblePresenterLayoutRenderTest {
             assertTrue(bounds.top >= 0f, "$marker starts above the output: $bounds")
             assertTrue(bounds.bottom <= 1080f, "$marker is clipped below the output: $bounds")
         }
+    }
+
+    @Test
+    fun `two short translations leave no empty band above the stack`() = runComposeUiTest {
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = stackVerses("FIRST TEXT", "SECOND TEXT"),
+                    appSettings = stackOf(2),
+                )
+            }
+        }
+
+        // The regression: wrapped and bottom-aligned, both blocks sat below the halfway line and left
+        // the whole top half of the output blank.
+        val half = outputHeight() / 2f
+        val firstTop = onNodeWithText("FIRST TEXT").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            firstTop < half,
+            "the first translation must use the top half of the output, not bunch at the bottom: $firstTop",
+        )
+    }
+
+    @Test
+    fun `each translation is drawn inside its own band`() = runComposeUiTest {
+        val markers = listOf("FIRST TEXT", "SECOND TEXT", "THIRD TEXT")
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = stackVerses(*markers.toTypedArray()),
+                    appSettings = stackOf(markers.size),
+                )
+            }
+        }
+
+        // Bands, not pixel positions: font metrics differ across the three target platforms, but the
+        // verse belonging to band i must have its centre inside band i whatever they measure.
+        val bandHeight = outputHeight() / markers.size
+        markers.forEachIndexed { index, marker ->
+            val bounds = onNodeWithText(marker).fetchSemanticsNode().boundsInRoot
+            val centre = (bounds.top + bounds.bottom) / 2f
+            assertTrue(
+                centre > index * bandHeight && centre < (index + 1) * bandHeight,
+                "$marker must sit in band $index (${index * bandHeight}..${(index + 1) * bandHeight}), was at $centre",
+            )
+        }
+    }
+
+    @Test
+    fun `a long verse beside a short one still fits its own band`() = runComposeUiTest {
+        val settings = AppSettings(
+            bibleSettings = BibleSettings().withTranslations(
+                listOf("bible0.spb", "bible1.spb").map {
+                    BibleTranslationSettings(fileName = it, textFontSize = 90)
+                },
+            ),
+        )
+        setContent {
+            Box(screen) {
+                BiblePresenter(
+                    selectedVerses = listOf(
+                        verse("LONG ${"and it came to pass ".repeat(60)}", 16, fileName = "bible0.spb"),
+                        verse("SHORT", 16, fileName = "bible1.spb"),
+                    ),
+                    appSettings = settings,
+                )
+            }
+        }
+
+        // The long one can no longer borrow the short one's slack, so the shared scale shrinks until
+        // it fits its own band — and neither translation may leave the output.
+        val height = outputHeight()
+        listOf("LONG", "SHORT").forEach { marker ->
+            val bounds = onNodeWithText(marker, substring = true).fetchSemanticsNode().boundsInRoot
+            assertTrue(bounds.top >= 0f, "$marker starts above the output: $bounds")
+            assertTrue(bounds.bottom <= height, "$marker is clipped below the output: $bounds")
+        }
+        val shortTop = onNodeWithText("SHORT").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            shortTop >= height / 2f,
+            "the second translation belongs in the lower band, was at $shortTop",
+        )
     }
 
     @Test
