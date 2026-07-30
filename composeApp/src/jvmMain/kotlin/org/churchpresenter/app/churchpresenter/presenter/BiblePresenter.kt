@@ -52,13 +52,30 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSet
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.composables.LoopingVideoBackground
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.MIN_AUTO_FIT_FONT_SIZE
 import org.churchpresenter.app.churchpresenter.utils.Utils.parseHexColor
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.jetbrains.skia.Image
 import java.io.File
 import kotlin.math.min
 
-private fun binarySearchFitScale(
+/**
+ * The lowest scale the parallel translation stack may shrink itself to.
+ *
+ * Expressed as a font size rather than as a scale, so it means the same thing whatever the stack is
+ * configured at: no line ends up under [MIN_AUTO_FIT_FONT_SIZE], the size every other auto-fit in the
+ * app bottoms out at. [smallestFontSize] is the smallest configured size in the stack — the first line
+ * to become unreadable — and [scaleFactor] is the output's own resolution scaling, already applied to
+ * every size before the fit scale multiplies it.
+ *
+ * A fixed 15% floor was enough for two translations but could leave a fourth block below the frame;
+ * dropping it to 3% instead traded that for eight translations rendering at around 2sp, which fits and
+ * cannot be read (issue #97). Past this floor the stack overflows and is clipped instead.
+ */
+internal fun multiTranslationMinFitScale(smallestFontSize: Int, scaleFactor: Float): Float =
+    (MIN_AUTO_FIT_FONT_SIZE / (smallestFontSize.coerceAtLeast(1) * scaleFactor)).coerceIn(0.01f, 1f)
+
+internal fun binarySearchFitScale(
     minScale: Float = 0.15f,
     iterations: Int = 8,
     fits: (scale: Float) -> Boolean
@@ -566,7 +583,10 @@ fun BiblePresenter(
                             ?: BibleTranslationSettings(fileName = verse.translationFileName)
                         verse to style
                     }
-                    BoxWithConstraints(modifier = innerModifier) {
+                    // Clipped, unlike the single-language paths that never needed it: a stack the fit
+                    // scale cannot get under the frame height (see the floor below) would otherwise
+                    // draw straight through the configured margins and off the output.
+                    BoxWithConstraints(modifier = innerModifier.clipToBounds()) {
                         val widthConstraint = Constraints(maxWidth = constraints.maxWidth)
                         fun alignment(value: String) = when (value) {
                             Constants.LEFT -> TextAlign.Start
@@ -621,11 +641,14 @@ fun BiblePresenter(
                             }
                             return contentHeight + gapCount * (gapHeight + dividerHeight)
                         }
+                        val minScale = multiTranslationMinFitScale(
+                            smallestFontSize = visible.minOf { (_, item) ->
+                                minOf(item.textFontSize, item.referenceFontSize)
+                            },
+                            scaleFactor = scaleFactor,
+                        )
                         val fitScale = if (totalHeight(1f) > constraints.maxHeight) {
-                            // A fixed 15% floor was enough for two translations but could leave the
-                            // fourth block below the clip boundary. Parallel stacks prioritise
-                            // keeping every configured translation on screen.
-                            binarySearchFitScale(minScale = 0.03f, iterations = 10) { scale ->
+                            binarySearchFitScale(minScale = minScale, iterations = 10) { scale ->
                                 totalHeight(scale) <= constraints.maxHeight
                             }
                         } else 1f

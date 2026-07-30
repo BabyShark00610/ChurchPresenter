@@ -8,6 +8,16 @@ import androidx.compose.ui.unit.sp
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 
 /**
+ * The smallest font size any auto-fit in the app will settle on, in settings units at the 1920×1080
+ * reference resolution.
+ *
+ * Text below this is not readable from a pew, so a fit that cannot be reached without going under it
+ * stops here and lets the content overflow (clipped) instead — an obviously-too-long verse reads
+ * better cut off than rendered at a size nobody can make out.
+ */
+const val MIN_AUTO_FIT_FONT_SIZE = 8
+
+/**
  * Binary-searches for the largest font size (in settings units, before scaleFactor)
  * whose rendered text fits within [availableWidth] × [availableHeight] pixels
  * at the 1920×1080 reference resolution (scaleFactor = 1).
@@ -25,11 +35,11 @@ fun calculateAutoFitFontSize(
     availableWidth: Int,
     availableHeight: Int,
 ): Int {
-    if (text.isBlank() || availableWidth <= 0 || availableHeight <= 0) return 8
+    if (text.isBlank() || availableWidth <= 0 || availableHeight <= 0) return MIN_AUTO_FIT_FONT_SIZE
     val referenceDensity = Density(1f)
     val lines = text.split("\n")
     val widthConstraints = Constraints(maxWidth = availableWidth)
-    var low = 8
+    var low = MIN_AUTO_FIT_FONT_SIZE
     var high = 300
     while (high - low > 1) {
         val mid = (low + high) / 2
@@ -44,7 +54,7 @@ fun calculateAutoFitFontSize(
         }
         if (totalHeight <= availableHeight) low = mid else high = mid
     }
-    return (low - 1).coerceAtLeast(8)
+    return (low - 1).coerceAtLeast(MIN_AUTO_FIT_FONT_SIZE)
 }
 
 /**
@@ -60,16 +70,16 @@ fun calculateAutoFitForAllSections(
     reservedHeight: Int = 0,
     includeEndIndicator: Boolean = false,
 ): Int {
-    if (sections.isEmpty() || availableWidth <= 0 || availableHeight <= 0) return 8
+    if (sections.isEmpty() || availableWidth <= 0 || availableHeight <= 0) return MIN_AUTO_FIT_FONT_SIZE
     val allLines = sections.flatMap { it.lines }
-    if (allLines.all { it.isBlank() }) return 8
+    if (allLines.all { it.isBlank() }) return MIN_AUTO_FIT_FONT_SIZE
 
     val effectiveHeight = (availableHeight - reservedHeight).coerceAtLeast(1)
     val referenceDensity = Density(1f)
     // Use unconstrained width to measure natural line width (no wrapping)
     val unconstrainedConstraints = Constraints()
 
-    var low = 8
+    var low = MIN_AUTO_FIT_FONT_SIZE
     var high = 300
     while (high - low > 1) {
         val mid = (low + high) / 2
@@ -119,5 +129,5 @@ fun calculateAutoFitForAllSections(
         }
         if (fits) low = mid else high = mid
     }
-    return (low - 1).coerceAtLeast(8)
+    return (low - 1).coerceAtLeast(MIN_AUTO_FIT_FONT_SIZE)
 }
