@@ -269,9 +269,10 @@ fun BibleTab(
     bibleEngineClient: BibleEngineClient? = null,
     dialogDismissSignal: Int = 0,
 ) {
-    // Reload the Bible modules whenever the active mode or its ordered file list changes.
-    // Multi mode deliberately leaves legacy primary/secondary fields untouched, so those fields
-    // cannot be used as the only effect keys.
+    // Hand the Bible modules any change to the active mode or its ordered file list. Multi mode
+    // deliberately leaves legacy primary/secondary fields untouched, so those fields cannot be used
+    // as the only effect keys. Whether a given change needs a re-read off disk or just a rearrange
+    // of what is already loaded is BibleViewModel.updateSettings's call, not this key's.
     val isFirstComposition = remember { mutableStateOf(true) }
     val translationSelectionKey = appSettings.bibleSettings.translationSelectionKey()
     LaunchedEffect(
