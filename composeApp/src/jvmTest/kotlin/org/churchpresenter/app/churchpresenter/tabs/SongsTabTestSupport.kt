@@ -61,6 +61,7 @@ internal class TabReports {
     var selectedSection: LyricSection? = null
     val allSections = mutableListOf<List<LyricSection>>()
     var sectionIndex: Int? = null
+    var lineIndex: Int? = null
     val scheduled = mutableListOf<String>()
     var settingsChanges = 0
 
@@ -90,6 +91,15 @@ internal fun songsTab(
      * composer). Lives on [AppSettings] rather than [SongSettings], so it is its own parameter.
      */
     hiddenCols: Set<String>? = null,
+    /** Metronome tempo per song id, which lives on [AppSettings] rather than [SongSettings]. */
+    songBpm: Map<String, Int>? = null,
+    /**
+     * True when the tab is what is live on the output.
+     *
+     * It changes what the arrow keys do: while presenting they step *within* the live song and push
+     * each step out, and while not presenting left/right move between songs instead.
+     */
+    isPresenting: Boolean = false,
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -110,6 +120,7 @@ internal fun songsTab(
         }
         val settings = AppSettings(songSettings = songSettings.copy(storageDirectory = dir.absolutePath))
             .let { if (hiddenCols != null) it.copy(songHiddenCols = hiddenCols) else it }
+            .let { if (songBpm != null) it.copy(songBpm = songBpm) else it }
         val vm = SongsViewModel(
             settings,
             dispatcher = Dispatchers.Unconfined,
@@ -131,6 +142,8 @@ internal fun songsTab(
                         onSongItemSelected = { reports.selectedSection = it },
                         onAllSectionsChanged = { reports.allSections += it },
                         onSectionIndexChanged = { reports.sectionIndex = it },
+                        onLineIndexChanged = { reports.lineIndex = it },
+                        isPresenting = isPresenting,
                     )
                 }
             }
