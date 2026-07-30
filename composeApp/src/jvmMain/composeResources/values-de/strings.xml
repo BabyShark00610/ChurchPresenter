@@ -2125,6 +2125,11 @@
     <string name="add_bible_translation">Übersetzung hinzufügen</string>
     <string name="bible_reference">Bibelstelle</string>
     <string name="bible_translation_order">Reihenfolge der Übersetzungen</string>
+    <string name="bible_translation_order_panel_title">Anzeigereihenfolge</string>
+    <string name="bible_translation_order_panel_subtitle">Verse stapeln sich von oben nach unten auf dem Bildschirm</string>
+    <string name="bible_translation_order_hint">Ziehen Sie eine Zeile oder verwenden Sie die Pfeile zum Neuordnen.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Zum Neuordnen ziehen</string>
     <string name="bible_multi_layout">Layout mehrerer Übersetzungen</string>
     <string name="bible_translation_spacing">Abstand zwischen Übersetzungen</string>
     <string name="bible_translation_divider">Trennlinie zwischen Übersetzungen anzeigen</string>

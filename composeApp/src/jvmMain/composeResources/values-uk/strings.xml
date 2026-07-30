@@ -2124,6 +2124,11 @@
     <string name="add_bible_translation">Додати переклад</string>
     <string name="bible_reference">Біблійне посилання</string>
     <string name="bible_translation_order">Порядок перекладів</string>
+    <string name="bible_translation_order_panel_title">Порядок показу</string>
+    <string name="bible_translation_order_panel_subtitle">Вірші розташовуються згори вниз на екрані</string>
+    <string name="bible_translation_order_hint">Перетягніть рядок або скористайтеся стрілками, щоб змінити порядок.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Перетягніть, щоб змінити порядок</string>
     <string name="bible_multi_layout">Розміщення перекладів</string>
     <string name="bible_translation_spacing">Відстань між перекладами</string>
     <string name="bible_translation_divider">Показувати роздільник між перекладами</string>

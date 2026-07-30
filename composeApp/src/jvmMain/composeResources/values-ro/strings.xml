@@ -2154,6 +2154,11 @@
     <string name="add_bible_translation">Adaugă traducere</string>
     <string name="bible_reference">Referință biblică</string>
     <string name="bible_translation_order">Ordinea traducerilor</string>
+    <string name="bible_translation_order_panel_title">Ordinea afișării</string>
+    <string name="bible_translation_order_panel_subtitle">Versetele se așază de sus în jos pe ecran</string>
+    <string name="bible_translation_order_hint">Trageți un rând sau folosiți săgețile pentru a reordona.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Trageți pentru a reordona</string>
     <string name="bible_multi_layout">Dispunerea traducerilor</string>
     <string name="bible_translation_spacing">Spațiu între traduceri</string>
     <string name="bible_translation_divider">Arată separatorul dintre traduceri</string>

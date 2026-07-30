@@ -2152,6 +2152,11 @@
     <string name="add_bible_translation">Vertaling toevoegen</string>
     <string name="bible_reference">Bijbelverwijzing</string>
     <string name="bible_translation_order">Volgorde van vertalingen</string>
+    <string name="bible_translation_order_panel_title">Weergavevolgorde</string>
+    <string name="bible_translation_order_panel_subtitle">Verzen stapelen van boven naar beneden op het scherm</string>
+    <string name="bible_translation_order_hint">Sleep een rij of gebruik de pijlen om opnieuw te ordenen.</string>
+    <string name="bible_translation_order_more">+%1$d</string>
+    <string name="drag_to_reorder_translation">Slepen om te herordenen</string>
     <string name="bible_multi_layout">Indeling van vertalingen</string>
     <string name="bible_translation_spacing">Ruimte tussen vertalingen</string>
     <string name="bible_translation_divider">Scheiding tussen vertalingen tonen</string>
