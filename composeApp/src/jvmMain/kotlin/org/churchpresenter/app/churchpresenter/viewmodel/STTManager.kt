@@ -97,6 +97,39 @@ class STTManager {
         _isLive.value = live
     }
 
+    // ── Socket state transitions ──────────────────────────────────────
+    // The four connection flags only ever change together, and every combination means something
+    // different to the UI (green dot vs "connecting…" vs "can't reach server" vs "reconnecting…").
+    // They live here as named functions rather than inline in connect()'s socket callbacks so the
+    // transitions are one testable step each: reaching them through a real socket needs a live STT
+    // server, but which flags a given event sets is ordinary logic.
+
+    /** A socket connection came up: live, and no longer connecting/failed/retrying. */
+    internal fun applyConnected() {
+        _connected.value = true
+        _connecting.value = false
+        _connectError.value = false
+        _reconnecting.value = false
+    }
+
+    /**
+     * The socket went down. [reason] is socket.io's disconnect reason: `"io client disconnect"` means
+     * we called [disconnect] ourselves, so the link is simply closed. Anything else (transport close,
+     * ping timeout, server disconnect) is an unexpected drop that reconnection keeps retrying, which
+     * the UI shows as "reconnecting…".
+     */
+    internal fun applyDisconnected(reason: String?) {
+        _connected.value = false
+        if (reason != CLIENT_DISCONNECT_REASON) _reconnecting.value = true
+    }
+
+    /** The server could not be reached at all — not connected, not connecting, and flagged failed. */
+    internal fun applyConnectError() {
+        _connected.value = false
+        _connecting.value = false
+        _connectError.value = true
+    }
+
     // ── Help Dev: periodic STT .db capture ─────────────────────────────
     // Read live from a background loop, not observed by Compose — kept in sync with the
     // "Help Dev" checkbox (BibleEngineSettings.helpDevMode) by a LaunchedEffect in main.kt, since
@@ -142,12 +175,7 @@ class STTManager {
                 val s = IO.socket(URI.create(url), opts)
 
                 s.on(Socket.EVENT_CONNECT) {
-                    scope.launch {
-                        _connected.value = true
-                        _connecting.value = false
-                        _connectError.value = false
-                        _reconnecting.value = false
-                    }
+                    scope.launch { applyConnected() }
                     // Request initial data
                     s.emit("request_all_entries")
                     s.emit("request_all_translation_entries")
@@ -159,23 +187,12 @@ class STTManager {
                 }
 
                 s.on(Socket.EVENT_DISCONNECT) { args ->
-                    // socket.io passes the reason; "io client disconnect" = we called disconnect()
-                    // ourselves. Anything else (transport close / ping timeout / server disconnect) is
-                    // an unexpected drop that reconnection will keep retrying → show "reconnecting…".
                     val reason = args.firstOrNull()?.toString()
-                    val dropped = reason != "io client disconnect"
-                    scope.launch {
-                        _connected.value = false
-                        if (dropped) _reconnecting.value = true
-                    }
+                    scope.launch { applyDisconnected(reason) }
                 }
 
                 s.on(Socket.EVENT_CONNECT_ERROR) {
-                    scope.launch {
-                        _connected.value = false
-                        _connecting.value = false
-                        _connectError.value = true
-                    }
+                    scope.launch { applyConnectError() }
                 }
 
                 s.on("transcription_update") { args ->
@@ -208,11 +225,7 @@ class STTManager {
                 socket = s
                 s.connect()
             } catch (e: Exception) {
-                scope.launch {
-                    _connecting.value = false
-                    _connected.value = false
-                    _connectError.value = true
-                }
+                scope.launch { applyConnectError() }
             }
         }
     }
@@ -235,7 +248,7 @@ class STTManager {
         }
     }
 
-    private fun handleTranscriptionUpdate(data: JSONObject) {
+    internal fun handleTranscriptionUpdate(data: JSONObject) {
         val segmentsArray = data.optJSONArray("segments")
         if (segmentsArray != null) {
             _segments.clear()
@@ -262,7 +275,7 @@ class STTManager {
         }
     }
 
-    private fun handleTranslationUpdate(data: JSONObject) {
+    internal fun handleTranslationUpdate(data: JSONObject) {
         val segmentsArray = data.optJSONArray("segments")
         if (segmentsArray != null) {
             _translationSegments.clear()
@@ -297,7 +310,7 @@ class STTManager {
         _translationLanguage.value = data.stringOr("target_language_name")
     }
 
-    private fun handleWordHighlightingUpdate(data: JSONObject) {
+    internal fun handleWordHighlightingUpdate(data: JSONObject) {
         _wordHighlightingEnabled.value = data.optBoolean("enabled", true)
 
         val disabledColors = mutableSetOf<String>()
@@ -427,5 +440,10 @@ class STTManager {
 
     fun dispose() {
         disconnect()
+    }
+
+    private companion object {
+        /** socket.io's disconnect reason when the client itself closed the socket. */
+        const val CLIENT_DISCONNECT_REASON = "io client disconnect"
     }
 }

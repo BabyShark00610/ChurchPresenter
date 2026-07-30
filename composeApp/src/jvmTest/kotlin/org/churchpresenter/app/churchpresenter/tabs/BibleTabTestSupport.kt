@@ -23,6 +23,9 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
+import org.churchpresenter.app.churchpresenter.data.StatisticsManager
 import java.io.File
 import java.nio.file.Files
 
@@ -38,8 +41,10 @@ import java.nio.file.Files
  *
  * Nothing is stubbed. The `.spb` module is written with the real [SpbFixture] and read back through
  * the real load path, so a fixture cannot drift from the format the app actually parses. `BibleTab`
- * needs no host window, no `PresenterManager` and no STT — those parameters are optional and the
- * tab renders its browse/search UI without them.
+ * needs no host window and no `PresenterManager` — those parameters are optional and the tab renders
+ * its browse/search UI without them. STT is optional too, but passing a connected [STTManager] is
+ * what draws the auto-follow panel (see the `stt` parameter), and a connected manager needs no socket
+ * since [STTManager.applyConnected] is the same transition its own socket callback runs.
  */
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────────────────────
@@ -105,6 +110,30 @@ internal class BibleReports {
 internal fun bibleTab(
     content: String = bibleFixture,
     settings: (AppSettings) -> AppSettings = { it },
+    /**
+     * Passed to the tab as its [STTManager] when non-null.
+     *
+     * The auto-follow panel is drawn only when the Bible engine is enabled in settings AND an STT
+     * connection is up, so a test that wants it passes a manager with `applyConnected()` already
+     * called. Left null everywhere else, which is how the tab looks at first launch.
+     */
+    stt: STTManager? = null,
+    /**
+     * Passed as the tab's [PresenterManager] when non-null.
+     *
+     * Going live releases Bible Hold on it, which is the only reason a test needs one.
+     */
+    presenter: PresenterManager? = null,
+    /**
+     * Passed as the tab's [StatisticsManager] when non-null.
+     *
+     * It resolves `~/.churchpresenter` at construction, so a test that passes one must isolate
+     * `user.home` first — see [bibleTabWithStatistics].
+     */
+    statistics: StatisticsManager? = null,
+    /** Instance Link Controller mode: non-null makes the tab mirror every go-live to the primary. */
+    onInstanceLinkSendVerse: ((SelectedVerse) -> Unit)? = null,
+    onInstanceLinkSendBibleHold: ((Boolean) -> Unit)? = null,
     block: ComposeUiTest.(vm: BibleViewModel, reports: BibleReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-bible-tab").toFile()
@@ -139,6 +168,23 @@ internal fun bibleTab(
                         },
                         onVerseSelected = { reports.selectedVerses += it },
                         onPresenting = { reports.presenting += it },
+                        sttManager = stt,
+                        presenterManager = presenter,
+                        statisticsManager = statistics,
+                        onInstanceLinkSendVerse = onInstanceLinkSendVerse?.let { send ->
+                            { book, chapter, verseNumber, verseText, verseRange ->
+                                send(
+                                    SelectedVerse(
+                                        bookName = book,
+                                        chapter = chapter,
+                                        verseNumber = verseNumber,
+                                        verseText = verseText,
+                                        verseRange = verseRange,
+                                    )
+                                )
+                            }
+                        },
+                        onInstanceLinkSendBibleHold = onInstanceLinkSendBibleHold,
                     )
                 }
             }
@@ -165,6 +211,9 @@ internal object BibleLabel {
     const val EXACT_MATCH = "Exact Match"
     const val NO_PRIMARY = "No Primary Bible Configured"
     const val SWAP = "Swap"
+    /** The mic button's tooltip, which is what it offers to do next. */
+    const val STT_CONNECT = "Connect"
+    const val STT_DISCONNECT = "Disconnect"
     const val SEARCH = "Search"
     const val SEARCH_PLACEHOLDER = "Reference or text — e.g. John 3:16, mat 1, or a word"
 }

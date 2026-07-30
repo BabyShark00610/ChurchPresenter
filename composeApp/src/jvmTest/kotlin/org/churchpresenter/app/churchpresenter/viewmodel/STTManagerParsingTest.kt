@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
  * How [STTManager] turns the STT server's socket payloads into caption state.
  *
  * The three `handle*Update` parsers are the pure core (the socket wiring around them needs a live
- * server); they are private, so they're invoked by reflection with hand-built [JSONObject]s and the
+ * server); they are `internal`, so they're called directly with hand-built [JSONObject]s and the
  * result read back through the public state. What matters: optional fields fall back to sane
  * defaults, translation prefers `translated_text` but degrades to `text`, `in_progress` may arrive
  * as a string OR an object OR null, and highlighted words whose colour group is disabled are dropped.
@@ -27,15 +27,9 @@ class STTManagerParsingTest {
         created.clear()
     }
 
-    private fun STTManager.invokePrivate(method: String, data: JSONObject) {
-        STTManager::class.java.getDeclaredMethod(method, JSONObject::class.java)
-            .apply { isAccessible = true }
-            .invoke(this, data)
-    }
-
-    private fun STTManager.transcription(json: String) = invokePrivate("handleTranscriptionUpdate", JSONObject(json))
-    private fun STTManager.translation(json: String) = invokePrivate("handleTranslationUpdate", JSONObject(json))
-    private fun STTManager.highlighting(json: String) = invokePrivate("handleWordHighlightingUpdate", JSONObject(json))
+    private fun STTManager.transcription(json: String) = handleTranscriptionUpdate(JSONObject(json))
+    private fun STTManager.translation(json: String) = handleTranslationUpdate(JSONObject(json))
+    private fun STTManager.highlighting(json: String) = handleWordHighlightingUpdate(JSONObject(json))
 
     // ── Transcription ────────────────────────────────────────────────────────────
 

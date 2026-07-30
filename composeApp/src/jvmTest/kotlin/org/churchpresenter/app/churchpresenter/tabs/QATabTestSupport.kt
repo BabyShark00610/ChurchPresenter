@@ -117,6 +117,14 @@ internal object QALabel {
     const val CLEAR_DISPLAY = "Clear Display"
     const val WAITING = "Waiting for questions…"
     const val NO_APPROVED = "No approved questions yet"
+    const val EDIT = "Edit"
+    const val SAVE = "Save"
+    const val CANCEL = "Cancel"
+    const val CLEAR_ALL = "Clear All Questions"
+    /** The confirm button inside the clear-all dialog. */
+    const val CLEAR = "Clear"
+    const val BACK_TO_INCOMING = "Back to Incoming"
+    const val CONFIRM_GO_LIVE = "Confirm Go Live"
 }
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────
@@ -133,6 +141,14 @@ internal fun ComposeUiTest.hasQaButton(label: String): Boolean =
 
 /** The question-entry box — the tab's first freely-typed field. */
 internal fun ComposeUiTest.qaAddField() = onAllNodes(hasSetTextAction())[0]
+
+/**
+ * The inline edit box of the row being edited.
+ *
+ * The add box is always present and comes first in the tree, so the edit field is the *second*
+ * typed field — there is only ever one row in edit mode at a time.
+ */
+internal fun ComposeUiTest.editField() = onAllNodes(hasSetTextAction())[1]
 
 /** Clicks a labelled control, taking the topmost when a label repeats across panes. */
 internal fun ComposeUiTest.clickQaLabel(label: String) {
