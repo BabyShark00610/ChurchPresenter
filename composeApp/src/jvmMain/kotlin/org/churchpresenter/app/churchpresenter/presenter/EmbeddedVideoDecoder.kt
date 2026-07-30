@@ -52,18 +52,23 @@ internal class EmbeddedVideoDecoder(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var pollJob: Job? = null
-    private var mp: EmbeddedMediaPlayer? = null
+    // internal (not private): EmbeddedMediaPlayer can't be constructed without a real libvlc
+    // native handle, so tests inject a mock here to exercise resume()/pause()'s guard logic.
+    internal var mp: EmbeddedMediaPlayer? = null
     private var component: java.awt.Component? = null
     private var surfaceFactory: MediaPlayerFactory? = null
-    private var decodedFrame: BufferedImage? = null
+    // internal: lets tests drive composite() directly with a decoded frame instead of needing a
+    // real VLC render callback to populate it.
+    internal var decodedFrame: BufferedImage? = null
     @Volatile private var frameVersion = 0L
     @Volatile private var resumed = false
     @Volatile private var closed = false
     // Confirmed via vlcj's own playing()/paused() events — resume()/pause() only reissue the
     // native command while unconfirmed (closes the start() race below without hammering libvlc
-    // every frame for the rest of the clip once the transition actually lands).
-    @Volatile private var confirmedPlaying = false
-    @Volatile private var confirmedPaused = false
+    // every frame for the rest of the clip once the transition actually lands). internal so tests
+    // can simulate the event without a real MediaPlayer to fire it.
+    @Volatile internal var confirmedPlaying = false
+    @Volatile internal var confirmedPaused = false
 
     fun start() {
         if (!isVlcAvailable || closed) return
@@ -84,10 +89,9 @@ internal class EmbeddedVideoDecoder(
 
         val bufferFormatCallback = object : BufferFormatCallback {
             override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
-                val w = sourceWidth.coerceAtLeast(1)
-                val h = sourceHeight.coerceAtLeast(1)
-                decodedFrame = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
-                return RV32BufferFormat(w, h)
+                val frame = allocateDecodedFrame(sourceWidth, sourceHeight)
+                decodedFrame = frame
+                return RV32BufferFormat(frame.width, frame.height)
             }
             override fun allocatedBuffers(buffers: Array<out ByteBuffer>) {}
         }
@@ -96,8 +100,7 @@ internal class EmbeddedVideoDecoder(
             val buf = nativeBuffers?.firstOrNull() ?: return@RenderCallback
             val pixelData = (img.raster.dataBuffer as? DataBufferInt)?.data ?: return@RenderCallback
             try {
-                buf.rewind()
-                buf.asIntBuffer().get(pixelData, 0, pixelData.size.coerceAtMost(buf.remaining() / 4))
+                copyFrameBytes(buf, pixelData)
                 frameVersion++
             } catch (_: Throwable) {
             }
@@ -107,15 +110,13 @@ internal class EmbeddedVideoDecoder(
         )
         player.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
             override fun error(mediaPlayer: MediaPlayer) {
-                System.err.println("VLCJ (embedded video): playback error for ${videoFile.name}")
+                onErrorEvent()
             }
             override fun playing(mediaPlayer: MediaPlayer) {
-                confirmedPlaying = true
-                confirmedPaused = false
+                onPlayingConfirmed()
             }
             override fun paused(mediaPlayer: MediaPlayer) {
-                confirmedPaused = true
-                confirmedPlaying = false
+                onPausedConfirmed()
             }
         })
 
@@ -141,7 +142,36 @@ internal class EmbeddedVideoDecoder(
         }
     }
 
-    private fun composite() {
+    /** Source dimensions VLC reports can be 0 (not yet known); a zero-sized BufferedImage throws. */
+    internal fun allocateDecodedFrame(sourceWidth: Int, sourceHeight: Int): BufferedImage {
+        val w = sourceWidth.coerceAtLeast(1)
+        val h = sourceHeight.coerceAtLeast(1)
+        return BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+    }
+
+    /** Copies as many whole pixels as [buf] actually holds — a short native buffer must not overrun [pixelData]. */
+    internal fun copyFrameBytes(buf: ByteBuffer, pixelData: IntArray): Int {
+        buf.rewind()
+        val count = pixelData.size.coerceAtMost(buf.remaining() / 4)
+        buf.asIntBuffer().get(pixelData, 0, count)
+        return count
+    }
+
+    internal fun onErrorEvent() {
+        System.err.println("VLCJ (embedded video): playback error for ${videoFile.name}")
+    }
+
+    internal fun onPlayingConfirmed() {
+        confirmedPlaying = true
+        confirmedPaused = false
+    }
+
+    internal fun onPausedConfirmed() {
+        confirmedPaused = true
+        confirmedPlaying = false
+    }
+
+    internal fun composite() {
         val src = decodedFrame ?: return
         val working = BufferedImage(posterCanvas.width, posterCanvas.height, BufferedImage.TYPE_INT_ARGB)
         val g = working.createGraphics()
