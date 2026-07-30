@@ -2,7 +2,10 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
@@ -16,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.Dispatchers
 import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -134,6 +138,14 @@ internal fun bibleTab(
     /** Instance Link Controller mode: non-null makes the tab mirror every go-live to the primary. */
     onInstanceLinkSendVerse: ((SelectedVerse) -> Unit)? = null,
     onInstanceLinkSendBibleHold: ((Boolean) -> Unit)? = null,
+    /**
+     * Constrains the tab's width.
+     *
+     * The search row lays itself out from `BoxWithConstraints`, stacking into a column below 440dp
+     * and sitting in one row above it, so which of the two branches a test sees is decided here.
+     * Left null everywhere else, which gives the tab the whole test window — the wide branch.
+     */
+    width: Dp? = null,
     block: ComposeUiTest.(vm: BibleViewModel, reports: BibleReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-bible-tab").toFile()
@@ -156,6 +168,7 @@ internal fun bibleTab(
         runComposeUiTest {
             setContent {
                 MaterialTheme {
+                    Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
                     BibleTab(
                         viewModel = vm,
                         appSettings = appSettings,
@@ -186,6 +199,7 @@ internal fun bibleTab(
                         },
                         onInstanceLinkSendBibleHold = onInstanceLinkSendBibleHold,
                     )
+                    }
                 }
             }
             block(vm, reports)
