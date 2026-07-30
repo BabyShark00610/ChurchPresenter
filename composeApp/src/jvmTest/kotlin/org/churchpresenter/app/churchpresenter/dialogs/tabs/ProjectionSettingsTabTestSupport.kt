@@ -170,7 +170,7 @@ internal object Grid {
 
 /**
  * Every button on the tab that carries a label. Excludes the stepper arrows, which publish a content
- * description instead of text, and which lay out zero pixels wide in any case.
+ * description instead of text.
  */
 private val labelledButton =
     SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) and

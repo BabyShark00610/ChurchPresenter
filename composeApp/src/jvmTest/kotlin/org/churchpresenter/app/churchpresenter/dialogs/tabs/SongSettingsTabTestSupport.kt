@@ -75,12 +75,11 @@ import kotlin.test.assertTrue
  *    condition already requires a non-blank line, so the guard cannot fire from the UI;
  *    `the auto-fit buttons leave the size alone when the live section is blank` asserts that.
  *  * `count == 1` in `segmentedItemShape`. Every segmented row on this tab has two or three items.
- *  * The increment/decrement arrows on every stepper field. They are laid out **zero pixels wide**,
- *    at every window size, so they cannot be clicked and nothing of them is drawn — the cause is in
- *    `NumberSettingsTextField` itself (its `BasicTextField` takes `fillMaxWidth()`, which leaves the
- *    20.dp arrow column no room), so it affects every numeric field in the app, not just this tab.
- *    The fields are driven by typing into them instead. Deliberately *not* pinned by a test: a test
- *    asserting the arrows are unclickable would lock the defect in.
+ *  * The increment/decrement arrows on every stepper field. The fields here are driven by typing
+ *    into them instead. (The arrows were once unclickable app-wide — the shared
+ *    `NumberSettingsTextField` gave its 20.dp arrow column no room — which is why these tests type.
+ *    That is fixed; `NumberSettingsTextFieldTest` covers the arrows and the range clamp behind them,
+ *    and the Projection, Dictionary and Stage Monitor suites assert they are clickable on a real tab.)
  *  * The `when`-on-String jump tables compile to a hash switch followed by an `equals` check; the
  *    "hash matched but the string differs" arms need a hash-colliding value to reach.
  */
