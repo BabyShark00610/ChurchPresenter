@@ -56,6 +56,34 @@ fun AppSettings.moveBibleTranslation(index: Int, offset: Int): AppSettings {
 fun AppSettings.swapBibleTranslations(): AppSettings = moveBibleTranslation(0, 1)
 
 /**
+ * First run: points the app at [directory] and puts the bundled [fileName] in the stack.
+ *
+ * Separate from its one caller in `main()` so it can be tested, and going through
+ * [BibleSettings.addTranslation] rather than setting `primaryBible`: written straight to the legacy
+ * field, the very first settings file the app ever saves is one whose stack is empty and whose
+ * legacy pair is not — the drift `SettingsManager.repaired` now has to undo on every subsequent load.
+ */
+fun AppSettings.withBundledBible(directory: String, fileName: String): AppSettings =
+    copy(bibleSettings = bibleSettings.copy(storageDirectory = directory).addTranslation(fileName))
+
+/**
+ * A bible just installed from the catalogue, presented if nothing else is.
+ *
+ * Deliberately not an unconditional add. The rule it replaces was "become the primary bible if there
+ * isn't one", which — once the stack existed — could no longer be honoured: the legacy field it
+ * tested is mirrored from the stack, so it was never empty and a downloaded module simply never
+ * appeared anywhere. Restoring the intent means asking the stack instead. An unconditional add would
+ * be a different rule altogether: browse the catalogue for an afternoon and every module you tried
+ * is stacked on the output.
+ */
+fun AppSettings.withInstalledBible(fileName: String): AppSettings =
+    if (bibleSettings.translationList().isEmpty()) {
+        copy(bibleSettings = bibleSettings.addTranslation(fileName))
+    } else {
+        this
+    }
+
+/**
  * Rewrites every output's stored positions through [newPositionOf]; null means that translation is
  * gone. Covers browser sources as well as screens — the same shape, driven by the same UI.
  */

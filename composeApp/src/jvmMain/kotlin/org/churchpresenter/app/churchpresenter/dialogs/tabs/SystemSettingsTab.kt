@@ -95,6 +95,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.withInstalledBible
 import org.churchpresenter.app.churchpresenter.data.SettingsManager
 import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.data.SpsConverter
@@ -216,13 +217,7 @@ fun SystemSettingsTab(
                     storageDirectory = bibleDir,
                     onDismiss = { showBibleCatalog = false },
                     onBibleInstalled = { fileName ->
-                        onSettingsChange { s ->
-                            s.copy(
-                                bibleSettings = s.bibleSettings.copy(
-                                    primaryBible = s.bibleSettings.primaryBible.ifEmpty { fileName }
-                                )
-                            )
-                        }
+                        onSettingsChange { s -> s.withInstalledBible(fileName) }
                         bibleFiles = bibleFiles + fileName
                     }
                 )

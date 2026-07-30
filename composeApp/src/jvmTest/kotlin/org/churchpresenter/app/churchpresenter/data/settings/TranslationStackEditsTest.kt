@@ -149,4 +149,41 @@ class TranslationStackEditsTest {
 
         assertEquals(before, before.swapBibleTranslations().swapBibleTranslations())
     }
+
+    // ── Bibles arriving from outside the Bible settings tab ─────────────────────
+    //
+    // Both of these used to write `primaryBible` directly. That field is a mirror of the stack kept
+    // for older builds to read, so writing it alone produces a settings file with a configured bible
+    // and an empty stack — which the Bible settings tab, and every stack edit, then work against.
+
+    @Test
+    fun `the bundled bible goes into the stack, not just the legacy field`() {
+        val first = AppSettings().withBundledBible("/bibles", "kjv1769.spb")
+
+        assertEquals(listOf("kjv1769.spb"), first.stack())
+        assertEquals("/bibles", first.bibleSettings.storageDirectory)
+        assertEquals(
+            listOf("kjv1769.spb"), first.bibleSettings.translations.map { it.fileName },
+            "the stack itself has to hold it -- translationList() would report it either way, " +
+                "because it falls back to the legacy pair",
+        )
+    }
+
+    @Test
+    fun `a bible installed with nothing configured becomes the one that presents`() {
+        val after = AppSettings().withInstalledBible("downloaded.spb")
+
+        assertEquals(listOf("downloaded.spb"), after.stack())
+    }
+
+    @Test
+    fun `a bible installed alongside a configured stack does not join it`() {
+        // The rule this restores is "become the presented bible if there isn't one". It had stopped
+        // working in both directions: with a stack configured the old test was against a mirrored
+        // field that is never empty, so the download vanished; with none, it created the drift.
+        val before = settings()
+        val after = before.withInstalledBible("downloaded.spb")
+
+        assertEquals(before, after, "a stack the operator has set up is not to be added to behind them")
+    }
 }
