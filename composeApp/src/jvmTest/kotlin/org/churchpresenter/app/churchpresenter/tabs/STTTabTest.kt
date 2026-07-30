@@ -84,7 +84,7 @@ class STTTabTest {
             assertTrue(stt.connecting.value, "clicking Connect should start a connection attempt")
             assertEquals(1, reports.settingsChanges)
             assertEquals(
-                UNREACHABLE_URL,
+                SILENT_STT_URL,
                 reports.settingsAfterChange?.sttSettings?.serverUrl,
                 "the url that was connected to should be the one that gets saved",
             )
@@ -93,22 +93,29 @@ class STTTabTest {
 
     @Test
     fun `a url typed without a scheme is saved with http prefixed`() {
+        // Host and port come from the silent loopback endpoint like every other Connect here: the
+        // click really does start an attempt, so the target must not be somewhere that takes a route
+        // timeout to fail.
+        val hostAndPort = SILENT_STT_URL.removePrefix("http://")
+
         sttTab { _, _, reports ->
             urlField().performTextClearance()
-            urlField().performTextInput("192.0.2.1:1")
+            urlField().performTextInput(hostAndPort)
 
             sttButton(STTLabel.CONNECT).performClick()
 
-            assertEquals("http://192.0.2.1:1", reports.settingsAfterChange?.sttSettings?.serverUrl)
+            assertEquals("http://$hostAndPort", reports.settingsAfterChange?.sttSettings?.serverUrl)
         }
     }
 
     @Test
     fun `an https url is left alone`() {
-        sttTab(settings = STTSettings(serverUrl = "https://192.0.2.1:1")) { _, _, reports ->
+        val httpsUrl = SILENT_STT_URL.replace("http://", "https://")
+
+        sttTab(settings = STTSettings(serverUrl = httpsUrl)) { _, _, reports ->
             sttButton(STTLabel.CONNECT).performClick()
 
-            assertEquals("https://192.0.2.1:1", reports.settingsAfterChange?.sttSettings?.serverUrl)
+            assertEquals(httpsUrl, reports.settingsAfterChange?.sttSettings?.serverUrl)
         }
     }
 
@@ -176,7 +183,7 @@ class STTTabTest {
     @Test
     fun `an in-progress phrase alone counts as content`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, showInProgress = true),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, showInProgress = true),
             seed = { applyConnected(); transcribeInProgress("half a sen") },
         ) { _, _, _ ->
             assertFalse(showsExactly(STTLabel.WAITING), renderedText().toString())
@@ -187,7 +194,7 @@ class STTTabTest {
     @Test
     fun `the in-progress phrase is hidden when the setting is off`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, showInProgress = false),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, showInProgress = false),
             seed = { live("said already"); transcribeInProgress("half a sen") },
         ) { _, _, _ ->
             assertTrue(showsExactly("said already"))
@@ -225,7 +232,7 @@ class STTTabTest {
     @Test
     fun `transcribe mode draws only the transcription column`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, displayMode = "transcribe"),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, displayMode = "transcribe"),
             seed = { live("spoken"); translate("translated") },
         ) { _, _, _ ->
             assertTrue(showsExactly(STTLabel.TRANSCRIPTION), renderedText().toString())
@@ -238,7 +245,7 @@ class STTTabTest {
     @Test
     fun `translate mode draws only the translation column`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, displayMode = "translate"),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, displayMode = "translate"),
             seed = { live("spoken"); translate("translated") },
         ) { _, _, _ ->
             assertTrue(showsExactly(STTLabel.TRANSLATION), renderedText().toString())
@@ -251,7 +258,7 @@ class STTTabTest {
     @Test
     fun `both mode draws the two columns side by side`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, displayMode = "both"),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, displayMode = "both"),
             seed = { live("spoken"); translate("translated") },
         ) { _, _, _ ->
             assertTrue(showsExactly(STTLabel.TRANSCRIPTION), renderedText().toString())
@@ -264,7 +271,7 @@ class STTTabTest {
     @Test
     fun `translate mode still waits when only a transcription has arrived`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, displayMode = "translate"),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, displayMode = "translate"),
             seed = { live("spoken but not translated") },
         ) { _, _, _ ->
             assertTrue(showsExactly(STTLabel.WAITING), renderedText().toString())
@@ -276,7 +283,7 @@ class STTTabTest {
     fun `an in-progress translation is shown or hidden by its own setting`() {
         sttTab(
             settings = STTSettings(
-                serverUrl = UNREACHABLE_URL,
+                serverUrl = SILENT_STT_URL,
                 displayMode = "translate",
                 showTranslationInProgress = true,
             ),
@@ -287,7 +294,7 @@ class STTTabTest {
 
         sttTab(
             settings = STTSettings(
-                serverUrl = UNREACHABLE_URL,
+                serverUrl = SILENT_STT_URL,
                 displayMode = "translate",
                 showTranslationInProgress = false,
             ),
@@ -303,7 +310,7 @@ class STTTabTest {
     @Test
     fun `only the last maxSegments captions are previewed`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, maxSegments = 2),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, maxSegments = 2),
             seed = { live("oldest", "middle", "newest") },
         ) { _, _, _ ->
             assertFalse(showsExactly("oldest"), renderedText().toString())
@@ -315,7 +322,7 @@ class STTTabTest {
     @Test
     fun `a zero cap means show everything`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, maxSegments = 0),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, maxSegments = 0),
             seed = { live("oldest", "middle", "newest") },
         ) { _, _, _ ->
             assertTrue(showsExactly("oldest"), renderedText().toString())
@@ -328,7 +335,7 @@ class STTTabTest {
     fun `the cap applies to the translation column too`() {
         sttTab(
             settings = STTSettings(
-                serverUrl = UNREACHABLE_URL,
+                serverUrl = SILENT_STT_URL,
                 displayMode = "translate",
                 maxSegments = 1,
             ),
@@ -346,7 +353,7 @@ class STTTabTest {
         // The colouring itself is asserted in STTHighlightingTest; what matters here is that turning
         // it on doesn't change, split or drop the caption the tab draws.
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, showWordHighlighting = true),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, showWordHighlighting = true),
             seed = { live("praise the Lord"); highlight("Lord" to "#ff0000") },
         ) { _, _, _ ->
             assertTrue(showsExactly("praise the Lord"), renderedText().toString())
@@ -356,7 +363,7 @@ class STTTabTest {
     @Test
     fun `a caption with a highlight and the label both render`() {
         sttTab(
-            settings = STTSettings(serverUrl = UNREACHABLE_URL, showWordHighlighting = true),
+            settings = STTSettings(serverUrl = SILENT_STT_URL, showWordHighlighting = true),
             seed = { live("grace"); highlight("grace" to "#00ff00") },
         ) { _, _, _ ->
             // The column header and the caption are separate nodes, not one merged string.

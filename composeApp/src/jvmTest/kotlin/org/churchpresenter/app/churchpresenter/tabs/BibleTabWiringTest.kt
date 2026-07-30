@@ -220,7 +220,7 @@ class BibleTabWiringTest {
             actionButton(BibleLabel.STT_CONNECT).performClick()
 
             // connect() sets `connecting` before it launches anything, so this needs no waiting; the
-            // address is unroutable (TEST-NET-1) so the attempt itself stays a background no-op.
+            // endpoint accepts the socket and never answers, so the attempt simply stays in flight.
             assertTrue(manager.connecting.value)
         }
     }
@@ -269,7 +269,11 @@ class BibleTabWiringTest {
     }
 
     private companion object {
-        /** TEST-NET-1 (RFC 5737) on a dead port: a real URL that can never reach a host. */
-        const val STT_URL = "http://192.0.2.1:1"
+        /**
+         * The silent loopback endpoint from `STTTabTestSupport` — accepts TCP, answers nothing, so a
+         * connection attempt stays *connecting* deterministically without waiting out a route timeout.
+         * See the note there for why an unroutable address was the wrong fixture on CI.
+         */
+        val STT_URL: String get() = SILENT_STT_URL
     }
 }

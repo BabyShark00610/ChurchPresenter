@@ -18,6 +18,8 @@ import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.json.JSONObject
+import java.net.InetAddress
+import java.net.ServerSocket
 
 /**
  * Harness and fixtures shared by the `STTTab` test classes.
@@ -51,7 +53,7 @@ internal class STTReports {
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun sttTab(
-    settings: STTSettings = STTSettings(serverUrl = UNREACHABLE_URL),
+    settings: STTSettings = STTSettings(serverUrl = SILENT_STT_URL),
     seed: STTManager.() -> Unit = {},
     block: ComposeUiTest.(stt: STTManager, presenter: PresenterManager, reports: STTReports) -> Unit,
 ) {
@@ -84,14 +86,30 @@ internal fun sttTab(
 }
 
 /**
- * A documentation-reserved address (TEST-NET-1, RFC 5737) on a port nothing listens on.
+ * A loopback port that accepts TCP connections and then says nothing at all.
  *
- * Used wherever a test clicks Connect: the click has to hand a real URL to socket.io, and this one
- * can never reach a host — on this machine or on CI — so the attempt stays a background no-op
- * instead of finding something. Tests assert on the state the click sets synchronously
- * (`connecting`), never on the outcome of the attempt.
+ * Used wherever a test clicks Connect. It has to be a real URL, and it has to keep socket.io in its
+ * *connecting* state deterministically, because that is what several assertions here are about — so
+ * the endpoint has to be reachable at the TCP level and silent above it. Binding a `ServerSocket` and
+ * never calling `accept()` does exactly that: the kernel completes the handshake into the backlog and
+ * no HTTP response ever comes.
+ *
+ * The earlier fixture was `http://192.0.2.1:1` (TEST-NET-1). That failed fast on macOS but on a Linux
+ * CI runner packets to an unrouted address are dropped rather than refused, so every attempt waited
+ * out the full TCP connect timeout while socket.io retried forever
+ * (`setReconnectionAttempts(Int.MAX_VALUE)`) — which pushed the whole `jvmTest` task past CI's 25
+ * minute step budget. A refused port would have fixed the hang but broken the assertions, since the
+ * manager would leave `connecting` before a test could read it.
+ *
+ * One socket for the whole JVM, opened on first use. It is deliberately never closed: it holds a
+ * single file descriptor and the tests that depend on it run throughout the suite.
  */
-internal const val UNREACHABLE_URL = "http://192.0.2.1:1"
+private val silentSttSocket: ServerSocket by lazy {
+    ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+}
+
+internal val SILENT_STT_URL: String
+    get() = "http://127.0.0.1:${silentSttSocket.localPort}"
 
 // ── Feeding the manager what the STT server would send ──────────────────────────────────────────
 
