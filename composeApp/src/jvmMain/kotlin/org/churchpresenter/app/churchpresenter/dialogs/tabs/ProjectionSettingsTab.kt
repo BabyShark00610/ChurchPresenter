@@ -64,6 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -178,7 +179,10 @@ import churchpresenter.composeapp.generated.resources.browser_source_website_sna
 import churchpresenter.composeapp.generated.resources.projection_web_decklink_tooltip
 import churchpresenter.composeapp.generated.resources.vlc_path_invalid
 import churchpresenter.composeapp.generated.resources.window_position
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import org.churchpresenter.app.churchpresenter.composables.DeckLinkManager
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
@@ -449,25 +453,43 @@ fun ProjectionSettingsTab(
     val otNtPortionLabel = stringResource(Res.string.content_bible_translation_portion_ot_nt)
     val ntPortionLabel = stringResource(Res.string.content_bible_translation_portion_nt)
     val otPortionLabel = stringResource(Res.string.content_bible_translation_portion_ot)
-    val translationDisplays = remember(settings.bibleSettings.translations, settings.bibleSettings.storageDirectory, otNtPortionLabel, ntPortionLabel, otPortionLabel) {
-        settings.bibleSettings.translationList().map { t ->
-            val code = t.fileName.substringBeforeLast('.')
-            val storageDir = settings.bibleSettings.storageDirectory
-            val path = if (storageDir.isNotEmpty()) java.io.File(storageDir, t.fileName).absolutePath else t.fileName
-            val summary = Bible.readTranslationSummary(path)
-            val portion = when {
-                summary?.hasOldTestament == true && summary.hasNewTestament -> otNtPortionLabel
-                summary?.hasNewTestament == true -> ntPortionLabel
-                summary?.hasOldTestament == true -> otPortionLabel
-                else -> ""
+    val translationStack = settings.bibleSettings.translations
+    val storageDirectory = settings.bibleSettings.storageDirectory
+    // What the picker shows until the headers have been read: one row per configured translation,
+    // each named by its file stem. Same shape and length as the finished list, so the picker's row
+    // count and the positions a selection stores are right from the first frame.
+    val unreadTranslationDisplays = remember(translationStack, storageDirectory) {
+        translationNames.map { BibleTranslationDisplay(code = it, title = it, portion = "") }
+    }
+    // Reading a header is file I/O and has no business happening during composition. Kept null while
+    // in flight -- and reset to null whenever the stack changes -- so a list read for the previous
+    // stack is never shown against the current one, which would put the wrong number of rows in the
+    // picker and misalign the positions a selection is stored as.
+    val readTranslationDisplays by produceState<List<BibleTranslationDisplay>?>(
+        initialValue = null,
+        translationStack, storageDirectory, otNtPortionLabel, ntPortionLabel, otPortionLabel,
+    ) {
+        value = null
+        value = withContext(Dispatchers.IO) {
+            settings.bibleSettings.translationList().map { t ->
+                val code = t.fileName.substringBeforeLast('.')
+                val path = if (storageDirectory.isNotEmpty()) File(storageDirectory, t.fileName).absolutePath else t.fileName
+                val summary = Bible.readTranslationSummary(path)
+                val portion = when {
+                    summary?.hasOldTestament == true && summary.hasNewTestament -> otNtPortionLabel
+                    summary?.hasNewTestament == true -> ntPortionLabel
+                    summary?.hasOldTestament == true -> otPortionLabel
+                    else -> ""
+                }
+                BibleTranslationDisplay(
+                    code = code,
+                    title = summary?.title?.takeIf { it.isNotBlank() } ?: code,
+                    portion = portion,
+                )
             }
-            BibleTranslationDisplay(
-                code = code,
-                title = summary?.title?.takeIf { it.isNotBlank() } ?: code,
-                portion = portion,
-            )
         }
     }
+    val translationDisplays = readTranslationDisplays ?: unreadTranslationDisplays
     val songLangModes = listOf(Constants.SONG_LANG_OFF to offLabel, Constants.SONG_LANG_PRIMARY to lang1Label, Constants.SONG_LANG_SECONDARY to lang2Label, Constants.SONG_LANG_BOTH to bothLabel)
 
     // Shared column widths — used by both the Screen Assignment table (Card 1) and the
@@ -1751,14 +1773,27 @@ private fun ContentTranslationCell(
      */
     onShowAndSelect: (List<Int>) -> Unit,
 ) {
-    val allSelected = selected.isEmpty() || selected.size == translations.size
-    val enabledCount = if (!showing) 0 else if (selected.isEmpty()) translations.size else selected.size
+    // Which translations this output actually shows, as positions that exist in the stack it is being
+    // shown against. Everything below counts, labels, ticks and writes from this rather than from
+    // `selected`, so a position past the end of the stack -- left in a settings file written before
+    // the stack edits started remapping selections, or by hand -- is ignored consistently. Counting
+    // one used to make the menu claim "2 of 3 translations enabled" over a single ticked row, while
+    // the preview chip beside it named just the one.
+    //
+    // A stored selection that has been emptied this way shows nothing, not everything: it named
+    // translations that have gone, which is not the same statement as the empty "all of them", and
+    // reading it as "all" would put every language on a screen deliberately narrowed to one. That is
+    // the same call TranslationStackEdits makes when a remap leaves an output with nothing.
+    val tickedPositions = if (selected.isEmpty()) translations.indices.toList()
+                          else selected.filter { it in translations.indices }
+    val allSelected = tickedPositions.size == translations.size
+    val enabledCount = if (!showing) 0 else tickedPositions.size
     val selectAll: () -> Unit = { onShowAndSelect(emptyList()) }
     val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     var dropdownOpen by remember { mutableStateOf(false) }
 
-    val selectionCount = if (selected.isEmpty()) translations.size else selected.size
-    val primaryIndex = selected.minOrNull() ?: 0
+    val selectionCount = tickedPositions.size
+    val primaryIndex = tickedPositions.minOrNull() ?: 0
     // null while off, not just when there's nothing configured: otherwise this kept previewing
     // the last-selected translation's code/portion after Bible was switched off for this output,
     // instead of reflecting that nothing is actually showing right now.
@@ -1985,7 +2020,7 @@ private fun ContentTranslationCell(
             HorizontalDivider(color = dividerColor)
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
                 translations.forEachIndexed { index, info ->
-                    val selectedIn = selected.isEmpty() || index in selected
+                    val selectedIn = index in tickedPositions
                     // Off means every row reads as unticked, matching the master row's own
                     // checkbox -- the underlying selection is still remembered in `selected`,
                     // just not shown as active while Bible is off for this output.
@@ -2001,13 +2036,12 @@ private fun ContentTranslationCell(
                             // the moment any one of them was clicked.
                             onShowAndSelect(listOf(index))
                         } else if (!selectedIn) {
-                            val next = (selected + index).distinct().sorted()
+                            val next = (tickedPositions + index).distinct().sorted()
                             // Everything ticked is stored as "all", so a translation added later
                             // shows up here too rather than needing to be ticked on every output.
                             onSelectedChange(if (next.size == translations.size) emptyList() else next)
                         } else {
-                            val current = if (selected.isEmpty()) translations.indices.toList() else selected
-                            val next = current.filterNot { it == index }
+                            val next = tickedPositions.filterNot { it == index }
                             if (next.isEmpty()) {
                                 // Unchecking the last remaining translation would store the same
                                 // empty list that means "all" everywhere else in this cell -- next
