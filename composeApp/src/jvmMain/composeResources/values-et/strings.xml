@@ -546,6 +546,11 @@
     <string name="tooltip_expand_schedule">Laienda kava</string>
     <string name="schedule_drop_hint">Lohista failid siia, et lisada need kavasse</string>
     <string name="schedule_add_files">Lisa faile…</string>
+    <string name="schedule_item_count">%1$d elementi</string>
+    <string name="schedule_density_compact">Kompaktne</string>
+    <string name="schedule_density_normal">Tavaline</string>
+    <string name="schedule_density_detailed">Üksikasjalik</string>
+    <string name="schedule_kind_lower_third">Alumine kolmandik</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Lisa silt</string>

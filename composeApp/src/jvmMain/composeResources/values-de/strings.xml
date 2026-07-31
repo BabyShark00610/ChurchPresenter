@@ -816,6 +816,11 @@
     <string name="settings_export_failed">Einstellungen konnten nicht exportiert werden.</string>
     <string name="settings_import_failed">Einstellungen konnten nicht importiert werden. Die Datei ist möglicherweise ungültig.</string>
     <string name="schedule_add_files">Dateien hinzufügen…</string>
+    <string name="schedule_item_count">%1$d Elemente</string>
+    <string name="schedule_density_compact">Kompakt</string>
+    <string name="schedule_density_normal">Normal</string>
+    <string name="schedule_density_detailed">Detailliert</string>
+    <string name="schedule_kind_lower_third">Unteres Drittel</string>
     <string name="schedule_drop_hint">Dateien hierher ziehen, um sie zum Programm hinzuzufügen</string>
     <string name="schedule_note_placeholder">Notiz hinzufügen…</string>
     <string name="screen_number">Bildschirm %1$d</string>

@@ -33,6 +33,40 @@ object Utils {
         }
     }
 
+    /**
+     * WCAG 2 relative luminance of [color], in the 0..1 range contrast-ratio math uses.
+     * https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html
+     */
+    private fun relativeLuminance(color: Color): Double {
+        fun channel(c: Float): Double {
+            val cs = c.toDouble()
+            return if (cs <= 0.03928) cs / 12.92 else Math.pow((cs + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+    }
+
+    /** WCAG 2 contrast ratio between two colors — 1:1 (identical) up to 21:1 (black on white). */
+    fun contrastRatio(a: Color, b: Color): Double {
+        val l1 = relativeLuminance(a) + 0.05
+        val l2 = relativeLuminance(b) + 0.05
+        return if (l1 > l2) l1 / l2 else l2 / l1
+    }
+
+    /**
+     * [foreground] as-is if it already meets [minRatio] against [background] — WCAG AA for
+     * normal text is 4.5:1, the default — otherwise whichever of pure white or pure black
+     * contrasts better with [background]. For user-chosen color pairs (e.g. a schedule label's
+     * saved text/background) that can land close enough to unreadable; this only changes what's
+     * rendered, never what's stored, so the original picked color is still shown if the user
+     * reopens the editor.
+     */
+    fun ensureContrast(foreground: Color, background: Color, minRatio: Double = 4.5): Color {
+        if (contrastRatio(foreground, background) >= minRatio) return foreground
+        val whiteContrast = contrastRatio(Color.White, background)
+        val blackContrast = contrastRatio(Color.Black, background)
+        return if (whiteContrast >= blackContrast) Color.White else Color.Black
+    }
+
     fun parseHexColor(hexColor: String): Color {
         if (hexColor.equals("transparent", ignoreCase = true)) return Color.Transparent
         return try {

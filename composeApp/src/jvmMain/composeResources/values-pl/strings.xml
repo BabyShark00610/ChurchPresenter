@@ -815,6 +815,11 @@
     <string name="settings_export_failed">Nie udało się wyeksportować ustawień.</string>
     <string name="settings_import_failed">Nie udało się zaimportować ustawień. Plik może być nieprawidłowy.</string>
     <string name="schedule_add_files">Dodaj pliki…</string>
+    <string name="schedule_item_count">%1$d elementów</string>
+    <string name="schedule_density_compact">Kompaktowy</string>
+    <string name="schedule_density_normal">Normalny</string>
+    <string name="schedule_density_detailed">Szczegółowy</string>
+    <string name="schedule_kind_lower_third">Dolna trzecia</string>
     <string name="schedule_drop_hint">Przeciągnij pliki tutaj, aby dodać do programu</string>
     <string name="schedule_note_placeholder">Dodaj notatkę…</string>
     <string name="screen_number">Ekran %1$d</string>

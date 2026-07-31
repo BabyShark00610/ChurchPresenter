@@ -529,6 +529,11 @@
     <string name="schedule_drop_hint">Glisați fișiere aici pentru a le adăuga la program</string>
     <string name="schedule_note_placeholder">Adaugă notă…</string>
     <string name="schedule_add_files">Adaugă Fișiere…</string>
+    <string name="schedule_item_count">%1$d elemente</string>
+    <string name="schedule_density_compact">Compact</string>
+    <string name="schedule_density_normal">Normal</string>
+    <string name="schedule_density_detailed">Detaliat</string>
+    <string name="schedule_kind_lower_third">Lower Third</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Adaugă Etichetă</string>

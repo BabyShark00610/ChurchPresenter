@@ -839,6 +839,11 @@
     <string name="settings_export_failed">Не удалось экспортировать настройки.</string>
     <string name="settings_import_failed">Не удалось импортировать настройки. Файл может быть повреждён.</string>
     <string name="schedule_add_files">Добавить файлы…</string>
+    <string name="schedule_item_count">%1$d элементов</string>
+    <string name="schedule_density_compact">Компактный</string>
+    <string name="schedule_density_normal">Обычный</string>
+    <string name="schedule_density_detailed">Подробный</string>
+    <string name="schedule_kind_lower_third">Нижняя треть</string>
     <string name="schedule_drop_hint">Перетащите файлы сюда, чтобы добавить в программу</string>
     <string name="schedule_note_placeholder">Добавить заметку…</string>
     <string name="screen_number">Экран %1$d</string>

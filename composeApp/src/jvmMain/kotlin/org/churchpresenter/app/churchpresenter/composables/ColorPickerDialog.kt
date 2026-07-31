@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -133,6 +135,15 @@ fun ColorPickerDialog(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp,
+            // No fixed heightIn cap: this Dialog is a Compose overlay layer bounded by whatever
+            // window hosts it (AddLabelDialog's own fixed 500x400 native window, or the much
+            // taller Options/Settings window), not an independent OS window — so an unscrollable
+            // Column here can silently push the Cancel/OK row past the small AddLabelDialog
+            // window's edge with nowhere to grow. A hardcoded dp cap "fixes" that by capping this
+            // dialog's height in EVERY host, including tall ones with plenty of room, artificially
+            // truncating content that would otherwise fit — the scrollable middle section below is
+            // enough on its own: it consumes only whatever height is actually left over after the
+            // fixed title/button rows, scrolling if that's not enough, sized to nothing if it is.
             modifier = Modifier.width(300.dp),
         ) {
             Column(
@@ -144,6 +155,11 @@ fun ColorPickerDialog(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+
+                Column(
+                    modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
 
                 // ── Saturation / Brightness square ──────────────────────────
                 SvPanel(
@@ -238,6 +254,7 @@ fun ColorPickerDialog(
                             )
                         }
                     }
+                }
                 }
 
                 // ── Buttons ─────────────────────────────────────────────────

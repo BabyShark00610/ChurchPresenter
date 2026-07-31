@@ -513,6 +513,11 @@
     <string name="schedule_drop_hint">Sleep bestanden hier om toe te voegen aan programma</string>
     <string name="schedule_note_placeholder">Notitie toevoegen…</string>
     <string name="schedule_add_files">Bestanden toevoegen…</string>
+    <string name="schedule_item_count">%1$d items</string>
+    <string name="schedule_density_compact">Compact</string>
+    <string name="schedule_density_normal">Normaal</string>
+    <string name="schedule_density_detailed">Gedetailleerd</string>
+    <string name="schedule_kind_lower_third">Lower Third</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Label toevoegen</string>

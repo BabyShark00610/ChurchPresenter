@@ -513,6 +513,11 @@
     <string name="schedule_drop_hint">Pretiahnite súbory sem a pridajte ich do programu</string>
     <string name="schedule_note_placeholder">Pridať poznámku…</string>
     <string name="schedule_add_files">Pridať súbory…</string>
+    <string name="schedule_item_count">%1$d položiek</string>
+    <string name="schedule_density_compact">Kompaktné</string>
+    <string name="schedule_density_normal">Normálne</string>
+    <string name="schedule_density_detailed">Podrobné</string>
+    <string name="schedule_kind_lower_third">Lower Third</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Pridať štítok</string>

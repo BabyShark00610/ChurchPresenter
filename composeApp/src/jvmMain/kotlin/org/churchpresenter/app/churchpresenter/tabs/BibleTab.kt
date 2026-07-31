@@ -214,7 +214,6 @@ import churchpresenter.composeapp.generated.resources.hold_live
 import churchpresenter.composeapp.generated.resources.ic_drag_dots
 import churchpresenter.composeapp.generated.resources.move_translation_down
 import churchpresenter.composeapp.generated.resources.move_translation_up
-import churchpresenter.composeapp.generated.resources.song_language_primary
 import churchpresenter.composeapp.generated.resources.swap_bibles
 import churchpresenter.composeapp.generated.resources.swap_bibles_hint
 import churchpresenter.composeapp.generated.resources.verse
@@ -2292,21 +2291,6 @@ private fun TranslationOrderPanel(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
-                            if (isPrimary) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                ) {
-                                    Text(
-                                        text = stringResource(Res.string.song_language_primary).uppercase(),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                    )
-                                }
-                            }
                         }
                         Text(
                             text = translation.fileName,

@@ -54,10 +54,17 @@ fun AddLabelDialog(
     if (!isVisible) return
 
     val mainWindowState = LocalMainWindowState.current
+    // Height is 640dp, not 400dp: the nested ColorPickerDialog opened from either color field is
+    // a Compose overlay bound to THIS window's own bounds (not an independent OS window), and its
+    // full content — SV panel, hue bar, swatch/hex row, AND a fully populated (12-color, 2-row)
+    // "Recent colors" list — needs ~590dp of height to render without scrolling. 400dp cut off
+    // everything past the SV panel with no visible scrollbar to hint more was there; a first pass
+    // at 560dp still cropped the recent-color swatches down to an unrecognizable sliver. 640dp
+    // leaves ~50dp of slack over the measured worst case.
     val dialogState = rememberDialogState(
-        position = centeredOnMainWindow(mainWindowState, 500.dp, 400.dp),
+        position = centeredOnMainWindow(mainWindowState, 500.dp, 640.dp),
         width = 500.dp,
-        height = 400.dp
+        height = 640.dp
     )
 
     DialogWindow(

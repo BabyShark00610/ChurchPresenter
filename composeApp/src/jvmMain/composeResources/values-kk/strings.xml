@@ -816,6 +816,11 @@
     <string name="settings_export_failed">Параметрлерді экспорттау сәтсіз аяқталды.</string>
     <string name="settings_import_failed">Параметрлерді импорттау сәтсіз аяқталды. Файл жарамсыз болуы мүмкін.</string>
     <string name="schedule_add_files">Файлдар қосу…</string>
+    <string name="schedule_item_count">%1$d элемент</string>
+    <string name="schedule_density_compact">Ықшам</string>
+    <string name="schedule_density_normal">Қалыпты</string>
+    <string name="schedule_density_detailed">Толық</string>
+    <string name="schedule_kind_lower_third">Төменгі үштен бір</string>
     <string name="schedule_drop_hint">Бағдарламаға қосу үшін файлдарды осында сүйреңіз</string>
     <string name="schedule_note_placeholder">Ескертпе қосу…</string>
     <string name="screen_number">Экран %1$d</string>
