@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -85,6 +86,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -142,7 +145,6 @@ import churchpresenter.composeapp.generated.resources.tooltip_move_up
 import churchpresenter.composeapp.generated.resources.tooltip_new_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_open_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_remove
-import churchpresenter.composeapp.generated.resources.tooltip_remove_from_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_save_schedule
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -367,7 +369,6 @@ fun ScheduleTab(
             onRedo = { viewModel.redo() },
             onAddLabel = onAddLabel,
             onImportPlanningCenter = { showPlanningCenterImport = true },
-            onRemoveSelected = { viewModel.selectedItemId?.let { viewModel.removeItem(it) } },
             onClearSchedule = { viewModel.clearSchedule() }
         )
 
@@ -539,13 +540,15 @@ fun ScheduleTab(
                 // composition gives those lambdas a list that cannot shrink under them.
                 itemsIndexed(rows, key = { _, item -> item.id }) { index, item ->
                     val isDraggingThis = isDragActive && draggingFromIndex == index
-                    val nextIsSection = rows.getOrNull(index + 1) is ScheduleItem.LabelItem
+                    // Every row is spaced the same, labels included: the extra room a section
+                    // used to get above it (and, briefly, below it too) made the heading float
+                    // away from the list rather than sit in it.
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .animateItem()
-                            .padding(bottom = if (nextIsSection) 12.dp else 3.dp)
+                            .padding(bottom = 3.dp)
                             .alpha(if (isDraggingThis) 0.35f else 1f)
                             .reorderGesture(index, requireShift = true)
                     ) {
@@ -743,7 +746,6 @@ private fun ScheduleHeader(
     onRedo: () -> Unit,
     onAddLabel: () -> Unit,
     onImportPlanningCenter: () -> Unit,
-    onRemoveSelected: () -> Unit,
     onClearSchedule: () -> Unit
 ) {
     Column(
@@ -765,16 +767,16 @@ private fun ScheduleHeader(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Box(
-                modifier = Modifier
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(5.dp))
-                    .padding(horizontal = 7.dp, vertical = 2.dp)
-            ) {
+            // The count sits in the same pill the toolbars use rather than a chunkier box of its
+            // own: same corner radius, same border, same 2dp inset, so the three groups along this
+            // header read as one family instead of one of them looking padded out.
+            PillGroup {
                 Text(
                     text = stringResource(Res.string.schedule_item_count, itemCount),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -789,17 +791,44 @@ private fun ScheduleHeader(
                     iconTint = if (canZoomOut) MaterialTheme.colorScheme.onSurfaceVariant
                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                 )
-                Text(
-                    text = when (density) {
-                        ScheduleDensity.COMPACT -> stringResource(Res.string.schedule_density_compact)
-                        ScheduleDensity.NORMAL -> stringResource(Res.string.schedule_density_normal)
-                        ScheduleDensity.DETAILED -> stringResource(Res.string.schedule_density_detailed)
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
+                val compactName = stringResource(Res.string.schedule_density_compact)
+                val normalName = stringResource(Res.string.schedule_density_normal)
+                val detailedName = stringResource(Res.string.schedule_density_detailed)
+                // The two outer rungs borrow their neighbour's name: they change how much room a
+                // card takes, not what it shows.
+                val densityName = when (density) {
+                    ScheduleDensity.EXTRA_COMPACT, ScheduleDensity.COMPACT -> compactName
+                    ScheduleDensity.NORMAL -> normalName
+                    ScheduleDensity.DETAILED, ScheduleDensity.EXTRA_DETAILED -> detailedName
+                }
+                Box(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Holds the width of the longest of the three names so the +/- buttons keep
+                    // their place as the label changes under them -- and stays right in every
+                    // locale, which a hardcoded dp would not: "Detailed" is "Detailliert" in
+                    // German and "Подробный" in Russian. Invisible and semantics-free, so a test
+                    // or a screen reader still sees one label.
+                    listOf(compactName, normalName, detailedName).forEach { name ->
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.alpha(0f).clearAndSetSemantics {}
+                        )
+                    }
+                    Text(
+                        text = densityName,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_add),
                     text = stringResource(Res.string.tooltip_schedule_zoom_in),
@@ -819,6 +848,9 @@ private fun ScheduleHeader(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             itemVerticalAlignment = Alignment.CenterVertically
         ) {
+            // One pill, which wraps inside itself when the panel gets too narrow -- see
+            // [PillGroup]. It stays a single group at any width; only the icons move, one at a
+            // time, onto a second line of the same pill.
             PillGroup {
                 // New Schedule clears the whole list — the same weight as Clear Schedule at the
                 // tail of this toolbar, so it stays a plain icon button rather than the kind of
@@ -847,7 +879,26 @@ private fun ScheduleHeader(
                     iconSize = 14.dp,
                     iconTint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Clear sits with the other whole-schedule actions rather than at the tail: it
+                // is the same kind of thing as New, and moving it here is what lets a narrow
+                // panel settle on two lines instead of three -- the four file-level icons fill
+                // the first, the four editing ones the second.
+                // No "Remove from Schedule" alongside it: that acted on the current selection, so
+                // it did nothing at all until a row had been clicked, with nothing on the button
+                // to say so -- and every row now carries its own Remove. The menu item and the
+                // Delete shortcut still reach `ScheduleTabActions.removeSelected`, unchanged.
+                TooltipIconButton(
+                    painter = painterResource(Res.drawable.ic_delete),
+                    text = stringResource(Res.string.tooltip_clear_schedule),
+                    onClick = onClearSchedule,
+                    buttonSize = 26.dp,
+                    iconSize = 14.dp,
+                    iconTint = MaterialTheme.colorScheme.error
+                )
                 PillDivider()
+                // Undo and Redo wrap as a pair: they read as one control, and a line break
+                // between them would put Redo alone at the start of the second row.
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_undo),
                     text = stringResource(Res.string.tooltip_undo),
@@ -868,6 +919,7 @@ private fun ScheduleHeader(
                     iconTint = if (canRedo) MaterialTheme.colorScheme.onSurfaceVariant
                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                 )
+                }
                 PillDivider()
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_label),
@@ -885,37 +937,28 @@ private fun ScheduleHeader(
                     iconSize = 14.dp,
                     iconTint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                PillDivider()
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_close),
-                    text = stringResource(Res.string.tooltip_remove_from_schedule),
-                    onClick = onRemoveSelected,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_delete),
-                    text = stringResource(Res.string.tooltip_clear_schedule),
-                    onClick = onClearSchedule,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.error
-                )
             }
         }
     }
 }
 
-/** A rounded, bordered pill housing a row of compact icon buttons — the toolbar's visual grouping. */
+/**
+ * A rounded, bordered pill housing compact icon buttons — the toolbar's visual grouping.
+ *
+ * Lays its buttons out in a `FlowRow`, so a pill too wide for the panel wraps *inside itself*: the
+ * buttons move onto a second line one at a time and the pill grows to hold them, staying one group
+ * with one border rather than clipping its tail or splitting into two pills that read as unrelated.
+ * At a width that fits, the FlowRow is a plain row and nothing moves.
+ */
 @Composable
 private fun PillGroup(content: @Composable () -> Unit) {
-    Row(
+    FlowRow(
         modifier = Modifier
             .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
             .padding(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) { content() }
 }
@@ -949,7 +992,13 @@ private fun ScheduleRowActionButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    buttonSize: Dp = 27.dp,
+    // One size for every button in the strip. The play/edit button used to be 30dp against the
+    // others' 27dp, and Row's CenterVertically did not save them: mixed heights came out sharing a
+    // bottom edge, so the four small buttons sat ~1.5dp low -- a visible wobble at Compact, where
+    // the card is barely taller than the buttons. Wrapping them in a uniform-height Box does not
+    // help either, IconButton's own minimum-interactive sizing escapes it. Their emphasis comes
+    // from [iconSize] instead, which is what actually reads at this scale.
+    buttonSize: Dp = 30.dp,
     iconSize: Dp = 13.dp,
     iconTint: Color? = null,
     colors: IconButtonColors = IconButtonDefaults.iconButtonColors()
@@ -1089,18 +1138,32 @@ internal fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel)
     }
 }
 
+/** The strip's button and icon sizes: one size for a content row, a smaller pair for a section. */
+private val ACTION_BUTTON_SIZE = 30.dp
+private val ACTION_ICON_SIZE = 13.dp
+private val SECTION_ACTION_BUTTON_SIZE = 22.dp
+private val SECTION_ACTION_ICON_SIZE = 12.dp
+
+/** A section's own vertical padding, fixed rather than density-scaled -- it heads a group, so it
+ *  stays the same slim band however large the cards under it grow. */
+private val SECTION_ROW_PADDING = 3.dp
+
 /** Vertical padding inside a card at each density rung. */
 private fun ScheduleDensity.rowPadding(): Dp = when (this) {
+    ScheduleDensity.EXTRA_COMPACT -> 2.dp
     ScheduleDensity.COMPACT -> 4.dp
     ScheduleDensity.NORMAL -> 7.dp
     ScheduleDensity.DETAILED -> 9.dp
+    ScheduleDensity.EXTRA_DETAILED -> 13.dp
 }
 
 /** Minimum card height at each density rung. */
 private fun ScheduleDensity.rowMinHeight(): Dp = when (this) {
+    ScheduleDensity.EXTRA_COMPACT -> 26.dp
     ScheduleDensity.COMPACT -> 32.dp
     ScheduleDensity.NORMAL -> 42.dp
     ScheduleDensity.DETAILED -> 54.dp
+    ScheduleDensity.EXTRA_DETAILED -> 68.dp
 }
 
 /**
@@ -1118,6 +1181,18 @@ private fun scheduleChipColors(paletteIndex: Int): Pair<Color, Color> {
         else -> scheme.errorContainer to scheme.onErrorContainer
     }
 }
+
+/**
+ * Test tags for one schedule row's geometry.
+ *
+ * Both name a container that draws rather than reads — a card and a scrim — so neither publishes
+ * text or a description a test could find it by, and both carry an invariant about *where* they
+ * are rather than what they say.
+ */
+internal const val SCHEDULE_ROW_CARD_TAG = "schedule_row_card"
+
+/** The hover-revealed action strip, whose gradient scrim has to cover the card behind it. */
+internal const val SCHEDULE_ROW_ACTIONS_TAG = "schedule_row_actions"
 
 @Composable
 private fun ScheduleItemRow(
@@ -1176,6 +1251,7 @@ private fun ScheduleItemRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(SCHEDULE_ROW_CARD_TAG)
             .hoverable(interactionSource)
             .clip(CARD_SHAPE)
             .background(cardBg, CARD_SHAPE)
@@ -1187,10 +1263,19 @@ private fun ScheduleItemRow(
                 .padding(
                     start = 3.dp,
                     end = 6.dp,
-                    top = density.rowPadding(),
-                    bottom = density.rowPadding()
+                    // A section is a heading, not a card of content: it takes the height of its
+                    // own single line rather than the density's, which had it standing as tall as
+                    // the items it heads -- at Detailed, 70dp of band for one word.
+                    top = if (isSection) SECTION_ROW_PADDING else density.rowPadding(),
+                    bottom = if (isSection) SECTION_ROW_PADDING else density.rowPadding()
                 )
-                .heightIn(min = density.rowMinHeight()),
+                .heightIn(min = if (isSection) 0.dp else density.rowMinHeight())
+                // The row's own height, resolved from its children's intrinsics rather than left
+                // to the LazyColumn's unbounded height constraint. Without it every `fillMax*`
+                // inside this row is a no-op -- there is no bounded height to fill -- which is why
+                // the title column wrapped its text and sat at the top of the card, and why the
+                // action strip's scrim was only as tall as the buttons themselves.
+                .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1266,7 +1351,13 @@ private fun ScheduleItemRow(
                         .initialPassCombinedClickable(
                             onClick = { onSelect() },
                             onDoubleClick = if (!isSection) { { onPresent() } } else null
-                        )
+                        ),
+                    // Centred, because fillMaxSize above stretches this Column to whichever
+                    // sibling is taller and the action-button row usually is: at Compact a single
+                    // title line is ~20dp against the buttons' 30dp, so a top-aligned title sat
+                    // visibly high in its own card. Normal and Detailed hid it because their
+                    // detail lines make this Column the taller sibling.
+                    verticalArrangement = Arrangement.Center
                 ) {
                     if (isSection) {
                         Text(
@@ -1282,18 +1373,10 @@ private fun ScheduleItemRow(
                         ScheduleItemContent(item = item, density = density, isSelected = isSelected)
                     }
 
-                    // Note preview when collapsed
-                    if (note.isNotEmpty() && !noteExpanded) {
-                        Text(
-                            text = note,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontStyle = FontStyle.Italic,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
+                    // No note preview here: the row below the card draws the saved note, with
+                    // the button that opens it for editing. Both were drawn on the same
+                    // `note.isNotEmpty() && !noteExpanded` condition, so every item carrying a note
+                    // showed it twice -- once italic under its title and again in its own band.
                 }
 
                 // Hover-revealed action buttons — always present (so they stay reachable by
@@ -1305,6 +1388,11 @@ private fun ScheduleItemRow(
                 Row(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
+                        .testTag(SCHEDULE_ROW_ACTIONS_TAG)
+                        // Fills the row's height so the gradient scrim covers the whole card behind
+                        // it. At the buttons' own ~30dp it was a band floating in the middle of a
+                        // 54dp Detailed card, with the card's background showing above and below.
+                        .fillMaxHeight()
                         .alpha(actionsAlpha)
                         .background(
                             Brush.horizontalGradient(
@@ -1321,22 +1409,32 @@ private fun ScheduleItemRow(
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // On a section these shrink with the row: at their usual 30dp they would be
+                    // the tallest thing in it and the heading could never get shorter than a card.
+                    val actionSize = if (isSection) SECTION_ACTION_BUTTON_SIZE else ACTION_BUTTON_SIZE
+                    val actionIcon = if (isSection) SECTION_ACTION_ICON_SIZE else ACTION_ICON_SIZE
                     ScheduleRowActionButton(
                         painter = painterResource(Res.drawable.ic_arrow_up),
                         text = stringResource(Res.string.tooltip_move_up),
                         onClick = onMoveUp,
+                        buttonSize = actionSize,
+                        iconSize = actionIcon,
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     ScheduleRowActionButton(
                         painter = painterResource(Res.drawable.ic_arrow_down),
                         text = stringResource(Res.string.tooltip_move_down),
                         onClick = onMoveDown,
+                        buttonSize = actionSize,
+                        iconSize = actionIcon,
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     ScheduleRowActionButton(
                         painter = painterResource(Res.drawable.ic_note),
                         text = stringResource(Res.string.tooltip_note),
                         onClick = { noteExpanded = !noteExpanded },
+                        buttonSize = actionSize,
+                        iconSize = actionIcon,
                         iconTint = if (note.isNotEmpty() || noteExpanded) MaterialTheme.colorScheme.primary
                                    else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1344,6 +1442,8 @@ private fun ScheduleItemRow(
                         painter = painterResource(Res.drawable.ic_close),
                         text = stringResource(Res.string.tooltip_remove),
                         onClick = onRemove,
+                        buttonSize = actionSize,
+                        iconSize = actionIcon,
                         iconTint = MaterialTheme.colorScheme.error
                     )
                     // Slightly larger than the other four, matching the reference design — but
@@ -1357,8 +1457,8 @@ private fun ScheduleItemRow(
                             text = stringResource(Res.string.tooltip_edit_label),
                             onClick = onEditLabel,
                             modifier = Modifier.padding(start = 2.dp),
-                            buttonSize = 30.dp,
-                            iconSize = 15.dp,
+                            buttonSize = actionSize,
+                            iconSize = SECTION_ACTION_ICON_SIZE,
                             iconTint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
@@ -1367,7 +1467,6 @@ private fun ScheduleItemRow(
                             text = stringResource(Res.string.tooltip_go_live),
                             onClick = onPresent,
                             modifier = Modifier.padding(start = 2.dp),
-                            buttonSize = 30.dp,
                             iconSize = 15.dp,
                             iconTint = MaterialTheme.colorScheme.onSurfaceVariant
                         )

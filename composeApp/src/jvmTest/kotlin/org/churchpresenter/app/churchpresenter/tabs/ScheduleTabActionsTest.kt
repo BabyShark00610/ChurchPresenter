@@ -81,11 +81,14 @@ class ScheduleTabActionsTest {
         }
 
     @Test
-    fun `the toolbar's remove takes the selected row`() =
-        scheduleTab(seed = { seedService() }) { vm, _ ->
+    fun `remove-selected takes the selected row`() =
+        scheduleTab(seed = { seedService() }) { vm, reports ->
+            // Driven through the action set rather than a toolbar button: the toolbar no longer
+            // carries a remove, because it did nothing until a row had been clicked and said so
+            // nowhere. The menu item and the Delete shortcut still land here.
             onNodeWithText("Notices").performClick()
             waitForIdle()
-            button(ScheduleLabel.REMOVE_SELECTED).performClick()
+            registeredActions(reports).removeSelected()
             waitForIdle()
 
             assertEquals(
@@ -95,8 +98,8 @@ class ScheduleTabActionsTest {
         }
 
     @Test
-    fun `clicking a label row selects it, so the toolbar's remove can clear it too`() =
-        scheduleTab(seed = { seedService() }) { vm, _ ->
+    fun `clicking a label row selects it, so remove-selected can clear it too`() =
+        scheduleTab(seed = { seedService() }) { vm, reports ->
             // "Welcome" is the label seedService() adds first. A label row used to skip its click
             // handler entirely (nothing to select or present), which also meant it could never
             // become the toolbar's selected row — this is the fix for that.
@@ -108,20 +111,20 @@ class ScheduleTabActionsTest {
                 "clicking a label row must select it, the same as any other row",
             )
 
-            button(ScheduleLabel.REMOVE_SELECTED).performClick()
+            registeredActions(reports).removeSelected()
             waitForIdle()
 
             assertEquals(
                 listOf("42 - Amazing Grace", "John 3:16", "Notices"),
                 vm.scheduleItems.map { it.displayText },
-                "a selected label must be removable from the toolbar, not just its own row button",
+                "a selected label must be removable from the menu, not just its own row button",
             )
         }
 
     @Test
-    fun `the toolbar's remove does nothing when nothing is selected`() =
-        scheduleTab(seed = { seedService() }) { vm, _ ->
-            button(ScheduleLabel.REMOVE_SELECTED).performClick()
+    fun `remove-selected does nothing when nothing is selected`() =
+        scheduleTab(seed = { seedService() }) { vm, reports ->
+            registeredActions(reports).removeSelected()
             waitForIdle()
 
             assertEquals(4, vm.scheduleItems.size, "no row is removed at random")
