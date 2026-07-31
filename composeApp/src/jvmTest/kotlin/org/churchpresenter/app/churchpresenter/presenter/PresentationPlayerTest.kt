@@ -206,6 +206,27 @@ class PresentationPlayerTest {
     }
 
     @Test
+    fun `a rasterization failure is reported and leaves frame returning null`() {
+        val file = File(dir, "vanishing.pdf")
+        PDDocument().use { doc ->
+            doc.addPage(PDPage())
+            doc.save(file)
+        }
+        val deck = (PresentationLoader.load(file) as LoadResult.Success).deck
+        file.delete()
+        val p = PresentationPlayer(deck).also { players.add(it) }
+
+        p.showSlide(0)
+
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && p.loading.containsKey(0)) {
+            Thread.sleep(10)
+        }
+        assertTrue(!p.loading.containsKey(0), "timed out waiting for the failed rasterization attempt to finish")
+        assertNull(p.frame(System.nanoTime()), "a rasterization failure must never populate the slide cache")
+    }
+
+    @Test
     fun `the deck passed to the constructor is exposed unchanged`() {
         val deck = staticDeck(pageCount = 1)
         val p = PresentationPlayer(deck).also { players.add(it) }

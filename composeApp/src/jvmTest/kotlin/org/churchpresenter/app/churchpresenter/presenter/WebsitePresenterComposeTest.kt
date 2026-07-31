@@ -135,4 +135,15 @@ class WebsitePresenterComposeTest {
             }
         }
     }
+
+    @Test
+    fun `the audio routing loop runs once the initial delay elapses`() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        setContent {
+            Box(Modifier.size(200.dp, 200.dp)) {
+                WebsitePresenter(url = "https://example.com", audioDeviceId = "some-sink")
+            }
+        }
+        mainClock.advanceTimeBy(2_100)
+    }
 }
