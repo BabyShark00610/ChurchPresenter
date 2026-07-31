@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.utils
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -108,6 +109,76 @@ class UtilsSystemTest {
         assertTrue(
             Utils.systemFontFamilyOrDefault("") != FontFamily.Default,
             "if this now equals FontFamily.Default, the fallback became reachable — update this test",
+        )
+    }
+}
+
+/**
+ * [Utils.contrastRatio] and [Utils.ensureContrast] back the WCAG-driven text-color fallback
+ * `ScheduleTab` applies to a section label's own user-chosen text/background pair — the only two
+ * callers of [Utils.contrastRatio] in the app, and previously with no direct test of their own
+ * (`ThemeTest` re-derives the same WCAG math independently for its theme-palette checks, rather
+ * than exercising this code). The ratio math is [private] `relativeLuminance`, reached only through
+ * these two public functions.
+ */
+class UtilsContrastTest {
+
+    private fun assertApprox(expected: Double, actual: Double, tolerance: Double = 0.01) =
+        assertTrue(abs(expected - actual) <= tolerance, "expected ~$expected, was $actual")
+
+    // ── contrastRatio ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `black on white is the maximum WCAG ratio, 21 to 1`() =
+        assertApprox(21.0, Utils.contrastRatio(Color.Black, Color.White))
+
+    @Test
+    fun `a color against itself has the minimum ratio, 1 to 1`() {
+        assertApprox(1.0, Utils.contrastRatio(Color.Red, Color.Red))
+        assertApprox(1.0, Utils.contrastRatio(Color.White, Color.White))
+    }
+
+    @Test
+    fun `the ratio is symmetric regardless of argument order`() {
+        val ab = Utils.contrastRatio(Color.Red, Color.Blue)
+        val ba = Utils.contrastRatio(Color.Blue, Color.Red)
+        assertApprox(ab, ba)
+    }
+
+    // ── ensureContrast ────────────────────────────────────────────────────────
+
+    @Test
+    fun `a foreground that already meets the minimum ratio is returned unchanged`() {
+        // Black on white comfortably clears the 4.5 default, so ensureContrast must be a no-op —
+        // never silently replacing a color pair the caller's own choice already satisfies.
+        assertEquals(Color.Black, Utils.ensureContrast(Color.Black, Color.White))
+    }
+
+    @Test
+    fun `a foreground that fails the ratio is replaced by whichever of white or black contrasts better`() {
+        // White text on white background has nowhere near enough contrast; black is the obvious
+        // rescue, so this also confirms the substitution actually engages rather than passing the
+        // original color through by accident.
+        assertEquals(Color.Black, Utils.ensureContrast(Color.White, Color.White))
+        // A near-black foreground on a black background is the mirror case: white must win.
+        assertEquals(Color.White, Utils.ensureContrast(Color(0x22, 0x22, 0x22), Color.Black))
+    }
+
+    @Test
+    fun `minRatio changes the outcome for a pair that clears AA but not AAA`() {
+        // Medium green (#008000) on white measures ~5.1:1 — above the 4.5 default (AA) but below
+        // the stricter 7.0 ScheduleTab uses for its label text (AAA), so the same pair must resolve
+        // two different ways depending on which threshold is asked for.
+        val green = Color(0, 128, 0)
+        assertEquals(
+            green,
+            Utils.ensureContrast(green, Color.White, minRatio = 4.5),
+            "5.1:1 clears the default AA threshold, so the original color must come back untouched",
+        )
+        assertEquals(
+            Color.Black,
+            Utils.ensureContrast(green, Color.White, minRatio = 7.0),
+            "the same 5.1:1 pair fails AAA, so it must fall back to whichever of white/black wins — black, on white",
         )
     }
 }

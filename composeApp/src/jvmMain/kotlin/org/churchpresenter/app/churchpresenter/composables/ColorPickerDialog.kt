@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -174,7 +175,8 @@ fun ColorPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(8.dp))
+                        .testTag("colorPickerSvPanel"),
                 )
 
                 // ── Hue rainbow bar ─────────────────────────────────────────
@@ -187,7 +189,8 @@ fun ColorPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(24.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .clip(RoundedCornerShape(12.dp))
+                        .testTag("colorPickerHueBar"),
                 )
 
                 // ── Preview swatch + hex text field ─────────────────────────
@@ -246,6 +249,7 @@ fun ColorPickerDialog(
                                     .size(24.dp)
                                     .background(recentColor, RoundedCornerShape(4.dp))
                                     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .testTag("recentColor_$recentHex")
                                     .clickable {
                                         val (h, s, v) = cpColorToHsv(recentColor)
                                         hue = h; saturation = s; brightness = v
@@ -284,7 +288,7 @@ fun ColorPickerDialog(
 // ── Sub-composables ──────────────────────────────────────────────────────────
 
 @Composable
-private fun SvPanel(
+internal fun SvPanel(
     hue: Float,
     saturation: Float,
     brightness: Float,
@@ -331,7 +335,7 @@ private fun SvPanel(
 }
 
 @Composable
-private fun HueBar(
+internal fun HueBar(
     hue: Float,
     onHueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,

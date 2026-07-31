@@ -95,6 +95,30 @@ class ScheduleTabActionsTest {
         }
 
     @Test
+    fun `clicking a label row selects it, so the toolbar's remove can clear it too`() =
+        scheduleTab(seed = { seedService() }) { vm, _ ->
+            // "Welcome" is the label seedService() adds first. A label row used to skip its click
+            // handler entirely (nothing to select or present), which also meant it could never
+            // become the toolbar's selected row — this is the fix for that.
+            onNodeWithText("Welcome").performClick()
+            waitForIdle()
+            assertEquals(
+                vm.scheduleItems.first().id,
+                vm.selectedItemId,
+                "clicking a label row must select it, the same as any other row",
+            )
+
+            button(ScheduleLabel.REMOVE_SELECTED).performClick()
+            waitForIdle()
+
+            assertEquals(
+                listOf("42 - Amazing Grace", "John 3:16", "Notices"),
+                vm.scheduleItems.map { it.displayText },
+                "a selected label must be removable from the toolbar, not just its own row button",
+            )
+        }
+
+    @Test
     fun `the toolbar's remove does nothing when nothing is selected`() =
         scheduleTab(seed = { seedService() }) { vm, _ ->
             button(ScheduleLabel.REMOVE_SELECTED).performClick()
