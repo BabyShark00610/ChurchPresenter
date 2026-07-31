@@ -850,6 +850,11 @@
     <string name="settings_export_failed">Export nastavení se nezdařil.</string>
     <string name="settings_import_failed">Import nastavení se nezdařil. Soubor může být neplatný.</string>
     <string name="schedule_add_files">Přidat soubory…</string>
+    <string name="schedule_item_count">%1$d položek</string>
+    <string name="schedule_density_compact">Kompaktní</string>
+    <string name="schedule_density_normal">Normální</string>
+    <string name="schedule_density_detailed">Podrobný</string>
+    <string name="schedule_kind_lower_third">Spodní třetina</string>
     <string name="schedule_drop_hint">Přetáhněte soubory sem pro přidání do programu</string>
     <string name="schedule_note_placeholder">Přidat poznámku…</string>
     <string name="screen_number">Obrazovka %1$d</string>

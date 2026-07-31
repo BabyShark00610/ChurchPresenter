@@ -1,38 +1,67 @@
 package org.churchpresenter.app.churchpresenter.utils
 
-import kotlin.math.abs
-
 /**
- * The schedule card zoom ladder. Zoom snaps to fixed rungs (so a value persisted before the ladder
- * existed still resolves to the nearest one), and below full size the card sheds its action buttons
- * and then collapses to a single line before it starts shrinking. Extracted from ScheduleTab so the
- * rung math and the two shed/collapse thresholds are tested without the Compose controls.
+ * The schedule card density ladder: five fixed rungs rather than a continuous zoom -- Compact,
+ * Normal and Detailed, plus one step smaller and one step larger than those. The two outer rungs
+ * reuse their neighbour's name in the UI: they change how much room a card takes, not what it
+ * shows, so a fourth and fifth label would name a distinction that is not there. The persisted setting stays a plain `Int` (`AppSettings.scheduleItemZoomPercent`,
+ * pre-dating this ladder) so a value saved under the old 11-rung 70-150 scheme still resolves to the
+ * nearest rung here. Extracted from ScheduleTab so the rung math is tested without the Compose
+ * controls.
  */
 
-internal val ZOOM_LEVELS = listOf(70, 80, 90, 98, 99, 100, 110, 120, 130, 140, 150)
-private const val ZOOM_HIDE_ACTIONS_BELOW = 100
-private const val ZOOM_SINGLE_LINE_AT_OR_BELOW = 98
+internal enum class ScheduleDensity(val percent: Int) {
+    EXTRA_COMPACT(55),
+    COMPACT(70),
+    NORMAL(100),
+    DETAILED(150),
+    EXTRA_DETAILED(200),
+}
 
-/** The rung nearest [percent], so a value persisted before the ladder existed still resolves. */
-internal fun nearestZoomIndex(percent: Int): Int =
-    ZOOM_LEVELS.indices.minBy { abs(ZOOM_LEVELS[it] - percent) }
+/**
+ * The rung nearest [percent], so a value persisted before or after this ladder still resolves.
+ *
+ * The three middle rungs keep the bands the old 70-150 scheme used, so nothing anyone has saved
+ * moves; the two outer rungs are only reachable by stepping past the ends with the +/- controls.
+ */
+internal fun scheduleDensityFor(percent: Int): ScheduleDensity = when {
+    percent <= 60 -> ScheduleDensity.EXTRA_COMPACT
+    percent <= 90 -> ScheduleDensity.COMPACT
+    percent < 120 -> ScheduleDensity.NORMAL
+    percent <= 175 -> ScheduleDensity.DETAILED
+    else -> ScheduleDensity.EXTRA_DETAILED
+}
 
-/** The next rung up from [percent] (clamped at the top rung). */
-internal fun scheduleZoomIn(percent: Int): Int =
-    ZOOM_LEVELS[(nearestZoomIndex(percent) + 1).coerceAtMost(ZOOM_LEVELS.lastIndex)]
+/** The next rung up from [percent] (clamped at Detailed). */
+internal fun scheduleZoomIn(percent: Int): Int {
+    val density = scheduleDensityFor(percent)
+    val next = ScheduleDensity.entries.getOrElse(density.ordinal + 1) { density }
+    return next.percent
+}
 
-/** The next rung down from [percent] (clamped at the bottom rung). */
-internal fun scheduleZoomOut(percent: Int): Int =
-    ZOOM_LEVELS[(nearestZoomIndex(percent) - 1).coerceAtLeast(0)]
+/** The next rung down from [percent] (clamped at Compact). */
+internal fun scheduleZoomOut(percent: Int): Int {
+    val density = scheduleDensityFor(percent)
+    val prev = ScheduleDensity.entries.getOrElse(density.ordinal - 1) { density }
+    return prev.percent
+}
 
-/** Whether there is a higher rung to zoom into. */
-internal fun scheduleCanZoomIn(percent: Int): Boolean = nearestZoomIndex(percent) < ZOOM_LEVELS.lastIndex
+/** Whether there is a higher rung to move into. */
+internal fun scheduleCanZoomIn(percent: Int): Boolean =
+    scheduleDensityFor(percent) != ScheduleDensity.entries.last()
 
-/** Whether there is a lower rung to zoom out to. */
-internal fun scheduleCanZoomOut(percent: Int): Boolean = nearestZoomIndex(percent) > 0
+/** Whether there is a lower rung to move out to. */
+internal fun scheduleCanZoomOut(percent: Int): Boolean =
+    scheduleDensityFor(percent) != ScheduleDensity.entries.first()
 
-/** At or above full size the cards keep their action buttons; below it they shed them. */
-internal fun scheduleShowCardActions(percent: Int): Boolean = percent >= ZOOM_HIDE_ACTIONS_BELOW
+/** The two smallest rungs show the title alone; the rest add the secondary (grey) detail line. */
+internal fun scheduleShowDetailLine(percent: Int): Boolean = when (scheduleDensityFor(percent)) {
+    ScheduleDensity.EXTRA_COMPACT, ScheduleDensity.COMPACT -> false
+    else -> true
+}
 
-/** At or below the collapse threshold the cards render a single line only. */
-internal fun scheduleSingleLineCards(percent: Int): Boolean = percent <= ZOOM_SINGLE_LINE_AT_OR_BELOW
+/** Only the two largest rungs show the type-kind chip and (when present) the file path. */
+internal fun scheduleShowKindDetails(percent: Int): Boolean = when (scheduleDensityFor(percent)) {
+    ScheduleDensity.DETAILED, ScheduleDensity.EXTRA_DETAILED -> true
+    else -> false
+}

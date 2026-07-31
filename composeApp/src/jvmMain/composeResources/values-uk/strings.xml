@@ -816,6 +816,11 @@
     <string name="settings_export_failed">Не вдалося експортувати налаштування.</string>
     <string name="settings_import_failed">Не вдалося імпортувати налаштування. Файл може бути пошкоджений.</string>
     <string name="schedule_add_files">Додати файли…</string>
+    <string name="schedule_item_count">%1$d елементів</string>
+    <string name="schedule_density_compact">Компактний</string>
+    <string name="schedule_density_normal">Звичайний</string>
+    <string name="schedule_density_detailed">Детальний</string>
+    <string name="schedule_kind_lower_third">Нижня третина</string>
     <string name="schedule_drop_hint">Перетягніть файли сюди, щоб додати до програми</string>
     <string name="schedule_note_placeholder">Додати нотатку…</string>
     <string name="screen_number">Екран %1$d</string>

@@ -816,6 +816,11 @@
     <string name="settings_export_failed">Не ўдалося экспартаваць налады.</string>
     <string name="settings_import_failed">Не ўдалося імпартаваць налады. Файл можа быць пашкоджаны.</string>
     <string name="schedule_add_files">Дадаць файлы…</string>
+    <string name="schedule_item_count">%1$d элементаў</string>
+    <string name="schedule_density_compact">Кампактны</string>
+    <string name="schedule_density_normal">Звычайны</string>
+    <string name="schedule_density_detailed">Падрабязны</string>
+    <string name="schedule_kind_lower_third">Ніжняя траціна</string>
     <string name="schedule_drop_hint">Перацягніце файлы сюды, каб дадаць у праграму</string>
     <string name="schedule_note_placeholder">Дадаць нататку…</string>
     <string name="screen_number">Экран %1$d</string>

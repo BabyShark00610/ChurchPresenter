@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -42,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -133,6 +136,15 @@ fun ColorPickerDialog(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp,
+            // No fixed heightIn cap: this Dialog is a Compose overlay layer bounded by whatever
+            // window hosts it (AddLabelDialog's own fixed 500x400 native window, or the much
+            // taller Options/Settings window), not an independent OS window — so an unscrollable
+            // Column here can silently push the Cancel/OK row past the small AddLabelDialog
+            // window's edge with nowhere to grow. A hardcoded dp cap "fixes" that by capping this
+            // dialog's height in EVERY host, including tall ones with plenty of room, artificially
+            // truncating content that would otherwise fit — the scrollable middle section below is
+            // enough on its own: it consumes only whatever height is actually left over after the
+            // fixed title/button rows, scrolling if that's not enough, sized to nothing if it is.
             modifier = Modifier.width(300.dp),
         ) {
             Column(
@@ -144,6 +156,11 @@ fun ColorPickerDialog(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+
+                Column(
+                    modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
 
                 // ── Saturation / Brightness square ──────────────────────────
                 SvPanel(
@@ -158,7 +175,8 @@ fun ColorPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(8.dp))
+                        .testTag("colorPickerSvPanel"),
                 )
 
                 // ── Hue rainbow bar ─────────────────────────────────────────
@@ -171,7 +189,8 @@ fun ColorPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(24.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .clip(RoundedCornerShape(12.dp))
+                        .testTag("colorPickerHueBar"),
                 )
 
                 // ── Preview swatch + hex text field ─────────────────────────
@@ -230,6 +249,7 @@ fun ColorPickerDialog(
                                     .size(24.dp)
                                     .background(recentColor, RoundedCornerShape(4.dp))
                                     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .testTag("recentColor_$recentHex")
                                     .clickable {
                                         val (h, s, v) = cpColorToHsv(recentColor)
                                         hue = h; saturation = s; brightness = v
@@ -238,6 +258,7 @@ fun ColorPickerDialog(
                             )
                         }
                     }
+                }
                 }
 
                 // ── Buttons ─────────────────────────────────────────────────
@@ -267,7 +288,7 @@ fun ColorPickerDialog(
 // ── Sub-composables ──────────────────────────────────────────────────────────
 
 @Composable
-private fun SvPanel(
+internal fun SvPanel(
     hue: Float,
     saturation: Float,
     brightness: Float,
@@ -314,7 +335,7 @@ private fun SvPanel(
 }
 
 @Composable
-private fun HueBar(
+internal fun HueBar(
     hue: Float,
     onHueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,

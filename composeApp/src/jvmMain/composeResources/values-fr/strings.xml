@@ -513,6 +513,11 @@
     <string name="schedule_drop_hint">Faites glisser des fichiers ici pour les ajouter au programme</string>
     <string name="schedule_note_placeholder">Ajouter une note…</string>
     <string name="schedule_add_files">Ajouter des fichiers…</string>
+    <string name="schedule_item_count">%1$d éléments</string>
+    <string name="schedule_density_compact">Compact</string>
+    <string name="schedule_density_normal">Normal</string>
+    <string name="schedule_density_detailed">Détaillé</string>
+    <string name="schedule_kind_lower_third">Bandeau inférieur</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Ajouter une étiquette</string>

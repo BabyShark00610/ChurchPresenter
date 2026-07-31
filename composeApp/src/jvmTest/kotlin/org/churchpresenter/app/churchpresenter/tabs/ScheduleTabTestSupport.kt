@@ -2,6 +2,8 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -11,7 +13,10 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.TestSingletons
@@ -67,6 +72,8 @@ internal class ScheduleReports {
 @OptIn(ExperimentalTestApi::class)
 internal fun scheduleTab(
     itemZoomPercent: Int = 100,
+    /** Constrains the panel, for the layout tests that need it narrow enough to wrap. */
+    width: Dp? = null,
     seed: ScheduleViewModel.() -> Unit = {},
     block: ComposeUiTest.(vm: ScheduleViewModel, reports: ScheduleReports) -> Unit,
 ) {
@@ -81,6 +88,7 @@ internal fun scheduleTab(
         runComposeUiTest {
             setContent {
                 MaterialTheme {
+                    Box(modifier = if (width != null) Modifier.width(width) else Modifier) {
                     ScheduleTab(
                         scheduleViewModel = vm,
                         itemZoomPercent = itemZoomPercent,
@@ -100,6 +108,7 @@ internal fun scheduleTab(
                         onPresentLowerThird = { reports.presented += it },
                         onPresentDictionary = { reports.presented += it },
                     )
+                    }
                 }
             }
             block(vm, reports)
@@ -171,7 +180,6 @@ internal object ScheduleLabel {
     const val UNDO = "Undo (Ctrl+Z)"
     const val REDO = "Redo (Ctrl+Shift+Z)"
     const val ADD_LABEL = "Add Label"
-    const val REMOVE_SELECTED = "Remove from Schedule"
     const val CLEAR = "Clear Schedule"
     const val ZOOM_IN = "Zoom In"
     const val ZOOM_OUT = "Zoom Out"

@@ -603,6 +603,11 @@
     <string name="tooltip_expand_schedule">Expand Schedule</string>
     <string name="schedule_drop_hint">Drag files here to add to schedule</string>
     <string name="schedule_add_files">Add Files…</string>
+    <string name="schedule_item_count">%1$d items</string>
+    <string name="schedule_density_compact">Compact</string>
+    <string name="schedule_density_normal">Normal</string>
+    <string name="schedule_density_detailed">Detailed</string>
+    <string name="schedule_kind_lower_third">Lower Third</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Add Label</string>

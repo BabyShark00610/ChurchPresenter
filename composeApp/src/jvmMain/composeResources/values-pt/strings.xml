@@ -513,6 +513,11 @@
     <string name="schedule_drop_hint">Arraste arquivos aqui para adicionar ao roteiro</string>
     <string name="schedule_note_placeholder">Adicionar nota…</string>
     <string name="schedule_add_files">Adicionar Arquivos…</string>
+    <string name="schedule_item_count">%1$d itens</string>
+    <string name="schedule_density_compact">Compacto</string>
+    <string name="schedule_density_normal">Normal</string>
+    <string name="schedule_density_detailed">Detalhado</string>
+    <string name="schedule_kind_lower_third">Lower Third</string>
 
     <!-- Add Label Dialog -->
     <string name="add_label">Adicionar Rótulo</string>

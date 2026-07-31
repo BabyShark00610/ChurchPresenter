@@ -1,7 +1,19 @@
 package org.churchpresenter.app.churchpresenter.viewmodel
 
+import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.announcements
+import churchpresenter.composeapp.generated.resources.bible
+import churchpresenter.composeapp.generated.resources.media_tab_title
+import churchpresenter.composeapp.generated.resources.pictures
+import churchpresenter.composeapp.generated.resources.presentation
+import churchpresenter.composeapp.generated.resources.schedule_kind_lower_third
+import churchpresenter.composeapp.generated.resources.songs
+import churchpresenter.composeapp.generated.resources.tab_canvas
+import churchpresenter.composeapp.generated.resources.tab_dictionary
+import churchpresenter.composeapp.generated.resources.tab_web
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.jetbrains.compose.resources.StringResource
 
 /**
  * How a schedule item is labelled in the list — its type glyph, its grey detail line, and an
@@ -38,6 +50,41 @@ internal fun scheduleItemDetailText(item: ScheduleItem): String? = when (item) {
     is ScheduleItem.PresentationItem -> "${item.fileType.uppercase()} - ${item.filePath}"
     is ScheduleItem.MediaItem -> "${item.mediaType.uppercase()} - ${item.mediaUrl}"
     else -> null
+}
+
+/**
+ * Which of a small rotating set of theme colors a row's type-icon chip uses — not a distinct hue per
+ * type (that would mean hardcoded colors, against project standards), but enough variety that
+ * adjacent kinds in a service read as visually different. [ScheduleItem.LabelItem] rows render as
+ * section headers with their own user-chosen color instead, so they never consult this.
+ */
+internal fun scheduleItemPaletteIndex(item: ScheduleItem): Int = when (item) {
+    is ScheduleItem.SongItem -> 0
+    is ScheduleItem.BibleVerseItem -> 1
+    is ScheduleItem.PresentationItem -> 2
+    is ScheduleItem.PictureItem -> 3
+    is ScheduleItem.MediaItem -> 0
+    is ScheduleItem.LowerThirdItem -> 1
+    is ScheduleItem.AnnouncementItem -> 2
+    is ScheduleItem.WebsiteItem -> 3
+    is ScheduleItem.SceneItem -> 0
+    is ScheduleItem.DictionaryItem -> 1
+    is ScheduleItem.LabelItem -> 0
+}
+
+/** The row's type name, shown as a small uppercase chip at the Detailed density. */
+internal fun scheduleItemKindLabel(item: ScheduleItem): StringResource = when (item) {
+    is ScheduleItem.SongItem -> Res.string.songs
+    is ScheduleItem.BibleVerseItem -> Res.string.bible
+    is ScheduleItem.PresentationItem -> Res.string.presentation
+    is ScheduleItem.PictureItem -> Res.string.pictures
+    is ScheduleItem.MediaItem -> Res.string.media_tab_title
+    is ScheduleItem.LowerThirdItem -> Res.string.schedule_kind_lower_third
+    is ScheduleItem.AnnouncementItem -> Res.string.announcements
+    is ScheduleItem.WebsiteItem -> Res.string.tab_web
+    is ScheduleItem.SceneItem -> Res.string.tab_canvas
+    is ScheduleItem.DictionaryItem -> Res.string.tab_dictionary
+    is ScheduleItem.LabelItem -> Res.string.songs // unused — LabelItem renders as a section header
 }
 
 /**
