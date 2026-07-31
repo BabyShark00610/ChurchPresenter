@@ -223,7 +223,17 @@ fun PresentationTab(
     onStopTunnel: () -> Unit = {},
     presentationFrozen: Boolean = false,
     onFreezeToggle: () -> Unit = {},
-    onClearPresentation: () -> Unit = {}
+    onClearPresentation: () -> Unit = {},
+    /**
+     * Whether VLC is usable, which decides only whether the missing-VLC banner is offered for a deck
+     * containing video.
+     *
+     * A parameter rather than a read of the global in `VideoPlayer.kt`, which caches its answer in a
+     * process-wide field — otherwise the banner's presence would depend on whether the machine running
+     * the tests has VLC installed. Same seam `WebTab` uses for `cefInitialized`; the default is the
+     * real check, so callers see no change.
+     */
+    vlcAvailable: Boolean = isVlcAvailable,
 ) {
     val scope = rememberCoroutineScope()
     var showRemoteDialog by remember { mutableStateOf(false) }
@@ -859,7 +869,7 @@ fun PresentationTab(
                     val deckHasVideo = viewModel.deck?.slides
                         ?.any { slide -> slide.layers.any { it is LayerSpec.Media } } == true
                     var vlcBannerDismissed by remember(viewModel.loadGeneration) { mutableStateOf(false) }
-                    if (deckHasVideo && !isVlcAvailable && !vlcBannerDismissed) {
+                    if (deckHasVideo && !vlcAvailable && !vlcBannerDismissed) {
                         VlcMissingBanner(
                             detail = when {
                                 isVlcArchMismatch -> stringResource(Res.string.media_vlc_arch_mismatch)

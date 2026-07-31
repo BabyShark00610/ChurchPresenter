@@ -204,24 +204,35 @@ fun MediaTab(
     /** Instance Link Controller mode — non-null only when connected and controlling. Sends via
      *  PROJECT; only remote URLs (youtube/vimeo) will actually play on the primary — a "local" file
      *  path only exists on this machine's disk, not the primary's, a known limitation. */
-    onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null
+    onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null,
+    /**
+     * Whether VLC is usable, and if not, why.
+     *
+     * Parameters rather than reads of the globals in `VideoPlayer.kt`, which cache their answer in a
+     * process-wide field: what this tab renders would otherwise depend on whether the machine running
+     * it happens to have VLC installed, so neither branch could be tested deterministically. Same seam
+     * `WebTab` uses for `cefInitialized`. The defaults are the real checks, so callers see no change.
+     */
+    vlcAvailable: Boolean = isVlcAvailable,
+    vlcArchMismatch: Boolean = isVlcArchMismatch,
+    vlcLoadFailed: Boolean = isVlcLoadFailed,
 ) {
     val scope = rememberCoroutineScope()
 
-    if (!isVlcAvailable) {
+    if (!vlcAvailable) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
-                    imageVector = if (isVlcArchMismatch || isVlcLoadFailed) Icons.Default.Warning else Icons.Default.Videocam,
+                    imageVector = if (vlcArchMismatch || vlcLoadFailed) Icons.Default.Warning else Icons.Default.Videocam,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
-                    tint = if (isVlcArchMismatch || isVlcLoadFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    tint = if (vlcArchMismatch || vlcLoadFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 )
                 Text(stringResource(Res.string.media_vlc_required), style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = when {
-                        isVlcArchMismatch -> stringResource(Res.string.media_vlc_arch_mismatch)
-                        isVlcLoadFailed -> stringResource(Res.string.media_vlc_load_failed)
+                        vlcArchMismatch -> stringResource(Res.string.media_vlc_arch_mismatch)
+                        vlcLoadFailed -> stringResource(Res.string.media_vlc_load_failed)
                         else -> stringResource(Res.string.media_vlc_install)
                     },
                     style = MaterialTheme.typography.bodyMedium,
