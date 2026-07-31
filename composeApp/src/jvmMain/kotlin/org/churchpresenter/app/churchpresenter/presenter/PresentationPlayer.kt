@@ -92,7 +92,9 @@ class PresentationPlayer(
     private val rasterLock = Any()
 
     private val slideCache = ConcurrentHashMap<Int, SlideLayers>()
-    private val loading = ConcurrentHashMap<Int, Job>()
+    // internal: lets tests wait for an async rasterization attempt to actually finish (success or
+    // failure) instead of polling frame(), which never turns non-null on the failure path.
+    internal val loading = ConcurrentHashMap<Int, Job>()
 
     // Embedded video playback (Keynote or PowerPoint): posterCanvases holds the raw poster
     // bitmap per slide (pre-toComposeImageBitmap, needed as the AWT compositing base — see
