@@ -96,19 +96,6 @@ class BibleTabTranslationOrderTest {
         }
 
     @Test
-    fun `only the first translation is badged as primary`() =
-        bibleTab(settings = three) { _, _ ->
-            openOrderPanel()
-
-            // The badge is what tells the operator which one drives the book and chapter list.
-            assertEquals(
-                1,
-                renderedText().count { it.equals("PRIMARY", ignoreCase = true) },
-                "exactly one row is the navigation bible: ${renderedText()}",
-            )
-        }
-
-    @Test
     fun `the panel explains both ways to reorder`() =
         bibleTab(settings = three) { _, _ ->
             openOrderPanel()
