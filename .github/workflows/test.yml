@@ -121,6 +121,22 @@ jobs:
         working-directory: composeApp/src/jvmMain/appResources/common/ChurchPresenter-LottieGen
         run: chmod +x gradlew && ./gradlew test
 
+      - name: Companion Satellite tests
+        if: always()
+        working-directory: composeApp/src/jvmMain/appResources/common/ChurchPresenter-CompanionSatellite
+        run: chmod +x gradlew && ./gradlew test
+
+      - name: Converter tests
+        if: always()
+        working-directory: composeApp/src/jvmMain/appResources/common/ChurchPresenter-Converter
+        run: chmod +x gradlew && ./gradlew test
+
+      # Kotlin Multiplatform, so the JVM suite is `jvmTest` rather than `test`.
+      - name: Crossword tests
+        if: always()
+        working-directory: composeApp/src/jvmMain/appResources/common/ChurchPresenter-Cross
+        run: chmod +x gradlew && ./gradlew jvmTest
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

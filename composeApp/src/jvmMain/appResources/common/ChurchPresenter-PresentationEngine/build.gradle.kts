@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.3.10"
     kotlin("plugin.serialization") version "2.3.10"
+    jacoco
 }
 
 group = "presentation.engine"
@@ -45,6 +46,7 @@ java {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
     // All rendering must work without a display server — CI-safe on every OS.
     systemProperty("java.awt.headless", "true")
     System.getProperty("updateGolden")?.let { systemProperty("updateGolden", it) }
@@ -76,4 +78,16 @@ tasks.register<JavaExec>("dumpTiming") {
     systemProperty("java.awt.headless", "true")
     (project.findProperty("file") as String?)?.let { args(it) }
     (project.findProperty("out") as String?)?.let { args(it) }
+}
+
+// Coverage for this module's own logic. UI composables and the CLI diagnostic entry points are
+// excluded: the first need a real display, the second exist to print to stdout.
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports { xml.required.set(true); html.required.set(true) }
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir("classes/kotlin/main")) {
+            exclude("**/ui/**", "**/MainKt*", "**/*Dump*", "**/MakeSampleDeck*")
+        }
+    )
 }
