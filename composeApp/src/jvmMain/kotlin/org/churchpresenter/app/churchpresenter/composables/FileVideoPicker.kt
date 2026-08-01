@@ -34,7 +34,8 @@ import kotlin.io.path.absolutePathString
 fun FileVideoPicker(
     videoPath: String,
     onVideoPathChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fileChooser: FileChooser = FileChooser.platformInstance,
 ) {
     val scope = rememberCoroutineScope()
     val videoFilesFilterStr = stringResource(Res.string.video_files_filter)
@@ -43,7 +44,7 @@ fun FileVideoPicker(
             .height(32.dp)
             .clickable {
                 scope.launch {
-                    val file = FileChooser.platformInstance.chooseSingle(
+                    val file = fileChooser.chooseSingle(
                         path = Path(videoPath),
                         filters = listOf(FileNameExtensionFilter(videoFilesFilterStr, "mp4", "mov", "avi", "mkv", "webm")),
                         title = "",
