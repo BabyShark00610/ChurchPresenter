@@ -49,7 +49,10 @@ class CompanionServerDictionaryTest {
         StrongsDictionaryRepository.interlinear.resetForTest()
 
         server = CompanionServer()
-        server.start(port = 39_721)
+        // Its own port: every CompanionServer suite claims a distinct one, and 39_721 is
+        // CompanionServerQaModerationTest's. Sharing it means a bind failure whenever the previous
+        // suite's socket has not finished closing.
+        server.start(port = 39_731)
         port = runBlocking {
             withTimeoutOrNull(10_000) {
                 while (!server.isRunning.value || server.serverUrl.value.isBlank()) {
