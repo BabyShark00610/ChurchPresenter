@@ -79,6 +79,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
 import org.churchpresenter.app.churchpresenter.server.AtemClient
 import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 
 @Composable
 fun AtemSettingsTab(
@@ -483,77 +484,38 @@ fun AtemSettingsTab(
                 Spacer(Modifier.height(8.dp))
 
                 // Key type: drive the API / Go Live key as a downstream keyer instead of upstream
-                Row(
+                LabeledSwitch(
+                    checked = atem.useDownstreamKey,
+                    onCheckedChange = { update { copy(useDownstreamKey = it) } },
+                    label = "Downstream keyer (DSK)",
+                    supporting = "Drive the key as a downstream keyer instead of an upstream keyer (USK)",
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Switch(
-                        checked = atem.useDownstreamKey,
-                        onCheckedChange = { update { copy(useDownstreamKey = it) } }
-                    )
-                    Column {
-                        Text(
-                            "Downstream keyer (DSK)",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "Drive the key as a downstream keyer instead of an upstream keyer (USK)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
+                    spacing = 12.dp,
+                )
 
                 Spacer(Modifier.height(8.dp))
 
                 // Quick upload: one-press upload to the default slots, no dialog
-                Row(
+                LabeledSwitch(
+                    checked = atem.quickUpload,
+                    onCheckedChange = { update { copy(quickUpload = it) } },
+                    label = stringResource(Res.string.atem_quick_upload),
+                    supporting = stringResource(Res.string.atem_quick_upload_hint),
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Switch(
-                        checked = atem.quickUpload,
-                        onCheckedChange = { update { copy(quickUpload = it) } }
-                    )
-                    Column {
-                        Text(
-                            stringResource(Res.string.atem_quick_upload),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            stringResource(Res.string.atem_quick_upload_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
+                    spacing = 12.dp,
+                )
 
                 Spacer(Modifier.height(8.dp))
 
                 // Go Live drives the key: the tab's Go Live runs the timed key sequence
-                Row(
+                LabeledSwitch(
+                    checked = atem.goLiveKey,
+                    onCheckedChange = { update { copy(goLiveKey = it) } },
+                    label = stringResource(Res.string.atem_golive_key),
+                    supporting = stringResource(Res.string.atem_golive_key_hint),
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Switch(
-                        checked = atem.goLiveKey,
-                        onCheckedChange = { update { copy(goLiveKey = it) } }
-                    )
-                    Column {
-                        Text(
-                            stringResource(Res.string.atem_golive_key),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            stringResource(Res.string.atem_golive_key_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
+                    spacing = 12.dp,
+                )
             }
 
             // Kept as its own card so background uploads (Settings → Backgrounds) are never

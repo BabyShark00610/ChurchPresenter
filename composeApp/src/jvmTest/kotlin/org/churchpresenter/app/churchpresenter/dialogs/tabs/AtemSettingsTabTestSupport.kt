@@ -221,21 +221,17 @@ internal fun ComposeUiTest.atemPortBox(): SemanticsNodeInteraction = nodeAt(host
 /**
  * The switch captioned [caption].
  *
- * Every switch on the tab sits to the left of a two-line caption block, so the switch wanted is the
- * one whose row the caption's first line shares.
+ * The switch and its caption are one node: `LabeledSwitch` puts `toggleable` on the row, so the
+ * toggleable node carries both lines of the caption. This used to hunt for a switch positioned to the
+ * left of the caption's first line, which is what the hand-rolled `Row(Switch, Column(Text, Text))`
+ * required — and which also meant clicking the caption did nothing.
  */
 internal fun ComposeUiTest.atemSwitchFor(caption: String): SemanticsNodeInteraction {
-    val label = onAllNodes(SemanticsMatcher("switch caption \"$caption\"") { node ->
-        node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == caption }
-    }).fetchSemanticsNodes(atLeastOneRootRequired = false)
-        .minByOrNull { it.boundsInRoot.top }
-        ?: error("no switch captioned \"$caption\" on screen")
-    val bounds = label.boundsInRoot
     val switch = atemSwitches().fetchSemanticsNodes(atLeastOneRootRequired = false)
-        .filter { it.boundsInRoot.right <= bounds.left }
-        .filter { it.boundsInRoot.top < bounds.bottom && it.boundsInRoot.bottom > bounds.top }
-        .maxByOrNull { it.boundsInRoot.left }
-        ?: error("no switch beside the caption \"$caption\"")
+        .firstOrNull { node ->
+            node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == caption }
+        }
+        ?: error("no switch captioned \"$caption\" on screen")
     return nodeAt(switch.boundsInRoot)
 }
 

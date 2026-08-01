@@ -5,6 +5,7 @@ package org.churchpresenter.app.churchpresenter.dialogs.tabs
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -62,9 +63,12 @@ class SongSettingsTabTest {
 
     @Test
     fun `the title-slide number checkbox is disabled while the title slide is off`() = songTab { get ->
+        // Reports itself disabled rather than simply having no click action. The old code disabled
+        // this by passing a null callback, which removed the action outright; LabeledCheckbox marks
+        // the row disabled instead, which is what a screen reader needs in order to say so.
         onNodeWithTag("song_titleSlideShowSongNumber")
             .performScrollTo()
-            .assertHasNoClickAction()
+            .assertIsNotEnabled()
         assertEquals(
             true,
             get().songSettings.titleSlideShowSongNumber,

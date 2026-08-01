@@ -384,16 +384,14 @@ private fun LeftColumn(
                 range = 0..200,
             )
             Spacer(Modifier.width(4.dp))
-            Checkbox(
+            LabeledCheckbox(
                 checked = settings.bibleSettings.multiTranslationDivider,
                 onCheckedChange = { enabled ->
                     onSettingsChange { app ->
                         app.copy(bibleSettings = app.bibleSettings.copy(multiTranslationDivider = enabled))
                     }
                 },
-            )
-            Text(
-                text = stringResource(Res.string.bible_translation_divider),
+                label = stringResource(Res.string.bible_translation_divider),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
