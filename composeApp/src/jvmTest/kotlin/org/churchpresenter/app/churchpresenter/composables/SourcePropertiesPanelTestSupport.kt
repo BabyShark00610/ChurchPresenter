@@ -34,6 +34,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -61,8 +62,11 @@ import kotlin.test.assertTrue
  *
  * Known gaps — what these tests do not reach, and why:
  *
- *  * **The two Browse buttons** (image and video) open `FileChooser.platformInstance`, a real native
- *    dialog. They are asserted to exist and to be reachable; they are never clicked.
+ *  * **The two Browse buttons** (image and video) default to `FileChooser.platformInstance`, a real
+ *    native dialog — but `SourcePropertiesPanel` takes a `fileChooser` parameter precisely so a test
+ *    can swap that out, which [sourcePanel] does via its own `fileChooser` parameter. See
+ *    `SourcePropertiesImageTest`/`SourcePropertiesVideoTest` for the Browse-button coverage that
+ *    unlocks.
  *  * **Camera and window enumeration** shell out to `ffmpeg`, `system_profiler`, `xprop` and
  *    `osascript`. What they return is the machine's hardware, which no fixture can set, and on macOS
  *    the window listing can raise an accessibility prompt. Those two panels are driven under
@@ -84,6 +88,7 @@ import kotlin.test.assertTrue
 internal fun sourcePanel(
     initial: SceneSource,
     appSettings: AppSettings? = null,
+    fileChooser: FileChooser = FileChooser.platformInstance,
     block: ComposeUiTest.(get: () -> SceneSource) -> Unit,
 ) = runComposeUiTest {
     var current = initial
@@ -93,6 +98,7 @@ internal fun sourcePanel(
             SourcePropertiesPanel(
                 source = state,
                 appSettings = appSettings,
+                fileChooser = fileChooser,
                 onSourceUpdate = { updated -> state = updated; current = updated },
             )
         }

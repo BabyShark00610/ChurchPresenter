@@ -104,8 +104,8 @@ class LowerThirdAtemDialogTest {
             openAtemDialog()
             val afterOpen = queried.size
 
-            // The radio itself, not its label: the labels are bare Text outside the RadioButton,
-            // so clicking the word does nothing (in the app as much as here — worth knowing).
+            // The clip row. Both modes are LabeledRadioButtons now, so the row -- control and label
+            // together -- is the one selectable node, and clicking anywhere on it selects the mode.
             onAllNodes(isSelectable())[1].performClick()
             waitForIdle()
 

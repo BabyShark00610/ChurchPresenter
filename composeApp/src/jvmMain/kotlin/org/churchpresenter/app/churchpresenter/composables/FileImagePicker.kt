@@ -33,7 +33,8 @@ import kotlin.io.path.Path
 fun FileImagePicker(
     imagePath: String, // File path string
     onImagePathChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fileChooser: FileChooser = FileChooser.platformInstance,
 ) {
     val imageFilesFilterStr = stringResource(Res.string.image_files_filter)
     val scope = rememberCoroutineScope()
@@ -43,7 +44,7 @@ fun FileImagePicker(
             .clickable {
                 scope.launch {
                     val path = if (imagePath.isNotEmpty()) Path(imagePath) else Path(System.getProperty(Constants.SystemProperties.USER_HOME))
-                    val file = FileChooser.platformInstance.chooseSingle(
+                    val file = fileChooser.chooseSingle(
                         path = path,
                         filters = listOf(
                             FileNameExtensionFilter(

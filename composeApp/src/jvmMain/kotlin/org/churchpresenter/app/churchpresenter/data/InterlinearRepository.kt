@@ -30,6 +30,23 @@ class InterlinearRepository {
     @Volatile private var greekLoading  = false
     @Volatile private var hebrewLoading = false
 
+    /**
+     * Clears every loaded index and load-once flag, so the next [ensureGreekLoaded]/
+     * [ensureHebrewLoaded] re-reads from `Res.readBytes` instead of treating this instance as
+     * already warm. For tests only: [StrongsDictionaryRepository] holds one instance of this class
+     * for the process lifetime, so whichever test loads it first (real data or a stub) otherwise
+     * wins for every test that runs after it in the same JVM.
+     */
+    internal fun resetForTest() {
+        greekIndex.clear(); hebrewIndex.clear()
+        greekBookIndex.clear(); hebrewBookIndex.clear()
+        greekChapterIndex.clear(); hebrewChapterIndex.clear()
+        greekChapterVerses.clear(); hebrewChapterVerses.clear()
+        greekVerseIndex.clear(); hebrewVerseIndex.clear()
+        greekLoaded = false; hebrewLoaded = false
+        greekLoading = false; hebrewLoading = false
+    }
+
     @OptIn(ExperimentalResourceApi::class)
     suspend fun ensureGreekLoaded() {
         if (greekLoaded || greekLoading) return

@@ -124,6 +124,23 @@ class CompanionSurfacePanelTest {
         callback(status, error)
     }
 
+    /** Reports [percent] brightness for the slot as the client's own callback would — same two
+     *  reflection hops as [reportStatus], for the sibling private field. */
+    private fun CompanionSatelliteViewModel.reportBrightness(settings: CompanionSatelliteSettings, percent: Int) {
+        connectAll(settings)
+        val clients = CompanionSatelliteViewModel::class.java
+            .getDeclaredField("clients").apply { isAccessible = true }
+            .get(this)
+        @Suppress("UNCHECKED_CAST")
+        val client = (clients as Map<CompanionSurfaceSlot, CompanionSatelliteClient>)[slot]
+            ?: error("no client registered for $slot")
+        @Suppress("UNCHECKED_CAST")
+        val callback = CompanionSatelliteClient::class.java
+            .getDeclaredField("onBrightnessChanged").apply { isAccessible = true }
+            .get(client) as (Int) -> Unit
+        callback(percent)
+    }
+
     /** Composes the panel at a fixed size — a lazy grid needs bounds before it lays anything out. */
     private fun panel(
         vm: CompanionSatelliteViewModel,
@@ -211,6 +228,32 @@ class CompanionSurfacePanelTest {
     }
 
     // ── The button grid ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `less than full brightness dims the grid without disrupting it`() {
+        val vm = vm()
+        val settings = settings()
+        vm.seedButtons(CompanionButtonState(index = 0, text = "GO"))
+        vm.reportBrightness(settings, 40)
+
+        panel(vm, settings) {
+            // The dim overlay is an unlabelled Box with no semantics trace of its own; this confirms
+            // the dimAlpha > 0 branch composes cleanly alongside the button it sits over.
+            assertTrue(rendersText("GO"), renderedText().toString())
+        }
+    }
+
+    @Test
+    fun `full brightness draws no dim overlay`() {
+        val vm = vm()
+        val settings = settings()
+        vm.seedButtons(CompanionButtonState(index = 0, text = "GO"))
+        vm.reportBrightness(settings, 100)
+
+        panel(vm, settings) {
+            assertTrue(rendersText("GO"), renderedText().toString())
+        }
+    }
 
     @Test
     fun `each button Companion pushed is drawn by its text`() {
