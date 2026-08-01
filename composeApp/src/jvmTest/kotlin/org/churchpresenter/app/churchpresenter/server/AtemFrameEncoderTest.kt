@@ -69,6 +69,14 @@ class AtemFrameEncoderTest {
         assertTrue(a.contentEquals(b), "same pixels must encode identically every time")
     }
 
+    @Test
+    fun `hd heights use the same four-bytes-per-pixel contract as sd`() {
+        // height >= 720 switches the coefficients from BT.601 to BT.709; only the size contract is
+        // asserted here, matching this file's determinism-over-arithmetic style.
+        val out = AtemFrameEncoder.argbToYuv422(4, 720, IntArray(4 * 720) { 0xFF204060.toInt() })
+        assertEquals(4 * 720 * 4, out.size)
+    }
+
     // ── encodeRLE ───────────────────────────────────────────────────────────────
 
     @Test
@@ -100,5 +108,38 @@ class AtemFrameEncoderTest {
         }.array()
         val out = AtemFrameEncoder.encodeRLE(mixed)
         assertTrue(out.size <= mixed.size, "RLE output must never exceed its input length")
+    }
+
+    @Test
+    fun `a run of exactly three identical blocks is left uncompressed`() {
+        // The header only pays off from four repeats on: three copies (8*3=24B) cost the same as
+        // the header+count+block record (also 24B), so the threshold is deliberately above three.
+        val block = 0x99AABBCCDDEEFF00uL.toLong()
+        val out = AtemFrameEncoder.encodeRLE(uniformBlocks(3, block))
+        assertEquals(24, out.size)
+        assertEquals(block, out.longAt(0))
+        assertEquals(block, out.longAt(8))
+        assertEquals(block, out.longAt(16))
+    }
+
+    @Test
+    fun `pending literal blocks flush before a following run is emitted`() {
+        // Two distinct blocks followed by a run of four: the literals must reach the output ahead
+        // of the run's header, verbatim, not be swallowed by the run they happen to precede.
+        val x = 0x1111111111111111L
+        val y = 0x2222222222222222L
+        val z = 0x3333333333333333L
+        val buf = ByteBuffer.allocate(6 * 8).apply {
+            putLong(x); putLong(y); putLong(z); putLong(z); putLong(z); putLong(z)
+        }.array()
+
+        val out = AtemFrameEncoder.encodeRLE(buf)
+
+        assertEquals(40, out.size, "2 literal blocks (16B) + header+count+block (24B)")
+        assertEquals(x, out.longAt(0))
+        assertEquals(y, out.longAt(8))
+        assertEquals(AtemFrameEncoder.RLE_HEADER, out.longAt(16))
+        assertEquals(4L, out.longAt(24))
+        assertEquals(z, out.longAt(32))
     }
 }

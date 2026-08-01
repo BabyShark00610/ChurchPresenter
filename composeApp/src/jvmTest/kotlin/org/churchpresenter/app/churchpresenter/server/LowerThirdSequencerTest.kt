@@ -117,4 +117,20 @@ class LowerThirdSequencerTest {
         )
         assertNull(keyError, "with no key control requested there is no ATEM error to report")
     }
+
+    @Test
+    fun `a sequence that reaches its natural end clears itself without an explicit stop`() = runBlocking {
+        val cleared = Channel<Unit>(capacity = 1)
+        val collector = launch { LowerThirdSequencer.onClear.collect { cleared.trySend(Unit) } }
+        LowerThirdSequencer.onClear.subscriptionCount.first { it > 0 }
+
+        LowerThirdSequencer.run(
+            name = "AutoEnd", json = "{}", durationMs = 0L, pauseAtFrame = false, pauseDurationMs = 0L,
+            mixEffect = null, keyer = null, atem = noAtem, autoEnd = true
+        )
+
+        withTimeout(1_000) { cleared.receive() }
+        collector.cancel()
+        assertEquals("idle", LowerThirdSequencer.status.value)
+    }
 }
