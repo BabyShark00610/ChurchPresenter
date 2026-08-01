@@ -253,6 +253,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
     /** True while the socket is open (keepalive nulls it when the ATEM goes silent). */
     fun isAlive(): Boolean = socket != null
 
+    /** Packets sent but not yet acknowledged by the ATEM — the reliable layer's backlog. */
+    internal fun inFlightCount(): Int = inFlight.size
+
     /**
      * Background loop that keeps a persistent session alive: every [KEEPALIVE_INTERVAL_MS]
      * it drains and ACKs whatever the ATEM has sent (the ATEM drops a client that stops
@@ -601,8 +604,21 @@ class AtemClient(val host: String, val port: Int = 9910) {
     internal fun u16(b: ByteArray, offset: Int): Int =
         ((b[offset].toInt() and 0xFF) shl 8) or (b[offset + 1].toInt() and 0xFF)
 
+    /**
+     * Write one packet to the switcher.
+     *
+     * Fails loudly on a closed socket rather than dropping the packet. This used to be
+     * `socket?.send(...)`, which silently discarded every command sent after a disconnect —
+     * the caller then waited out its full 8s command timeout and reported "ATEM did not respond
+     * with LKOB", blaming the device for what is entirely a local lifecycle error. The
+     * best-effort unlock in the upload paths already wraps its send in `runCatching`, so a
+     * genuinely dead socket there still cannot mask the original failure.
+     */
     private fun sendRaw(bytes: ByteArray) {
-        socket?.send(DatagramPacket(bytes, bytes.size, address, port))
+        val sock = socket ?: throw IllegalStateException(
+            "ATEM connection to $host:$port is closed — connect() first (or the keepalive dropped it)"
+        )
+        sock.send(DatagramPacket(bytes, bytes.size, address, port))
     }
 
     internal fun buildCommandBytes(name: String, data: ByteArray): ByteArray {
