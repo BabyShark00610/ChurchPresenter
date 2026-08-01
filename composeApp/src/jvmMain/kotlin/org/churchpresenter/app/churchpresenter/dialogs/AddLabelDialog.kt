@@ -39,6 +39,11 @@ import churchpresenter.composeapp.generated.resources.label_text
 import churchpresenter.composeapp.generated.resources.ok
 import churchpresenter.composeapp.generated.resources.text_color
 import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
+import org.churchpresenter.app.churchpresenter.composables.LabelColorColumns
+import org.churchpresenter.app.churchpresenter.composables.LabelColors
+import org.churchpresenter.app.churchpresenter.composables.RecentLabelColors
+import org.churchpresenter.app.churchpresenter.composables.matches
+import org.churchpresenter.app.churchpresenter.composables.themeLabelPresets
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -47,8 +52,9 @@ fun AddLabelDialog(
     onDismiss: () -> Unit,
     onConfirm: (text: String, textColor: String, backgroundColor: String) -> Unit,
     existingText: String = "",
-    existingTextColor: String = "#FFFFFF",
-    existingBackgroundColor: String = "#2196F3",
+    /** Blank means "no colour chosen yet" — the content resolves it from the theme. */
+    existingTextColor: String = "",
+    existingBackgroundColor: String = "",
     isEdit: Boolean = false
 ) {
     if (!isVisible) return
@@ -98,13 +104,19 @@ internal fun AddLabelDialogContent(
     onDismiss: () -> Unit,
     onConfirm: (text: String, textColor: String, backgroundColor: String) -> Unit,
     existingText: String = "",
-    existingTextColor: String = "#FFFFFF",
-    existingBackgroundColor: String = "#2196F3",
+    existingTextColor: String = "",
+    existingBackgroundColor: String = "",
     isEdit: Boolean = false
 ) {
+    // A new label starts on the theme's own first preset, which is the tone an ordinary schedule
+    // card is drawn in -- a label is a heading *in* the list, not a slab across it. It still reads
+    // as one: the row draws its text bold and letter-spaced with the accent bar beside it.
+    val presets = themeLabelPresets()
+    val themeBackground = presets.first().background
+    val themeText = presets.first().text
     var labelText by remember { mutableStateOf(existingText) }
-    var textColor by remember { mutableStateOf(existingTextColor) }
-    var backgroundColor by remember { mutableStateOf(existingBackgroundColor) }
+    var textColor by remember { mutableStateOf(existingTextColor.ifBlank { themeText }) }
+    var backgroundColor by remember { mutableStateOf(existingBackgroundColor.ifBlank { themeBackground }) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -152,6 +164,17 @@ internal fun AddLabelDialogContent(
                         singleLine = true,
                     )
                 }
+
+                // Theme presets and this user's own history, side by side: pick a pair in one
+                // click, or fall through to the two pickers below for something new.
+                LabelColorColumns(
+                    presets = presets,
+                    recents = RecentLabelColors.combos.toList(),
+                    onPick = { picked ->
+                        backgroundColor = picked.background
+                        textColor = picked.text
+                    },
+                )
 
                 // Text color picker
                 Row(
@@ -211,6 +234,10 @@ internal fun AddLabelDialogContent(
                     shape = RoundedCornerShape(6.dp),
                     onClick = {
                         if (labelText.isNotBlank()) {
+                            val chosen = LabelColors(background = backgroundColor, text = textColor)
+                            // A preset is not history: it has its own column already, and
+                            // recording it would push out the custom pairs this list is for.
+                            if (presets.none { it.matches(chosen) }) RecentLabelColors.add(chosen)
                             onConfirm(labelText.trim(), textColor, backgroundColor)
                             onDismiss()
                         }

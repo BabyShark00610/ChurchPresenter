@@ -4,6 +4,7 @@ import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -419,24 +420,34 @@ private val MochaColorScheme = darkColorScheme(
     inverseOnSurface = Color.Black,
 )
 
+/**
+ * The palette a [ThemeMode] paints with, without applying it.
+ *
+ * Lets one theme's colours be offered inside another — the schedule-label presets show every
+ * theme's own accent so an operator on Dark can still colour a section Ocean-blue or Forest-green.
+ * [ThemeMode.SYSTEM] is not a palette of its own; it resolves to Light or Dark, so callers listing
+ * palettes skip it.
+ */
+internal fun colorSchemeFor(themeMode: ThemeMode, systemDark: Boolean = true): ColorScheme = when (themeMode) {
+    ThemeMode.LIGHT -> LightColorScheme
+    ThemeMode.DARK -> DarkColorScheme
+    ThemeMode.SYSTEM -> if (systemDark) DarkColorScheme else LightColorScheme
+    ThemeMode.WARM -> WarmColorScheme
+    ThemeMode.OCEAN -> OceanColorScheme
+    ThemeMode.ROSE -> RoseColorScheme
+    ThemeMode.MIDNIGHT -> MidnightColorScheme
+    ThemeMode.FOREST -> ForestColorScheme
+    ThemeMode.MOCHA -> MochaColorScheme
+    ThemeMode.STUDIO -> StudioColorScheme
+}
+
 @Composable
 fun ChurchPresenterTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
-    val colorScheme = when (themeMode) {
-        ThemeMode.LIGHT -> LightColorScheme
-        ThemeMode.DARK -> DarkColorScheme
-        ThemeMode.SYSTEM -> if (systemDark) DarkColorScheme else LightColorScheme
-        ThemeMode.WARM -> WarmColorScheme
-        ThemeMode.OCEAN -> OceanColorScheme
-        ThemeMode.ROSE -> RoseColorScheme
-        ThemeMode.MIDNIGHT -> MidnightColorScheme
-        ThemeMode.FOREST -> ForestColorScheme
-        ThemeMode.MOCHA -> MochaColorScheme
-        ThemeMode.STUDIO -> StudioColorScheme
-    }
+    val colorScheme = colorSchemeFor(themeMode, systemDark)
 
     MaterialTheme(
         colorScheme = colorScheme,
