@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.composables
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
@@ -16,9 +17,13 @@ import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -42,9 +47,9 @@ import kotlin.test.assertTrue
  * way to make `realWindowCount > 0`.
  *
  * Media transport controls and the audio equalizer are gated behind `LocalMediaViewModel` being
- * non-null; only its default-null (hidden) state is tested, matching how every hardware-adjacent
- * dependency has been scoped elsewhere this session — constructing a real `MediaViewModel` pulls
- * in the same VLC/audio stack already excluded for `SceneSourceRenderer`'s Video source.
+ * non-null. `MediaViewModel` itself is plain state (no VLC/audio stack — that only lives in the
+ * `VideoPlayer`/`SoftwareVideoPlayer` composables that read it), so a real instance is used below
+ * to cover the loaded/playing states too.
  */
 @OptIn(ExperimentalTestApi::class)
 class LivePreviewPanelTest {
@@ -353,5 +358,132 @@ class LivePreviewPanelTest {
         }
         // No crash, and the panel still renders its one dev-fallback preview normally.
         onNodeWithText("Screen 1").assertExists()
+    }
+
+    // ── Media controls (loaded MediaViewModel) ───────────────────────────────────────────────
+
+    @Test
+    fun `media controls do not render when nothing is presenting, even with loaded media`() = runComposeUiTest {
+        val pm = PresenterManager()
+        val media = MediaViewModel().apply { loadMedia("/tmp/song.mp3", "audio") }
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalMediaViewModel provides media) {
+                    LivePreviewPanel(presenterManager = pm, appSettings = AppSettings())
+                }
+            }
+        }
+        onNodeWithContentDescription("Play").assertDoesNotExist()
+        onNodeWithContentDescription("Pause").assertDoesNotExist()
+    }
+
+    @Test
+    fun `media controls render the Play icon and no time label while paused with no duration yet`() = runComposeUiTest {
+        val pm = PresenterManager()
+        pm.setPresentingMode(Presenting.MEDIA)
+        val media = MediaViewModel().apply { loadMedia("/tmp/song.mp3", "audio") }
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalMediaViewModel provides media) {
+                    LivePreviewPanel(presenterManager = pm, appSettings = AppSettings())
+                }
+            }
+        }
+        onNodeWithContentDescription("Play").assertExists()
+        onNodeWithContentDescription("Pause").assertDoesNotExist()
+        onNodeWithText("0:00").assertDoesNotExist()
+    }
+
+    @Test
+    fun `media controls show a formatted time label once duration is known`() = runComposeUiTest {
+        val pm = PresenterManager()
+        pm.setPresentingMode(Presenting.MEDIA)
+        val media = MediaViewModel().apply {
+            loadMedia("/tmp/song.mp3", "audio")
+            setDuration(90_000L)
+        }
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalMediaViewModel provides media) {
+                    LivePreviewPanel(presenterManager = pm, appSettings = AppSettings())
+                }
+            }
+        }
+        onNodeWithText("0:00").assertExists("with a known duration, the slider shows the current position as a time label")
+    }
+
+    @Test
+    fun `clicking the media play button plays and swaps the icon to Pause`() = runComposeUiTest {
+        val pm = PresenterManager()
+        pm.setPresentingMode(Presenting.MEDIA)
+        val media = MediaViewModel().apply { loadMedia("/tmp/song.mp3", "audio") }
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalMediaViewModel provides media) {
+                    LivePreviewPanel(presenterManager = pm, appSettings = AppSettings())
+                }
+            }
+        }
+        onNodeWithContentDescription("Play").performClick()
+        assertTrue(media.isPlaying)
+        onNodeWithContentDescription("Pause").assertExists()
+    }
+
+    @Test
+    fun `clicking the media pause button while playing pauses and swaps the icon back to Play`() = runComposeUiTest {
+        val pm = PresenterManager()
+        pm.setPresentingMode(Presenting.MEDIA)
+        val media = MediaViewModel().apply {
+            loadMedia("/tmp/song.mp3", "audio")
+            play()
+        }
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalMediaViewModel provides media) {
+                    LivePreviewPanel(presenterManager = pm, appSettings = AppSettings())
+                }
+            }
+        }
+        onNodeWithContentDescription("Pause").performClick()
+        assertFalse(media.isPlaying)
+        onNodeWithContentDescription("Play").assertExists()
+    }
+
+    @Test
+    fun `the audio equalizer renders without error while media is loaded and playing`() = runComposeUiTest {
+        val pm = PresenterManager()
+        pm.setPresentingMode(Presenting.MEDIA)
+        val media = MediaViewModel().apply {
+            loadMedia("/tmp/song.mp3", "audio")
+            play()
+        }
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalMediaViewModel provides media) {
+                    LivePreviewPanel(presenterManager = pm, appSettings = AppSettings())
+                }
+            }
+        }
+        // No dedicated semantics for the equalizer bars themselves — this confirms that branch
+        // composes without crashing, alongside the panel's own always-present content.
+        onNodeWithText("Screen 1").assertExists()
+    }
+
+    // ── STT ────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `STT mode with a real, unconnected STTManager renders the STT presenter without error`() = runComposeUiTest {
+        val pm = PresenterManager()
+        pm.setPresentingMode(Presenting.STT)
+        setContent {
+            MaterialTheme {
+                LivePreviewPanel(presenterManager = pm, appSettings = AppSettings(), sttManager = STTManager())
+            }
+        }
+        // STTManager starts with no segments/in-progress text, so there's no caption text to
+        // assert on directly — this confirms the sttManager != null branch composes cleanly,
+        // alongside the panel's own always-present content and Live badge.
+        onNodeWithText("Screen 1").assertExists()
+        onNodeWithText("Live").assertExists()
     }
 }

@@ -36,7 +36,7 @@ object SharedCameraFrameCache {
     )
 
     /** Build a unique key for a camera source. */
-    private fun keyFor(source: SceneSource.CameraSource): String {
+    internal fun keyFor(source: SceneSource.CameraSource): String {
         return if (source.isDeckLink && source.deckLinkIndex >= 0) {
             "decklink:${source.deckLinkIndex}:${source.videoFormat}:${source.videoConnection}"
         } else {
@@ -182,38 +182,9 @@ object SharedCameraFrameCache {
         val path = source.devicePath
         System.err.println("[Camera] Starting camera capture for device: $path, format: ${source.videoFormat.ifEmpty { "auto" }}")
 
-        // Parse video format into ffmpeg input args (must come before -i)
-        val formatArgs = if (source.videoFormat.isNotEmpty()) {
-            val match = Regex("""(\d+)x(\d+)@(\d+)""").find(source.videoFormat)
-            if (match != null) {
-                val (w, h, fps) = match.destructured
-                listOf("-video_size", "${w}x${h}", "-framerate", fps)
-            } else emptyList()
-        } else emptyList()
-
-        val command = when {
-            path.startsWith("dshow://") -> {
-                val deviceName = path.removePrefix("dshow://").removePrefix(":dshow-vdev=")
-                listOf("ffmpeg", "-f", "dshow") + formatArgs + listOf("-i", "video=$deviceName",
-                    "-an", "-vf", "fps=30", "-pix_fmt", "bgra",
-                    "-f", "rawvideo", "-")
-            }
-            path.startsWith("v4l2://") -> {
-                val device = path.removePrefix("v4l2://")
-                listOf("ffmpeg", "-f", "v4l2") + formatArgs + listOf("-i", device,
-                    "-an", "-vf", "fps=30", "-pix_fmt", "bgra",
-                    "-f", "rawvideo", "-")
-            }
-            path.startsWith("avfoundation://") -> {
-                val index = path.removePrefix("avfoundation://")
-                listOf("ffmpeg", "-f", "avfoundation") + formatArgs + listOf("-i", "$index:none",
-                    "-an", "-vf", "fps=30", "-pix_fmt", "bgra",
-                    "-f", "rawvideo", "-")
-            }
-            else -> {
-                System.err.println("[Camera] Unknown device path scheme: $path")
-                return
-            }
+        val command = buildFfmpegCommand(source) ?: run {
+            System.err.println("[Camera] Unknown device path scheme: $path")
+            return
         }
 
         var consecutiveFailures = 0
@@ -257,20 +228,14 @@ object SharedCameraFrameCache {
             val videoDims = java.util.concurrent.atomic.AtomicReference<Pair<Int, Int>?>(null)
             val stderrJob = CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
                 try {
-                    val dimPattern = Regex("""(\d{2,5})x(\d{2,5})""")
                     process.errorStream.bufferedReader().useLines { lines ->
                         lines.forEach { line ->
                             synchronized(stderrLines) {
                                 stderrLines.add(line)
                                 if (stderrLines.size > 50) stderrLines.removeAt(0)
                             }
-                            if (videoDims.get() == null && line.contains("Video:") && line.contains("bgra")) {
-                                val m = dimPattern.find(line.substringAfter("bgra"))
-                                if (m != null) {
-                                    val w = m.groupValues[1].toIntOrNull() ?: 0
-                                    val h = m.groupValues[2].toIntOrNull() ?: 0
-                                    if (w > 0 && h > 0) videoDims.set(Pair(w, h))
-                                }
+                            if (videoDims.get() == null) {
+                                parseFfmpegVideoDimensions(line)?.let { videoDims.set(it) }
                             }
                         }
                     }
@@ -318,15 +283,7 @@ object SharedCameraFrameCache {
                 if (!ok) break
 
                 withContext(Dispatchers.IO) {
-                    var bi = 0
-                    for (pi in pixelBuf.indices) {
-                        val b = frameBuf[bi].toInt() and 0xFF
-                        val g = frameBuf[bi + 1].toInt() and 0xFF
-                        val r = frameBuf[bi + 2].toInt() and 0xFF
-                        val a = frameBuf[bi + 3].toInt() and 0xFF
-                        pixelBuf[pi] = (a shl 24) or (r shl 16) or (g shl 8) or b
-                        bi += 4
-                    }
+                    bgraBytesToArgbPixels(frameBuf, pixelBuf)
                 }
 
                 val img = java.awt.image.BufferedImage(videoW, videoH, java.awt.image.BufferedImage.TYPE_INT_ARGB)
@@ -369,6 +326,73 @@ object SharedCameraFrameCache {
                 tags = mapOf("subsystem" to "camera")
             )
         }
+    }
+}
+
+/**
+ * Builds the ffmpeg command line for capturing [source]'s device as raw BGRA video, or `null` when
+ * [SceneSource.CameraSource.devicePath] doesn't match a recognized OS capture scheme
+ * (`dshow://`, `v4l2://`, `avfoundation://`).
+ */
+internal fun buildFfmpegCommand(source: SceneSource.CameraSource): List<String>? {
+    val path = source.devicePath
+
+    // Parse video format into ffmpeg input args (must come before -i)
+    val formatArgs = if (source.videoFormat.isNotEmpty()) {
+        val match = Regex("""(\d+)x(\d+)@(\d+)""").find(source.videoFormat)
+        if (match != null) {
+            val (w, h, fps) = match.destructured
+            listOf("-video_size", "${w}x${h}", "-framerate", fps)
+        } else emptyList()
+    } else emptyList()
+
+    return when {
+        path.startsWith("dshow://") -> {
+            val deviceName = path.removePrefix("dshow://").removePrefix(":dshow-vdev=")
+            listOf("ffmpeg", "-f", "dshow") + formatArgs + listOf("-i", "video=$deviceName",
+                "-an", "-vf", "fps=30", "-pix_fmt", "bgra",
+                "-f", "rawvideo", "-")
+        }
+        path.startsWith("v4l2://") -> {
+            val device = path.removePrefix("v4l2://")
+            listOf("ffmpeg", "-f", "v4l2") + formatArgs + listOf("-i", device,
+                "-an", "-vf", "fps=30", "-pix_fmt", "bgra",
+                "-f", "rawvideo", "-")
+        }
+        path.startsWith("avfoundation://") -> {
+            val index = path.removePrefix("avfoundation://")
+            listOf("ffmpeg", "-f", "avfoundation") + formatArgs + listOf("-i", "$index:none",
+                "-an", "-vf", "fps=30", "-pix_fmt", "bgra",
+                "-f", "rawvideo", "-")
+        }
+        else -> null
+    }
+}
+
+/**
+ * Parses ffmpeg's own `-list_options`/capture stderr line announcing the negotiated raw BGRA video
+ * stream — e.g. `Stream #0:0: Video: rawvideo (BGRA / ...), bgra, 1280x720, ...` — into (width,
+ * height), or `null` when this line isn't that announcement, or the dimensions in it are invalid.
+ */
+internal fun parseFfmpegVideoDimensions(stderrLine: String): Pair<Int, Int>? {
+    if (!stderrLine.contains("Video:") || !stderrLine.contains("bgra")) return null
+    val match = Regex("""(\d{2,5})x(\d{2,5})""").find(stderrLine.substringAfter("bgra")) ?: return null
+    val w = match.groupValues[1].toIntOrNull() ?: 0
+    val h = match.groupValues[2].toIntOrNull() ?: 0
+    return if (w > 0 && h > 0) Pair(w, h) else null
+}
+
+/** Converts a raw BGRA frame buffer (4 bytes/pixel, as ffmpeg emits it) into [pixelBuf]'s packed
+ *  ARGB ints, in place. [frameBuf] must hold at least `pixelBuf.size * 4` bytes. */
+internal fun bgraBytesToArgbPixels(frameBuf: ByteArray, pixelBuf: IntArray) {
+    var bi = 0
+    for (pi in pixelBuf.indices) {
+        val b = frameBuf[bi].toInt() and 0xFF
+        val g = frameBuf[bi + 1].toInt() and 0xFF
+        val r = frameBuf[bi + 2].toInt() and 0xFF
+        val a = frameBuf[bi + 3].toInt() and 0xFF
+        pixelBuf[pi] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        bi += 4
     }
 }
 

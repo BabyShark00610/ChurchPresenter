@@ -221,7 +221,7 @@ fun Modifier.focusRescuePressHook(state: FocusLostRescueState): Modifier = point
 
 /** Deepest AWT Canvas under [c] — the Skiko/Compose render surface that must own AWT
  *  keyboard focus for key events to reach Compose at all. */
-private fun findAwtCanvas(c: Component): Component? = when (c) {
+internal fun findAwtCanvas(c: Component): Component? = when (c) {
     is Canvas -> c
     is Container -> c.components.firstNotNullOfOrNull { findAwtCanvas(it) }
     else -> null

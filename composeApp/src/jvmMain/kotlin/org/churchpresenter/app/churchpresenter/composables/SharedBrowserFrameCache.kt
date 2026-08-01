@@ -163,13 +163,8 @@ object SharedBrowserFrameCache {
                     })
                 }
                 if (customCss.isNotBlank()) {
-                    val escapedCss = customCss
-                        .replace("\\", "\\\\")
-                        .replace("'", "\\'")
-                        .replace("\n", "\\n")
-                        .replace("\r", "")
                     cdp.sendAsync("Runtime.evaluate", buildJsonObject {
-                        put("expression", "var s=document.createElement('style');s.textContent='$escapedCss';document.head.appendChild(s);")
+                        put("expression", "var s=document.createElement('style');s.textContent='${escapeForJsStringLiteral(customCss)}';document.head.appendChild(s);")
                     })
                 }
             } catch (_: Exception) {}
@@ -188,7 +183,7 @@ object SharedBrowserFrameCache {
 
     // ── Browser Discovery ──────────────────────────────────────────
 
-    private fun findBrowserExecutable(): String? {
+    internal fun findBrowserExecutable(): String? {
         val osName = System.getProperty("os.name", "").lowercase()
         val isWindows = osName.contains("win")
 
@@ -242,7 +237,7 @@ object SharedBrowserFrameCache {
         return null
     }
 
-    private fun findFreePort(): Int {
+    internal fun findFreePort(): Int {
         return ServerSocket(0).use { it.localPort }
     }
 
@@ -319,24 +314,7 @@ object SharedBrowserFrameCache {
 
         System.err.println("[BrowserSource] Launching headless browser: $browserPath on port $port (userData=$userDataDir)")
 
-        val command = listOf(
-            browserPath,
-            "--headless=new",
-            "--remote-debugging-port=$port",
-            "--user-data-dir=${userDataDir.absolutePath}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-extensions",
-            "--disable-popup-blocking",
-            "--disable-translate",
-            "--disable-gpu",
-            "--disable-software-rasterizer",
-            "--no-sandbox",
-            "--mute-audio",
-            "--window-size=$renderWidth,$renderHeight",
-            "--window-position=-32000,-32000",
-            "about:blank"
-        )
+        val command = buildBrowserLaunchCommand(browserPath, port, userDataDir.absolutePath, renderWidth, renderHeight)
 
         val process = withContext(Dispatchers.IO) {
             ProcessBuilder(command).redirectErrorStream(true).start()
@@ -436,13 +414,8 @@ object SharedBrowserFrameCache {
                 })
             }
             if (customCss.isNotBlank()) {
-                val escapedCss = customCss
-                    .replace("\\", "\\\\")
-                    .replace("'", "\\'")
-                    .replace("\n", "\\n")
-                    .replace("\r", "")
                 cdp.sendAsync("Runtime.evaluate", buildJsonObject {
-                    put("expression", "var s=document.createElement('style');s.textContent='$escapedCss';document.head.appendChild(s);")
+                    put("expression", "var s=document.createElement('style');s.textContent='${escapeForJsStringLiteral(customCss)}';document.head.appendChild(s);")
                 })
             }
         }
@@ -563,7 +536,7 @@ object SharedBrowserFrameCache {
         entry.frame.value = null
     }
 
-    private fun killProcess(process: Process) {
+    internal fun killProcess(process: Process) {
         try {
             if (isWindows) {
                 try {
@@ -583,7 +556,7 @@ object SharedBrowserFrameCache {
 
     // ── CDP WebSocket Connection ───────────────────────────────────
 
-    private class CdpConnection {
+    internal class CdpConnection {
         private var ws: WebSocket? = null
         private val msgId = AtomicInteger(0)
         private val pending = ConcurrentHashMap<Int, CompletableFuture<JsonObject?>>()
@@ -717,3 +690,36 @@ object SharedBrowserFrameCache {
         }
     }
 }
+
+/** Builds the headless-browser launch command line for a [SharedBrowserFrameCache] capture. */
+internal fun buildBrowserLaunchCommand(
+    browserPath: String,
+    debugPort: Int,
+    userDataDir: String,
+    renderWidth: Int,
+    renderHeight: Int,
+): List<String> = listOf(
+    browserPath,
+    "--headless=new",
+    "--remote-debugging-port=$debugPort",
+    "--user-data-dir=$userDataDir",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-extensions",
+    "--disable-popup-blocking",
+    "--disable-translate",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--no-sandbox",
+    "--mute-audio",
+    "--window-size=$renderWidth,$renderHeight",
+    "--window-position=-32000,-32000",
+    "about:blank"
+)
+
+/** Escapes text for safe interpolation into a single-quoted JS string literal injected via CDP. */
+internal fun escapeForJsStringLiteral(text: String): String = text
+    .replace("\\", "\\\\")
+    .replace("'", "\\'")
+    .replace("\n", "\\n")
+    .replace("\r", "")
