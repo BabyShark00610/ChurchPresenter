@@ -23,22 +23,29 @@ import kotlin.test.assertTrue
  * lottie's own w/h/timing, clamping to 1920, and the aspect-match branch that chooses between
  * "share one upsized entry" and "letterbox into the raster".
  *
- * All functions here are pure (no disk, no render). The object's one-time init deletes an old cache
- * dir under user.home, so user.home is redirected to a temp dir before the class is first touched.
+ * Most of it is pure (no disk, no render), but the last two touch the cache directory and the
+ * eviction one deletes from it, so `user.home` is redirected to a temp dir for every test. That
+ * redirect only works because `LottieRenderCache.cacheDir` resolves per call: the object is
+ * reachable from `CompanionServer`, `LowerThird` and `PresenterManager`, so in a full run something
+ * has already touched it, and a latched `cacheDir` would hand these tests the developer's own
+ * cache to delete.
  */
 class LottieRenderCacheTest {
 
     private lateinit var originalUserHome: String
+    private lateinit var tempHome: java.nio.file.Path
 
     @BeforeTest
     fun isolateUserHome() {
         originalUserHome = System.getProperty("user.home")
-        System.setProperty("user.home", Files.createTempDirectory("lrc-home").toString())
+        tempHome = Files.createTempDirectory("lrc-home")
+        System.setProperty("user.home", tempHome.toString())
     }
 
     @AfterTest
     fun restoreUserHome() {
         System.setProperty("user.home", originalUserHome)
+        tempHome.toFile().deleteRecursively()
     }
 
     /** A minimal lottie: 1920×1080 canvas, 30fps, frames 0..90 → a 3-second clip. */
@@ -202,6 +209,10 @@ class LottieRenderCacheTest {
     @Test
     fun `eviction removes the oldest entries first once past the entry cap`() {
         val dir = LottieRenderCache.cacheDir
+        // This test empties the directory it is given, and eviction deletes from it too. If the
+        // user.home redirect above ever stops taking effect, that directory is the developer's own
+        // render cache. Refuse to touch anything outside the temp home rather than find out later.
+        check(dir.toPath().startsWith(tempHome)) { "refusing to evict outside the test home: $dir" }
         dir.mkdirs()
         dir.listFiles { f -> f.extension == "lrcc" }?.forEach { it.delete() }
 

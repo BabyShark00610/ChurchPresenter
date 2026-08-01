@@ -75,7 +75,18 @@ object LottieRenderCache {
     private const val HEADER_LEN = 22L
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    internal val cacheDir = File(System.getProperty("user.home"), ".churchpresenter/lottie_render_cache")
+    /**
+     * Resolved per call, not latched at object-init.
+     *
+     * This object is reachable from `CompanionServer`, `LowerThird` and `PresenterManager`, so in a
+     * full suite run something touches it long before any one test does. Held as a plain `val`, it
+     * would capture whatever `user.home` was at that first touch — the real one — and a test that
+     * points `user.home` at a temp dir would still be handed the developer's own cache. Since
+     * [evictOldEntries] deletes files, that is not a stale read but real data destroyed, and which
+     * test class ran first would decide it. Same reasoning as `RecentLabelColors`.
+     */
+    internal val cacheDir: File
+        get() = File(System.getProperty("user.home"), ".churchpresenter/lottie_render_cache")
 
     /** One render at a time — each opens an off-screen Compose scene. */
     private val renderMutex = Mutex()
