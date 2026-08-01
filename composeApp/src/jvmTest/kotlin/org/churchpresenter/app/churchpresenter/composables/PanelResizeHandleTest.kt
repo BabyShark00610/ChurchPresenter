@@ -65,7 +65,6 @@ class PanelResizeHandleTest {
      * repeat-drag test below passes even against a handle keyed on something that changes every
      * composition, and it was written that way first.
      */
-
     private fun ComposeUiTest.handle(collapsed: Boolean = false): Reports {
         val reports = Reports()
         setContent {
