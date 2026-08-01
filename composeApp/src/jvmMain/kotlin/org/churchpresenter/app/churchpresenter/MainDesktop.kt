@@ -2191,8 +2191,9 @@ fun MainDesktop(
             editingLabelItem = null
         },
         existingText = editingLabelItem?.text ?: "",
-        existingTextColor = editingLabelItem?.textColor ?: "#FFFFFF",
-        existingBackgroundColor = editingLabelItem?.backgroundColor ?: "#2196F3",
+        // Empty, not a hardcoded pair: a new label picks its colours up from the active theme.
+        existingTextColor = editingLabelItem?.textColor.orEmpty(),
+        existingBackgroundColor = editingLabelItem?.backgroundColor.orEmpty(),
         isEdit = editingLabelItem != null
     )
 

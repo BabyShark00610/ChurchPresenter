@@ -3,6 +3,10 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import org.churchpresenter.app.churchpresenter.composables.cpColorToHex
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -18,6 +22,13 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import androidx.compose.ui.test.onNodeWithTag
+import org.churchpresenter.app.churchpresenter.TestSingletons
+import org.churchpresenter.app.churchpresenter.composables.LABEL_PRESET_TAG
+import org.churchpresenter.app.churchpresenter.composables.LabelColors
+import org.churchpresenter.app.churchpresenter.composables.RecentLabelColors
+import java.nio.file.Files
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 /**
@@ -60,17 +71,27 @@ class AddLabelContentTest {
         waitForIdle()
     }
 
+    /** What the theme in force offers a new label, captured as the content resolves it. */
+    private class Defaults {
+        var text: String = ""
+        var background: String = ""
+    }
+
     private fun dialog(
         existingText: String = "",
-        existingTextColor: String = "#FFFFFF",
-        existingBackgroundColor: String = "#2196F3",
+        existingTextColor: String = "",
+        existingBackgroundColor: String = "",
         isEdit: Boolean = false,
+        themeMode: ThemeMode? = null,
+        defaults: Defaults = Defaults(),
         block: ComposeUiTest.(Result) -> Unit,
     ) {
         val result = Result()
         runComposeUiTest {
             setContent {
-                MaterialTheme {
+                val body = @Composable {
+                    defaults.text = cpColorToHex(MaterialTheme.colorScheme.onSurface)
+                    defaults.background = cpColorToHex(MaterialTheme.colorScheme.surfaceContainer)
                     AddLabelDialogContent(
                         onDismiss = { result.dismissed++ },
                         onConfirm = { text, textColor, backgroundColor ->
@@ -82,6 +103,8 @@ class AddLabelContentTest {
                         isEdit = isEdit,
                     )
                 }
+                if (themeMode == null) MaterialTheme { body() }
+                else ChurchPresenterTheme(themeMode = themeMode) { body() }
             }
             block(result)
         }
@@ -102,9 +125,45 @@ class AddLabelContentTest {
     // ── Field defaults ──────────────────────────────────────────────────────────
 
     @Test
-    fun `a brand new label starts with the default colours`() = dialog {
-        onNodeWithText("#FFFFFF").assertExists()
-        onNodeWithText("#2196F3").assertExists()
+    fun `a brand new label starts with the theme's own colours`() {
+        val defaults = Defaults()
+        dialog(defaults = defaults) {
+            // Not a fixed white-on-blue: that pair belonged to no palette here and sat oddly in the
+            // eight themes that are not the light one.
+            onNodeWithText(defaults.text).assertExists()
+            onNodeWithText(defaults.background).assertExists()
+        }
+    }
+
+    @Test
+    fun `the default colours change with the theme`() {
+        // The point of the change: nine themes, and a new label should look like it belongs to
+        // whichever one is on rather than to the light one.
+        val light = Defaults()
+        val forest = Defaults()
+        dialog(themeMode = ThemeMode.LIGHT, defaults = light) {
+            onNodeWithText(light.background).assertExists()
+        }
+        dialog(themeMode = ThemeMode.FOREST, defaults = forest) {
+            onNodeWithText(forest.background).assertExists()
+        }
+
+        assertNotEquals(
+            light.background, forest.background,
+            "a themed default that is the same in every theme is not themed",
+        )
+    }
+
+    @Test
+    fun `editing keeps the saved colours, theme or no theme`() = dialog(
+        existingTextColor = "#123456",
+        existingBackgroundColor = "#ABCDEF",
+        isEdit = true,
+    ) {
+        // A label saved months ago must come back as it was, not be recoloured by the theme in
+        // force when it is next opened.
+        onNodeWithText("#123456").assertExists()
+        onNodeWithText("#ABCDEF").assertExists()
     }
 
     @Test
@@ -148,11 +207,14 @@ class AddLabelContentTest {
     // ── Confirming ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `OK hands back the typed text and both colours`() = dialog { result ->
-        onNodeWithText("Enter label text...").performTextInput("Welcome")
-        onNodeWithText("OK").performClick()
+    fun `OK hands back the typed text and both colours`() {
+        val defaults = Defaults()
+        dialog(defaults = defaults) { result ->
+            onNodeWithText("Enter label text...").performTextInput("Welcome")
+            onNodeWithText("OK").performClick()
 
-        assertEquals(Triple("Welcome", "#FFFFFF", "#2196F3"), result.confirmed)
+            assertEquals(Triple("Welcome", defaults.text, defaults.background), result.confirmed)
+        }
     }
 
     @Test
@@ -193,52 +255,68 @@ class AddLabelContentTest {
     // ── Colour pickers ──────────────────────────────────────────────────────────
 
     @Test
-    fun `changing the text colour is reflected in what OK confirms`() = dialog { result ->
-        onNodeWithText("Enter label text...").performTextInput("Welcome")
-        openColorField("#FFFFFF")
-        confirmColorPickerWith("#123456")
+    fun `changing the text colour is reflected in what OK confirms`() {
+        val defaults = Defaults()
+        dialog(defaults = defaults) { result ->
+            onNodeWithText("Enter label text...").performTextInput("Welcome")
+            openColorField(defaults.text)
+            confirmColorPickerWith("#123456")
 
-        onNodeWithText("OK").performClick()
+            onNodeWithText("OK").performClick()
 
-        assertEquals("#123456", result.confirmed?.second)
-        assertEquals("#2196F3", result.confirmed?.third, "the background colour must be untouched by editing the text colour")
+            assertEquals("#123456", result.confirmed?.second)
+            assertEquals(
+                defaults.background, result.confirmed?.third,
+                "the background colour must be untouched by editing the text colour",
+            )
+        }
     }
 
     @Test
-    fun `changing the background colour is reflected in what OK confirms`() = dialog { result ->
-        onNodeWithText("Enter label text...").performTextInput("Welcome")
-        openColorField("#2196F3")
-        confirmColorPickerWith("#654321")
+    fun `changing the background colour is reflected in what OK confirms`() {
+        val defaults = Defaults()
+        dialog(defaults = defaults) { result ->
+            onNodeWithText("Enter label text...").performTextInput("Welcome")
+            openColorField(defaults.background)
+            confirmColorPickerWith("#654321")
 
-        onNodeWithText("OK").performClick()
+            onNodeWithText("OK").performClick()
 
-        assertEquals("#FFFFFF", result.confirmed?.second, "the text colour must be untouched by editing the background colour")
-        assertEquals("#654321", result.confirmed?.third)
+            assertEquals(
+                defaults.text, result.confirmed?.second,
+                "the text colour must be untouched by editing the background colour",
+            )
+            assertEquals("#654321", result.confirmed?.third)
+        }
     }
 
     @Test
-    fun `both colours can be changed independently before confirming`() = dialog { result ->
-        onNodeWithText("Enter label text...").performTextInput("Welcome")
-        openColorField("#FFFFFF")
-        confirmColorPickerWith("#111111")
-        openColorField("#2196F3")
-        confirmColorPickerWith("#222222")
+    fun `both colours can be changed independently before confirming`() {
+        val defaults = Defaults()
+        dialog(defaults = defaults) { result ->
+            onNodeWithText("Enter label text...").performTextInput("Welcome")
+            openColorField(defaults.text)
+            confirmColorPickerWith("#111111")
+            openColorField(defaults.background)
+            confirmColorPickerWith("#222222")
 
-        onNodeWithText("OK").performClick()
+            onNodeWithText("OK").performClick()
 
-        assertEquals(Triple("Welcome", "#111111", "#222222"), result.confirmed)
+            assertEquals(Triple("Welcome", "#111111", "#222222"), result.confirmed)
+        }
     }
 
     @Test
     fun `every optional parameter can be left to its own default`() = runComposeUiTest {
+        var themeBackground = ""
         setContent {
             MaterialTheme {
+                themeBackground = cpColorToHex(MaterialTheme.colorScheme.surfaceContainer)
                 AddLabelDialogContent(onDismiss = {}, onConfirm = { _, _, _ -> })
             }
         }
         onNodeWithText("Add Label").assertExists()
-        onNodeWithText("#FFFFFF").assertExists()
-        onNodeWithText("#2196F3").assertExists()
+        onNodeWithText(themeBackground).assertExists()
     }
 
     // ── AddLabelDialog itself, via its isVisible guard ─────────────────────────
@@ -269,5 +347,61 @@ class AddLabelContentTest {
             )
         }
         onNodeWithText("Edit Label").assertDoesNotExist()
+    }
+
+    // ── History ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a custom pair is remembered, a theme preset is not`() {
+        TestSingletons.latchToTestHome()
+        val realHome = System.getProperty("user.home")
+        val tempHome = Files.createTempDirectory("cp-label-dialog").toFile()
+        System.setProperty("user.home", tempHome.absolutePath)
+        RecentLabelColors.load()
+        val defaults = Defaults()
+        try {
+            // Confirming on the untouched default -- which is a theme preset -- must leave the
+            // history alone: presets have their own column, and recording them would push out the
+            // custom pairs the history exists to keep.
+            dialog(defaults = defaults) { _ ->
+                onNodeWithText("Enter label text...").performTextInput("Welcome")
+                onNodeWithText("OK").performClick()
+            }
+            assertEquals(emptyList(), RecentLabelColors.combos.toList(), "a preset is not history")
+
+            // A colour of the user's own is the case the history exists for.
+            dialog(defaults = defaults) { _ ->
+                onNodeWithText("Enter label text...").performTextInput("Welcome")
+                openColorField(defaults.background)
+                confirmColorPickerWith("#654321")
+                onNodeWithText("OK").performClick()
+            }
+
+            assertEquals(
+                listOf(LabelColors("#654321", defaults.text)),
+                RecentLabelColors.combos.toList(),
+                "the pair actually used is what gets kept",
+            )
+        } finally {
+            System.setProperty("user.home", realHome)
+            tempHome.deleteRecursively()
+            RecentLabelColors.load()
+        }
+    }
+
+    @Test
+    fun `picking a swatch sets both colours at once`() {
+        val defaults = Defaults()
+        dialog(defaults = defaults) { result ->
+            onNodeWithText("Enter label text...").performTextInput("Welcome")
+            // The second preset, whatever the theme makes it -- the swatch is the pair, so one
+            // click has to move the band and its text together.
+            onNodeWithTag("${LABEL_PRESET_TAG}_1").performClick()
+            onNodeWithText("OK").performClick()
+
+            val confirmed = result.confirmed
+            assertNotEquals(defaults.background, confirmed?.third, "the band must have changed")
+            assertNotEquals(defaults.text, confirmed?.second, "and its text with it")
+        }
     }
 }

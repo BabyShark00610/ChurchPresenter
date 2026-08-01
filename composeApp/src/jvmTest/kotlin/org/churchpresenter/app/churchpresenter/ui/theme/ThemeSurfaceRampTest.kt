@@ -140,4 +140,24 @@ class ThemeSurfaceRampTest {
             "the old baseline card must fail the bar this test sets",
         )
     }
+
+    @Test
+    fun `every theme's label swatch reads its own text on its own band`() {
+        // The schedule-label presets show one pair per theme -- primaryContainer with its own
+        // onPrimaryContainer -- so every scheme's accent pair has to work as a band with text on
+        // it, not just as a button. A label whose text does not read on its band is a section
+        // heading nobody can see.
+        everyTheme { s ->
+            val accent = contrast(s.onPrimaryContainer, s.primaryContainer)
+            val card = contrast(s.onSurface, s.surfaceContainer)
+            when {
+                accent < 4.5 ->
+                    "accent swatch ${hex(s.onPrimaryContainer)} on ${hex(s.primaryContainer)} is only %.2f:1".format(accent)
+                // The head of the list, and the default a new label opens on.
+                card < 4.5 ->
+                    "card swatch ${hex(s.onSurface)} on ${hex(s.surfaceContainer)} is only %.2f:1".format(card)
+                else -> null
+            }
+        }
+    }
 }
