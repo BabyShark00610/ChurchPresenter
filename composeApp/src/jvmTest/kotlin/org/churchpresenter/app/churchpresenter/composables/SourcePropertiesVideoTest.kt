@@ -9,7 +9,11 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.SceneSource
+import java.nio.file.Path
+import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -17,12 +21,40 @@ import kotlin.test.assertTrue
 /**
  * The Video source: a file path with a Browse button, a Loop flag and a volume slider.
  *
- * As with the Image panel, Browse opens the platform's own file dialog and so is asserted rather than
- * clicked. Everything else here is a plain read-one-field/write-one-field control, and what each test
- * pins is that it writes the field it belongs to and leaves its two neighbours alone — the panel's
- * three controls are close enough in shape that a mis-wired `copy(...)` would otherwise go unnoticed.
+ * Browse defaults to the platform's own file dialog, driven end to end here the same way
+ * [SourcePropertiesImageTest] does via a [FakeFileChooser] passed to `sourcePanel`. Everything else
+ * here is a plain read-one-field/write-one-field control, and what each test pins is that it writes
+ * the field it belongs to and leaves its two neighbours alone — the panel's three controls are close
+ * enough in shape that a mis-wired `copy(...)` would otherwise go unnoticed.
  */
 class SourcePropertiesVideoTest {
+
+    /** Records the call it received and returns [answer] without ever touching a real dialog. */
+    private class FakeFileChooser(private val answer: Path?) : FileChooser() {
+        var lastPath: Path? = null
+        var lastFilters: List<FileNameExtensionFilter>? = null
+        var callCount = 0
+
+        override suspend fun chooseImpl(
+            path: Path,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+            selectDirectory: Boolean,
+            multiple: Boolean,
+        ): List<Path>? {
+            callCount++
+            lastPath = path
+            lastFilters = filters
+            return answer?.let { listOf(it) }
+        }
+
+        override suspend fun saveImpl(
+            location: Path,
+            suggestedName: String,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+        ): Path? = error("not used by the video source's Browse button")
+    }
 
     /** Ordinal of the file path field — the header owns the first six. */
     private val filePathField = 6
@@ -57,8 +89,57 @@ class SourcePropertiesVideoTest {
 
     @Test
     fun `the Browse button is on screen and clickable`() = sourcePanel(Fixture.video()) { _ ->
-        // Never clicked: it opens the platform's own file dialog.
         onNodeWithContentDescription("Browse").assertIsDisplayed().assertHasClickAction()
+    }
+
+    @Test
+    fun `clicking Browse opens the chooser with a video filter, at the stored path's directory`() {
+        val chooser = FakeFileChooser(answer = null)
+        sourcePanel(Fixture.video(), fileChooser = chooser) { _ ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            assertEquals(1, chooser.callCount)
+            assertEquals(Path.of("/tmp"), chooser.lastPath, "the chooser must open at the stored file's parent directory")
+            assertEquals(
+                listOf("mp4", "mov", "avi", "mkv", "wmv", "flv", "webm", "m4v"),
+                chooser.lastFilters?.single()?.extensions?.toList(),
+            )
+        }
+    }
+
+    @Test
+    fun `choosing a file from Browse stores its path`() {
+        val chooser = FakeFileChooser(answer = Path.of("/media/clips/outro.mov"))
+        sourcePanel(Fixture.video(), fileChooser = chooser) { get ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            assertEquals("/media/clips/outro.mov", (get() as SceneSource.VideoSource).filePath)
+        }
+    }
+
+    @Test
+    fun `canceling Browse leaves the stored path untouched`() {
+        val chooser = FakeFileChooser(answer = null)
+        sourcePanel(Fixture.video(), fileChooser = chooser) { get ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            assertEquals("/tmp/bumper.mp4", (get() as SceneSource.VideoSource).filePath, "canceling must not touch the stored path")
+        }
+    }
+
+    @Test
+    fun `with no stored path, Browse falls back to the user's home directory`() {
+        val chooser = FakeFileChooser(answer = null)
+        sourcePanel(Fixture.video().copy(filePath = ""), fileChooser = chooser) { _ ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            // FileChooser.choose() itself falls back to user.home for a null/nonexistent start path.
+            assertEquals(Path.of(System.getProperty("user.home")), chooser.lastPath)
+        }
     }
 
     // ── File path ─────────────────────────────────────────────────────────────

@@ -93,6 +93,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.jetbrains.compose.resources.stringResource
 import java.awt.GraphicsEnvironment
+import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -192,17 +193,14 @@ internal fun STTSettingsDialogContent(
                     }
                 }
                 AnimatedVisibility(visible = engine.enabled) {
-                    Row(
+                    LabeledCheckbox(
+                        checked = engine.helpDevMode,
+                        onCheckedChange = { onSettingsChange { s -> s.copy(bibleEngineSettings = s.bibleEngineSettings.copy(helpDevMode = it)) } },
+                        label = stringResource(Res.string.stt_help_dev_mode),
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Checkbox(
-                            checked = engine.helpDevMode,
-                            onCheckedChange = { onSettingsChange { s -> s.copy(bibleEngineSettings = s.bibleEngineSettings.copy(helpDevMode = it)) } }
-                        )
-                        Text(stringResource(Res.string.stt_help_dev_mode), color = MaterialTheme.colorScheme.onSurface)
-                    }
+                        color = MaterialTheme.colorScheme.onSurface,
+                        spacing = 4.dp,
+                    )
                 }
                 AnimatedVisibility(visible = engine.enabled && !engine.runLocal) {
                     Row(
@@ -288,39 +286,27 @@ internal fun STTSettingsDialogContent(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = sttSettings.showWordHighlighting,
-                            onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(showWordHighlighting = it)) } }
-                        )
-                        Text(
-                            stringResource(Res.string.stt_word_highlighting),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = sttSettings.showInProgress,
-                            onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(showInProgress = it)) } }
-                        )
-                        Text(
-                            stringResource(Res.string.stt_in_progress_text),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = sttSettings.showTranslationInProgress,
-                            onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(showTranslationInProgress = it)) } }
-                        )
-                        Text(
-                            stringResource(Res.string.stt_translation_in_progress),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    LabeledCheckbox(
+                        checked = sttSettings.showWordHighlighting,
+                        onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(showWordHighlighting = it)) } },
+                        label = stringResource(Res.string.stt_word_highlighting),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    LabeledCheckbox(
+                        checked = sttSettings.showInProgress,
+                        onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(showInProgress = it)) } },
+                        label = stringResource(Res.string.stt_in_progress_text),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    LabeledCheckbox(
+                        checked = sttSettings.showTranslationInProgress,
+                        onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(showTranslationInProgress = it)) } },
+                        label = stringResource(Res.string.stt_translation_in_progress),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
 
                 // Drip feed settings
@@ -329,13 +315,13 @@ internal fun STTSettingsDialogContent(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = sttSettings.dripFeedEnabled,
-                            onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(dripFeedEnabled = it)) } }
-                        )
-                        Text(stringResource(Res.string.stt_drip_feed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
-                    }
+                    LabeledCheckbox(
+                        checked = sttSettings.dripFeedEnabled,
+                        onCheckedChange = { onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(dripFeedEnabled = it)) } },
+                        label = stringResource(Res.string.stt_drip_feed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     NumberSettingsTextField(
                         label = stringResource(Res.string.stt_drip_feed_speed),
                         initialText = sttSettings.dripFeedSpeed,

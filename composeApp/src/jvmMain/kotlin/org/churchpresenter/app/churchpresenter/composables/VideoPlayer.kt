@@ -182,7 +182,7 @@ private fun checkVlcAvailable(): Boolean {
 }
 
 /** If a custom VLC path is set and valid, adds it to jna.library.path so VLCJ/JNA can find native libs. */
-private fun applyCustomVlcPath() {
+internal fun applyCustomVlcPath() {
     if (vlcCustomPath.isBlank()) return
     val dir = File(vlcCustomPath)
     if (!dir.isDirectory) return
@@ -193,7 +193,7 @@ private fun applyCustomVlcPath() {
 }
 
 /** Checks whether a directory contains a VLC native library (libvlc.dll / .so* / .dylib). */
-private fun dirContainsVlcLib(dir: Path): Boolean {
+internal fun dirContainsVlcLib(dir: Path): Boolean {
     if (!Files.isDirectory(dir)) return false
     return try {
         Files.list(dir).use { stream ->

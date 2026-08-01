@@ -59,9 +59,9 @@ data class DictionaryVersesResponse(
 object StrongsDictionaryRepository {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val mutex = Mutex()
-    private val cache = mutableMapOf<String, List<StrongsEntry>>()
+    internal val cache = mutableMapOf<String, List<StrongsEntry>>()
 
-    private val interlinear = InterlinearRepository()
+    internal val interlinear = InterlinearRepository()
     private val strongsRef = Regex("[HG]\\d{1,5}")
 
     internal fun normalizeLang(lang: String?): String = if (lang?.lowercase() == "ru") "ru" else "en"

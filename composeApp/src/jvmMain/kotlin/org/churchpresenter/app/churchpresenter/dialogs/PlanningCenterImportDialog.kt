@@ -100,6 +100,7 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.viewmodel.PlanningCenterImportViewModel
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
+import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 /**
  * Lets the operator pick a Planning Center Services plan and import its songs (matched against
@@ -594,17 +595,14 @@ internal fun PlanningCenterImportDialogContent(
                                 if (scriptures.isNotEmpty()) {
                                     val selectedScriptureIdx = viewModel.selectedScriptureIndices[pco.id].orEmpty()
                                     scriptures.forEachIndexed { index, verse ->
-                                        Row(
+                                        LabeledCheckbox(
+                                            checked = index in selectedScriptureIdx,
+                                            onCheckedChange = { viewModel.toggleScriptureSelected(pco.id, index) },
+                                            label = verse.displayReference,
                                             modifier = Modifier.fillMaxWidth().padding(start = 40.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Checkbox(
-                                                checked = index in selectedScriptureIdx,
-                                                onCheckedChange = { viewModel.toggleScriptureSelected(pco.id, index) }
-                                            )
-                                            Text(verse.displayReference, style = MaterialTheme.typography.bodySmall)
-                                        }
+                                            style = MaterialTheme.typography.bodySmall,
+                                            spacing = 8.dp,
+                                        )
                                     }
                                 }
 
