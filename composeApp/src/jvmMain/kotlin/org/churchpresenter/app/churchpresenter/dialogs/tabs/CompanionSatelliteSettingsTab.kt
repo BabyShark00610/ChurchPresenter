@@ -20,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -75,6 +74,7 @@ import org.churchpresenter.app.churchpresenter.models.CompanionSurfacePlacement
 import org.churchpresenter.app.churchpresenter.models.CompanionSurfaceSlot
 import org.churchpresenter.app.churchpresenter.viewmodel.CompanionSatelliteViewModel
 import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 
 @Composable
 fun CompanionSatelliteSettingsTab(
@@ -405,20 +405,14 @@ private fun CompanionConnectionCard(
 
         Spacer(Modifier.height(8.dp))
 
-        Row(
+        LabeledSwitch(
+            checked = connection.autoConnect,
+            onCheckedChange = { onUpdate { copy(autoConnect = it) } },
+            label = stringResource(Res.string.companion_satellite_autoconnect),
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Switch(
-                checked = connection.autoConnect,
-                onCheckedChange = { onUpdate { copy(autoConnect = it) } }
-            )
-            Text(
-                stringResource(Res.string.companion_satellite_autoconnect),
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
+            style = MaterialTheme.typography.bodyMedium,
+            spacing = 12.dp,
+        )
 
         if (canRemove) {
             Spacer(Modifier.height(8.dp))

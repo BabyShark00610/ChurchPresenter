@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
 import org.churchpresenter.app.churchpresenter.server.AtemState
 import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
@@ -87,6 +88,8 @@ internal fun lowerThirdTab(
      * the tab looks for the majority of churches, who have no switcher.
      */
     atemReachable: Boolean = false,
+    /** A lower third clicked in the schedule, which the tab resolves back to one of its presets. */
+    selectedLowerThirdItem: ScheduleItem.LowerThirdItem? = null,
     block: ComposeUiTest.(reports: LowerThirdReports) -> Unit,
 ) {
     val reports = LowerThirdReports()
@@ -121,6 +124,7 @@ internal fun lowerThirdTab(
                             reports.live += presetName
                             reports.liveJson = json
                         },
+                        selectedLowerThirdItem = selectedLowerThirdItem,
                         queryAtemState = queryAtemState,
                         probeAtemReachable = { _, _ -> atemReachable },
                     )
