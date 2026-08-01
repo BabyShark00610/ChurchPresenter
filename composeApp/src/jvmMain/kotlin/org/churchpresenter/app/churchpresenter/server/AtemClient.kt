@@ -810,7 +810,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
     }
 
     /** Parse every command from a single UDP packet into (name, payload) pairs. */
-    private fun parseAllCommands(packet: ByteArray): List<Pair<String, ByteArray>> {
+    internal fun parseAllCommands(packet: ByteArray): List<Pair<String, ByteArray>> {
         val out = mutableListOf<Pair<String, ByteArray>>()
         var offset = HEADER_SIZE
         while (offset + 8 <= packet.size) {
@@ -825,7 +825,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
 
     // ── State parsers ─────────────────────────────────────────────────────────
 
-    private fun parseAtemState(m: Map<String, List<ByteArray>>): AtemState {
+    internal fun parseAtemState(m: Map<String, List<ByteArray>>): AtemState {
         val (mode, fps) = when (m["VidM"]?.firstOrNull()?.getOrNull(0)?.toInt()?.and(0xFF)) {
             0, 2 -> "525i59.94 NTSC" to 30000.0 / 1001.0   // 29.97…
             1, 3 -> "625i50 PAL"     to 25.0
@@ -871,7 +871,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
      *   byte  23:    name length (uint8)
      *   bytes 24+:   name (UTF-8)
      */
-    private fun parseStillSlots(m: Map<String, List<ByteArray>>): List<AtemMediaSlot> =
+    internal fun parseStillSlots(m: Map<String, List<ByteArray>>): List<AtemMediaSlot> =
         m["MPfe"]?.mapNotNull { p ->
             if (p.size < 24 || p[0].toInt() != 0) return@mapNotNull null   // still store only
             val idx  = ((p[2].toInt() and 0xFF) shl 8) or (p[3].toInt() and 0xFF)
@@ -888,7 +888,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
      *   bytes 2-65:  name (null-terminated UTF-8; garbage when unused)
      *   bytes 66-67: current frame count (uint16)
      */
-    private fun parseClipSlots(m: Map<String, List<ByteArray>>): List<AtemMediaSlot> =
+    internal fun parseClipSlots(m: Map<String, List<ByteArray>>): List<AtemMediaSlot> =
         m["MPCS"]?.mapNotNull { p ->
             if (p.size < 68) return@mapNotNull null
             val idx  = p[0].toInt() and 0xFF
@@ -907,7 +907,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
      *   bytes 8-9: unassigned frames (uint16)
      * Absent on pre-8.0 firmware - capacity stays unknown (empty list) in that case.
      */
-    private fun parseMediaPoolSettings(m: Map<String, List<ByteArray>>): Pair<List<Int>, Int> {
+    internal fun parseMediaPoolSettings(m: Map<String, List<ByteArray>>): Pair<List<Int>, Int> {
         val p = m["MPSp"]?.firstOrNull() ?: return emptyList<Int>() to 0
         if (p.size < 10) return emptyList<Int>() to 0
         val clipCount = m["_mpl"]?.firstOrNull()?.getOrNull(1)?.toInt()?.and(0xFF) ?: 4
