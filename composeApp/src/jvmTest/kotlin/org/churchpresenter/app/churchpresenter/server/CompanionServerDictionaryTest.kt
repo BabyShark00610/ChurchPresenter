@@ -21,19 +21,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * The Strong's dictionary REST endpoints (`GET /api/dictionary`, `/{number}`, `/{number}/verses`) —
- * untouched by every other `CompanionServer*Test`.
- *
- * `StrongsDictionaryRepositoryTest` already pins the repository's own filtering/sorting/scoping
- * logic against a tiny stubbed fixture (`Res.readBytes` mocked via `DictionaryFixture`). That
- * approach does not carry over here: the mock is installed from the JUnit test thread, but Ktor
- * dispatches the request handler onto its own Netty worker thread pool, and empirically the mocked
- * `Res` is not visible there — the route ends up reading the real bundled dictionary regardless.
- * Rather than chase that cross-thread mocking gap, these tests exercise only the route's own
- * behaviour that holds against the *real* dictionary: the request/response plumbing (status codes,
- * param parsing), not exact result content, which `StrongsDictionaryRepositoryTest` already owns.
- */
 class CompanionServerDictionaryTest {
 
     private lateinit var server: CompanionServer
@@ -43,15 +30,10 @@ class CompanionServerDictionaryTest {
 
     @BeforeTest
     fun setUp() {
-        // This test deliberately reads the real bundled dictionary (see class doc comment); reset
-        // first so it never depends on whatever another test already loaded into these singletons.
         StrongsDictionaryRepository.cache.clear()
         StrongsDictionaryRepository.interlinear.resetForTest()
 
         server = CompanionServer()
-        // Its own port: every CompanionServer suite claims a distinct one, and 39_721 is
-        // CompanionServerQaModerationTest's. Sharing it means a bind failure whenever the previous
-        // suite's socket has not finished closing.
         server.start(port = 39_731)
         port = runBlocking {
             withTimeoutOrNull(10_000) {
@@ -98,6 +80,15 @@ class CompanionServerDictionaryTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
+    @Test
+    fun `looking up a real number from the bundled dictionary returns it`() = runBlocking {
+        val response = client.get(url("/api/dictionary/H430"))
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals("H430", body["number"]?.jsonPrimitive?.content)
+        assertTrue(body["word"]?.jsonPrimitive?.content?.isNotBlank() == true)
+    }
+
     // ── GET /api/dictionary/{number}/verses ───────────────────────────────────
 
     @Test
@@ -114,5 +105,22 @@ class CompanionServerDictionaryTest {
         val response = client.get(url("/api/dictionary/H9999999/verses"))
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals(0, json.parseToJsonElement(response.bodyAsText()).jsonObject["total"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `verses for a real, common number returns real verse references`() = runBlocking {
+        val dir = Files.createTempDirectory("cp-dictionary-verses-real-test").toFile()
+        server.updateBible(SpbFixture.loadedBible(dir), "KJV")
+
+        val response = client.get(url("/api/dictionary/H430/verses"))
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+        val total = body["total"]?.jsonPrimitive?.int ?: 0
+        assertTrue(total > 0, "H430 must occur somewhere in the real Bible")
+        val verses = body["verses"]!!.jsonArray
+        assertTrue(verses.isNotEmpty())
+        val first = verses.first().jsonObject
+        assertTrue(first["bookName"]?.jsonPrimitive?.content?.isNotBlank() == true)
+        assertTrue(first["reference"]?.jsonPrimitive?.content?.isNotBlank() == true)
     }
 }

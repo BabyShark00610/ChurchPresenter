@@ -1042,7 +1042,7 @@ class CompanionServer {
      * handled natively by the WebSocket protocol — no manual buffer/boundary parsing needed on
      * either side, and no dependence on a legacy MIME type with inconsistent engine support.
      */
-    private fun encodeBrowserSourceFrameMessage(frame: BrowserSourceFrame): ByteArray {
+    internal fun encodeBrowserSourceFrameMessage(frame: BrowserSourceFrame): ByteArray {
         val buf = java.nio.ByteBuffer.allocate(24 + frame.png.size)
         buf.putInt(frame.x)
         buf.putInt(frame.y)

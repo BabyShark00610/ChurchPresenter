@@ -62,7 +62,7 @@ object LottieRenderCache {
 
     private const val MAGIC = "LRCC"
     private const val VERSION = 1
-    private const val MAX_ENTRIES = 60
+    internal const val MAX_ENTRIES = 60
     private const val MAX_TOTAL_BYTES = 4L * 1024 * 1024 * 1024
 
     /** Frame rate desktop playback variants are rendered at. */
@@ -75,7 +75,7 @@ object LottieRenderCache {
     private const val HEADER_LEN = 22L
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val cacheDir = File(System.getProperty("user.home"), ".churchpresenter/lottie_render_cache")
+    internal val cacheDir = File(System.getProperty("user.home"), ".churchpresenter/lottie_render_cache")
 
     /** One render at a time — each opens an off-screen Compose scene. */
     private val renderMutex = Mutex()
@@ -366,7 +366,7 @@ object LottieRenderCache {
 
     // ── Internals ─────────────────────────────────────────────────────────────
 
-    private fun keyFor(lottieJson: String, v: Variant): String {
+    internal fun keyFor(lottieJson: String, v: Variant): String {
         val md5 = MessageDigest.getInstance("MD5").digest(lottieJson.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
         return if (!v.clip) "${md5}_${v.width}x${v.height}_still"
@@ -375,7 +375,7 @@ object LottieRenderCache {
 
     // Version in the filename so a format/behavior change invalidates old entries
     // (leftovers age out through LRU eviction)
-    private fun cacheFile(key: String) = File(cacheDir, "${key}_v$VERSION.lrcc")
+    internal fun cacheFile(key: String) = File(cacheDir, "${key}_v$VERSION.lrcc")
 
     private suspend fun renderToFile(lottieJson: String, v: Variant, dest: File, key: String) {
         cacheDir.mkdirs()
@@ -425,7 +425,7 @@ object LottieRenderCache {
         }
     }
 
-    private fun evictOldEntries() {
+    internal fun evictOldEntries() {
         val entries = cacheDir.listFiles { f -> f.extension == "lrcc" } ?: return
         val byAge = entries.sortedBy { it.lastModified() }
         var totalBytes = entries.sumOf { it.length() }
@@ -443,7 +443,7 @@ object LottieRenderCache {
     /** Runs shorter than this stay literal — a run record costs 8 bytes. */
     private const val MIN_RUN = 3
 
-    private fun encodeArgbRle(pixels: IntArray): ByteArray {
+    internal fun encodeArgbRle(pixels: IntArray): ByteArray {
         // Worst case is alternating length-1 literal records and minimum runs, which stays
         // at parity with raw size; headroom covers record headers.
         val buf = ByteBuffer.allocate(pixels.size * 4 + pixels.size / MIN_RUN * 4 + 16)
@@ -474,7 +474,7 @@ object LottieRenderCache {
         return buf.array().copyOf(buf.position())
     }
 
-    private fun decodeArgbRle(payload: ByteArray, pixelCount: Int): IntArray {
+    internal fun decodeArgbRle(payload: ByteArray, pixelCount: Int): IntArray {
         val buf = ByteBuffer.wrap(payload)
         val out = IntArray(pixelCount)
         var o = 0
@@ -494,7 +494,7 @@ object LottieRenderCache {
     }
 
     /** Bilinear ARGB scale (used only for same-aspect raster mismatches at ATEM upload time). */
-    private fun scaleArgb(src: IntArray, sw: Int, sh: Int, dw: Int, dh: Int): IntArray {
+    internal fun scaleArgb(src: IntArray, sw: Int, sh: Int, dw: Int, dh: Int): IntArray {
         val srcImg = BufferedImage(sw, sh, BufferedImage.TYPE_INT_ARGB)
         srcImg.setRGB(0, 0, sw, sh, src, 0, sw)
         val dstImg = BufferedImage(dw, dh, BufferedImage.TYPE_INT_ARGB)
