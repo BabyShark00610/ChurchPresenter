@@ -15,6 +15,7 @@ import org.churchpresenter.app.churchpresenter.composables.initialPassClickable
 import org.churchpresenter.app.churchpresenter.composables.finalPassClickable
 import org.churchpresenter.app.churchpresenter.composables.AddToScheduleButton
 import org.churchpresenter.app.churchpresenter.composables.GoLiveButton
+import org.churchpresenter.app.churchpresenter.composables.LabeledRadioButton
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -118,6 +119,7 @@ import churchpresenter.composeapp.generated.resources.atem_processing
 import churchpresenter.composeapp.generated.resources.atem_upload_mode
 import churchpresenter.composeapp.generated.resources.atem_uploading
 import org.churchpresenter.app.churchpresenter.server.AtemMediaSlot
+import org.churchpresenter.app.churchpresenter.server.AtemState
 import churchpresenter.composeapp.generated.resources.cancel
 import churchpresenter.composeapp.generated.resources.confirm_delete
 import churchpresenter.composeapp.generated.resources.confirm_delete_file
@@ -171,7 +173,29 @@ fun LowerThirdTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit = {},
     onAddToSchedule: (presetId: String, presetLabel: String, pauseAtFrame: Boolean, pauseDurationMs: Long) -> Unit = { _, _, _, _ -> },
     onGoLive: (jsonContent: String, pauseAtFrame: Boolean, pauseFrame: Float, pauseDurationMs: Long, presetName: String) -> Unit = { _, _, _, _, _ -> },
-    onOpenLottieGen: (outputDir: String, onFileSaved: (() -> Unit)?) -> Unit = { _, _ -> }
+    onOpenLottieGen: (outputDir: String, onFileSaved: (() -> Unit)?) -> Unit = { _, _ -> },
+    /**
+     * Reads the ATEM's media-pool state — what the upload dialog is built from.
+     *
+     * A parameter rather than a direct `AtemClient(...).queryState()` because that call is **UDP with
+     * a 5s socket timeout**: there is no fast connection-refused, so every test that opened this
+     * dialog would cost five seconds whether or not a switcher existed. That timeout, not the absence
+     * of hardware, is what kept this tab capped at ~42%. The default is the real client, so callers
+     * are unaffected; a test supplies a canned [AtemState] or throws to exercise the error path.
+     */
+    queryAtemState: suspend (host: String, port: Int) -> AtemState = { host, port ->
+        AtemClient(host, port).queryState()
+    },
+    /**
+     * Whether the switcher answers at all — polled on a loop, and what enables the upload buttons.
+     *
+     * Injected alongside [queryAtemState] because seaming only the state query is not enough: the
+     * button that opens the dialog is disabled until this says the device is there, so a test could
+     * never reach the dialog. Defaults to the real probe.
+     */
+    probeAtemReachable: suspend (host: String, port: Int) -> Boolean = { host, port ->
+        AtemClient.isReachable(host, port)
+    },
 ) {
     val lottieFolder = appSettings.streamingSettings.lowerThirdFolder
     var refreshKey by remember { mutableStateOf(0) }
@@ -253,7 +277,7 @@ fun LowerThirdTab(
             return@LaunchedEffect
         }
         while (isActive) {
-            val reachable = AtemClient.isReachable(host, port)
+            val reachable = probeAtemReachable(host, port)
             atemReachable = reachable
             if (reachable) atemEverConnected = true
             delay(if (reachable) 30_000L else 10_000L)
@@ -285,7 +309,7 @@ fun LowerThirdTab(
         atemSlotsError = null
         try {
             val state = withContext(Dispatchers.IO) {
-                AtemClient(appSettings.atemSettings.host, appSettings.atemSettings.port).queryState()
+                queryAtemState(appSettings.atemSettings.host, appSettings.atemSettings.port)
             }
             atemSlots = if (atemIsClip) state.clipSlots else state.stillSlots
             atemDetectedFps = state.fps
@@ -504,17 +528,23 @@ fun LowerThirdTab(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        RadioButton(selected = !atemIsClip, onClick = {
-                            atemIsClip = false
-                            atemSlot = appSettings.atemSettings.defaultStillSlot
-                        })
-                        Text(stringResource(Res.string.atem_mode_still), style = MaterialTheme.typography.bodyMedium)
+                        LabeledRadioButton(
+                            selected = !atemIsClip,
+                            onClick = {
+                                atemIsClip = false
+                                atemSlot = appSettings.atemSettings.defaultStillSlot
+                            },
+                            label = stringResource(Res.string.atem_mode_still),
+                        )
                         Spacer(Modifier.width(16.dp))
-                        RadioButton(selected = atemIsClip, onClick = {
-                            atemIsClip = true
-                            atemSlot = appSettings.atemSettings.defaultClipSlot
-                        })
-                        Text(stringResource(Res.string.atem_mode_clip), style = MaterialTheme.typography.bodyMedium)
+                        LabeledRadioButton(
+                            selected = atemIsClip,
+                            onClick = {
+                                atemIsClip = true
+                                atemSlot = appSettings.atemSettings.defaultClipSlot
+                            },
+                            label = stringResource(Res.string.atem_mode_clip),
+                        )
                     }
 
                     // Warn when the design doesn't match the ATEM frame: aspect mismatches
@@ -923,7 +953,11 @@ fun LowerThirdTab(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = atemButtonColors
                             ) {
-                                Icon(painterResource(Res.drawable.ic_upload), contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(
+                                    painterResource(Res.drawable.ic_upload),
+                                    contentDescription = stringResource(Res.string.atem_send_to_atem),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
                         }
                     }
