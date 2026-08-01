@@ -205,6 +205,7 @@ import org.jetbrains.compose.resources.stringResource
 import java.awt.GraphicsEnvironment
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
+import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 
 /**
  * One physical display, reduced to what this tab needs of it: its index in the device list (which is
@@ -1071,22 +1072,19 @@ fun ProjectionSettingsTab(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Switch(
-                                checked = output.browserSourceEnabled,
-                                onCheckedChange = { checked ->
+                        LabeledSwitch(
+                            checked = output.browserSourceEnabled,
+                            onCheckedChange = { checked ->
                                     val updated = output.copy(browserSourceEnabled = checked)
                                     onSettingsChange { s ->
                                         s.copy(projectionSettings = s.projectionSettings.withBrowserSourceOutput(i, updated))
                                     }
-                                }
-                            )
-                            Text(
-                                text = stringResource(Res.string.browser_source_enabled),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                                },
+                            label = stringResource(Res.string.browser_source_enabled),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            spacing = 4.dp,
+                        )
                         Text(
                             text = stringResource(Res.string.browser_source_output_label, i + 1),
                             style = MaterialTheme.typography.bodyMedium
