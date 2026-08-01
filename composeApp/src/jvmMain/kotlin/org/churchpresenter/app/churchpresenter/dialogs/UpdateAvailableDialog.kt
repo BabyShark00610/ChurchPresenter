@@ -83,6 +83,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.system.exitProcess
+import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 
 internal sealed class DownloadState {
     object Idle : DownloadState()
@@ -483,14 +484,12 @@ internal fun UpdateAvailableContent(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(Res.string.participate_in_prereleases),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
+                LabeledSwitch(
                     checked = participateInPrereleases,
-                    onCheckedChange = onParticipateInPrereleasesChange
+                    onCheckedChange = onParticipateInPrereleasesChange,
+                    label = stringResource(Res.string.participate_in_prereleases),
+                    modifier = Modifier.weight(1f),
+                    controlAtEnd = true,
                 )
             }
             if (isManualCheck) {
