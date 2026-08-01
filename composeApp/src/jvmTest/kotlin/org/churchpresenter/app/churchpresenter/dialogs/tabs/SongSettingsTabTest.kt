@@ -4,7 +4,6 @@ package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
