@@ -29,4 +29,16 @@ class SettingsSectionTest {
         onNodeWithText("Display", substring = true).assertExists("the group must show its heading")
         onNodeWithText("Auto-fit text", substring = true).assertExists("the slot content must be composed inside the section")
     }
+
+    @Test
+    fun `headerTrailing content renders alongside the title when given`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                SettingsSection(title = "Display", headerTrailing = { Text("Reset") }) {
+                    Text("Auto-fit text")
+                }
+            }
+        }
+        onNodeWithText("Reset").assertExists("headerTrailing must be composed at the header's trailing edge")
+    }
 }

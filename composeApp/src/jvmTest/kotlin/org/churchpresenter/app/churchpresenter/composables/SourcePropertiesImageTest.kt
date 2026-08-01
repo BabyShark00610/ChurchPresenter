@@ -7,7 +7,11 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.SceneSource
+import java.nio.file.Path
+import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -20,10 +24,39 @@ import kotlin.test.assertEquals
  * renderer does not recognise. Both directions are walked over all four values, and the fallback for
  * a stored value this build has no label for is pinned too.
  *
- * The Browse button opens `FileChooser.platformInstance`, a real native dialog, so it is asserted to
- * be there and clickable but never clicked.
+ * The Browse button defaults to `FileChooser.platformInstance`, a real native dialog — but
+ * `sourcePanel` accepts a `fileChooser` to swap in, so the button-click path is driven end to end
+ * with a [FakeFileChooser] standing in for the dialog, same as [FileImagePickerTest] does for the
+ * unrelated picker row used elsewhere in the app.
  */
 class SourcePropertiesImageTest {
+
+    /** Records the call it received and returns [answer] without ever touching a real dialog. */
+    private class FakeFileChooser(private val answer: Path?) : FileChooser() {
+        var lastPath: Path? = null
+        var lastFilters: List<FileNameExtensionFilter>? = null
+        var callCount = 0
+
+        override suspend fun chooseImpl(
+            path: Path,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+            selectDirectory: Boolean,
+            multiple: Boolean,
+        ): List<Path>? {
+            callCount++
+            lastPath = path
+            lastFilters = filters
+            return answer?.let { listOf(it) }
+        }
+
+        override suspend fun saveImpl(
+            location: Path,
+            suggestedName: String,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+        ): Path? = error("not used by the image source's Browse button")
+    }
 
     /** Ordinal of the file path field among the panel's fields — the header owns the first six. */
     private val filePathField = 6
@@ -51,8 +84,57 @@ class SourcePropertiesImageTest {
 
     @Test
     fun `the Browse button is on screen and clickable`() = sourcePanel(Fixture.image()) { _ ->
-        // Never clicked: it opens the platform's own file dialog.
         onNodeWithContentDescription("Browse").assertIsDisplayed().assertHasClickAction()
+    }
+
+    @Test
+    fun `clicking Browse opens the chooser with an image filter, at the stored path's directory`() {
+        val chooser = FakeFileChooser(answer = null)
+        sourcePanel(Fixture.image(), fileChooser = chooser) { _ ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            assertEquals(1, chooser.callCount)
+            assertEquals(Path.of("/tmp"), chooser.lastPath, "the chooser must open at the stored file's parent directory")
+            assertEquals(
+                listOf("png", "jpg", "jpeg", "gif", "bmp", "webp", "heic", "heif", "svg"),
+                chooser.lastFilters?.single()?.extensions?.toList(),
+            )
+        }
+    }
+
+    @Test
+    fun `choosing a file from Browse stores its path`() {
+        val chooser = FakeFileChooser(answer = Path.of("/media/backdrops/sunset.jpg"))
+        sourcePanel(Fixture.image(), fileChooser = chooser) { get ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            assertEquals("/media/backdrops/sunset.jpg", (get() as SceneSource.ImageSource).filePath)
+        }
+    }
+
+    @Test
+    fun `canceling Browse leaves the stored path untouched`() {
+        val chooser = FakeFileChooser(answer = null)
+        sourcePanel(Fixture.image(), fileChooser = chooser) { get ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            assertEquals("/tmp/logo.png", (get() as SceneSource.ImageSource).filePath, "canceling must not touch the stored path")
+        }
+    }
+
+    @Test
+    fun `with no stored path, Browse falls back to the user's home directory`() {
+        val chooser = FakeFileChooser(answer = null)
+        sourcePanel(Fixture.image().copy(filePath = ""), fileChooser = chooser) { _ ->
+            onNodeWithContentDescription("Browse").performClick()
+            waitForIdle()
+
+            // FileChooser.choose() itself falls back to user.home for a null/nonexistent start path.
+            assertEquals(Path.of(System.getProperty("user.home")), chooser.lastPath)
+        }
     }
 
     // ── File path ─────────────────────────────────────────────────────────────

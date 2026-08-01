@@ -16,6 +16,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
+import org.churchpresenter.app.churchpresenter.server.AtemState
 import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
 import java.io.File
 import java.nio.file.Files
@@ -67,6 +69,24 @@ internal class LowerThirdReports {
 @OptIn(ExperimentalTestApi::class)
 internal fun lowerThirdTab(
     folder: File? = lottieFolder("Welcome", "Speaker Name"),
+    /**
+     * What the ATEM upload dialog reads its media-pool state from.
+     *
+     * Injected because the real call is **UDP with a 5s socket timeout** — there is no fast
+     * connection-refused, so every test that opened the dialog used to cost five seconds, which is
+     * what capped this tab at ~42%. Supply a canned [AtemState], or throw to exercise the error path.
+     */
+    queryAtemState: suspend (host: String, port: Int) -> AtemState = { _, _ ->
+        error("no ATEM in tests unless the test supplies one")
+    },
+    /**
+     * Whether the (fake) switcher answers.
+     *
+     * The ATEM row is gated on `atemConfigured && atemEverConnected`, so a test that wants it needs
+     * both a non-blank host and a probe that succeeds — this sets both. Off by default, which is how
+     * the tab looks for the majority of churches, who have no switcher.
+     */
+    atemReachable: Boolean = false,
     block: ComposeUiTest.(reports: LowerThirdReports) -> Unit,
 ) {
     val reports = LowerThirdReports()
@@ -78,7 +98,12 @@ internal fun lowerThirdTab(
                         AppSettings(
                             streamingSettings = StreamingSettings(
                                 lowerThirdFolder = folder?.absolutePath ?: ""
-                            )
+                            ),
+                            atemSettings = if (atemReachable) {
+                                AtemSettings(host = "10.0.0.9")
+                            } else {
+                                AtemSettings()
+                            },
                         )
                     )
                 }
@@ -96,6 +121,8 @@ internal fun lowerThirdTab(
                             reports.live += presetName
                             reports.liveJson = json
                         },
+                        queryAtemState = queryAtemState,
+                        probeAtemReachable = { _, _ -> atemReachable },
                     )
                 }
             }
