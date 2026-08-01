@@ -99,6 +99,8 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.toComposeImageBitmap
 
 import org.churchpresenter.app.churchpresenter.composables.ConnectionStatusRow
+import org.churchpresenter.app.churchpresenter.composables.PanelResizeHandle
+import org.churchpresenter.app.churchpresenter.composables.resizedPanelWidth
 import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.composables.rememberTokenGate
 import org.churchpresenter.app.churchpresenter.composables.LivePreviewPanel
@@ -1610,71 +1612,34 @@ fun MainDesktop(
                 } // end if (schedule panel visible)
 
                 // Drag handle + collapse toggle between schedule and main content
-                Box(
-                    modifier = Modifier
-                        .width(16.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        // Keyed only on scheduleCollapsed (not the persisted width, which
-                        // saveScheduleWidth() rewrites at the end of every drag) — otherwise
-                        // this coroutine gets torn down and relaunched after every gesture,
-                        // which is what made the second drag onward unreliable. Matches the
-                        // working pattern in SongsTab.kt's column-resize handles.
-                        .pointerInput(scheduleCollapsed) {
-                            if (!scheduleCollapsed) {
-                                detectHorizontalDragGestures(
-                                    onDragEnd = ::saveScheduleWidth
-                                ) { _, amount ->
-                                    val cap = maxScheduleState.value
-                                    schedulePanelPx = (schedulePanelPx + amount).coerceIn(
-                                        minOf(with(density) { 160.dp.toPx() }, cap),
-                                        cap
-                                    )
-                                }
-                            }
-                        }
-                        .pointerHoverIcon(
-                            if (scheduleCollapsed) PointerIcon.Default
-                            else PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!scheduleCollapsed) {
-                        val dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        Column(
-                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) { repeat(3) { Box(Modifier.size(3.dp).background(dotColor, CircleShape)) } }
-                        Column(
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) { repeat(3) { Box(Modifier.size(3.dp).background(dotColor, CircleShape)) } }
-                    }
-                    IconButton(
-                        onClick = {
-                            scheduleCollapsed = !scheduleCollapsed
-                            onSettingsChangeState.value { s ->
-                                if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(schedulePanelCollapsed = scheduleCollapsed))
-                                else s.copy(windowedLayout = s.windowedLayout.copy(schedulePanelCollapsed = scheduleCollapsed))
-                            }
-                        },
-                        modifier = Modifier.wrapContentHeight()
-                    ) {
-                        Icon(
-                            painter = painterResource(
-                                if (scheduleCollapsed) Res.drawable.ic_arrow_right
-                                else Res.drawable.ic_arrow_left
-                            ),
-                            contentDescription = stringResource(
-                                if (scheduleCollapsed) Res.string.tooltip_expand_schedule
-                                else Res.string.tooltip_collapse_schedule
-                            ),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                PanelResizeHandle(
+                    collapsed = scheduleCollapsed,
+                    onResize = { amount ->
+                        val cap = maxScheduleState.value
+                        schedulePanelPx = resizedPanelWidth(
+                            currentPx = schedulePanelPx,
+                            dragAmount = amount,
+                            invert = false,
+                            minPx = with(density) { 160.dp.toPx() },
+                            maxPx = cap,
                         )
-                    }
-                }
+                    },
+                    onResizeEnd = ::saveScheduleWidth,
+                    onToggleCollapsed = {
+                        scheduleCollapsed = !scheduleCollapsed
+                        onSettingsChangeState.value { s ->
+                            if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(schedulePanelCollapsed = scheduleCollapsed))
+                            else s.copy(windowedLayout = s.windowedLayout.copy(schedulePanelCollapsed = scheduleCollapsed))
+                        }
+                    },
+                    icon = painterResource(
+                        if (scheduleCollapsed) Res.drawable.ic_arrow_right else Res.drawable.ic_arrow_left
+                    ),
+                    contentDescription = stringResource(
+                        if (scheduleCollapsed) Res.string.tooltip_expand_schedule
+                        else Res.string.tooltip_collapse_schedule
+                    ),
+                )
 
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     Row(
@@ -2017,70 +1982,35 @@ fun MainDesktop(
                 }
 
                 // Right drag handle + collapse toggle for preview panel
-                Box(
-                    modifier = Modifier
-                        .width(16.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        // Keyed only on previewCollapsed — see the matching comment on the
-                        // schedule handle's pointerInput above for why the persisted width
-                        // must not be part of this key.
-                        .pointerInput(previewCollapsed) {
-                            if (!previewCollapsed) {
-                                detectHorizontalDragGestures(
-                                    onDragEnd = ::savePreviewWidth
-                                ) { _, amount ->
-                                    val cap = maxPreviewState.value
-                                    // Invert drag direction: dragging left increases width
-                                    previewPanelPx = (previewPanelPx - amount).coerceIn(
-                                        minOf(with(density) { 150.dp.toPx() }, cap),
-                                        cap
-                                    )
-                                }
-                            }
-                        }
-                        .pointerHoverIcon(
-                            if (previewCollapsed) PointerIcon.Default
-                            else PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!previewCollapsed) {
-                        val dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        Column(
-                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) { repeat(3) { Box(Modifier.size(3.dp).background(dotColor, CircleShape)) } }
-                        Column(
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) { repeat(3) { Box(Modifier.size(3.dp).background(dotColor, CircleShape)) } }
-                    }
-                    IconButton(
-                        onClick = {
-                            previewCollapsed = !previewCollapsed
-                            onSettingsChangeState.value { s ->
-                                if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(previewPanelCollapsed = previewCollapsed))
-                                else s.copy(windowedLayout = s.windowedLayout.copy(previewPanelCollapsed = previewCollapsed))
-                            }
-                        },
-                        modifier = Modifier.wrapContentHeight()
-                    ) {
-                        Icon(
-                            painter = painterResource(
-                                if (previewCollapsed) Res.drawable.ic_arrow_left
-                                else Res.drawable.ic_arrow_right
-                            ),
-                            contentDescription = stringResource(
-                                if (previewCollapsed) Res.string.tooltip_expand_schedule
-                                else Res.string.tooltip_collapse_schedule
-                            ),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                PanelResizeHandle(
+                    collapsed = previewCollapsed,
+                    // Inverted: this panel is on the right, so dragging left widens it.
+                    onResize = { amount ->
+                        val cap = maxPreviewState.value
+                        previewPanelPx = resizedPanelWidth(
+                            currentPx = previewPanelPx,
+                            dragAmount = amount,
+                            invert = true,
+                            minPx = with(density) { 150.dp.toPx() },
+                            maxPx = cap,
                         )
-                    }
-                }
+                    },
+                    onResizeEnd = ::savePreviewWidth,
+                    onToggleCollapsed = {
+                        previewCollapsed = !previewCollapsed
+                        onSettingsChangeState.value { s ->
+                            if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(previewPanelCollapsed = previewCollapsed))
+                            else s.copy(windowedLayout = s.windowedLayout.copy(previewPanelCollapsed = previewCollapsed))
+                        }
+                    },
+                    icon = painterResource(
+                        if (previewCollapsed) Res.drawable.ic_arrow_left else Res.drawable.ic_arrow_right
+                    ),
+                    contentDescription = stringResource(
+                        if (previewCollapsed) Res.string.tooltip_expand_schedule
+                        else Res.string.tooltip_collapse_schedule
+                    ),
+                )
 
                 // Collapsible preview panel (right sidebar)
                 if (!previewCollapsed || previewVisibleFraction.value > 0f) {
