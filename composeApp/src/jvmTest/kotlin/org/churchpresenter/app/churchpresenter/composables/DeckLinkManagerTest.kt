@@ -11,6 +11,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -24,6 +25,17 @@ import kotlin.test.assertTrue
  * `if (!isAvailable()) return ...` branch, never the native call inside. The native calls
  * themselves (`nativeXxx`) are therefore permanently unreachable in this suite, by construction —
  * consistent with this project's rule that hardware-only code paths are not force-tested.
+ *
+ * What each native call's *result* is turned into is a different matter, and that part is covered:
+ * the `parseXxx` helpers below are the decision logic lifted out of those hardware-gated methods,
+ * so only the one unreachable JNI call is left uncovered in each.
+ *
+ * **Driving a real card is a separate, opt-in step.** [DeckLinkHardwareTest] does that, but it is
+ * gated behind `-PdecklinkHardware=true` and inert in every ordinary run — including this one.
+ * Reaching the native calls means opening the output device for real, which pushes a frame to
+ * whatever the card is wired to, installs a JVM shutdown hook and costs driver-init time; it also
+ * has to reset the memoized `available` field that the assertions here rely on. None of that
+ * belongs in a suite that runs on every change, so it stays behind the flag.
  */
 class DeckLinkManagerTest {
 
@@ -208,5 +220,205 @@ class DeckLinkManagerTest {
         val audio = DeckLinkManager.AudioFrame(sampleFrames = 2, channels = 2, samples = shortArrayOf(1, 2, 3, 4))
         assertEquals(2, audio.sampleFrames)
         assertEquals(4, audio.samples.size)
+    }
+
+    // ── parseInputModes ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `parseInputModes splits name and encoded value on pipe`() {
+        val result = DeckLinkManager.parseInputModes(arrayOf("1080p60|Hp60"))
+        assertEquals(1, result.size)
+        assertEquals("1080p60", result[0].name)
+        assertEquals("Hp60", result[0].encodedValue)
+    }
+
+    @Test
+    fun `parseInputModes handles entries with no pipe as name-only`() {
+        val result = DeckLinkManager.parseInputModes(arrayOf("Auto"))
+        assertEquals(1, result.size)
+        assertEquals("Auto", result[0].name)
+        assertEquals("", result[0].encodedValue)
+    }
+
+    @Test
+    fun `parseInputModes parses multiple entries`() {
+        val result = DeckLinkManager.parseInputModes(arrayOf("720p50|mod1", "1080i60|mod2", "2160p30|mod3"))
+        assertEquals(3, result.size)
+        assertEquals("720p50", result[0].name)
+        assertEquals("mod1", result[0].encodedValue)
+        assertEquals("2160p30", result[2].name)
+        assertEquals("mod3", result[2].encodedValue)
+    }
+
+    @Test
+    fun `parseInputModes handles pipe in the value portion`() {
+        val result = DeckLinkManager.parseInputModes(arrayOf("1080p60|enc|extra"))
+        assertEquals(1, result.size)
+        assertEquals("1080p60", result[0].name)
+        assertEquals("enc|extra", result[0].encodedValue)
+    }
+
+    @Test
+    fun `parseInputModes returns empty list for empty array`() {
+        assertTrue(DeckLinkManager.parseInputModes(emptyArray()).isEmpty())
+    }
+
+    // ── parseVideoConnections ────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `parseVideoConnections splits name and numeric value on pipe`() {
+        val result = DeckLinkManager.parseVideoConnections(arrayOf("SDI|1"))
+        assertEquals(1, result.size)
+        assertEquals("SDI", result[0].name)
+        assertEquals(1, result[0].value)
+    }
+
+    @Test
+    fun `parseVideoConnections defaults value to 0 when missing`() {
+        val result = DeckLinkManager.parseVideoConnections(arrayOf("HDMI"))
+        assertEquals(1, result.size)
+        assertEquals("HDMI", result[0].name)
+        assertEquals(0, result[0].value)
+    }
+
+    @Test
+    fun `parseVideoConnections defaults to 0 when value is not numeric`() {
+        val result = DeckLinkManager.parseVideoConnections(arrayOf("SDI|abc"))
+        assertEquals(1, result.size)
+        assertEquals("SDI", result[0].name)
+        assertEquals(0, result[0].value)
+    }
+
+    @Test
+    fun `parseVideoConnections parses multiple connections`() {
+        val result = DeckLinkManager.parseVideoConnections(arrayOf("SDI|1", "HDMI|2", "Component|4"))
+        assertEquals(3, result.size)
+        assertEquals(1, result[0].value)
+        assertEquals(2, result[1].value)
+        assertEquals(4, result[2].value)
+    }
+
+    // ── parseOutputInfo ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `parseOutputInfo returns OutputInfo from a valid 4-element array`() {
+        val info = DeckLinkManager.parseOutputInfo(intArrayOf(1920, 1080, 60000, 1001))
+        assertNotNull(info)
+        assertEquals(1920, info.width)
+        assertEquals(1080, info.height)
+        assertEquals(60000, info.fpsNumerator)
+        assertEquals(1001, info.fpsDenominator)
+    }
+
+    @Test
+    fun `parseOutputInfo returns null when array is too short`() {
+        assertNull(DeckLinkManager.parseOutputInfo(intArrayOf(1920, 1080, 60000)))
+    }
+
+    @Test
+    fun `parseOutputInfo returns null when width is zero`() {
+        assertNull(DeckLinkManager.parseOutputInfo(intArrayOf(0, 1080, 60000, 1001)))
+    }
+
+    @Test
+    fun `parseOutputInfo returns null when height is zero`() {
+        assertNull(DeckLinkManager.parseOutputInfo(intArrayOf(1920, 0, 60000, 1001)))
+    }
+
+    @Test
+    fun `parseOutputInfo returns null for an empty array`() {
+        assertNull(DeckLinkManager.parseOutputInfo(intArrayOf()))
+    }
+
+    @Test
+    fun `parseOutputInfo accepts extra trailing elements`() {
+        val info = DeckLinkManager.parseOutputInfo(intArrayOf(3840, 2160, 30, 1, 99))
+        assertNotNull(info)
+        assertEquals(3840, info.width)
+        assertEquals(2160, info.height)
+    }
+
+    // ── parseDeviceStatus ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `parseDeviceStatus returns status from a valid 3-element array`() {
+        val status = DeckLinkManager.parseDeviceStatus(intArrayOf(1, 0, 14))
+        assertNotNull(status)
+        assertTrue(status.signalLocked)
+        assertEquals(0, status.busy)
+        assertEquals(14, status.detectedModeCode)
+    }
+
+    @Test
+    fun `parseDeviceStatus maps zero to signalLocked false`() {
+        val status = DeckLinkManager.parseDeviceStatus(intArrayOf(0, 2, 7))
+        assertNotNull(status)
+        assertFalse(status.signalLocked)
+        assertEquals(2, status.busy)
+    }
+
+    @Test
+    fun `parseDeviceStatus returns null when array is too short`() {
+        assertNull(DeckLinkManager.parseDeviceStatus(intArrayOf(1, 0)))
+    }
+
+    @Test
+    fun `parseDeviceStatus returns null for an empty array`() {
+        assertNull(DeckLinkManager.parseDeviceStatus(intArrayOf()))
+    }
+
+    // ── parseInputAudio ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `parseInputAudio extracts frames, channels and sample data from the native format`() {
+        val data = shortArrayOf(2, 2, 100, 200, 300, 400)
+        val frame = DeckLinkManager.parseInputAudio(data)
+        assertNotNull(frame)
+        assertEquals(2, frame.sampleFrames)
+        assertEquals(2, frame.channels)
+        assertEquals(4, frame.samples.size)
+        assertEquals(100, frame.samples[0])
+        assertEquals(400, frame.samples[3])
+    }
+
+    @Test
+    fun `parseInputAudio returns null when the array is too short for the header`() {
+        assertNull(DeckLinkManager.parseInputAudio(shortArrayOf(1)))
+    }
+
+    @Test
+    fun `parseInputAudio returns null when sampleFrames is zero`() {
+        assertNull(DeckLinkManager.parseInputAudio(shortArrayOf(0, 2, 100)))
+    }
+
+    @Test
+    fun `parseInputAudio returns null when channels is zero`() {
+        assertNull(DeckLinkManager.parseInputAudio(shortArrayOf(2, 0, 100)))
+    }
+
+    @Test
+    fun `parseInputAudio returns null when sampleFrames is negative`() {
+        assertNull(DeckLinkManager.parseInputAudio(shortArrayOf(-1, 2)))
+    }
+
+    @Test
+    fun `parseInputAudio handles mono audio`() {
+        val data = shortArrayOf(3, 1, 10, 20, 30)
+        val frame = DeckLinkManager.parseInputAudio(data)
+        assertNotNull(frame)
+        assertEquals(3, frame.sampleFrames)
+        assertEquals(1, frame.channels)
+        assertEquals(3, frame.samples.size)
+    }
+
+    @Test
+    fun `parseInputAudio handles 6-channel audio`() {
+        val samples = ShortArray(12) { it.toShort() }
+        val data = shortArrayOf(2, 6) + samples
+        val frame = DeckLinkManager.parseInputAudio(data)
+        assertNotNull(frame)
+        assertEquals(2, frame.sampleFrames)
+        assertEquals(6, frame.channels)
+        assertEquals(12, frame.samples.size)
     }
 }

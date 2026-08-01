@@ -658,6 +658,17 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     // as if it were a real install. An empty DSN leaves the SDK permanently disabled.
     systemProperty("sentry.dsn", "")
     systemProperty("sentry.enable-external-configuration", "false")
+
+    // Opt-in gate for DeckLinkHardwareTest, which drives a real Blackmagic card: it opens the
+    // output (pushing a frame to whatever that card is wired to), installs a JVM shutdown hook and
+    // pays driver-init time, so it must never run as part of an ordinary `check`. Off by default;
+    // enable for a deliberate hardware pass with:
+    //   ./gradlew :composeApp:jvmTest -PdecklinkHardware=true --tests '*DeckLinkHardwareTest*'
+    systemProperty(
+        "churchpresenter.decklinkHardware",
+        if (project.hasProperty("decklinkHardware")) project.property("decklinkHardware").toString() else "false"
+    )
+
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
