@@ -15,9 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
@@ -79,6 +77,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkSetting
 import org.churchpresenter.app.churchpresenter.server.InstanceLinkStatus
 import org.churchpresenter.app.churchpresenter.server.LiveStateDto
 import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
+import org.churchpresenter.app.churchpresenter.composables.LabeledRadioButton
 
 @Composable
 fun InstanceLinkDialog(
@@ -242,29 +242,23 @@ internal fun InstanceLinkDialogContent(
                             )
                         }
 
-                        Row(
+                        LabeledSwitch(
+                            checked = autoConnect,
+                            onCheckedChange = { autoConnect = it },
+                            label = stringResource(Res.string.instance_link_autoconnect),
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Switch(checked = autoConnect, onCheckedChange = { autoConnect = it })
-                            Text(
-                                stringResource(Res.string.instance_link_autoconnect),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                            style = MaterialTheme.typography.bodyMedium,
+                            spacing = 12.dp,
+                        )
 
-                        Row(
+                        LabeledSwitch(
+                            checked = allowPushToSchedule,
+                            onCheckedChange = { allowPushToSchedule = it },
+                            label = stringResource(Res.string.instance_link_allow_push_to_schedule),
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Switch(checked = allowPushToSchedule, onCheckedChange = { allowPushToSchedule = it })
-                            Text(
-                                stringResource(Res.string.instance_link_allow_push_to_schedule),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                            style = MaterialTheme.typography.bodyMedium,
+                            spacing = 12.dp,
+                        )
                     }
 
                     VerticalDivider()
@@ -281,35 +275,23 @@ internal fun InstanceLinkDialogContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Row(
+                        LabeledRadioButton(
+                            selected = role == InstanceLinkRole.CONTROLLED,
+                            onClick = { role = InstanceLinkRole.CONTROLLED },
+                            label = stringResource(Res.string.instance_link_role_controlled),
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            RadioButton(
-                                selected = role == InstanceLinkRole.CONTROLLED,
-                                onClick = { role = InstanceLinkRole.CONTROLLED }
-                            )
-                            Text(
-                                stringResource(Res.string.instance_link_role_controlled),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                            style = MaterialTheme.typography.bodyMedium,
+                            spacing = 12.dp,
+                        )
 
-                        Row(
+                        LabeledRadioButton(
+                            selected = role == InstanceLinkRole.CONTROLLER,
+                            onClick = { role = InstanceLinkRole.CONTROLLER },
+                            label = stringResource(Res.string.instance_link_role_controller),
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            RadioButton(
-                                selected = role == InstanceLinkRole.CONTROLLER,
-                                onClick = { role = InstanceLinkRole.CONTROLLER }
-                            )
-                            Text(
-                                stringResource(Res.string.instance_link_role_controller),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                            style = MaterialTheme.typography.bodyMedium,
+                            spacing = 12.dp,
+                        )
 
                         // Bible sync mode / background mirroring only matter in Controlled mode — a
                         // Controller keeps its own local content entirely, so these settings would
@@ -321,47 +303,32 @@ internal fun InstanceLinkDialogContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            Row(
+                            LabeledRadioButton(
+                                selected = bibleSyncMode == BibleSyncMode.FULL_REPLICA,
+                                onClick = { bibleSyncMode = BibleSyncMode.FULL_REPLICA },
+                                label = stringResource(Res.string.instance_link_bible_sync_full_replica),
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                RadioButton(
-                                    selected = bibleSyncMode == BibleSyncMode.FULL_REPLICA,
-                                    onClick = { bibleSyncMode = BibleSyncMode.FULL_REPLICA }
-                                )
-                                Text(
-                                    stringResource(Res.string.instance_link_bible_sync_full_replica),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
+                                style = MaterialTheme.typography.bodyMedium,
+                                spacing = 12.dp,
+                            )
 
-                            Row(
+                            LabeledRadioButton(
+                                selected = bibleSyncMode == BibleSyncMode.REFERENCE_ONLY,
+                                onClick = { bibleSyncMode = BibleSyncMode.REFERENCE_ONLY },
+                                label = stringResource(Res.string.instance_link_bible_sync_reference_only),
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                RadioButton(
-                                    selected = bibleSyncMode == BibleSyncMode.REFERENCE_ONLY,
-                                    onClick = { bibleSyncMode = BibleSyncMode.REFERENCE_ONLY }
-                                )
-                                Text(
-                                    stringResource(Res.string.instance_link_bible_sync_reference_only),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
+                                style = MaterialTheme.typography.bodyMedium,
+                                spacing = 12.dp,
+                            )
 
-                            Row(
+                            LabeledSwitch(
+                                checked = mirrorBackgrounds,
+                                onCheckedChange = { mirrorBackgrounds = it },
+                                label = stringResource(Res.string.instance_link_mirror_backgrounds),
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Switch(checked = mirrorBackgrounds, onCheckedChange = { mirrorBackgrounds = it })
-                                Text(
-                                    stringResource(Res.string.instance_link_mirror_backgrounds),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
+                                style = MaterialTheme.typography.bodyMedium,
+                                spacing = 12.dp,
+                            )
                         }
                     }
                 }

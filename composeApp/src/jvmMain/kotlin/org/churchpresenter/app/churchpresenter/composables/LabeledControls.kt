@@ -1,5 +1,7 @@
 package org.churchpresenter.app.churchpresenter.composables
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -11,6 +13,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 
@@ -31,6 +36,12 @@ import androidx.compose.ui.text.TextStyle
  *
  * `enabled` propagates to both halves, so a disabled row is inert *and* reports itself disabled rather
  * than silently ignoring presses.
+ *
+ * The remaining parameters exist so migrated call sites keep the look they had: [color] and [spacing]
+ * carry the label colour and the gap the old hand-rolled `Row` set, [supporting] is the quieter second
+ * line the settings rows use, and [controlAtEnd] keeps the layout where the label sits left and the
+ * control is pushed to the right edge. **[controlModifier] is the control's own modifier** — a `size`
+ * or `testTag` belongs there, not on [modifier], which is the whole row.
  */
 
 @Composable
@@ -41,7 +52,11 @@ fun LabeledCheckbox(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = Color.Unspecified,
+    supporting: String? = null,
     controlModifier: Modifier = Modifier,
+    spacing: Dp = 0.dp,
+    controlAtEnd: Boolean = false,
 ) {
     Row(
         modifier = modifier.toggleable(
@@ -51,11 +66,17 @@ fun LabeledCheckbox(
             onValueChange = onCheckedChange,
         ),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing),
     ) {
         // null: the row above already handles the click, and a control with its own handler would
         // publish a second, competing click target inside the first.
-        Checkbox(checked = checked, onCheckedChange = null, enabled = enabled, modifier = controlModifier)
-        Text(text = label, style = style)
+        if (controlAtEnd) {
+            LabelText(label, supporting, style, color, Modifier.weight(1f))
+            Checkbox(checked = checked, onCheckedChange = null, enabled = enabled, modifier = controlModifier)
+        } else {
+            Checkbox(checked = checked, onCheckedChange = null, enabled = enabled, modifier = controlModifier)
+            LabelText(label, supporting, style, color)
+        }
     }
 }
 
@@ -67,7 +88,11 @@ fun LabeledRadioButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = Color.Unspecified,
+    supporting: String? = null,
     controlModifier: Modifier = Modifier,
+    spacing: Dp = 0.dp,
+    controlAtEnd: Boolean = false,
 ) {
     Row(
         modifier = modifier.selectable(
@@ -77,9 +102,15 @@ fun LabeledRadioButton(
             onClick = onClick,
         ),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing),
     ) {
-        RadioButton(selected = selected, onClick = null, enabled = enabled, modifier = controlModifier)
-        Text(text = label, style = style)
+        if (controlAtEnd) {
+            LabelText(label, supporting, style, color, Modifier.weight(1f))
+            RadioButton(selected = selected, onClick = null, enabled = enabled, modifier = controlModifier)
+        } else {
+            RadioButton(selected = selected, onClick = null, enabled = enabled, modifier = controlModifier)
+            LabelText(label, supporting, style, color)
+        }
     }
 }
 
@@ -91,7 +122,11 @@ fun LabeledSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = Color.Unspecified,
+    supporting: String? = null,
     controlModifier: Modifier = Modifier,
+    spacing: Dp = 0.dp,
+    controlAtEnd: Boolean = false,
 ) {
     Row(
         modifier = modifier.toggleable(
@@ -101,8 +136,37 @@ fun LabeledSwitch(
             onValueChange = onCheckedChange,
         ),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing),
     ) {
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled, modifier = controlModifier)
-        Text(text = label, style = style)
+        if (controlAtEnd) {
+            LabelText(label, supporting, style, color, Modifier.weight(1f))
+            Switch(checked = checked, onCheckedChange = null, enabled = enabled, modifier = controlModifier)
+        } else {
+            Switch(checked = checked, onCheckedChange = null, enabled = enabled, modifier = controlModifier)
+            LabelText(label, supporting, style, color)
+        }
+    }
+}
+
+/** A control's label: one line, or a title with a quieter description under it. */
+@Composable
+private fun LabelText(
+    label: String,
+    supporting: String?,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    if (supporting == null) {
+        Text(text = label, style = style, color = color, modifier = modifier)
+    } else {
+        Column(modifier = modifier) {
+            Text(text = label, style = style, color = color)
+            Text(
+                text = supporting,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

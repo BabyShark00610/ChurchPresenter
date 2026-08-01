@@ -126,6 +126,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import java.awt.GraphicsEnvironment
 import java.io.File
+import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 /** [ActionIconButton]'s own default size, which the reorder buttons take and their gaps stand in for. */
 private val REORDER_BUTTON_SIZE = 34.dp
@@ -402,21 +403,17 @@ private fun LeftColumn(
 
     // Split Browse Mode
     SettingsSection(title = stringResource(Res.string.bible_split_browse_mode)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = settings.bibleSettings.splitBrowseMode,
-                onCheckedChange = { enabled ->
+        LabeledCheckbox(
+            checked = settings.bibleSettings.splitBrowseMode,
+            onCheckedChange = { enabled ->
                     onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(splitBrowseMode = enabled)) }
                 },
-                modifier = Modifier.size(24.dp)
-            )
-            Text(
-                text = stringResource(Res.string.bible_split_browse_mode),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+            controlModifier = Modifier.size(24.dp),
+            label = stringResource(Res.string.bible_split_browse_mode),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 
     // Vertical Alignment
@@ -454,18 +451,30 @@ private fun LeftColumn(
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = settings.bibleSettings.fadeIn, onCheckedChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(fadeIn = it)) } }, modifier = Modifier.size(24.dp))
-                Text(text = stringResource(Res.string.fade_in), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 4.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = settings.bibleSettings.fadeOut, onCheckedChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(fadeOut = it)) } }, modifier = Modifier.size(24.dp))
-                Text(text = stringResource(Res.string.fade_out), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 4.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = settings.bibleSettings.crossfade, onCheckedChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(crossfade = it)) } }, modifier = Modifier.size(24.dp))
-                Text(text = stringResource(Res.string.animation_crossfade), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 4.dp))
-            }
+            LabeledCheckbox(
+                checked = settings.bibleSettings.fadeIn,
+                onCheckedChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(fadeIn = it)) } },
+                controlModifier = Modifier.size(24.dp),
+                label = stringResource(Res.string.fade_in),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            LabeledCheckbox(
+                checked = settings.bibleSettings.fadeOut,
+                onCheckedChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(fadeOut = it)) } },
+                controlModifier = Modifier.size(24.dp),
+                label = stringResource(Res.string.fade_out),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            LabeledCheckbox(
+                checked = settings.bibleSettings.crossfade,
+                onCheckedChange = { onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(crossfade = it)) } },
+                controlModifier = Modifier.size(24.dp),
+                label = stringResource(Res.string.animation_crossfade),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 
@@ -870,18 +879,14 @@ private fun TranslationReferenceSection(
             }
         }
     }
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = translation.showAbbreviation,
-            onCheckedChange = {
+    LabeledCheckbox(
+        checked = translation.showAbbreviation,
+        onCheckedChange = {
                 update { t -> t.copy(showAbbreviation = it) }
-            }
-        )
-        Text(
-            text = stringResource(Res.string.show_abbreviation),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(start = 4.dp)
-        )
-    }
+            },
+        label = stringResource(Res.string.show_abbreviation),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        style = MaterialTheme.typography.bodyMedium,
+    )
 }
 
