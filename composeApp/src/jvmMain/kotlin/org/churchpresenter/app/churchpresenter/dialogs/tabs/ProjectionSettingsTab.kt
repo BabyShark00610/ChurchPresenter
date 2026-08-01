@@ -57,7 +57,6 @@ import androidx.compose.material3.OutlinedButton
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.SettingsTextField
 import org.churchpresenter.app.churchpresenter.models.Scene
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -1075,11 +1074,11 @@ fun ProjectionSettingsTab(
                         LabeledSwitch(
                             checked = output.browserSourceEnabled,
                             onCheckedChange = { checked ->
-                                    val updated = output.copy(browserSourceEnabled = checked)
-                                    onSettingsChange { s ->
-                                        s.copy(projectionSettings = s.projectionSettings.withBrowserSourceOutput(i, updated))
-                                    }
-                                },
+                                val updated = output.copy(browserSourceEnabled = checked)
+                                onSettingsChange { s ->
+                                    s.copy(projectionSettings = s.projectionSettings.withBrowserSourceOutput(i, updated))
+                                }
+                            },
                             label = stringResource(Res.string.browser_source_enabled),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
