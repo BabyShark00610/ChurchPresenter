@@ -109,7 +109,7 @@ object DeckLinkManager {
             nativeListDevices().mapIndexed { index, name ->
                 DeckLinkDevice(index, name)
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             emptyList()
         }
     }
@@ -123,7 +123,7 @@ object DeckLinkManager {
                 registerShutdownHook()
             }
             result
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             false
         }
     }
@@ -149,7 +149,7 @@ object DeckLinkManager {
                 }
                 Thread.sleep(100)
                 nativeClose(deviceIndex)
-            } catch (_: Exception) {}
+            } catch (_: Throwable) {}
         }
         outputDevices.clear()
     }
@@ -157,10 +157,7 @@ object DeckLinkManager {
     fun getOutputInfo(deviceIndex: Int): OutputInfo? {
         if (!isAvailable()) return null
         return try {
-            val info = nativeGetOutputInfo(deviceIndex)
-            if (info.size >= 4 && info[0] > 0 && info[1] > 0) {
-                OutputInfo(info[0], info[1], info[2], info[3])
-            } else null
+            parseOutputInfo(nativeGetOutputInfo(deviceIndex))
         } catch (_: Throwable) {
             null
         }
@@ -170,7 +167,7 @@ object DeckLinkManager {
         if (!isAvailable()) return
         try {
             nativeSendFrame(deviceIndex, pixels, width, height)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // silently ignore
         }
     }
@@ -179,7 +176,7 @@ object DeckLinkManager {
         if (!isAvailable()) return false
         return try {
             nativeStartScheduledPlayback(deviceIndex, fps)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             false
         }
     }
@@ -188,7 +185,7 @@ object DeckLinkManager {
         if (!isAvailable()) return
         try {
             nativeScheduleFrame(deviceIndex, pixels, width, height)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // silently ignore
         }
     }
@@ -197,7 +194,7 @@ object DeckLinkManager {
         if (!isAvailable()) return
         try {
             nativeStopPlayback(deviceIndex)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // silently ignore
         }
     }
@@ -207,7 +204,7 @@ object DeckLinkManager {
         try {
             nativeClose(deviceIndex)
             outputDevices.remove(deviceIndex)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // silently ignore
         }
     }
@@ -245,27 +242,15 @@ object DeckLinkManager {
     fun listInputModes(deviceIndex: Int): List<InputMode> {
         if (!isAvailable()) return emptyList()
         return try {
-            nativeListInputModes(deviceIndex).map { encoded ->
-                val parts = encoded.split("|", limit = 2)
-                InputMode(
-                    name = parts.getOrElse(0) { encoded },
-                    encodedValue = parts.getOrElse(1) { "" }
-                )
-            }
-        } catch (_: Exception) { emptyList() }
+            parseInputModes(nativeListInputModes(deviceIndex))
+        } catch (_: Throwable) { emptyList() }
     }
 
     fun listVideoConnections(deviceIndex: Int): List<VideoConnection> {
         if (!isAvailable()) return emptyList()
         return try {
-            nativeListVideoConnections(deviceIndex).map { encoded ->
-                val parts = encoded.split("|", limit = 2)
-                VideoConnection(
-                    name = parts.getOrElse(0) { encoded },
-                    value = parts.getOrElse(1) { "0" }.toIntOrNull() ?: 0
-                )
-            }
-        } catch (_: Exception) { emptyList() }
+            parseVideoConnections(nativeListVideoConnections(deviceIndex))
+        } catch (_: Throwable) { emptyList() }
     }
 
     fun openInput(deviceIndex: Int, mode: String = "", connection: Int = 0): Boolean {
@@ -274,14 +259,14 @@ object DeckLinkManager {
             val result = nativeOpenInput(deviceIndex, mode, connection)
             if (result) inputDevices.add(deviceIndex)
             result
-        } catch (_: Exception) { false }
+        } catch (_: Throwable) { false }
     }
 
     fun getInputFrame(deviceIndex: Int): IntArray? {
         if (!isAvailable()) return null
         return try {
             nativeGetInputFrame(deviceIndex)
-        } catch (_: Exception) { null }
+        } catch (_: Throwable) { null }
     }
 
     fun closeInput(deviceIndex: Int) {
@@ -289,7 +274,7 @@ object DeckLinkManager {
         try {
             nativeCloseInput(deviceIndex)
             inputDevices.remove(deviceIndex)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // silently ignore
         }
     }
@@ -300,20 +285,14 @@ object DeckLinkManager {
         if (!isAvailable()) return false
         return try {
             nativeEnableAudioInput(deviceIndex, channels)
-        } catch (_: Exception) { false }
+        } catch (_: Throwable) { false }
     }
 
     fun getInputAudio(deviceIndex: Int): AudioFrame? {
         if (!isAvailable()) return null
         return try {
-            val data = nativeGetInputAudio(deviceIndex) ?: return null
-            if (data.size < 2) return null
-            val sampleFrames = data[0].toInt()
-            val channels = data[1].toInt()
-            if (sampleFrames <= 0 || channels <= 0) return null
-            val samples = data.copyOfRange(2, 2 + sampleFrames * channels)
-            AudioFrame(sampleFrames, channels, samples)
-        } catch (_: Exception) { null }
+            parseInputAudio(nativeGetInputAudio(deviceIndex) ?: return null)
+        } catch (_: Throwable) { null }
     }
 
     // ── Audio output API ───────────────────────────────────────────────
@@ -322,19 +301,19 @@ object DeckLinkManager {
         if (!isAvailable()) return false
         return try {
             nativeEnableAudioOutput(deviceIndex, channels)
-        } catch (_: Exception) { false }
+        } catch (_: Throwable) { false }
     }
 
     fun writeAudioSamples(deviceIndex: Int, samples: ShortArray, sampleFrameCount: Int): Int {
         if (!isAvailable()) return 0
         return try {
             nativeWriteAudioSamples(deviceIndex, samples, sampleFrameCount)
-        } catch (_: Exception) { 0 }
+        } catch (_: Throwable) { 0 }
     }
 
     fun disableAudioOutput(deviceIndex: Int) {
         if (!isAvailable()) return
-        try { nativeDisableAudioOutput(deviceIndex) } catch (_: Exception) {}
+        try { nativeDisableAudioOutput(deviceIndex) } catch (_: Throwable) {}
     }
 
     // ── Keyer API ──────────────────────────────────────────────────────
@@ -346,30 +325,30 @@ object DeckLinkManager {
         if (!isAvailable()) return false
         return try {
             nativeEnableKeyer(deviceIndex, isExternal)
-        } catch (_: Exception) { false }
+        } catch (_: Throwable) { false }
     }
 
     /** Set keyer opacity level (0 = fully transparent, 255 = fully opaque). */
     fun setKeyerLevel(deviceIndex: Int, level: Int) {
         if (!isAvailable()) return
-        try { nativeSetKeyerLevel(deviceIndex, level) } catch (_: Exception) {}
+        try { nativeSetKeyerLevel(deviceIndex, level) } catch (_: Throwable) {}
     }
 
     /** Smoothly ramp the keyer overlay up over the given number of frames. */
     fun keyerRampUp(deviceIndex: Int, frames: Int = 30) {
         if (!isAvailable()) return
-        try { nativeKeyerRampUp(deviceIndex, frames) } catch (_: Exception) {}
+        try { nativeKeyerRampUp(deviceIndex, frames) } catch (_: Throwable) {}
     }
 
     /** Smoothly ramp the keyer overlay down over the given number of frames. */
     fun keyerRampDown(deviceIndex: Int, frames: Int = 30) {
         if (!isAvailable()) return
-        try { nativeKeyerRampDown(deviceIndex, frames) } catch (_: Exception) {}
+        try { nativeKeyerRampDown(deviceIndex, frames) } catch (_: Throwable) {}
     }
 
     fun disableKeyer(deviceIndex: Int) {
         if (!isAvailable()) return
-        try { nativeDisableKeyer(deviceIndex) } catch (_: Exception) {}
+        try { nativeDisableKeyer(deviceIndex) } catch (_: Throwable) {}
     }
 
     // ── Output connection API ──────────────────────────────────────────
@@ -378,20 +357,14 @@ object DeckLinkManager {
         if (!isAvailable()) return false
         return try {
             nativeSetOutputConnection(deviceIndex, connectionType)
-        } catch (_: Exception) { false }
+        } catch (_: Throwable) { false }
     }
 
     fun listOutputConnections(deviceIndex: Int): List<VideoConnection> {
         if (!isAvailable()) return emptyList()
         return try {
-            nativeListOutputConnections(deviceIndex).map { encoded ->
-                val parts = encoded.split("|", limit = 2)
-                VideoConnection(
-                    name = parts.getOrElse(0) { encoded },
-                    value = parts.getOrElse(1) { "0" }.toIntOrNull() ?: 0
-                )
-            }
-        } catch (_: Exception) { emptyList() }
+            parseVideoConnections(nativeListOutputConnections(deviceIndex))
+        } catch (_: Throwable) { emptyList() }
     }
 
     // ── Status monitoring API ──────────────────────────────────────────
@@ -399,14 +372,50 @@ object DeckLinkManager {
     fun getDeviceStatus(deviceIndex: Int): DeviceStatus? {
         if (!isAvailable()) return null
         return try {
-            val data = nativeGetDeviceStatus(deviceIndex)
-            if (data.size >= 3) {
-                DeviceStatus(
-                    signalLocked = data[0] != 0,
-                    busy = data[1],
-                    detectedModeCode = data[2]
-                )
-            } else null
-        } catch (_: Exception) { null }
+            parseDeviceStatus(nativeGetDeviceStatus(deviceIndex))
+        } catch (_: Throwable) { null }
+    }
+
+    // ── Internal parsing helpers (separated from native calls for testability) ──
+
+    internal fun parseInputModes(rawArray: Array<String>): List<InputMode> =
+        rawArray.map { encoded ->
+            val parts = encoded.split("|", limit = 2)
+            InputMode(
+                name = parts.getOrElse(0) { encoded },
+                encodedValue = parts.getOrElse(1) { "" }
+            )
+        }
+
+    internal fun parseVideoConnections(rawArray: Array<String>): List<VideoConnection> =
+        rawArray.map { encoded ->
+            val parts = encoded.split("|", limit = 2)
+            VideoConnection(
+                name = parts.getOrElse(0) { encoded },
+                value = parts.getOrElse(1) { "0" }.toIntOrNull() ?: 0
+            )
+        }
+
+    internal fun parseOutputInfo(rawArray: IntArray): OutputInfo? =
+        if (rawArray.size >= 4 && rawArray[0] > 0 && rawArray[1] > 0) {
+            OutputInfo(rawArray[0], rawArray[1], rawArray[2], rawArray[3])
+        } else null
+
+    internal fun parseDeviceStatus(rawArray: IntArray): DeviceStatus? =
+        if (rawArray.size >= 3) {
+            DeviceStatus(
+                signalLocked = rawArray[0] != 0,
+                busy = rawArray[1],
+                detectedModeCode = rawArray[2]
+            )
+        } else null
+
+    internal fun parseInputAudio(data: ShortArray): AudioFrame? {
+        if (data.size < 2) return null
+        val sampleFrames = data[0].toInt()
+        val channels = data[1].toInt()
+        if (sampleFrames <= 0 || channels <= 0) return null
+        val samples = data.copyOfRange(2, 2 + sampleFrames * channels)
+        return AudioFrame(sampleFrames, channels, samples)
     }
 }

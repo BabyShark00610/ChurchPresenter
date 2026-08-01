@@ -180,16 +180,7 @@ fun DeckLinkComposeOutput(
                             val bytes = data.getBytes(0, (w * h * 4).coerceAtMost(data.size))
                             System.arraycopy(bytes, 0, byteBuf, 0, bytes.size)
 
-                            // Convert BGRA/RGBA bytes to ARGB IntArray for the JNI bridge
-                            // Skia on Windows uses BGRA_8888 natively
-                            for (i in 0 until w * h) {
-                                val off = i * 4
-                                val b = byteBuf[off].toInt() and 0xFF
-                                val g = byteBuf[off + 1].toInt() and 0xFF
-                                val r = byteBuf[off + 2].toInt() and 0xFF
-                                val a = byteBuf[off + 3].toInt() and 0xFF
-                                pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
-                            }
+                            skiaBgraToArgbPixels(byteBuf, pixels, w * h)
 
                             // For key output: convert rendered fill to key signal.
                             // Content on black bg → white where content is, black where it isn't.
@@ -247,5 +238,20 @@ internal fun convertToKeySignal(pixels: IntArray) {
         val b = pixels[i] and 0xFF
         val key = maxOf(r, g, b)
         pixels[i] = (0xFF shl 24) or (key shl 16) or (key shl 8) or key
+    }
+}
+
+/**
+ * Converts Skia's native BGRA_8888 byte buffer into packed ARGB ints for the DeckLink JNI bridge.
+ * [byteBuf] must hold at least `pixelCount * 4` bytes; result is written into [pixels].
+ */
+internal fun skiaBgraToArgbPixels(byteBuf: ByteArray, pixels: IntArray, pixelCount: Int) {
+    for (i in 0 until pixelCount) {
+        val off = i * 4
+        val b = byteBuf[off].toInt() and 0xFF
+        val g = byteBuf[off + 1].toInt() and 0xFF
+        val r = byteBuf[off + 2].toInt() and 0xFF
+        val a = byteBuf[off + 3].toInt() and 0xFF
+        pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
     }
 }
