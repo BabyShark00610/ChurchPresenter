@@ -25,6 +25,17 @@ import kotlin.test.assertTrue
  * `if (!isAvailable()) return ...` branch, never the native call inside. The native calls
  * themselves (`nativeXxx`) are therefore permanently unreachable in this suite, by construction —
  * consistent with this project's rule that hardware-only code paths are not force-tested.
+ *
+ * What each native call's *result* is turned into is a different matter, and that part is covered:
+ * the `parseXxx` helpers below are the decision logic lifted out of those hardware-gated methods,
+ * so only the one unreachable JNI call is left uncovered in each.
+ *
+ * **Driving a real card is a separate, opt-in step.** [DeckLinkHardwareTest] does that, but it is
+ * gated behind `-PdecklinkHardware=true` and inert in every ordinary run — including this one.
+ * Reaching the native calls means opening the output device for real, which pushes a frame to
+ * whatever the card is wired to, installs a JVM shutdown hook and costs driver-init time; it also
+ * has to reset the memoized `available` field that the assertions here rely on. None of that
+ * belongs in a suite that runs on every change, so it stays behind the flag.
  */
 class DeckLinkManagerTest {
 

@@ -7,22 +7,39 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Integration tests that exercise DeckLinkManager against a real Blackmagic DeckLink card.
+ * An **opt-in manual harness** that exercises DeckLinkManager against a real Blackmagic DeckLink
+ * card. It is not part of the ordinary unit suite and does nothing unless explicitly asked for:
  *
- * These tests only run meaningfully on a machine with the Blackmagic Desktop Video drivers
- * installed and a DeckLink card present. On any other machine, [DeckLinkManager.isAvailable]
- * returns false and every test is a no-op (asserts skip via an `assumeAvailable()` guard).
+ * ```
+ * ./gradlew :composeApp:jvmTest -PdecklinkHardware=true --tests '*DeckLinkHardwareTest*'
+ * ```
  *
- * The [available] field is a private memoizing `Boolean?` — once the guard-clause tests in
- * [DeckLinkManagerTest] latch it to `false`, it stays false for the rest of the JVM. This class
- * resets it to `null` before each test and sets `compose.application.resources.dir` to the
- * directory containing `decklink_jni.dll`, giving [isAvailable] a fresh chance to load the
- * native library. After each test, the field and system property are restored so
- * [DeckLinkManagerTest]'s own guard-clause assumptions hold if it runs later in the same JVM.
+ * **Why it is gated rather than merely self-skipping.** Reaching the native calls has real side
+ * effects that must never happen during a routine `:composeApp:check`:
+ * - `open` pushes a frame to whatever the card's output is wired to — on a machine mid-service
+ *   that is a visible glitch on the program feed — and installs a JVM shutdown hook that sends
+ *   three more black frames and sleeps 100 ms at teardown.
+ * - Loading the driver costs far more than the ~1s per-test bar the suite is held to.
+ * - It resets [DeckLinkManager]'s private memoized `available` field (see below), which
+ *   [DeckLinkManagerTest] depends on being latched to `false`. Leaving that reset out of the
+ *   default run keeps the two suites independent instead of coupled through a restore.
+ *
+ * With the flag off, [setUp] touches nothing at all — no reflection, no system properties, no
+ * library load — and every test returns at its [assumeAvailable] guard.
+ *
+ * With the flag on: the `available` field is a private memoizing `Boolean?`, so once the
+ * guard-clause tests in [DeckLinkManagerTest] latch it to `false` it stays false for the rest of
+ * the JVM. This class resets it to `null` and sets `compose.application.resources.dir` to the
+ * directory holding `decklink_jni.dll`, giving `isAvailable()` a fresh chance to load the native
+ * library; both are restored afterwards so [DeckLinkManagerTest]'s assumptions still hold if it
+ * runs later in the same JVM.
+ *
+ * The `println`s below are the point of a manual harness rather than stray debug output — what a
+ * card reported is the result you run this for — and are the same exemption the PresentationEngine's
+ * `dumpKeynote`/`dumpTiming` CLI tasks carry in DEVELOPMENT_GUIDE.md.
  */
 class DeckLinkHardwareTest {
 
@@ -31,12 +48,14 @@ class DeckLinkHardwareTest {
     private var savedAvailable: Any? = SENTINEL
     private var savedResDir: String? = null
 
-    private val availableField = DeckLinkManager::class.java.getDeclaredField("available").apply {
-        isAccessible = true
+    /** Lazy so that with the flag off this class never even loads [DeckLinkManager]. */
+    private val availableField by lazy {
+        DeckLinkManager::class.java.getDeclaredField("available").apply { isAccessible = true }
     }
 
     @BeforeTest
     fun setUp() {
+        if (!HARDWARE_ENABLED) return
         TestSingletons.latchToTestHome()
         realHome = System.getProperty("user.home")
         tempHome = Files.createTempDirectory("cp-decklink-hw").toFile()
@@ -63,6 +82,7 @@ class DeckLinkHardwareTest {
 
     @AfterTest
     fun tearDown() {
+        if (!HARDWARE_ENABLED) return
         // Restore the memoized field so guard-clause tests in DeckLinkManagerTest still work
         if (savedAvailable !== SENTINEL) {
             availableField.set(DeckLinkManager, savedAvailable)
@@ -77,6 +97,7 @@ class DeckLinkHardwareTest {
     }
 
     private fun assumeAvailable(): Boolean {
+        if (!HARDWARE_ENABLED) return false
         if (!DeckLinkManager.isAvailable()) {
             println("[DeckLinkHardwareTest] Native library not loadable — skipping hardware test")
             return false
@@ -220,5 +241,13 @@ class DeckLinkHardwareTest {
 
     companion object {
         private val SENTINEL = Any()
+
+        /**
+         * Opt-in switch, forwarded from `-PdecklinkHardware=true` by the `Test` task config in
+         * `composeApp/build.gradle.kts`. Absent — which is every CI run and every ordinary local
+         * run — this whole class is inert.
+         */
+        private val HARDWARE_ENABLED: Boolean =
+            System.getProperty("churchpresenter.decklinkHardware") == "true"
     }
 }
