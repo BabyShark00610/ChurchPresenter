@@ -31,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -2046,10 +2045,20 @@ private fun BibleProperties(
         label = stringResource(Res.string.canvas_font_color)
     )
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Checkbox(checked = source.bold, onCheckedChange = { onUpdate(source.copy(bold = it)) })
-        Text(stringResource(Res.string.canvas_text_bold), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Checkbox(checked = source.italic, onCheckedChange = { onUpdate(source.copy(italic = it)) })
-        Text(stringResource(Res.string.canvas_text_italic), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LabeledCheckbox(
+            checked = source.bold,
+            onCheckedChange = { onUpdate(source.copy(bold = it)) },
+            label = stringResource(Res.string.canvas_text_bold),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LabeledCheckbox(
+            checked = source.italic,
+            onCheckedChange = { onUpdate(source.copy(italic = it)) },
+            label = stringResource(Res.string.canvas_text_italic),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
     Spacer(modifier = Modifier.height(4.dp))
@@ -2065,10 +2074,20 @@ private fun BibleProperties(
         label = stringResource(Res.string.canvas_bible_ref_color)
     )
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Checkbox(checked = source.referenceBold, onCheckedChange = { onUpdate(source.copy(referenceBold = it)) })
-        Text(stringResource(Res.string.canvas_text_bold), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Checkbox(checked = source.referenceItalic, onCheckedChange = { onUpdate(source.copy(referenceItalic = it)) })
-        Text(stringResource(Res.string.canvas_text_italic), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LabeledCheckbox(
+            checked = source.referenceBold,
+            onCheckedChange = { onUpdate(source.copy(referenceBold = it)) },
+            label = stringResource(Res.string.canvas_text_bold),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LabeledCheckbox(
+            checked = source.referenceItalic,
+            onCheckedChange = { onUpdate(source.copy(referenceItalic = it)) },
+            label = stringResource(Res.string.canvas_text_italic),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
     Spacer(modifier = Modifier.height(4.dp))

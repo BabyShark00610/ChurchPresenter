@@ -17,6 +17,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.hasImeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -209,7 +210,10 @@ internal fun ComposeUiTest.segmentedButton(text: String, row: Int): SemanticsNod
 
 /** The "Auto" push-buttons next to the lyrics font sizes; only rendered with a PresenterManager. */
 internal fun ComposeUiTest.autoFitButtons(): SemanticsNodeInteractionCollection =
-    onAllNodes(hasClickAction() and hasText("Auto"))
+    // Not toggleable: the auto-fit *checkboxes* beside these buttons carry the same "Auto" label,
+    // and since they became LabeledCheckbox their row is clickable too, so text + click alone now
+    // matches four nodes rather than two.
+    onAllNodes(hasClickAction() and hasText("Auto") and !isToggleable())
 
 // ── Actions ─────────────────────────────────────────────────────────────────────────────────────
 

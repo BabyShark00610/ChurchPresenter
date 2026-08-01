@@ -123,6 +123,7 @@ import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -184,44 +185,34 @@ private fun TitleSlideColumn(
 ) {
     SettingsSection(title = stringResource(Res.string.song_title_slide)) {
         Column {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = settings.songSettings.titleSlideEnabled,
-                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(titleSlideEnabled = it)) } },
-                    modifier = Modifier.size(24.dp).testTag("song_titleSlideEnabled")
-                )
-                Text(stringResource(Res.string.enabled), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = settings.songSettings.titleSlideShowSongNumber,
-                    onCheckedChange = if (settings.songSettings.titleSlideEnabled) {
-                        { checked ->
-                            onSettingsChange { s ->
-                                s.copy(songSettings = s.songSettings.copy(titleSlideShowSongNumber = checked))
-                            }
-                        }
-                    } else null,
-                    enabled = settings.songSettings.titleSlideEnabled,
-                    modifier = Modifier.size(24.dp).testTag("song_titleSlideShowSongNumber")
-                )
-                Text(
-                    text = stringResource(Res.string.show_song_number_before_title),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (settings.songSettings.titleSlideEnabled) {
+            LabeledCheckbox(
+                checked = settings.songSettings.titleSlideEnabled,
+                onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(titleSlideEnabled = it)) } },
+                controlModifier = Modifier.size(24.dp),
+                label = stringResource(Res.string.enabled),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("song_titleSlideEnabled"),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            LabeledCheckbox(
+                checked = settings.songSettings.titleSlideShowSongNumber,
+                // The old code disabled this by passing a null callback; `enabled` below already
+                // makes the row inert, and the helper needs one or the other, not both.
+                onCheckedChange = { checked ->
+                    onSettingsChange { s ->
+                        s.copy(songSettings = s.songSettings.copy(titleSlideShowSongNumber = checked))
+                    }
+                },
+                enabled = settings.songSettings.titleSlideEnabled,
+                controlModifier = Modifier.size(24.dp),
+                label = stringResource(Res.string.show_song_number_before_title),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("song_titleSlideShowSongNumber"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (settings.songSettings.titleSlideEnabled) {
                         MaterialTheme.colorScheme.onSurface
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                     },
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
+            )
         }
     }
 }
@@ -358,17 +349,13 @@ private fun LeftColumn(
     val sameLowerThird = settings.songSettings.songNumberLowerThirdPosition == settings.songSettings.titleLowerThirdPosition &&
             settings.songSettings.songNumberLowerThirdHorizontalAlignment == settings.songSettings.titleLowerThirdHorizontalAlignment
     AnimatedVisibility(visible = sameFullscreen || sameLowerThird) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = settings.songSettings.songNumberBeforeTitle,
-                onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(songNumberBeforeTitle = it)) } },
-                modifier = Modifier.testTag("song_songNumberBeforeTitle")
-            )
-            Text(stringResource(Res.string.number_before_title), style = MaterialTheme.typography.bodyMedium)
-        }
+        LabeledCheckbox(
+            checked = settings.songSettings.songNumberBeforeTitle,
+            onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(songNumberBeforeTitle = it)) } },
+            label = stringResource(Res.string.number_before_title),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("song_songNumberBeforeTitle"),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
     } // end song_number SettingsSection
 
@@ -595,45 +582,33 @@ private fun LeftColumn(
     Spacer(modifier = Modifier.height(4.dp))
 
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = settings.songSettings.fadeIn,
-                onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(fadeIn = it)) } },
-                modifier = Modifier.size(24.dp).testTag("song_fadeIn")
-            )
-            Text(
-                text = stringResource(Res.string.fade_in),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = settings.songSettings.fadeOut,
-                onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(fadeOut = it)) } },
-                modifier = Modifier.size(24.dp).testTag("song_fadeOut")
-            )
-            Text(
-                text = stringResource(Res.string.fade_out),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = settings.songSettings.crossfade,
-                onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(crossfade = it)) } },
-                modifier = Modifier.size(24.dp).testTag("song_crossfade")
-            )
-            Text(
-                text = stringResource(Res.string.animation_crossfade),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-        }
+        LabeledCheckbox(
+            checked = settings.songSettings.fadeIn,
+            onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(fadeIn = it)) } },
+            controlModifier = Modifier.size(24.dp),
+            label = stringResource(Res.string.fade_in),
+            modifier = Modifier.testTag("song_fadeIn"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        LabeledCheckbox(
+            checked = settings.songSettings.fadeOut,
+            onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(fadeOut = it)) } },
+            controlModifier = Modifier.size(24.dp),
+            label = stringResource(Res.string.fade_out),
+            modifier = Modifier.testTag("song_fadeOut"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        LabeledCheckbox(
+            checked = settings.songSettings.crossfade,
+            onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(crossfade = it)) } },
+            controlModifier = Modifier.size(24.dp),
+            label = stringResource(Res.string.animation_crossfade),
+            modifier = Modifier.testTag("song_crossfade"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 
     // ── Bilingual Layout ──
@@ -864,14 +839,14 @@ private fun RightColumn(
                 tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) { Text(stringResource(Res.string.auto_fit_checkbox_tooltip), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) } },
                 tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = settings.songSettings.lyricsFontSizeAutoFit,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsFontSizeAutoFit = it)) } },
-                        modifier = Modifier.size(24.dp).testTag("song_lyricsFontSizeAutoFit")
-                    )
-                    Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-                }
+                LabeledCheckbox(
+                    checked = settings.songSettings.lyricsFontSizeAutoFit,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsFontSizeAutoFit = it)) } },
+                    controlModifier = Modifier.size(24.dp),
+                    label = stringResource(Res.string.auto_fit),
+                    modifier = Modifier.testTag("song_lyricsFontSizeAutoFit"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             if (presenterManager != null) {
                 TooltipArea(
@@ -1022,14 +997,14 @@ private fun RightColumn(
                 tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) { Text(stringResource(Res.string.auto_fit_checkbox_tooltip), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) } },
                 tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = settings.songSettings.lyricsLowerThirdFontSizeAutoFit,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdFontSizeAutoFit = it)) } },
-                        modifier = Modifier.size(24.dp).testTag("song_lyricsLowerThirdFontSizeAutoFit")
-                    )
-                    Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-                }
+                LabeledCheckbox(
+                    checked = settings.songSettings.lyricsLowerThirdFontSizeAutoFit,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdFontSizeAutoFit = it)) } },
+                    controlModifier = Modifier.size(24.dp),
+                    label = stringResource(Res.string.auto_fit),
+                    modifier = Modifier.testTag("song_lyricsLowerThirdFontSizeAutoFit"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             if (presenterManager != null) {
                 TooltipArea(
@@ -1198,14 +1173,14 @@ private fun LookAheadColumn(
                 tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) { Text(stringResource(Res.string.auto_fit_checkbox_tooltip), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) } },
                 tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = settings.songSettings.lookAheadFontSizeAutoFit,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lookAheadFontSizeAutoFit = it)) } },
-                        modifier = Modifier.size(24.dp).testTag("song_lookAheadFontSizeAutoFit")
-                    )
-                    Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-                }
+                LabeledCheckbox(
+                    checked = settings.songSettings.lookAheadFontSizeAutoFit,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lookAheadFontSizeAutoFit = it)) } },
+                    controlModifier = Modifier.size(24.dp),
+                    label = stringResource(Res.string.auto_fit),
+                    modifier = Modifier.testTag("song_lookAheadFontSizeAutoFit"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
     }
@@ -1260,14 +1235,14 @@ private fun LookAheadColumn(
                 tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) { Text(stringResource(Res.string.auto_fit_checkbox_tooltip), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) } },
                 tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = settings.songSettings.lookAheadNextFontSizeAutoFit,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lookAheadNextFontSizeAutoFit = it)) } },
-                        modifier = Modifier.size(24.dp).testTag("song_lookAheadNextFontSizeAutoFit")
-                    )
-                    Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-                }
+                LabeledCheckbox(
+                    checked = settings.songSettings.lookAheadNextFontSizeAutoFit,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lookAheadNextFontSizeAutoFit = it)) } },
+                    controlModifier = Modifier.size(24.dp),
+                    label = stringResource(Res.string.auto_fit),
+                    modifier = Modifier.testTag("song_lookAheadNextFontSizeAutoFit"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
     }
@@ -1372,14 +1347,14 @@ private fun LookAheadColumn(
                 tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) { Text(stringResource(Res.string.auto_fit_checkbox_tooltip), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) } },
                 tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = settings.songSettings.lowerThirdLookAheadFontSizeAutoFit,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lowerThirdLookAheadFontSizeAutoFit = it)) } },
-                        modifier = Modifier.size(24.dp).testTag("song_lowerThirdLookAheadFontSizeAutoFit")
-                    )
-                    Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-                }
+                LabeledCheckbox(
+                    checked = settings.songSettings.lowerThirdLookAheadFontSizeAutoFit,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lowerThirdLookAheadFontSizeAutoFit = it)) } },
+                    controlModifier = Modifier.size(24.dp),
+                    label = stringResource(Res.string.auto_fit),
+                    modifier = Modifier.testTag("song_lowerThirdLookAheadFontSizeAutoFit"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
     }
@@ -1434,14 +1409,14 @@ private fun LookAheadColumn(
                 tooltip = { Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) { Text(stringResource(Res.string.auto_fit_checkbox_tooltip), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) } },
                 tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = settings.songSettings.lowerThirdLookAheadNextFontSizeAutoFit,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lowerThirdLookAheadNextFontSizeAutoFit = it)) } },
-                        modifier = Modifier.size(24.dp).testTag("song_lowerThirdLookAheadNextFontSizeAutoFit")
-                    )
-                    Text(stringResource(Res.string.auto_fit), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
-                }
+                LabeledCheckbox(
+                    checked = settings.songSettings.lowerThirdLookAheadNextFontSizeAutoFit,
+                    onCheckedChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lowerThirdLookAheadNextFontSizeAutoFit = it)) } },
+                    controlModifier = Modifier.size(24.dp),
+                    label = stringResource(Res.string.auto_fit),
+                    modifier = Modifier.testTag("song_lowerThirdLookAheadNextFontSizeAutoFit"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
     }
