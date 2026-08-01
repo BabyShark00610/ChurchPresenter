@@ -93,6 +93,10 @@ Presentation deps in `composeApp/build.gradle.kts` are mirrored in
 bash cleanup_check.sh                  # repo code-quality report
 ```
 
+A failure that makes no sense — unresolved references to symbols that exist, unrelated suites
+failing, a `NoClassDefFoundError` at runtime — is a stale build. `clean` does not clear it;
+`--rerun-tasks` does.
+
 Presentation Engine tooling (from that module's root):
 ```bash
 ./gradlew test
