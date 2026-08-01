@@ -234,7 +234,7 @@ class InstanceLinkClient(
      * "timeout"/"tls"/"other" are more likely to indicate an actual regression (e.g. a primary
      * that crashed mid-session, or a protocol/certificate bug).
      */
-    private fun classifyConnectFailure(e: Exception): String = when (e) {
+    internal fun classifyConnectFailure(e: Exception): String = when (e) {
         is ConnectException -> "refused"
         is UnknownHostException -> "dns"
         is SocketTimeoutException -> "timeout"
@@ -242,7 +242,7 @@ class InstanceLinkClient(
         else -> "other"
     }
 
-    private fun handleMessage(raw: String) {
+    internal fun handleMessage(raw: String) {
         val msg = runCatching { json.decodeFromString(WebSocketMessage.serializer(), raw) }.getOrNull()
         if (msg == null) {
             InstanceLinkLogger.log(
