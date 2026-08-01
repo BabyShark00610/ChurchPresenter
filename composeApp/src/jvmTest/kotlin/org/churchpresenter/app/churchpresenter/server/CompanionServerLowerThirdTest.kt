@@ -287,4 +287,68 @@ class CompanionServerLowerThirdTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertTrue(response.text().contains("M/E 3 does not exist (available: 1-2)"), response.text())
     }
+
+    // ── ATEM media upload (still/clip): guard clauses only ─────────────────────
+
+    @Test
+    fun `uploading an unknown preset as a still is refused`() {
+        val response = posting("/api/atem/still/Nonexistent")
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        assertTrue(response.text().contains("lower third not found"), response.text())
+    }
+
+    @Test
+    fun `uploading a still with no ATEM configured reports the service as unavailable`() {
+        val response = posting("/api/atem/still/Welcome")
+        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+        assertTrue(response.text().contains("ATEM not configured"), response.text())
+    }
+
+    @Test
+    fun `uploading a still with a key target that does not exist is refused before uploading`() {
+        server.updateAtemConfig(
+            AtemSettings(host = "192.0.2.1", detectedMixEffects = 1, detectedKeyersPerMe = listOf(2)),
+            lottieFolder.absolutePath,
+        )
+        val response = posting("/api/atem/still/Welcome?key=3")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.text().contains("Key 3 does not exist on M/E 1 (available: 1-2)"), response.text())
+    }
+
+    @Test
+    fun `uploading an unknown preset as a clip is refused`() {
+        val response = posting("/api/atem/clip/Nonexistent")
+        assertEquals(HttpStatusCode.NotFound, response.status)
+    }
+
+    @Test
+    fun `uploading a clip with no ATEM configured reports the service as unavailable`() {
+        val response = posting("/api/atem/clip/Welcome")
+        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+    }
+
+    @Test
+    fun `uploading a clip with a key target that does not exist is refused before uploading`() {
+        server.updateAtemConfig(
+            AtemSettings(host = "192.0.2.1", detectedMixEffects = 1),
+            lottieFolder.absolutePath,
+        )
+        val response = posting("/api/atem/clip/Welcome?me=2&key=1")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.text().contains("M/E 2 does not exist (available: 1-1)"), response.text())
+    }
+
+    @Test
+    fun `a clip too long for its slot's capacity is refused before uploading`() {
+        server.updateAtemConfig(
+            AtemSettings(host = "192.0.2.1", detectedClipMaxFrames = listOf(30)),
+            lottieFolder.absolutePath,
+        )
+        val response = posting("/api/atem/clip/Welcome")
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(
+            response.text().contains("Clip is 60 frames but slot 1 holds at most 30 frames"),
+            response.text(),
+        )
+    }
 }

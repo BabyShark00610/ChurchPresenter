@@ -1,12 +1,16 @@
 package org.churchpresenter.app.churchpresenter.server
 
 import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The size and variant policy that decides which cached render every consumer shares.
@@ -19,22 +23,29 @@ import kotlin.test.assertNull
  * lottie's own w/h/timing, clamping to 1920, and the aspect-match branch that chooses between
  * "share one upsized entry" and "letterbox into the raster".
  *
- * All functions here are pure (no disk, no render). The object's one-time init deletes an old cache
- * dir under user.home, so user.home is redirected to a temp dir before the class is first touched.
+ * Most of it is pure (no disk, no render), but the last two touch the cache directory and the
+ * eviction one deletes from it, so `user.home` is redirected to a temp dir for every test. That
+ * redirect only works because `LottieRenderCache.cacheDir` resolves per call: the object is
+ * reachable from `CompanionServer`, `LowerThird` and `PresenterManager`, so in a full run something
+ * has already touched it, and a latched `cacheDir` would hand these tests the developer's own
+ * cache to delete.
  */
 class LottieRenderCacheTest {
 
     private lateinit var originalUserHome: String
+    private lateinit var tempHome: java.nio.file.Path
 
     @BeforeTest
     fun isolateUserHome() {
         originalUserHome = System.getProperty("user.home")
-        System.setProperty("user.home", Files.createTempDirectory("lrc-home").toString())
+        tempHome = Files.createTempDirectory("lrc-home")
+        System.setProperty("user.home", tempHome.toString())
     }
 
     @AfterTest
     fun restoreUserHome() {
         System.setProperty("user.home", originalUserHome)
+        tempHome.toFile().deleteRecursively()
     }
 
     /** A minimal lottie: 1920×1080 canvas, 30fps, frames 0..90 → a 3-second clip. */
@@ -129,5 +140,95 @@ class LottieRenderCacheTest {
     @Test
     fun `the desktop variant is null when the lottie carries no timing`() {
         assertNull(LottieRenderCache.desktopVariant("""{"w":1920,"h":1080}""", atem1080), "no timeline, nothing to stream")
+    }
+
+    // ── ARGB RLE codec ────────────────────────────────────────────────────────
+
+    private fun roundTrip(pixels: IntArray): IntArray =
+        LottieRenderCache.decodeArgbRle(LottieRenderCache.encodeArgbRle(pixels), pixels.size)
+
+    @Test
+    fun `a solid-color frame round-trips through a single run record`() {
+        val pixels = IntArray(100) { 0xFF112233.toInt() }
+        assertTrue(roundTrip(pixels).contentEquals(pixels))
+    }
+
+    @Test
+    fun `an all-distinct frame round-trips through literal records`() {
+        val pixels = IntArray(50) { it }
+        assertTrue(roundTrip(pixels).contentEquals(pixels))
+    }
+
+    @Test
+    fun `a frame mixing runs and literals round-trips intact`() {
+        val pixels = intArrayOf(1, 1, 1, 1, 2, 3, 4, 5, 5, 5, 6)
+        assertTrue(roundTrip(pixels).contentEquals(pixels))
+    }
+
+    @Test
+    fun `decoding fewer pixels than the payload promises throws rather than returning a short frame`() {
+        val payload = LottieRenderCache.encodeArgbRle(IntArray(10) { 7 })
+        assertFailsWith<java.io.IOException> { LottieRenderCache.decodeArgbRle(payload, 20) }
+    }
+
+    // ── Pixel scaling ────────────────────────────────────────────────────────
+
+    @Test
+    fun `scaling a solid-color image preserves the color regardless of size change`() {
+        val src = IntArray(4) { 0xFFFF0000.toInt() }
+
+        val scaledUp = LottieRenderCache.scaleArgb(src, 2, 2, 8, 8)
+        assertEquals(64, scaledUp.size)
+        assertTrue(scaledUp.all { it == 0xFFFF0000.toInt() })
+
+        val scaledDown = LottieRenderCache.scaleArgb(src, 2, 2, 1, 1)
+        assertEquals(1, scaledDown.size)
+        assertEquals(0xFFFF0000.toInt(), scaledDown[0])
+    }
+
+    // ── Cache file presence ──────────────────────────────────────────────────
+
+    @Test
+    fun `isReady is false until a file exists at the content-addressed cache path`() {
+        val json = """{"w":10,"h":10,"fr":30,"ip":0,"op":30,"unique":"isready-test"}"""
+        val variant = LottieRenderCache.Variant(clip = true, width = 10, height = 10, fps = 30.0, frameCount = 30)
+        assertFalse(LottieRenderCache.isReady(json, variant))
+
+        val file = LottieRenderCache.cacheFile(LottieRenderCache.keyFor(json, variant))
+        file.parentFile.mkdirs()
+        file.writeBytes(ByteArray(1))
+        try {
+            assertTrue(LottieRenderCache.isReady(json, variant))
+        } finally {
+            file.delete()
+        }
+    }
+
+    // ── Eviction ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `eviction removes the oldest entries first once past the entry cap`() {
+        val dir = LottieRenderCache.cacheDir
+        // This test empties the directory it is given, and eviction deletes from it too. If the
+        // user.home redirect above ever stops taking effect, that directory is the developer's own
+        // render cache. Refuse to touch anything outside the temp home rather than find out later.
+        check(dir.toPath().startsWith(tempHome)) { "refusing to evict outside the test home: $dir" }
+        dir.mkdirs()
+        dir.listFiles { f -> f.extension == "lrcc" }?.forEach { it.delete() }
+
+        val total = LottieRenderCache.MAX_ENTRIES + 5
+        val base = System.currentTimeMillis()
+        val files = (0 until total).map { i ->
+            File(dir, "evict-test-$i.lrcc").apply {
+                writeBytes(ByteArray(1))
+                setLastModified(base + i * 1000L)
+            }
+        }
+
+        LottieRenderCache.evictOldEntries()
+
+        assertEquals(LottieRenderCache.MAX_ENTRIES, dir.listFiles { f -> f.extension == "lrcc" }?.size)
+        (0 until 5).forEach { assertFalse(files[it].exists(), "file $it should have been evicted") }
+        (5 until total).forEach { assertTrue(files[it].exists(), "file $it should have survived") }
     }
 }

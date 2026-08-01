@@ -32,9 +32,12 @@ import kotlin.test.assertTrue
  *    primary that may be a different version, so every field is nullable and every branch has to
  *    cope with the nulls.
  *
- * Not covered here: the PICTURES and LOWER_THIRD branches fetch bytes over the link and the MEDIA
- * stream path needs a reachable primary — those need a live socket. The BIBLE reference-only branch
- * needs a real `Bible`, which `BibleViewModel`'s own suites already build; it is left to them.
+ * Not covered here: PICTURES and LOWER_THIRD fetch bytes over the link, and the MEDIA stream-url
+ * path needs a reachable primary — those need a live socket, and are covered separately in
+ * `ApplyRemoteLiveStateRemoteFetchTest` against a real [CompanionServer] (the same approach
+ * `InstanceLinkClientTest` uses), so this class doesn't pay for starting one per test. The BIBLE
+ * reference-only branch needs a real `Bible`, which `BibleViewModel`'s own suites already build; it
+ * is left to them.
  */
 class ApplyRemoteLiveStateTest {
 

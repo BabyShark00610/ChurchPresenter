@@ -98,6 +98,15 @@ class CompanionServerDictionaryTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
+    @Test
+    fun `looking up a real number from the bundled dictionary returns it`() = runBlocking {
+        val response = client.get(url("/api/dictionary/H430"))
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals("H430", body["number"]?.jsonPrimitive?.content)
+        assertTrue(body["word"]?.jsonPrimitive?.content?.isNotBlank() == true)
+    }
+
     // ── GET /api/dictionary/{number}/verses ───────────────────────────────────
 
     @Test
@@ -114,5 +123,22 @@ class CompanionServerDictionaryTest {
         val response = client.get(url("/api/dictionary/H9999999/verses"))
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals(0, json.parseToJsonElement(response.bodyAsText()).jsonObject["total"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `verses for a real, common number returns real verse references`() = runBlocking {
+        val dir = Files.createTempDirectory("cp-dictionary-verses-real-test").toFile()
+        server.updateBible(SpbFixture.loadedBible(dir), "KJV")
+
+        val response = client.get(url("/api/dictionary/H430/verses"))
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+        val total = body["total"]?.jsonPrimitive?.int ?: 0
+        assertTrue(total > 0, "H430 must occur somewhere in the real Bible")
+        val verses = body["verses"]!!.jsonArray
+        assertTrue(verses.isNotEmpty())
+        val first = verses.first().jsonObject
+        assertTrue(first["bookName"]?.jsonPrimitive?.content?.isNotBlank() == true)
+        assertTrue(first["reference"]?.jsonPrimitive?.content?.isNotBlank() == true)
     }
 }
