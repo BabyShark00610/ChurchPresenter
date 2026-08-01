@@ -31,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -209,6 +208,7 @@ import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 import org.churchpresenter.app.churchpresenter.data.readTranslationTitle
+import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 @Composable
 fun SourcePropertiesPanel(
@@ -459,20 +459,18 @@ private fun TextProperties(source: SceneSource.TextSource, onUpdate: (SceneSourc
         onColorChange = { onUpdate(source.copy(fontColor = it)) },
         label = stringResource(Res.string.canvas_font_color)
     )
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Checkbox(
-            checked = isTransparentBg,
-            onCheckedChange = { checked ->
+    LabeledCheckbox(
+        checked = isTransparentBg,
+        onCheckedChange = { checked ->
                 onUpdate(source.copy(
                     backgroundColor = if (checked) "#00000000" else "#000000"
                 ))
-            }
-        )
-        Text(stringResource(Res.string.canvas_transparent_bg), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+            },
+        label = stringResource(Res.string.canvas_transparent_bg),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
     if (!isTransparentBg) {
         ColorPickerField(
             color = source.backgroundColor,
@@ -490,16 +488,14 @@ private fun ColorProperties(source: SceneSource.ColorSource, onUpdate: (SceneSou
         onColorChange = { onUpdate(source.copy(color = it)) },
         label = stringResource(Res.string.canvas_color_1)
     )
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Checkbox(
-            checked = source.isGradient,
-            onCheckedChange = { onUpdate(source.copy(isGradient = it)) }
-        )
-        Text(stringResource(Res.string.canvas_gradient), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    LabeledCheckbox(
+        checked = source.isGradient,
+        onCheckedChange = { onUpdate(source.copy(isGradient = it)) },
+        label = stringResource(Res.string.canvas_gradient),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
     PropertySlider("${stringResource(Res.string.canvas_color_1)} ${stringResource(Res.string.canvas_opacity)}", source.sourceOpacity, 0f, 1f) { v ->
         onUpdate(source.copy(sourceOpacity = v))
     }
@@ -569,20 +565,14 @@ private fun VideoProperties(source: SceneSource.VideoSource, onUpdate: (SceneSou
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Checkbox(
-            checked = source.loop,
-            onCheckedChange = { onUpdate(source.copy(loop = it)) }
-        )
-        Text(
-            stringResource(Res.string.canvas_video_loop),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    LabeledCheckbox(
+        checked = source.loop,
+        onCheckedChange = { onUpdate(source.copy(loop = it)) },
+        label = stringResource(Res.string.canvas_video_loop),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
 
     PropertySlider(stringResource(Res.string.canvas_video_volume), source.volume, 0f, 1f) { v ->
         onUpdate(source.copy(volume = v))
@@ -620,13 +610,14 @@ private fun BrowserProperties(source: SceneSource.BrowserSource, onUpdate: (Scen
     PropertyTextField(stringResource(Res.string.canvas_fps), source.fps.toString()) { v ->
         v.toIntOrNull()?.let { onUpdate(source.copy(fps = it.coerceIn(1, 60))) }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Checkbox(
-            checked = source.forceTransparent,
-            onCheckedChange = { onUpdate(source.copy(forceTransparent = it)) }
-        )
-        Text(stringResource(Res.string.canvas_transparent_bg), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    LabeledCheckbox(
+        checked = source.forceTransparent,
+        onCheckedChange = { onUpdate(source.copy(forceTransparent = it)) },
+        label = stringResource(Res.string.canvas_transparent_bg),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
     PropertyTextField(stringResource(Res.string.canvas_custom_css), source.customCss) { v ->
         onUpdate(source.copy(customCss = v))
     }
@@ -642,20 +633,14 @@ private fun ShapeProperties(source: SceneSource.ShapeSource, onUpdate: (SceneSou
     val isStrokeOnly = source.shapeType in listOf("line", "arrow", "freehand")
 
     if (!isStrokeOnly) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Checkbox(
-                checked = source.showStroke,
-                onCheckedChange = { onUpdate(source.copy(showStroke = it)) }
-            )
-            Text(
-                stringResource(Res.string.canvas_shape_show_stroke),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        LabeledCheckbox(
+            checked = source.showStroke,
+            onCheckedChange = { onUpdate(source.copy(showStroke = it)) },
+            label = stringResource(Res.string.canvas_shape_show_stroke),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            spacing = 4.dp,
+        )
     }
 
     if (isStrokeOnly || source.showStroke) {
@@ -692,20 +677,14 @@ private fun ShapeProperties(source: SceneSource.ShapeSource, onUpdate: (SceneSou
     if (!isStrokeOnly) {
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Checkbox(
-                checked = source.isGradient,
-                onCheckedChange = { onUpdate(source.copy(isGradient = it)) }
-            )
-            Text(
-                stringResource(Res.string.canvas_gradient),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        LabeledCheckbox(
+            checked = source.isGradient,
+            onCheckedChange = { onUpdate(source.copy(isGradient = it)) },
+            label = stringResource(Res.string.canvas_gradient),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            spacing = 4.dp,
+        )
         if (source.isGradient) {
             ColorPickerField(
                 color = source.gradientColor2,
@@ -750,18 +729,30 @@ private fun ClockProperties(source: SceneSource.ClockSource, onUpdate: (SceneSou
             onSelectedChange = { onUpdate(source.copy(timeFormat = if (it == format12hLabel) "12h" else "24h")) }
         )
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Checkbox(checked = source.showHours, onCheckedChange = { onUpdate(source.copy(showHours = it)) })
-        Text(stringResource(Res.string.canvas_clock_show_hours), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Checkbox(checked = source.showSeconds, onCheckedChange = { onUpdate(source.copy(showSeconds = it)) })
-        Text(stringResource(Res.string.canvas_clock_show_seconds), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Checkbox(checked = source.bold, onCheckedChange = { onUpdate(source.copy(bold = it)) })
-        Text(stringResource(Res.string.canvas_text_bold), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    LabeledCheckbox(
+        checked = source.showHours,
+        onCheckedChange = { onUpdate(source.copy(showHours = it)) },
+        label = stringResource(Res.string.canvas_clock_show_hours),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
+    LabeledCheckbox(
+        checked = source.showSeconds,
+        onCheckedChange = { onUpdate(source.copy(showSeconds = it)) },
+        label = stringResource(Res.string.canvas_clock_show_seconds),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
+    LabeledCheckbox(
+        checked = source.bold,
+        onCheckedChange = { onUpdate(source.copy(bold = it)) },
+        label = stringResource(Res.string.canvas_text_bold),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
     PropertyTextField(stringResource(Res.string.canvas_clock_font_size), source.fontSize.toString()) { v ->
         v.toIntOrNull()?.let { onUpdate(source.copy(fontSize = it.coerceIn(8, 500))) }
     }
@@ -889,10 +880,14 @@ private fun QRCodeProperties(source: SceneSource.QRCodeSource, onUpdate: (SceneS
             onSelectedChange = { onUpdate(source.copy(wifiEncryption = it)) },
             modifier = Modifier.fillMaxWidth()
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Checkbox(checked = source.wifiHidden, onCheckedChange = { onUpdate(source.copy(wifiHidden = it)) })
-            Text(stringResource(Res.string.canvas_qr_wifi_hidden), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        LabeledCheckbox(
+            checked = source.wifiHidden,
+            onCheckedChange = { onUpdate(source.copy(wifiHidden = it)) },
+            label = stringResource(Res.string.canvas_qr_wifi_hidden),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            spacing = 4.dp,
+        )
     } else {
         PropertyTextField(stringResource(Res.string.canvas_qr_content), source.content) { v ->
             onUpdate(source.copy(content = v))
@@ -903,13 +898,14 @@ private fun QRCodeProperties(source: SceneSource.QRCodeSource, onUpdate: (SceneS
         onColorChange = { onUpdate(source.copy(foregroundColor = it)) },
         label = stringResource(Res.string.canvas_qr_foreground)
     )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Checkbox(
-            checked = source.transparentBackground,
-            onCheckedChange = { onUpdate(source.copy(transparentBackground = it)) }
-        )
-        Text(stringResource(Res.string.canvas_transparent_bg), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    LabeledCheckbox(
+        checked = source.transparentBackground,
+        onCheckedChange = { onUpdate(source.copy(transparentBackground = it)) },
+        label = stringResource(Res.string.canvas_transparent_bg),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        spacing = 4.dp,
+    )
     if (!source.transparentBackground) {
         ColorPickerField(
             color = source.backgroundColor,
@@ -2050,10 +2046,20 @@ private fun BibleProperties(
         label = stringResource(Res.string.canvas_font_color)
     )
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Checkbox(checked = source.bold, onCheckedChange = { onUpdate(source.copy(bold = it)) })
-        Text(stringResource(Res.string.canvas_text_bold), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Checkbox(checked = source.italic, onCheckedChange = { onUpdate(source.copy(italic = it)) })
-        Text(stringResource(Res.string.canvas_text_italic), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LabeledCheckbox(
+            checked = source.bold,
+            onCheckedChange = { onUpdate(source.copy(bold = it)) },
+            label = stringResource(Res.string.canvas_text_bold),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LabeledCheckbox(
+            checked = source.italic,
+            onCheckedChange = { onUpdate(source.copy(italic = it)) },
+            label = stringResource(Res.string.canvas_text_italic),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
     Spacer(modifier = Modifier.height(4.dp))
@@ -2069,10 +2075,20 @@ private fun BibleProperties(
         label = stringResource(Res.string.canvas_bible_ref_color)
     )
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Checkbox(checked = source.referenceBold, onCheckedChange = { onUpdate(source.copy(referenceBold = it)) })
-        Text(stringResource(Res.string.canvas_text_bold), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Checkbox(checked = source.referenceItalic, onCheckedChange = { onUpdate(source.copy(referenceItalic = it)) })
-        Text(stringResource(Res.string.canvas_text_italic), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LabeledCheckbox(
+            checked = source.referenceBold,
+            onCheckedChange = { onUpdate(source.copy(referenceBold = it)) },
+            label = stringResource(Res.string.canvas_text_bold),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LabeledCheckbox(
+            checked = source.referenceItalic,
+            onCheckedChange = { onUpdate(source.copy(referenceItalic = it)) },
+            label = stringResource(Res.string.canvas_text_italic),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
     Spacer(modifier = Modifier.height(4.dp))

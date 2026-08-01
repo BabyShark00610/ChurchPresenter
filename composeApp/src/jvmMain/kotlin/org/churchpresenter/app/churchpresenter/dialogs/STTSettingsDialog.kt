@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -173,23 +172,25 @@ internal fun STTSettingsDialogContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Checkbox(
+                    LabeledCheckbox(
                         checked = engine.enabled,
-                        onCheckedChange = { onSettingsChange { s -> s.copy(bibleEngineSettings = s.bibleEngineSettings.copy(enabled = it)) } }
+                        onCheckedChange = { onSettingsChange { s -> s.copy(bibleEngineSettings = s.bibleEngineSettings.copy(enabled = it)) } },
+                        label = stringResource(Res.string.bible_engine_detect),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(stringResource(Res.string.bible_engine_detect), color = MaterialTheme.colorScheme.onSurface)
                     // Toggle hidden for now — engine always runs locally (runLocal defaults true).
                     // Flip to true to expose the local/remote choice again.
                     @Suppress("KotlinConstantConditions")
                     val showRunEngineLocallyToggle = false
                     if (showRunEngineLocallyToggle) {
                         Spacer(Modifier.weight(1f))
-                        Checkbox(
+                        LabeledCheckbox(
                             checked = engine.runLocal,
                             enabled = engine.enabled,
-                            onCheckedChange = { onSettingsChange { s -> s.copy(bibleEngineSettings = s.bibleEngineSettings.copy(runLocal = it)) } }
+                            onCheckedChange = { onSettingsChange { s -> s.copy(bibleEngineSettings = s.bibleEngineSettings.copy(runLocal = it)) } },
+                            label = stringResource(Res.string.bible_engine_run_local),
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Text(stringResource(Res.string.bible_engine_run_local), color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
                 AnimatedVisibility(visible = engine.enabled) {
