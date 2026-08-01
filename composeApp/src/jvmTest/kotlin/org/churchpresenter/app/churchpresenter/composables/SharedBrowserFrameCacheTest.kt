@@ -92,8 +92,19 @@ class SharedBrowserFrameCacheTest {
         fun stop() = server.stop(0, 0)
 
         /** Pushes an arbitrary CDP event frame straight to the connected client, bypassing the
-         *  automatic id/result echo above. */
-        fun sendEvent(json: String) = runBlocking { sessions.forEach { it.send(Frame.Text(json)) } }
+         *  automatic id/result echo above.
+         *
+         *  Waits for the session first. `CdpConnection.connect` returning means the *client* side
+         *  of the handshake finished; the server's own handler coroutine — the one that runs
+         *  `sessions.add(this)` — may not have been dispatched yet. Sending into an empty list is
+         *  silent, so the frame goes nowhere and the test waiting on it fails a timeout later,
+         *  with nothing to say why. */
+        fun sendEvent(json: String) {
+            val deadline = System.currentTimeMillis() + 5_000
+            while (sessions.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(5)
+            if (sessions.isEmpty()) throw AssertionError("no client session connected to the fake CDP server")
+            runBlocking { sessions.forEach { it.send(Frame.Text(json)) } }
+        }
     }
 
     private fun startFakeCdpBrowser(): FakeCdpBrowser = FakeCdpBrowser().also { servers.add(it); it.start() }
