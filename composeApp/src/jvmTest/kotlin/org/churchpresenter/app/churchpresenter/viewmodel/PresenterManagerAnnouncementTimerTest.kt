@@ -171,16 +171,21 @@ class PresenterManagerAnnouncementTimerTest {
     // the background never overwrites whatever is on screen. goLive sets the live flag; pausing then
     // stops the ticker while leaving that flag set, so the gate can be exercised without a live tick.
 
-    /** Arms the live flag the way going live does, then stops the ticker so nothing ticks under us. */
-    private fun PresenterManager.armLiveTicker() {
-        goLiveAnnouncementTimer(
-            timerMode = Constants.TIMER_MODE_DURATION,
-            timerHours = 0, timerMinutes = 5, timerSeconds = 0,
-            targetHour = 0, targetMinute = 0, targetSecond = 0,
-            liveClockFormat = "HH:mm", timerExpiredText = "",
-        )
-        pauseAnnouncementTimer()
-    }
+    /**
+     * Sets the live flag the gate reads, and nothing else.
+     *
+     * It used to go live with a real five-minute countdown and then pause it. `pauseAnnouncementTimer`
+     * only *cancels* the ticker job, and cancellation is cooperative: a ticker already dispatched
+     * could still get its first `pushAnnouncementTextIfLive("05:00")` in afterwards, overwriting the
+     * text the test had just pushed. That is a race against a real clock, and it failed on CI as
+     * `expected:<00:41> but was:<05:00>`.
+     *
+     * `_announcementTickerLive` is the only thing these tests need out of going live — it is half of
+     * what [PresenterManager.pushAnnouncementTextIfLive] gates on, the other half being a screen on
+     * announcements — and it has its own setter. `goLiveAnnouncementTimer` itself stays covered by
+     * the go-live tests below.
+     */
+    private fun PresenterManager.armLiveTicker() = setAnnouncementTickerLive(true)
 
     @Test
     fun `timer text is not pushed when nothing is showing announcements`() {
