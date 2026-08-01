@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.composables
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
@@ -128,6 +129,25 @@ class DropdownSelectorTest {
 
         assertEquals("b", current, "choosing Banana must report its key, not its display label")
         onAllNodesWithText("Banana").assertCountEquals(0)
+    }
+
+    @Test
+    fun `itemTrailingContent renders alongside each option, keyed to that option`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                DropdownSelector(
+                    label = "Fruit",
+                    value = "a",
+                    options = listOf("a" to "Apple", "b" to "Banana"),
+                    onValueChange = { },
+                    itemTrailingContent = { key, index -> Text("trailing-$key-$index") },
+                )
+            }
+        }
+        onAllNodesWithText("Apple").onLast().performClick()
+
+        onNodeWithText("trailing-a-0").assertExists()
+        onNodeWithText("trailing-b-1").assertExists()
     }
 
     // ── items: List<String> overload ──────────────────────────────────────────────────────────

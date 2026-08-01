@@ -215,6 +215,7 @@ fun SourcePropertiesPanel(
     source: SceneSource,
     modifier: Modifier = Modifier,
     appSettings: AppSettings? = null,
+    fileChooser: FileChooser = FileChooser.platformInstance,
     onSourceUpdate: (SceneSource) -> Unit
 ) {
     Column(
@@ -268,10 +269,10 @@ fun SourcePropertiesPanel(
 
         // Type-specific properties
         when (source) {
-            is SceneSource.ImageSource -> ImageProperties(source, onSourceUpdate)
+            is SceneSource.ImageSource -> ImageProperties(source, onSourceUpdate, fileChooser)
             is SceneSource.TextSource -> TextProperties(source, onSourceUpdate)
             is SceneSource.ColorSource -> ColorProperties(source, onSourceUpdate)
-            is SceneSource.VideoSource -> VideoProperties(source, onSourceUpdate)
+            is SceneSource.VideoSource -> VideoProperties(source, onSourceUpdate, fileChooser)
             is SceneSource.BrowserSource -> BrowserProperties(source, onSourceUpdate)
             is SceneSource.ShapeSource -> ShapeProperties(source, onSourceUpdate)
             is SceneSource.ClockSource -> ClockProperties(source, onSourceUpdate)
@@ -284,7 +285,7 @@ fun SourcePropertiesPanel(
 }
 
 @Composable
-private fun ImageProperties(source: SceneSource.ImageSource, onUpdate: (SceneSource) -> Unit) {
+private fun ImageProperties(source: SceneSource.ImageSource, onUpdate: (SceneSource) -> Unit, fileChooser: FileChooser) {
     val scope = rememberCoroutineScope()
     val strFilePath = stringResource(Res.string.canvas_file_path)
     val strSelectImage = stringResource(Res.string.canvas_select_image_title)
@@ -313,7 +314,7 @@ private fun ImageProperties(source: SceneSource.ImageSource, onUpdate: (SceneSou
                     val startPath = if (source.filePath.isNotEmpty()) {
                         try { Path(source.filePath).parent } catch (_: Exception) { null }
                     } else null
-                    val file = FileChooser.platformInstance.chooseSingle(
+                    val file = fileChooser.chooseSingle(
                         path = startPath,
                         filters = listOf(imageFilter),
                         title = strSelectImage,
@@ -521,7 +522,7 @@ private fun ColorProperties(source: SceneSource.ColorSource, onUpdate: (SceneSou
 }
 
 @Composable
-private fun VideoProperties(source: SceneSource.VideoSource, onUpdate: (SceneSource) -> Unit) {
+private fun VideoProperties(source: SceneSource.VideoSource, onUpdate: (SceneSource) -> Unit, fileChooser: FileChooser) {
     val scope = rememberCoroutineScope()
     val strFilePath = stringResource(Res.string.canvas_file_path)
     val strSelectVideo = stringResource(Res.string.canvas_select_video_title)
@@ -546,7 +547,7 @@ private fun VideoProperties(source: SceneSource.VideoSource, onUpdate: (SceneSou
                     val startPath = if (source.filePath.isNotEmpty()) {
                         try { Path(source.filePath).parent } catch (_: Exception) { null }
                     } else null
-                    val file = FileChooser.platformInstance.chooseSingle(
+                    val file = fileChooser.chooseSingle(
                         path = startPath,
                         filters = listOf(videoFilter),
                         title = strSelectVideo,
