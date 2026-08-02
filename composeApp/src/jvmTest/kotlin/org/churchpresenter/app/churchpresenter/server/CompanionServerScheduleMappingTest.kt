@@ -344,6 +344,22 @@ class CompanionServerScheduleMappingTest {
         response.status to parsed
     }
 
+    /**
+     * Waits for [updatePresentation]'s own coroutine to publish the catalogue for [id] — the
+     * endpoint answering 200 is the positive signal, so this never waits on a timer.
+     */
+    private fun awaitCatalog(id: String) {
+        val published = runBlocking {
+            withTimeoutOrNull(5_000) {
+                while (getting("${Constants.ENDPOINT_PRESENTATIONS}/$id").status != HttpStatusCode.OK) {
+                    kotlinx.coroutines.delay(20)
+                }
+                true
+            }
+        }
+        assertTrue(published == true, "the catalogue for $id was never published")
+    }
+
     @Test
     fun `a song posted in the companion format arrives as a song`() {
         val (status, item) = addAndApprove(
@@ -391,6 +407,91 @@ class CompanionServerScheduleMappingTest {
         } finally {
             folder.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `a presentation posted as an id is resolved against the rendered catalogue`() {
+        // The phone lists presentations by the id the server gave it; the deck's path never leaves
+        // the desktop, so the id is all it can post back.
+        val dir = java.nio.file.Files.createTempDirectory("cp-remote-presentation").toFile()
+        try {
+            val deck = java.io.File(dir, "Sermon.pptx").apply { writeBytes(byteArrayOf(1)) }
+            val slides = (0..2).map { java.io.File(dir, "slide$it.jpg").apply { writeBytes(byteArrayOf(it.toByte())) } }
+            server.updatePresentation(
+                id = "deck-1", filePath = deck.absolutePath,
+                fileName = "Sermon", fileType = "pptx", slideFiles = slides
+            )
+            awaitCatalog("deck-1")
+
+            val (status, item) = addAndApprove("""{"item":{"type":"presentation","id":"deck-1"}}""")
+
+            assertEquals(HttpStatusCode.OK, status)
+            val presentation = assertNotNull(item as? ScheduleItem.PresentationItem, "got $item")
+            assertEquals(deck.absolutePath, presentation.filePath, "resolved to the real deck")
+            assertEquals("Sermon", presentation.fileName, "the name comes from the catalogue, not the phone")
+            assertEquals(3, presentation.slideCount)
+            assertEquals("pptx", presentation.fileType)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a presentation posted with no type at all is still resolved by its id`() {
+        // Mobile omits "type" when it equals its default, so an id that resolves has to be enough.
+        val dir = java.nio.file.Files.createTempDirectory("cp-remote-presentation-untyped").toFile()
+        try {
+            val deck = java.io.File(dir, "Notices.pdf").apply { writeBytes(byteArrayOf(1)) }
+            val slides = listOf(java.io.File(dir, "slide0.jpg").apply { writeBytes(byteArrayOf(7)) })
+            server.updatePresentation(
+                id = "deck-2", filePath = deck.absolutePath,
+                fileName = "Notices", fileType = "pdf", slideFiles = slides
+            )
+            awaitCatalog("deck-2")
+
+            val (status, item) = addAndApprove("""{"item":{"id":"deck-2"}}""")
+
+            assertEquals(HttpStatusCode.OK, status)
+            val presentation = assertNotNull(item as? ScheduleItem.PresentationItem, "got $item")
+            assertEquals(deck.absolutePath, presentation.filePath)
+            assertEquals(1, presentation.slideCount)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a presentation the desktop has only scheduled, never rendered, is found by scanning the schedule`() {
+        // Nothing has opened this deck, so there is no catalogue and no render — only the schedule
+        // entry. Posting the schedule item's own id (not the file-hash the render would key on) is
+        // what a phone does when it adds a deck straight from the service list.
+        val path = java.io.File(
+            java.nio.file.Files.createTempDirectory("cp-remote-presentation-scan").toFile(),
+            "Unopened.pptx"
+        ).absolutePath
+        server.updateSchedule(
+            listOf(
+                ScheduleItem.PresentationItem(
+                    id = "sched-9", filePath = path, fileName = "Unopened", slideCount = 12, fileType = "pptx"
+                )
+            )
+        )
+
+        val (status, item) = addAndApprove("""{"item":{"type":"presentation","id":"sched-9","title":"Unopened"}}""")
+
+        assertEquals(HttpStatusCode.OK, status)
+        val presentation = assertNotNull(item as? ScheduleItem.PresentationItem, "got $item")
+        assertEquals(path, presentation.filePath)
+        assertEquals("Unopened", presentation.fileName, "with no catalogue the phone's own title is used")
+        assertEquals(0, presentation.slideCount, "and the slide count is unknown until something renders it")
+    }
+
+    @Test
+    fun `a presentation id the desktop has never heard of is refused`() {
+        val (status, item) = addAndApprove("""{"item":{"type":"presentation","id":"deck-that-never-existed"}}""")
+
+        assertEquals(HttpStatusCode.BadRequest, status)
+        assertNull(item, "an unresolvable id must not become an item with no file behind it")
     }
 
     @Test
