@@ -111,7 +111,9 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
+import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
+import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.RecentPresentationFiles
 import org.churchpresenter.app.churchpresenter.data.SongItem
@@ -193,6 +195,107 @@ data class ScheduleActions(
     val addAnnouncement: (item: ScheduleItem.AnnouncementItem) -> Unit = { },
     val addWebsite: (url: String, title: String) -> Unit = { _, _ -> }
 )
+
+internal fun computeVisibleTabs(
+    hiddenTabs: Set<String>,
+    showCrosswordTab: Boolean,
+    hasCompanionTabConnections: Boolean,
+): List<Tabs> =
+    (Tabs.entries.filter { tab ->
+        tab != Tabs.CROSSWORD && tab.name !in hiddenTabs &&
+            (tab != Tabs.COMPANION_SURFACE || hasCompanionTabConnections)
+    } + if (showCrosswordTab) listOf(Tabs.CROSSWORD) else emptyList())
+        .ifEmpty { listOf(Tabs.BIBLE) }
+
+internal fun clampedTabIndex(selectedTabIndex: Int, visibleTabs: List<Tabs>): Int =
+    selectedTabIndex.coerceIn(visibleTabs.indices)
+
+internal fun resolveTabSelection(tab: Tabs, visibleTabs: List<Tabs>, currentIndex: Int): Int {
+    val idx = visibleTabs.indexOf(tab)
+    return if (idx >= 0) idx else currentIndex
+}
+
+internal data class SequenceStep(val progress: Int, val completed: Boolean)
+
+internal fun advanceKeySequence(pressedKey: Key, sequence: List<Key>, currentProgress: Int): SequenceStep {
+    val expected = sequence.getOrNull(currentProgress)
+    if (pressedKey == expected) {
+        val next = currentProgress + 1
+        return if (next == sequence.size) SequenceStep(progress = 0, completed = true)
+        else SequenceStep(progress = next, completed = false)
+    }
+    return SequenceStep(progress = if (pressedKey == sequence[0]) 1 else 0, completed = false)
+}
+
+internal fun computePanelCapPx(availablePx: Float, otherPanelPx: Float, reservePx: Float, absMaxPx: Float): Float =
+    if (availablePx <= 0f) Float.MAX_VALUE
+    else (availablePx - otherPanelPx - reservePx).coerceIn(0f, absMaxPx)
+
+internal fun withScheduleWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
+    if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(schedulePanelWidthDp = widthDp))
+    else settings.copy(windowedLayout = settings.windowedLayout.copy(schedulePanelWidthDp = widthDp))
+
+internal fun withPreviewWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
+    if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(previewPanelWidthDp = widthDp))
+    else settings.copy(windowedLayout = settings.windowedLayout.copy(previewPanelWidthDp = widthDp))
+
+internal fun sttUrlToPersist(settings: AppSettings, sttConnected: Boolean): String? {
+    if (!sttConnected) return null
+    val url = settings.sttSettings.serverUrl
+    return if (settings.sttSettings.lastConnectedUrl != url) url else null
+}
+
+internal fun withSttLastConnectedUrl(settings: AppSettings, url: String): AppSettings =
+    settings.copy(sttSettings = settings.sttSettings.copy(lastConnectedUrl = url))
+
+internal fun stageMonitorScreenIndices(screenAssignments: List<ScreenAssignment>): List<Int> =
+    screenAssignments.indices.filter { screenAssignments[it].displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR }
+
+internal fun resolveSelectedConnectionId(currentId: String?, connections: List<CompanionSatelliteSettings>): String? =
+    if (connections.any { it.id == currentId }) currentId else connections.firstOrNull()?.id
+
+internal fun resolveBookIndex(bookNames: List<String>, requestedBookName: String): Int =
+    bookNames.indexOfFirst { it.equals(requestedBookName, ignoreCase = true) }
+
+internal fun parseVerseRangeEnd(verseRange: String, verseNumber: Int): Int? {
+    val rangeNums = verseRange
+        .takeIf { it.isNotBlank() }
+        ?.split(",", "-")
+        ?.mapNotNull { it.trim().toIntOrNull() }
+        ?.takeIf { it.isNotEmpty() }
+    return rangeNums?.max()?.takeIf { it > verseNumber }
+}
+
+internal fun retrySecondsLeft(nextRetryAtMs: Long?, nowMs: Long): Long? =
+    nextRetryAtMs?.let { ((it - nowMs) / 1000).coerceAtLeast(0) }
+
+internal fun findLottiePresetFile(files: List<File>?, presetLabel: String, presetId: String): File? =
+    files?.find { it.nameWithoutExtension == presetLabel || it.nameWithoutExtension == presetId }
+
+internal fun visibleTabCount(hiddenTabs: Set<String>): Int =
+    Tabs.entries.count { it != Tabs.CROSSWORD && it.name !in hiddenTabs }
+
+internal fun isOnlyVisibleTab(tab: Tabs, hiddenTabs: Set<String>, visibleCount: Int): Boolean =
+    tab.name !in hiddenTabs && visibleCount == 1
+
+internal fun toggleHiddenTabs(hiddenTabs: Set<String>, tab: Tabs): Set<String> =
+    if (tab.name !in hiddenTabs) hiddenTabs + tab.name else hiddenTabs - tab.name
+
+internal fun stableFileId(file: File): String = file.absolutePath.hashCode().toUInt().toString(16)
+
+internal fun tabForScheduleItem(item: ScheduleItem): Tabs? = when (item) {
+    is ScheduleItem.SongItem -> Tabs.SONGS
+    is ScheduleItem.BibleVerseItem -> Tabs.BIBLE
+    is ScheduleItem.LabelItem -> null
+    is ScheduleItem.PictureItem -> Tabs.PICTURES
+    is ScheduleItem.PresentationItem -> Tabs.PRESENTATION
+    is ScheduleItem.MediaItem -> Tabs.MEDIA
+    is ScheduleItem.LowerThirdItem -> Tabs.LOWER_THIRD
+    is ScheduleItem.AnnouncementItem -> Tabs.ANNOUNCEMENTS
+    is ScheduleItem.WebsiteItem -> Tabs.WEB
+    is ScheduleItem.SceneItem -> Tabs.CANVAS
+    is ScheduleItem.DictionaryItem -> Tabs.DICTIONARY
+}
 
 @Composable
 fun MainDesktop(
@@ -376,14 +479,10 @@ fun MainDesktop(
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     val hasCompanionTabConnections = appSettings.companionSatelliteConnections.any { it.showInTab && it.host.isNotBlank() }
     val visibleTabs = remember(appSettings.hiddenTabs, showCrosswordTab, hasCompanionTabConnections) {
-        (Tabs.entries.filter { tab ->
-            tab != Tabs.CROSSWORD && tab.name !in appSettings.hiddenTabs &&
-                (tab != Tabs.COMPANION_SURFACE || hasCompanionTabConnections)
-        } + if (showCrosswordTab) listOf(Tabs.CROSSWORD) else emptyList())
-            .ifEmpty { listOf(Tabs.BIBLE) }
+        computeVisibleTabs(appSettings.hiddenTabs, showCrosswordTab, hasCompanionTabConnections)
     }
     // Clamp synchronously so no composition pass ever sees an out-of-bounds index.
-    val effectiveTabIndex = selectedTabIndex.coerceIn(visibleTabs.indices)
+    val effectiveTabIndex = clampedTabIndex(selectedTabIndex, visibleTabs)
     // Persist the clamped value back into state after composition.
     LaunchedEffect(effectiveTabIndex) {
         if (selectedTabIndex != effectiveTabIndex) selectedTabIndex = effectiveTabIndex
@@ -393,16 +492,13 @@ fun MainDesktop(
     // button stays visible across restarts (and hides again if the URL later changes).
     val sttConnected = sttManager?.connected?.value == true
     LaunchedEffect(sttConnected) {
-        if (sttConnected) {
-            val url = appSettings.sttSettings.serverUrl
-            if (appSettings.sttSettings.lastConnectedUrl != url) {
-                onSettingsChange { s -> s.copy(sttSettings = s.sttSettings.copy(lastConnectedUrl = url)) }
-            }
+        val urlToPersist = sttUrlToPersist(appSettings, sttConnected)
+        if (urlToPersist != null) {
+            onSettingsChange { s -> withSttLastConnectedUrl(s, urlToPersist) }
         }
     }
     fun selectTab(tab: Tabs) {
-        val idx = visibleTabs.indexOf(tab)
-        if (idx >= 0) selectedTabIndex = idx
+        selectedTabIndex = resolveTabSelection(tab, visibleTabs, selectedTabIndex)
     }
     var showAddLabelDialog by remember { mutableStateOf(false) }
     var editingLabelItem by remember { mutableStateOf<ScheduleItem.LabelItem?>(null) }
@@ -446,14 +542,14 @@ fun MainDesktop(
 
     LaunchedEffect(presentationViewModel.selectedSlideIndex, presentationViewModel.slideFiles.size, presentationViewModel.isPlaying) {
         val f = presentationViewModel.selectedPresentation ?: return@LaunchedEffect
-        val id = f.absolutePath.hashCode().toUInt().toString(16)
+        val id = stableFileId(f)
         onSlideChanged?.invoke(id, presentationViewModel.selectedSlideIndex, presentationViewModel.slideFiles.size, presentationViewModel.isPlaying)
     }
     LaunchedEffect(appSettings.presentationRemoteSettings.remoteControlEnabled) {
         if (!appSettings.presentationRemoteSettings.remoteControlEnabled) return@LaunchedEffect
         val f = presentationViewModel.selectedPresentation ?: return@LaunchedEffect
         if (presentationViewModel.slideFiles.isEmpty()) return@LaunchedEffect
-        val id = f.absolutePath.hashCode().toUInt().toString(16)
+        val id = stableFileId(f)
         onSlideChanged?.invoke(
             id,
             presentationViewModel.selectedSlideIndex,
@@ -703,6 +799,7 @@ fun MainDesktop(
     var crosswordProgress by remember { mutableStateOf(0) }
 
     // Secret Developer-menu unlock: the letter D pressed seven times in a row
+    val developerUnlockSequence = remember { List(7) { Key.D } }
     var developerUnlockProgress by remember { mutableStateOf(0) }
 
     // Notify server whenever the picture folder, image list, or image order changes
@@ -712,7 +809,7 @@ fun MainDesktop(
     LaunchedEffect(pictureFolder, pictureImages.size, pictureOrderVersion) {
         val folder = pictureFolder ?: return@LaunchedEffect
         if (pictureImages.isEmpty()) return@LaunchedEffect
-        val folderId = folder.absolutePath.hashCode().toUInt().toString(16)
+        val folderId = stableFileId(folder)
         currentOnPicturesLoaded?.invoke(folderId, folder.name, folder.absolutePath, pictureImages.toList())
     }
 
@@ -731,8 +828,7 @@ fun MainDesktop(
         selectPictureImageFlow?.collect { (folderId, index) ->
             // Derive the folderId of the currently loaded Pictures-tab folder (same hash as
             // CompanionServer.updatePictures and the LaunchedEffect(pictureFolder, …) above).
-            val activeFolderId = picturesViewModel.selectedFolder
-                ?.absolutePath?.hashCode()?.toUInt()?.toString(16)
+            val activeFolderId = picturesViewModel.selectedFolder?.let { stableFileId(it) }
 
             // Resolve the file from the server's file map so selections from any folder
             // (including session-only device_uploads) go to the correct image.
@@ -864,9 +960,7 @@ fun MainDesktop(
             val primaryBible = bibleViewModel.primaryBible.value
 
             // Resolve bookId from book name using the primary Bible's book list
-            val bookIndex = primaryBible?.getBooks()
-                ?.indexOfFirst { it.equals(req.bookName, ignoreCase = true) }
-                ?: -1
+            val bookIndex = primaryBible?.getBooks()?.let { resolveBookIndex(it, req.bookName) } ?: -1
             val bookId = if (bookIndex >= 0) primaryBible?.getBookId(bookIndex) ?: 0 else 0
 
             val resolved = bibleViewModel.getVersesForDisplay(req.bookName, req.chapter, req.verseNumber)
@@ -893,12 +987,7 @@ fun MainDesktop(
             if (bookIndex >= 0) {
                 // Capture the full span the client asked for: parse req.verseRange ("1-3", "2,4,5")
                 // and take its max as the end, rather than hardcoding null (which dropped the range).
-                val rangeNums = req.verseRange
-                    .takeIf { it.isNotBlank() }
-                    ?.split(",", "-")
-                    ?.mapNotNull { it.trim().toIntOrNull() }
-                    ?.takeIf { it.isNotEmpty() }
-                val verseEnd = rangeNums?.max()?.takeIf { it > req.verseNumber }
+                val verseEnd = parseVerseRangeEnd(req.verseRange, req.verseNumber)
                 bibleViewModel.logLiveReference(
                     displayBookIndex = bookIndex,
                     chapter    = req.chapter,
@@ -1008,8 +1097,7 @@ fun MainDesktop(
                             instanceLinkSendClear?.invoke()
                             // Also release any "Send to Stage Monitor" lock (e.g. from Announcements)
                             // so the stage monitor goes back to following the main presenting mode.
-                            appSettings.projectionSettings.screenAssignments.indices
-                                .filter { appSettings.projectionSettings.screenAssignments[it].displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR }
+                            stageMonitorScreenIndices(appSettings.projectionSettings.screenAssignments)
                                 .forEach { presenterManager.setScreenLock(it, null) }
                             true
                         }
@@ -1057,38 +1145,23 @@ fun MainDesktop(
                                 false
                             } else {
                                 // Konami code: ↑↑↓↓←→←→BA
-                                val konamiExpected = konamiSequence.getOrNull(konamiProgress)
-                                if (keyEvent.key == konamiExpected) {
-                                    konamiProgress++
-                                    if (konamiProgress == konamiSequence.size) {
-                                        konamiProgress = 0
-                                        showKonamiEasterEgg = true
-                                    }
-                                } else {
-                                    konamiProgress = if (keyEvent.key == konamiSequence[0]) 1 else 0
-                                }
+                                val konamiStep = advanceKeySequence(keyEvent.key, konamiSequence, konamiProgress)
+                                konamiProgress = konamiStep.progress
+                                if (konamiStep.completed) showKonamiEasterEgg = true
 
                                 // Crossword: ←→←→
-                                val crosswordExpected = crosswordSequence.getOrNull(crosswordProgress)
-                                if (keyEvent.key == crosswordExpected) {
-                                    crosswordProgress++
-                                    if (crosswordProgress == crosswordSequence.size) {
-                                        crosswordProgress = 0
-                                        showCrosswordTab = true
-                                        selectTab(Tabs.CROSSWORD)
-                                    }
-                                } else {
-                                    crosswordProgress = if (keyEvent.key == crosswordSequence[0]) 1 else 0
+                                val crosswordStep = advanceKeySequence(keyEvent.key, crosswordSequence, crosswordProgress)
+                                crosswordProgress = crosswordStep.progress
+                                if (crosswordStep.completed) {
+                                    showCrosswordTab = true
+                                    selectTab(Tabs.CROSSWORD)
                                 }
 
                                 // Secret unlock: press D seven times in a row to reveal the
                                 // Developer menu (upper- or lower-case; Key.D is Shift-agnostic).
-                                developerUnlockProgress =
-                                    if (keyEvent.key == Key.D) developerUnlockProgress + 1 else 0
-                                if (developerUnlockProgress >= 7) {
-                                    developerUnlockProgress = 0
-                                    onRequestDeveloperMenuUnlock()
-                                }
+                                val developerStep = advanceKeySequence(keyEvent.key, developerUnlockSequence, developerUnlockProgress)
+                                developerUnlockProgress = developerStep.progress
+                                if (developerStep.completed) onRequestDeveloperMenuUnlock()
 
                                 false
                             }
@@ -1138,18 +1211,12 @@ fun MainDesktop(
 
             fun saveScheduleWidth() {
                 val widthDp = with(density) { schedulePanelPx.toDp().value.toInt() }
-                onSettingsChangeState.value { s ->
-                    if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(schedulePanelWidthDp = widthDp))
-                    else s.copy(windowedLayout = s.windowedLayout.copy(schedulePanelWidthDp = widthDp))
-                }
+                onSettingsChangeState.value { s -> withScheduleWidth(s, isMaximized, widthDp) }
             }
 
             fun savePreviewWidth() {
                 val widthDp = with(density) { previewPanelPx.toDp().value.toInt() }
-                onSettingsChangeState.value { s ->
-                    if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(previewPanelWidthDp = widthDp))
-                    else s.copy(windowedLayout = s.windowedLayout.copy(previewPanelWidthDp = widthDp))
-                }
+                onSettingsChangeState.value { s -> withPreviewWidth(s, isMaximized, widthDp) }
             }
 
             // Plain Box + onSizeChanged (not BoxWithConstraints/SubcomposeLayout): subcomposed
@@ -1174,9 +1241,7 @@ fun MainDesktop(
                 // that as "unknown" (uncapped) rather than clamping panels to 0 in the interim,
                 // since nothing here ever raises schedulePanelPx/previewPanelPx back up once the
                 // SideEffect below has clamped them down.
-                fun panelCapPx(otherPanelPx: Float) =
-                    if (availablePx <= 0f) Float.MAX_VALUE
-                    else (availablePx - otherPanelPx - reservePx).coerceIn(0f, absMaxPx)
+                fun panelCapPx(otherPanelPx: Float) = computePanelCapPx(availablePx, otherPanelPx, reservePx, absMaxPx)
 
                 val maxSchedulePx = panelCapPx(if (previewCollapsed) 0f else previewPanelPx)
                 val maxPreviewPx = panelCapPx(if (scheduleCollapsed) 0f else schedulePanelPx)
@@ -1236,8 +1301,7 @@ fun MainDesktop(
                                     delay(1000)
                                 }
                             }
-                            val retrySecondsLeft = instanceLinkNextRetryAtMs
-                                ?.let { ((it - reconnectNowMs) / 1000).coerceAtLeast(0) }
+                            val retrySecondsLeft = retrySecondsLeft(instanceLinkNextRetryAtMs, reconnectNowMs)
                             ConnectionStatusRow(
                                 status = instanceLinkConnectionStatus,
                                 connectedLabel = if (instanceLinkRole == InstanceLinkRole.CONTROLLER)
@@ -1368,9 +1432,7 @@ fun MainDesktop(
                         },
                         onPresentLowerThird = { item ->
                             val lottieFolder = File(appSettings.streamingSettings.lowerThirdFolder)
-                            val lottieFile = lottieFolder.listFiles()?.find {
-                                it.nameWithoutExtension == item.presetLabel || it.nameWithoutExtension == item.presetId
-                            }
+                            val lottieFile = findLottiePresetFile(lottieFolder.listFiles()?.toList(), item.presetLabel, item.presetId)
                             if (lottieFile != null && lottieFile.exists()) {
                                 val json = lottieFile.readText()
                                 presenterManager.setLottieContent(json, item.pauseAtFrame, -1f, item.pauseDurationMs, lottieFile.nameWithoutExtension)
@@ -1397,15 +1459,14 @@ fun MainDesktop(
                             presenting(Presenting.CANVAS)
                         },
                         onItemClick = { item ->
+                            tabForScheduleItem(item)?.let { selectTab(it) }
                             when (item) {
                                 is ScheduleItem.SongItem -> {
-                                    selectTab(Tabs.SONGS)
                                     selectedSongItem = item
                                     selectedSongItemVersion++
                                 }
 
                                 is ScheduleItem.BibleVerseItem -> {
-                                    selectTab(Tabs.BIBLE)
                                     selectedBibleVerseItem = item
                                 }
 
@@ -1415,27 +1476,22 @@ fun MainDesktop(
                                 }
 
                                 is ScheduleItem.PictureItem -> {
-                                    selectTab(Tabs.PICTURES)
                                     selectedPictureItem = item
                                 }
 
                                 is ScheduleItem.PresentationItem -> {
-                                    selectTab(Tabs.PRESENTATION)
                                     selectedPresentationItem = item
                                 }
 
                                 is ScheduleItem.MediaItem -> {
-                                    selectTab(Tabs.MEDIA)
                                     selectedMediaItem = item
                                 }
 
                                 is ScheduleItem.LowerThirdItem -> {
-                                    selectTab(Tabs.LOWER_THIRD)
                                     selectedLowerThirdItem = item
                                 }
 
                                 is ScheduleItem.AnnouncementItem -> {
-                                    selectTab(Tabs.ANNOUNCEMENTS)
                                     onSettingsChange { settings ->
                                         settings.copy(
                                             announcementsSettings = settings.announcementsSettings.copy(
@@ -1473,16 +1529,13 @@ fun MainDesktop(
 
                                 is ScheduleItem.WebsiteItem -> {
                                     selectedWebsiteItem = item
-                                    selectTab(Tabs.WEB)
                                 }
 
                                 is ScheduleItem.SceneItem -> {
                                     sceneViewModel.selectScene(item.sceneId)
-                                    selectTab(Tabs.CANVAS)
                                 }
 
                                 is ScheduleItem.DictionaryItem -> {
-                                    selectTab(Tabs.DICTIONARY)
                                     dictionaryViewModel.selectByNumber(item.number)
                                 }
                             }
@@ -1577,12 +1630,10 @@ fun MainDesktop(
                     if (leftSidebarConnections.isNotEmpty()) {
                         HorizontalDivider()
                         var selectedLeftSidebarId by remember(leftSidebarConnections.map { it.id }) {
-                            mutableStateOf(leftSidebarConnections.firstOrNull()?.id)
+                            mutableStateOf(resolveSelectedConnectionId(null, leftSidebarConnections))
                         }
                         LaunchedEffect(leftSidebarConnections.map { it.id }) {
-                            if (leftSidebarConnections.none { it.id == selectedLeftSidebarId }) {
-                                selectedLeftSidebarId = leftSidebarConnections.firstOrNull()?.id
-                            }
+                            selectedLeftSidebarId = resolveSelectedConnectionId(selectedLeftSidebarId, leftSidebarConnections)
                         }
                         val selectedLeftSidebarConnection = leftSidebarConnections.find { it.id == selectedLeftSidebarId }
                         // No weight here — this panel sizes itself to exactly what its configured
@@ -1667,22 +1718,15 @@ fun MainDesktop(
                                 expanded = showTabVisibilityMenu,
                                 onDismissRequest = { showTabVisibilityMenu = false }
                             ) {
-                                val visibleCount = Tabs.entries.count { it != Tabs.CROSSWORD && it.name !in appSettings.hiddenTabs }
+                                val visibleCount = visibleTabCount(appSettings.hiddenTabs)
                                 Tabs.entries.filter { it != Tabs.CROSSWORD }.forEach { tab ->
                                     val isVisible = tab.name !in appSettings.hiddenTabs
-                                    val isOnlyVisible = isVisible && visibleCount == 1
+                                    val isOnlyVisible = isOnlyVisibleTab(tab, appSettings.hiddenTabs, visibleCount)
                                     DropdownMenuItem(
                                         text = { Text(getStringName(tab)) },
                                         onClick = {
                                             if (!isOnlyVisible) {
-                                                onSettingsChange { s ->
-                                                    val newHidden = if (isVisible) {
-                                                        s.hiddenTabs + tab.name
-                                                    } else {
-                                                        s.hiddenTabs - tab.name
-                                                    }
-                                                    s.copy(hiddenTabs = newHidden)
-                                                }
+                                                onSettingsChange { s -> s.copy(hiddenTabs = toggleHiddenTabs(s.hiddenTabs, tab)) }
                                             }
                                         },
                                         leadingIcon = {
@@ -2067,12 +2111,10 @@ fun MainDesktop(
                             Spacer(modifier = Modifier.height(8.dp))
                             HorizontalDivider()
                             var selectedRightSidebarId by remember(rightSidebarConnections.map { it.id }) {
-                                mutableStateOf(rightSidebarConnections.firstOrNull()?.id)
+                                mutableStateOf(resolveSelectedConnectionId(null, rightSidebarConnections))
                             }
                             LaunchedEffect(rightSidebarConnections.map { it.id }) {
-                                if (rightSidebarConnections.none { it.id == selectedRightSidebarId }) {
-                                    selectedRightSidebarId = rightSidebarConnections.firstOrNull()?.id
-                                }
+                                selectedRightSidebarId = resolveSelectedConnectionId(selectedRightSidebarId, rightSidebarConnections)
                             }
                             val selectedRightSidebarConnection = rightSidebarConnections.find { it.id == selectedRightSidebarId }
                             // No weight here — sizeToContent sizes this panel to exactly what its
