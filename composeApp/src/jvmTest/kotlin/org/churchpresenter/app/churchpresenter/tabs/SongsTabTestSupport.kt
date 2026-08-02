@@ -19,6 +19,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.models.LyricSection
+import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 import java.io.File
 import java.nio.file.Files
@@ -49,6 +50,21 @@ internal data class SongFixture(
     val lyrics: List<String> = listOf("[Verse 1]", "a line of $title"),
 )
 
+/**
+ * The only configuration in which left and right walk between songs.
+ *
+ * `isSongLineMode` is true if **any** of the four display modes is "line", and two of them —
+ * `lowerThirdDisplayMode` and `lowerThirdLookAheadDisplayMode` — default to it. So out of the box the
+ * arrow keys (and per-line lyric clicks) are already in line mode, and every one of these four has to
+ * say "verse" before the tab treats a section as one whole click target instead of per-line ones.
+ */
+internal fun verseMode() = SongSettings(
+    fullscreenDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
+    lowerThirdDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
+    lookAheadDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
+    lowerThirdLookAheadDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
+)
+
 internal val defaultSongs = listOf(
     SongFixture(number = "1", title = "Amazing Grace", author = "John Newton"),
     SongFixture(number = "2", title = "Be Thou My Vision", author = "Dallan Forgaill"),
@@ -65,7 +81,12 @@ internal class TabReports {
     var sectionIndex: Int? = null
     var lineIndex: Int? = null
     val scheduled = mutableListOf<String>()
+    val presenting = mutableListOf<Presenting>()
     var settingsChanges = 0
+
+    /** The temp songbook folder backing this run — for a test that wants to add a file on disk and
+     *  prove a reload actually reads it, rather than merely that a callback fired. */
+    lateinit var songsDir: File
 
     /**
      * The settings the tab's most recent change would produce.
@@ -109,6 +130,9 @@ internal fun songsTab(
      * each step out, and while not presenting left/right move between songs instead.
      */
     isPresenting: Boolean = false,
+    /** Whether the tab is given somewhere to add a song to the schedule — off to test that the
+     *  add-to-schedule actions are hidden rather than merely disabled when there is nowhere to send it. */
+    withOnAddToSchedule: Boolean = true,
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -147,6 +171,7 @@ internal fun songsTab(
             enableFolderWatcher = false,
         )
         val reports = TabReports()
+        reports.songsDir = dir
         runComposeUiTest {
             setContent {
                 MaterialTheme {
@@ -157,11 +182,12 @@ internal fun songsTab(
                             reports.settingsChanges++
                             reports.settingsAfterChange = transform(reports.settingsAfterChange ?: settings)
                         },
-                        onAddToSchedule = { _, title, _, _ -> reports.scheduled += title },
+                        onAddToSchedule = if (withOnAddToSchedule) { { _, title, _, _ -> reports.scheduled += title } } else null,
                         onSongItemSelected = { reports.selectedSection = it },
                         onAllSectionsChanged = { reports.allSections += it },
                         onSectionIndexChanged = { reports.sectionIndex = it },
                         onLineIndexChanged = { reports.lineIndex = it },
+                        onPresenting = { reports.presenting += it },
                         isPresenting = isPresenting,
                     )
                 }
