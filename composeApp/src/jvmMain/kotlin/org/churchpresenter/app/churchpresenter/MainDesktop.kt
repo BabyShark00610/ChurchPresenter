@@ -590,9 +590,14 @@ fun MainDesktop(
     val engineBibles = remember(appSettings.bibleSettings.translationList()) {
         appSettings.bibleSettings.translationList().map { it.fileName }.sorted()
     }
+    // storageDirectory is a key because it is READ below as bibleRoot: without it, changing the
+    // Bible folder mid-service leaves the engine on the old root — old verse index, and a version
+    // corpus that is built once at start and never rebuilt. engineBibles does not cover it, being
+    // file NAMES: move to another folder holding the same names and the set never changes.
     LaunchedEffect(
         sttConnected, bibleEngineSettings.enabled, bibleEngineSettings.runLocal,
         bibleEngineSettings.host, bibleEngineSettings.port, engineBibles,
+        appSettings.bibleSettings.storageDirectory,
     ) {
         if (sttConnected && bibleEngineSettings.enabled && engineBibles.isNotEmpty()) {
             bibleEngineClient.start(

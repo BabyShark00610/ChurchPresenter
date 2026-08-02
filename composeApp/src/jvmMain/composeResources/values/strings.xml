@@ -287,6 +287,7 @@
     <string name="set_all_directories">Set All</string>
     <string name="no_directory_selected">No directory selected</string>
     <string name="no_files_detected">No files detected</string>
+    <string name="scanning_directory">Scanning folder…</string>
     <string name="detected_files_label">Detected:</string>
     <string name="files_in_directory">Files in Directory</string>
     <string name="import_song_file">Import Song File</string>

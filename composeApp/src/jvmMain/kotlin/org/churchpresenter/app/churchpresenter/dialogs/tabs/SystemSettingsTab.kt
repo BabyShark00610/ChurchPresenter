@@ -69,6 +69,7 @@ import churchpresenter.composeapp.generated.resources.lower_third_storage_direct
 import churchpresenter.composeapp.generated.resources.media_storage_directory
 import churchpresenter.composeapp.generated.resources.no_directory_selected
 import churchpresenter.composeapp.generated.resources.no_files_detected
+import churchpresenter.composeapp.generated.resources.scanning_directory
 import churchpresenter.composeapp.generated.resources.pictures_storage_directory
 import churchpresenter.composeapp.generated.resources.presentation_storage_directory
 import churchpresenter.composeapp.generated.resources.reset_settings
@@ -168,7 +169,8 @@ fun SystemSettingsTab(
     ) {
         // Bible Storage Directory
         SettingsSection(title = stringResource(Res.string.bible_storage_directory)) {
-        var bibleFiles by remember(settings.bibleSettings.storageDirectory) { mutableStateOf(emptyList<String>()) }
+        // null until the scan lands — see DetectedFilesList.
+        var bibleFiles by remember(settings.bibleSettings.storageDirectory) { mutableStateOf<List<String>?>(null) }
         LaunchedEffect(settings.bibleSettings.storageDirectory) {
             bibleFiles = withContext(Dispatchers.IO) {
                 fileManager.getBibleFilesInDirectory(settings.bibleSettings.storageDirectory)
@@ -192,7 +194,8 @@ fun SystemSettingsTab(
             files = bibleFiles,
             directorySet = settings.bibleSettings.storageDirectory.isNotEmpty(),
             detectedLabel = stringResource(Res.string.detected_files_label),
-            noFilesText = stringResource(Res.string.no_files_detected)
+            noFilesText = stringResource(Res.string.no_files_detected),
+            scanningText = stringResource(Res.string.scanning_directory)
         )
         // Sits beside the folder picker because that is where someone with no Bibles ends up.
         // Offered only once a real folder is in place: downloads are written the moment they
@@ -218,7 +221,7 @@ fun SystemSettingsTab(
                     onDismiss = { showBibleCatalog = false },
                     onBibleInstalled = { fileName ->
                         onSettingsChange { s -> s.withInstalledBible(fileName) }
-                        bibleFiles = bibleFiles + fileName
+                        bibleFiles = bibleFiles.orEmpty() + fileName
                     }
                 )
             }
@@ -246,10 +249,19 @@ fun SystemSettingsTab(
             val coroutineScope = rememberCoroutineScope()
             var spsFiles by remember(settings.songSettings.storageDirectory) { mutableStateOf(emptyList<String>()) }
             var songFolders by remember(settings.songSettings.storageDirectory) { mutableStateOf(emptyList<Pair<String, Int>>()) }
+            // Two scans, one verdict: "no songs here" is only true once BOTH have landed, so this
+            // stays true across the pair rather than flickering between them.
+            var scanningSongs by remember(settings.songSettings.storageDirectory) { mutableStateOf(true) }
             LaunchedEffect(settings.songSettings.storageDirectory) {
                 val dir = settings.songSettings.storageDirectory
-                spsFiles = withContext(Dispatchers.IO) { fileManager.getSongFilesInDirectory(dir) }
-                songFolders = withContext(Dispatchers.IO) { fileManager.getSongFoldersInDirectory(dir) }
+                scanningSongs = true
+                try {
+                    spsFiles = withContext(Dispatchers.IO) { fileManager.getSongFilesInDirectory(dir) }
+                    songFolders = withContext(Dispatchers.IO) { fileManager.getSongFoldersInDirectory(dir) }
+                } finally {
+                    // finally, so a cancelled or failed scan does not leave the spinner up forever.
+                    scanningSongs = false
+                }
             }
 
             // Add Song Samples button
@@ -260,7 +272,9 @@ fun SystemSettingsTab(
                 modifier = Modifier.padding(top = 2.dp, start = 2.dp).height(24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (spsFiles.isEmpty() && songFolders.isEmpty()) {
+                if (scanningSongs) {
+                    ScanningRow(stringResource(Res.string.scanning_directory))
+                } else if (spsFiles.isEmpty() && songFolders.isEmpty()) {
                     Text(
                         text = stringResource(Res.string.no_files_detected),
                         style = MaterialTheme.typography.bodySmall,
@@ -888,14 +902,27 @@ private fun DirectoryPicker(
     }
 }
 
+/**
+ * Detected files under a chosen folder, or a spinner while the scan is still running.
+ *
+ * [files] is null until the scan finishes. That distinction is the whole point: the scan runs on
+ * Dispatchers.IO and takes seconds against a network share, and rendering "no files detected" for
+ * that whole time reads as a verdict rather than a wait — someone who has just picked the right
+ * folder is told, in red, that it is empty.
+ */
 @Composable
 private fun DetectedFilesList(
-    files: List<String>,
+    files: List<String>?,
     directorySet: Boolean,
     detectedLabel: String,
-    noFilesText: String
+    noFilesText: String,
+    scanningText: String
 ) {
     if (!directorySet) return
+    if (files == null) {
+        ScanningRow(scanningText)
+        return
+    }
     Text(
         text = if (files.isNotEmpty()) "$detectedLabel ${files.joinToString(", ")}"
                else noFilesText,
@@ -904,6 +931,33 @@ private fun DetectedFilesList(
                 else MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
         modifier = Modifier.padding(top = 4.dp, start = 2.dp)
     )
+}
+
+/**
+ * Spinner plus label, sized to sit inline with the body-small text it replaces.
+ *
+ * `internal` so it can be composed directly in a test: the state it represents is transient by
+ * nature, and `SystemSettingsTab` builds its own `FileManager`, so there is no seam to hold a scan
+ * open long enough to catch this on screen without racing it.
+ */
+@Composable
+internal fun ScanningRow(scanningText: String) {
+    Row(
+        modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(12.dp),
+            strokeWidth = 1.5.dp,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = scanningText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 private suspend fun copySongSamples(storageDirectory: String): Int {
