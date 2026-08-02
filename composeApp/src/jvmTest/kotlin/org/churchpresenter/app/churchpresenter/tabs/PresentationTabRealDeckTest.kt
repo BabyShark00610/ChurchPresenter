@@ -8,9 +8,14 @@ import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.font.PDType1Font
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -63,10 +68,11 @@ class PresentationTabRealDeckTest {
     private fun withRealDeck(
         pages: Int = 3,
         presenterManager: PresenterManager? = null,
+        onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null,
         block: ComposeUiTest.(vm: PresentationViewModel, reports: PresentationReports, file: File) -> Unit,
     ) {
         val file = pdf(pages)
-        presentationTab(presenterManager = presenterManager) { vm, reports ->
+        presentationTab(presenterManager = presenterManager, onInstanceLinkSendProject = onInstanceLinkSendProject) { vm, reports ->
             vm.addPresentation(file)
             awaitLoaded(vm)
             block(vm, reports, file)
@@ -125,6 +131,42 @@ class PresentationTabRealDeckTest {
             }
 
             assertTrue(presenter.selectedSlide.value != null, "the live slide bitmap must arrive, even though it decodes asynchronously")
+        }
+    }
+
+    @Test
+    fun `Go Live also projects the deck to Instance Link when wired`() {
+        val presenter = PresenterManager()
+        val sent = mutableListOf<ScheduleItem>()
+        withRealDeck(pages = 3, presenterManager = presenter, onInstanceLinkSendProject = { sent += it }) { vm, _, file ->
+            presentationButton(PresentationLabel.GO_LIVE).performClick()
+            waitForIdle()
+
+            val item = sent.single() as ScheduleItem.PresentationItem
+            assertEquals(file.absolutePath, item.filePath)
+            assertEquals(file.nameWithoutExtension, item.fileName)
+            assertEquals(vm.slideFiles.size, item.slideCount)
+            assertEquals("pdf", item.fileType)
+        }
+    }
+
+    @Test
+    fun `double-clicking a thumbnail also projects to Instance Link when wired`() {
+        val presenter = PresenterManager()
+        val sent = mutableListOf<ScheduleItem>()
+        withRealDeck(pages = 3, presenterManager = presenter, onInstanceLinkSendProject = { sent += it }) { _, _, file ->
+            waitUntilAtLeastOneExists(hasContentDescription("Slide 2"), timeoutMillis = 5_000)
+            onNodeWithContentDescription("Slide 2").performTouchInput {
+                down(center)
+                up()
+                advanceEventTime(50)
+                down(center)
+                up()
+            }
+            waitForIdle()
+
+            val item = sent.single() as ScheduleItem.PresentationItem
+            assertEquals(file.absolutePath, item.filePath)
         }
     }
 }

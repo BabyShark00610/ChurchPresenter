@@ -71,6 +71,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -367,6 +368,7 @@ fun PresentationTab(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .testTag("presentation_root")
             .focusRequester(focusRequester)
             .onFocusChanged { focusRescue.onFocusChanged(it.hasFocus) }
             .focusRescuePressHook(focusRescue)

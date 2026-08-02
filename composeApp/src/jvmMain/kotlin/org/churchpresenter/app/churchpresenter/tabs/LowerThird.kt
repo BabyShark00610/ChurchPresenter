@@ -984,7 +984,11 @@ fun LowerThirdTab(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
-                        Icon(painterResource(if (isPlaying) Res.drawable.ic_pause else Res.drawable.ic_play), contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(
+                            painterResource(if (isPlaying) Res.drawable.ic_pause else Res.drawable.ic_play),
+                            contentDescription = stringResource(if (isPlaying) Res.string.pause else Res.string.play),
+                            modifier = Modifier.size(15.dp),
+                        )
                     }
                 }
 

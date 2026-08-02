@@ -198,4 +198,12 @@ class AnnouncementsTabTest {
             assertFalse(hasAnnButton(AnnouncementLabel.GO_LIVE), "but nothing offers to go live")
             assertFalse(hasAnnButton(AnnouncementLabel.SHOW))
         }
+
+    @Test
+    fun `with no schedule to add to, neither half offers to add to it`() =
+        announcementsTab(withOnAddToSchedule = false, initial = AnnouncementsSettings(timerMinutes = 5)) { _, _ ->
+            typeAnnouncement("Notices")
+
+            assertFalse(hasAnnButton(AnnouncementLabel.ADD_TO_SCHEDULE))
+        }
 }

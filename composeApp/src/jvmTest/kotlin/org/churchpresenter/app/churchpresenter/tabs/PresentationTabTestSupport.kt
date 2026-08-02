@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
 import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
@@ -81,6 +82,11 @@ internal fun presentationTab(
     presentationDisplayUrl: String = "",
     /** Whether VLC is usable — only decides the missing-VLC banner for a deck containing video. */
     vlcAvailable: Boolean = true,
+    selectedPresentationItem: ScheduleItem.PresentationItem? = null,
+    instanceLinkFetchPresentationSlideBytes: (suspend (id: String, index: Int) -> ByteArray?)? = null,
+    onInstanceLinkSendNextSlide: (() -> Unit)? = null,
+    onInstanceLinkSendPreviousSlide: (() -> Unit)? = null,
+    onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null,
     block: ComposeUiTest.(vm: PresentationViewModel, reports: PresentationReports) -> Unit,
 ) {
     // PresentationViewModel's slide disk cache resolves under user.home.
@@ -111,6 +117,11 @@ internal fun presentationTab(
                     onFreezeToggle = { reports.freezeToggles++ },
                     onClearPresentation = { reports.clears++ },
                     vlcAvailable = vlcAvailable,
+                    selectedPresentationItem = selectedPresentationItem,
+                    instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
+                    onInstanceLinkSendNextSlide = onInstanceLinkSendNextSlide,
+                    onInstanceLinkSendPreviousSlide = onInstanceLinkSendPreviousSlide,
+                    onInstanceLinkSendProject = onInstanceLinkSendProject,
                 )
             }
         }

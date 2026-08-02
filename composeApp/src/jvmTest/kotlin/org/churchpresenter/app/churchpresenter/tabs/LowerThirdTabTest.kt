@@ -11,6 +11,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/** 3 frames at 30fps = 100ms — fast enough to play through to completion inside a test. */
+private const val QUICK_LOTTIE = """{"v":"5.7.4","fr":30,"ip":0,"op":3,"w":1920,"h":1080,"layers":[]}"""
+
 /**
  * The Lower Third tab: a preset picker over a folder of Lottie animations.
  *
@@ -113,6 +116,55 @@ class LowerThirdTabTest {
 
         assertEquals(listOf("Welcome", "Welcome"), reports.live)
     }
+
+    // ── Play / Pause ────────────────────────────────────────────────────────────
+
+    // These pause the test's own frame clock and advance it by exactly one frame instead of
+    // calling waitForIdle(): with auto-advance on, waitForIdle() fast-forwards straight through
+    // the whole tween in one go, so isPlaying is already back to false before the assertion runs
+    // — a genuinely playing/paused state is real but transient, and only observable this way.
+
+    @Test
+    fun `pressing play starts the animation and offers to pause instead`() = lowerThirdTab { _ ->
+        selectPreset("Welcome")
+        assertTrue(hasLtButton(LowerThirdLabel.PLAY), "stopped to begin with")
+
+        mainClock.autoAdvance = false
+        ltButton(LowerThirdLabel.PLAY).performClick()
+        mainClock.advanceTimeByFrame()
+
+        assertTrue(hasLtButton(LowerThirdLabel.PAUSE), "the same button now offers to pause")
+        assertFalse(hasLtButton(LowerThirdLabel.PLAY))
+    }
+
+    @Test
+    fun `pressing pause stops it again`() = lowerThirdTab { _ ->
+        selectPreset("Welcome")
+        mainClock.autoAdvance = false
+        ltButton(LowerThirdLabel.PLAY).performClick()
+        mainClock.advanceTimeByFrame()
+
+        ltButton(LowerThirdLabel.PAUSE).performClick()
+        mainClock.advanceTimeByFrame()
+
+        assertTrue(hasLtButton(LowerThirdLabel.PLAY), "back to offering a play")
+    }
+
+    @Test
+    fun `playing through to the end and pressing play again restarts from the beginning`() =
+        lowerThirdTab(folder = lottieFolderWithContent("Quick" to QUICK_LOTTIE)) { _ ->
+            selectPreset("Quick")
+            ltButton(LowerThirdLabel.PLAY).performClick()
+            waitForIdle() // auto-advance fast-forwards the short animation to completion
+
+            assertTrue(hasLtButton(LowerThirdLabel.PLAY), "must have finished and returned to Play")
+
+            mainClock.autoAdvance = false
+            ltButton(LowerThirdLabel.PLAY).performClick()
+            mainClock.advanceTimeByFrame()
+
+            assertTrue(hasLtButton(LowerThirdLabel.PAUSE), "pressing play again must restart it, not sit idle")
+        }
 
     // ── Managing the folder ─────────────────────────────────────────────────────
 
