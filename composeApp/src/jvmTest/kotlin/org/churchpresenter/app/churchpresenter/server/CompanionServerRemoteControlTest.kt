@@ -18,6 +18,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -35,6 +36,7 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import kotlin.test.AfterTest
@@ -723,7 +725,10 @@ class CompanionServerRemoteControlTest {
 
     @Test
     fun `the instant navigation commands fire without approval`() {
-        val fired = mutableListOf<String>()
+        // Four collectors on Dispatchers.IO appending concurrently: a plain ArrayList loses an
+        // element outright under that, and the socket's quiet window is not a signal that the
+        // handlers have run — it only says the server stopped writing back.
+        val fired = CopyOnWriteArrayList<String>()
         collecting(server.onNextSlide) { fired.add("next_slide") }
         collecting(server.onPreviousSlide) { fired.add("previous_slide") }
         collecting(server.onNextPicture) { fired.add("next_picture") }
@@ -738,7 +743,7 @@ class CompanionServerRemoteControlTest {
 
         assertEquals(
             setOf("next_slide", "previous_slide", "next_picture", "previous_picture"),
-            fired.toSet(),
+            runBlocking { withTimeoutOrNull(2_000) { while (fired.size < 4) delay(10); fired.toSet() } },
             "these are the buttons under the operator's thumb during a service",
         )
     }
@@ -1211,7 +1216,7 @@ class CompanionServerRemoteControlTest {
     fun `jumping to a slide outside the deck lands on the nearest one`() {
         server.presentationRemoteEnabled = true
         server.broadcastSlideChange(id = "deck-1", index = 0, total = 12, isPlaying = false)
-        val jumps = mutableListOf<Int>()
+        val jumps = CopyOnWriteArrayList<Int>()
         collecting(server.onPresentationGoto) { jumps.add(it) }
 
         remotePost("goto/99")
@@ -1219,7 +1224,7 @@ class CompanionServerRemoteControlTest {
 
         assertEquals(
             listOf(11, 0),
-            runBlocking { withTimeoutOrNull(2_000) { while (jumps.size < 2) kotlinx.coroutines.delay(10); jumps.toList() } },
+            runBlocking { withTimeoutOrNull(2_000) { while (jumps.size < 2) delay(10); jumps.toList() } },
             "a stale phone asking for a slide the deck no longer has must not crash the deck",
         )
     }
@@ -1234,7 +1239,8 @@ class CompanionServerRemoteControlTest {
     @Test
     fun `the remote's own buttons reach the app`() {
         server.presentationRemoteEnabled = true
-        val fired = mutableListOf<String>()
+        // Thread-safe: these four collectors append from Dispatchers.IO at the same time.
+        val fired = CopyOnWriteArrayList<String>()
         collecting(server.onPresentationFreezeToggle) { fired.add("freeze") }
         collecting(server.onPresentationPlayPause) { fired.add("play-pause") }
         collecting(server.onPresentationLoopToggle) { fired.add("loop") }
@@ -1244,7 +1250,7 @@ class CompanionServerRemoteControlTest {
 
         assertEquals(
             setOf("freeze", "play-pause", "loop", "go-live"),
-            runBlocking { withTimeoutOrNull(2_000) { while (fired.size < 4) kotlinx.coroutines.delay(10); fired.toSet() } },
+            runBlocking { withTimeoutOrNull(2_000) { while (fired.size < 4) delay(10); fired.toSet() } },
         )
     }
 
