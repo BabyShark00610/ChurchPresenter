@@ -33,6 +33,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.SceneSource
@@ -151,8 +152,13 @@ internal fun redrawablePanel(
  * the panel has no enumerator for sends it down its own empty-list path with no process spawned at
  * all, which is what makes the surrounding controls — the mode dropdown, the Refresh button, the
  * "nothing found" message — testable at all.
+ *
+ * Skiko reads `os.name` through a JVM-wide `by lazy` and throws on a name it does not know, so the
+ * latch below has to happen before the swap — see [TestSingletons.latchSkikoHostOs] for what breaks
+ * without it, and why it breaks only on some machines.
  */
 internal fun <T> withOsName(name: String, block: () -> T): T {
+    TestSingletons.latchSkikoHostOs()
     val previous = System.getProperty("os.name")
     System.setProperty("os.name", name)
     return try {
@@ -174,10 +180,12 @@ internal const val OS_WITHOUT_ENUMERATOR = "TestOS"
  * singleton — sharing one id across tests would leak a running timer between them.
  */
 internal object Fixture {
-    fun image(id: String = "img-1") = SceneSource.ImageSource(id = id, name = "Logo", filePath = "/tmp/logo.png")
+    fun image(id: String = "img-1", filePath: String = "/tmp/logo.png") =
+        SceneSource.ImageSource(id = id, name = "Logo", filePath = filePath)
     fun text(id: String = "txt-1") = SceneSource.TextSource(id = id, name = "Title")
     fun color(id: String = "col-1") = SceneSource.ColorSource(id = id, name = "Backdrop")
-    fun video(id: String = "vid-1") = SceneSource.VideoSource(id = id, name = "Bumper", filePath = "/tmp/bumper.mp4")
+    fun video(id: String = "vid-1", filePath: String = "/tmp/bumper.mp4") =
+        SceneSource.VideoSource(id = id, name = "Bumper", filePath = filePath)
     fun browser(id: String = "web-1") = SceneSource.BrowserSource(id = id, name = "Feed", url = "https://example.org")
     fun shape(id: String = "shp-1") = SceneSource.ShapeSource(id = id, name = "Box")
     fun clock(id: String = "clk-1") = SceneSource.ClockSource(id = id, name = "Service timer")
