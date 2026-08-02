@@ -29,19 +29,9 @@ import kotlin.test.assertNull
 
 class InstanceLinkContentTest {
 
-    private data class Connected(
-        val host: String,
-        val port: Int,
-        val apiKey: String,
-        val autoConnect: Boolean,
-        val allowPushToSchedule: Boolean,
-        val bibleSyncMode: BibleSyncMode,
-        val mirrorBackgrounds: Boolean,
-        val role: InstanceLinkRole,
-    )
-
     private class Result {
-        var connected: Connected? = null
+        var connected: InstanceLinkSettings? = null
+        var saved: InstanceLinkSettings? = null
         var disconnectCalls = 0
         var dismissed = 0
     }
@@ -65,9 +55,8 @@ class InstanceLinkContentTest {
                         remoteLiveState = remoteLiveState,
                         remoteScheduleCount = remoteScheduleCount,
                         lastMessageAtMs = lastMessageAtMs,
-                        onConnect = { host, port, apiKey, autoConnect, allowPushToSchedule, bibleSyncMode, mirrorBackgrounds, role ->
-                            result.connected = Connected(host, port, apiKey, autoConnect, allowPushToSchedule, bibleSyncMode, mirrorBackgrounds, role)
-                        },
+                        onConnect = { result.connected = it },
+                        onSave = { result.saved = it },
                         onDisconnect = { result.disconnectCalls++ },
                         onDismiss = { result.dismissed++ },
                     )
@@ -80,6 +69,7 @@ class InstanceLinkContentTest {
     private fun ComposeUiTest.hostField(): SemanticsNodeInteraction = onAllNodes(hasSetTextAction())[0]
     private fun ComposeUiTest.portField(): SemanticsNodeInteraction = onAllNodes(hasSetTextAction())[1]
     private fun ComposeUiTest.apiKeyField(): SemanticsNodeInteraction = onAllNodes(hasSetTextAction())[2]
+    private fun ComposeUiTest.reconnectDelayField(): SemanticsNodeInteraction = onAllNodes(hasSetTextAction())[3]
 
     // ── Connect's enabled state ─────────────────────────────────────────────────
 
@@ -139,8 +129,8 @@ class InstanceLinkContentTest {
         apiKeyField().performTextInput("  secret  ")
         onNodeWithText("Connect").performClick()
 
-        assertEquals("192.168.1.10", result.connected?.host)
-        assertEquals(8080, result.connected?.port)
+        assertEquals("192.168.1.10", result.connected?.primaryHost)
+        assertEquals(8080, result.connected?.primaryPort)
         assertEquals("secret", result.connected?.apiKey)
     }
 
@@ -168,9 +158,108 @@ class InstanceLinkContentTest {
     ) { result ->
         onNodeWithText("Connect").performClick()
 
-        assertEquals("10.0.0.5", result.connected?.host)
-        assertEquals(9090, result.connected?.port)
+        assertEquals("10.0.0.5", result.connected?.primaryHost)
+        assertEquals(9090, result.connected?.primaryPort)
         assertEquals("existing-key", result.connected?.apiKey)
+    }
+
+    // ── Saving without connecting ────────────────────────────────────────────────
+    //
+    // Connect used to be the only button that persisted anything, so every settings edit — including
+    // the ones consumed reactively and needing no handshake at all — cost a reconnect.
+
+    @Test
+    fun `Save persists the edits without connecting`() = dialog { result ->
+        hostField().performTextInput("192.168.1.10")
+        portField().performTextInput("8080")
+        onNodeWithText("Save").performClick()
+
+        assertEquals("192.168.1.10", result.saved?.primaryHost)
+        assertEquals(8080, result.saved?.primaryPort)
+        assertNull(result.connected, "Save must not open a connection")
+        assertEquals(1, result.dismissed)
+    }
+
+    @Test
+    fun `Save is available with no host, unlike Connect`() = dialog { result ->
+        // Turning autoConnect back off is a legitimate edit on its own; requiring a reachable
+        // primary to record it would make the setting impossible to undo from here.
+        onNodeWithText("Connect").assertIsNotEnabled()
+        onAllNodes(isToggleable())[0].performClick()
+        onNodeWithText("Save").assertIsEnabled().performClick()
+
+        assertEquals(true, result.saved?.autoConnect)
+    }
+
+    @Test
+    fun `Save keeps the fields the dialog never shows`() = dialog(
+        settings = InstanceLinkSettings(deviceId = "device-abc", enabled = true),
+    ) { result ->
+        onNodeWithText("Save").performClick()
+
+        assertEquals("device-abc", result.saved?.deviceId)
+        assertEquals(true, result.saved?.enabled)
+    }
+
+    // ── Reconnect delay ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `the reconnect delay is pre-filled and editable`() = dialog(
+        settings = InstanceLinkSettings(reconnectDelayMs = 3000),
+    ) { result ->
+        reconnectDelayField().performTextReplacement("5000")
+        onNodeWithText("Save").performClick()
+
+        assertEquals(5000, result.saved?.reconnectDelayMs)
+    }
+
+    @Test
+    fun `a non-digit reconnect delay edit is rejected outright`() = dialog(
+        settings = InstanceLinkSettings(reconnectDelayMs = 2000),
+    ) { result ->
+        reconnectDelayField().performTextInput("x")
+        onNodeWithText("Save").performClick()
+
+        assertEquals(2000, result.saved?.reconnectDelayMs)
+    }
+
+    @Test
+    fun `an emptied reconnect delay falls back to the saved value`() = dialog(
+        settings = InstanceLinkSettings(reconnectDelayMs = 2000),
+    ) { result ->
+        reconnectDelayField().performTextReplacement("")
+        onNodeWithText("Save").performClick()
+
+        assertEquals(2000, result.saved?.reconnectDelayMs)
+    }
+
+    @Test
+    fun `a reconnect delay of zero is clamped to the floor`() = dialog { result ->
+        // The setting is the floor of the client's backoff, so 0 would retry in a tight loop
+        // against a primary that is most likely still restarting.
+        reconnectDelayField().performTextReplacement("0")
+        onNodeWithText("Save").performClick()
+
+        assertEquals(INSTANCE_LINK_MIN_RECONNECT_DELAY_MS, result.saved?.reconnectDelayMs)
+    }
+
+    @Test
+    fun `a mistyped extra digit is clamped to the ceiling`() = dialog { result ->
+        reconnectDelayField().performTextReplacement("600000")
+        onNodeWithText("Save").performClick()
+
+        assertEquals(INSTANCE_LINK_MAX_RECONNECT_DELAY_MS, result.saved?.reconnectDelayMs)
+    }
+
+    @Test
+    fun `parseReconnectDelayMs falls back rather than throwing on unusable input`() {
+        assertEquals(2000, parseReconnectDelayMs("", fallback = 2000))
+        assertEquals(2000, parseReconnectDelayMs("   ", fallback = 2000))
+        // Longer than an Int can hold — toIntOrNull is null, not an exception.
+        assertEquals(2000, parseReconnectDelayMs("99999999999999", fallback = 2000))
+        assertEquals(3000, parseReconnectDelayMs(" 3000 ", fallback = 2000))
+        assertEquals(INSTANCE_LINK_MIN_RECONNECT_DELAY_MS, parseReconnectDelayMs("0", fallback = 2000))
+        assertEquals(INSTANCE_LINK_MAX_RECONNECT_DELAY_MS, parseReconnectDelayMs("999999", fallback = 2000))
     }
 
     // ── Disconnect ───────────────────────────────────────────────────────────────
@@ -242,6 +331,26 @@ class InstanceLinkContentTest {
     @Test
     fun `Controlled-only settings are shown for the default role`() = dialog {
         onNodeWithText("Bible sync").assertExists()
+        onNodeWithText("Allow adding items to the primary's schedule").assertExists()
+    }
+
+    @Test
+    fun `pushing to the schedule is hidden for a Controller`() = dialog {
+        // A Controller's schedule is its own local one — ScheduleViewModel is not following the
+        // primary, so nothing it adds is ever pushed and the switch would be inert.
+        onAllNodes(isSelectable())[1].performClick()
+        onNodeWithText("Allow adding items to the primary's schedule").assertDoesNotExist()
+    }
+
+    @Test
+    fun `switching to Controller and back keeps the push setting that was saved`() = dialog(
+        settings = InstanceLinkSettings(allowPushToSchedule = true),
+    ) { result ->
+        onAllNodes(isSelectable())[1].performClick()
+        onAllNodes(isSelectable())[0].performClick()
+
+        onNodeWithText("Save").performClick()
+        assertEquals(true, result.saved?.allowPushToSchedule)
     }
 
     // ── Bible sync (Controlled only) ─────────────────────────────────────────────
@@ -508,7 +617,8 @@ class InstanceLinkContentTest {
                     connectionStatus = InstanceLinkStatus.DISCONNECTED,
                     remoteLiveState = null,
                     remoteScheduleCount = 0,
-                    onConnect = { _, _, _, _, _, _, _, _ -> },
+                    onConnect = {},
+                    onSave = {},
                     onDisconnect = {},
                     onDismiss = {},
                 )

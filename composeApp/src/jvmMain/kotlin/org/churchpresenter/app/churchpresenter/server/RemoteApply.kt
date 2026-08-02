@@ -12,6 +12,7 @@ import org.churchpresenter.app.churchpresenter.ScheduleActions
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BackgroundSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
+import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.dialogs.RemoteEventType
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.Question
@@ -52,6 +53,59 @@ internal val instanceLinkPictureCacheDir: File by lazy {
 internal val instanceLinkBackgroundCacheDir: File by lazy {
     File(System.getProperty("user.home"), ".churchpresenter/instance-link/cache/backgrounds").apply { mkdirs() }
 }
+
+/**
+ * Whether this instance mirrors the primary's live output onto its own presenter — the single
+ * decision behind every "does the follower follow?" gate in `main.kt` (live state, the dedicated
+ * presentation-slide broadcast, and display_cleared).
+ *
+ * Only [InstanceLinkRole.CONTROLLED] mirrors. A [InstanceLinkRole.CONTROLLER] drives the primary
+ * and keeps its own output: it goes live locally *and* sends the command, so mirroring the primary
+ * as well would echo that command straight back and overwrite the content it had just put up — with
+ * the primary's version of it, refetched over the network. The primary's connect snapshot replays
+ * its current live state to every client, so an ungated Controller is clobbered the moment it
+ * connects, before the operator does anything at all.
+ */
+internal fun shouldMirrorRemoteOutput(role: InstanceLinkRole): Boolean =
+    role == InstanceLinkRole.CONTROLLED
+
+/**
+ * Whether content should be sourced from the primary rather than from this machine — the same
+ * decision as [shouldMirrorRemoteOutput], plus a live connection to source it over.
+ *
+ * Gates the remote-asset fallbacks (picture bytes, presentation slides, the media stream URL). Those
+ * exist for a *mirrored* schedule item, whose file only lives on the primary's disk. A Controller's
+ * schedule is its own local one, so routing it through the primary streams the wrong bytes — or none
+ * at all, for an item id the primary has never seen.
+ */
+internal fun shouldUseRemoteContent(status: InstanceLinkStatus, role: InstanceLinkRole): Boolean =
+    status == InstanceLinkStatus.CONNECTED && shouldMirrorRemoteOutput(role)
+
+/**
+ * Whether to replace this instance's backgrounds with the primary's — [shouldUseRemoteContent] plus
+ * the explicit opt-in, which is off by default because backgrounds are usually venue-specific.
+ */
+internal fun shouldMirrorRemoteBackgrounds(
+    status: InstanceLinkStatus,
+    role: InstanceLinkRole,
+    mirrorBackgrounds: Boolean
+): Boolean = mirrorBackgrounds && shouldUseRemoteContent(status, role)
+
+/**
+ * Which URL a follower actually plays for a schedule item's media.
+ *
+ * A mirrored item's path usually only exists on the primary's disk, so it is streamed from there
+ * ([remoteStreamUrl], null when there is nothing to stream from). A path that *does* resolve here —
+ * a shared network drive, or the same layout on both machines — is played from disk instead: no
+ * network in the path, and seeking a local file beats seeking an HTTP stream. A URL-type item is
+ * already reachable from anywhere and is never rewritten.
+ */
+internal fun followerMediaUrl(mediaType: String, localUrl: String, remoteStreamUrl: String?): String =
+    if (mediaType == Constants.MEDIA_TYPE_LOCAL && remoteStreamUrl != null && !File(localUrl).exists()) {
+        remoteStreamUrl
+    } else {
+        localUrl
+    }
 
 /**
  * Downloads the primary's configured background image/video assets (only for slots it actually has
