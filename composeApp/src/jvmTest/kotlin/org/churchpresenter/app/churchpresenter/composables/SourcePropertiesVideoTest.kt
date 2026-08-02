@@ -12,8 +12,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.SceneSource
+import java.nio.file.Files
 import java.nio.file.Path
 import javax.swing.filechooser.FileNameExtensionFilter
+import kotlin.io.path.absolutePathString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -94,28 +96,38 @@ class SourcePropertiesVideoTest {
 
     @Test
     fun `clicking Browse opens the chooser with a video filter, at the stored path's directory`() {
+        // A real directory, not a literal "/tmp": FileChooser falls back to the home directory for
+        // a start path that does not exist, and "/tmp" is not one on Windows.
+        val dir = Files.createTempDirectory("cp-video-browse")
         val chooser = FakeFileChooser(answer = null)
-        sourcePanel(Fixture.video(), fileChooser = chooser) { _ ->
-            onNodeWithContentDescription("Browse").performClick()
-            waitForIdle()
+        try {
+            sourcePanel(Fixture.video(filePath = dir.resolve("bumper.mp4").toString()), fileChooser = chooser) { _ ->
+                onNodeWithContentDescription("Browse").performClick()
+                waitForIdle()
 
-            assertEquals(1, chooser.callCount)
-            assertEquals(Path.of("/tmp"), chooser.lastPath, "the chooser must open at the stored file's parent directory")
-            assertEquals(
-                listOf("mp4", "mov", "avi", "mkv", "wmv", "flv", "webm", "m4v"),
-                chooser.lastFilters?.single()?.extensions?.toList(),
-            )
+                assertEquals(1, chooser.callCount)
+                assertEquals(dir, chooser.lastPath, "the chooser must open at the stored file's parent directory")
+                assertEquals(
+                    listOf("mp4", "mov", "avi", "mkv", "wmv", "flv", "webm", "m4v"),
+                    chooser.lastFilters?.single()?.extensions?.toList(),
+                )
+            }
+        } finally {
+            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun `choosing a file from Browse stores its path`() {
-        val chooser = FakeFileChooser(answer = Path.of("/media/clips/outro.mov"))
+        val chosen = Path.of("/media/clips/outro.mov")
+        val chooser = FakeFileChooser(answer = chosen)
         sourcePanel(Fixture.video(), fileChooser = chooser) { get ->
             onNodeWithContentDescription("Browse").performClick()
             waitForIdle()
 
-            assertEquals("/media/clips/outro.mov", (get() as SceneSource.VideoSource).filePath)
+            // The panel stores what the chooser answered, absolutised — which on Windows gains a
+            // drive letter, so the expectation is derived rather than spelled out.
+            assertEquals(chosen.absolutePathString(), (get() as SceneSource.VideoSource).filePath)
         }
     }
 

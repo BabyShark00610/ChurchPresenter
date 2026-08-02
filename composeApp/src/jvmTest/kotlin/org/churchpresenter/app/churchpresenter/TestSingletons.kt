@@ -4,8 +4,14 @@ import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogSide
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
 
 /**
- * Pins the JVM-wide singletons that resolve a path from `user.home` to the real test home
- * (`build/test-home`) before any test swaps that property.
+ * Pins JVM-wide lazies that read a system property, forcing them to resolve against the real value
+ * before any test swaps that property.
+ *
+ * Two properties are covered — `user.home` ([latchToTestHome]) and `os.name` ([latchSkikoHostOs]).
+ * The failure mode is the same for both: a `by lazy` that resolves once per JVM keeps whatever the
+ * property said at the moment it was first touched, so a test that swaps the property and happens
+ * to be the one that triggers the lazy poisons every later test in that JVM — and which test that
+ * is depends on execution order, so it passes on one machine and fails on another.
  *
  * [InstanceLinkLogger] resolves its log directory in a `by lazy`, so it keeps whatever `user.home`
  * pointed at the *first* time anything logged, for the rest of the JVM. A test class that swaps
@@ -29,6 +35,37 @@ object TestSingletons {
             // The only public entry point that forces the logger's lazy path resolution.
             InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "test_home_latch")
             latched = true
+        }
+    }
+
+    @Volatile private var skikoLatched = false
+
+    /**
+     * Forces skiko to resolve its host OS against the real `os.name`, before any test fakes it.
+     *
+     * `org.jetbrains.skiko.hostOs` is a `by lazy` that maps `os.name` onto a known OS and throws
+     * `Error: Unknown OS <name>` for anything it does not recognise. `org.jetbrains.skia.Surface`
+     * resolves it in its static initializer, on the way to loading the native library, and every
+     * `runComposeUiTest` touches `Surface`. So a Compose test composed inside a fake `os.name` — as
+     * every [org.churchpresenter.app.churchpresenter.composables.withOsName] caller does, naming an
+     * OS no enumerator matches precisely so the panel spawns no processes — makes that the *first*
+     * touch, and skiko throws. `Surface` is then permanently uninitialisable and every later Compose
+     * test in the JVM dies with `NoClassDefFoundError: Could not initialize class
+     * org.jetbrains.skia.Surface`, pointing at whichever innocent class ran next.
+     *
+     * Whether it bites is pure execution order: if any Compose test runs before the first faking
+     * one, the lazy is already resolved and the fake is harmless. That is why CI stayed green while
+     * running a single faking class on its own reproduces it every time.
+     *
+     * Loading `Surface` is what a Compose test does anyway, so this only moves that cost earlier.
+     */
+    fun latchSkikoHostOs() {
+        if (skikoLatched) return
+        synchronized(this) {
+            if (skikoLatched) return
+            // Initialising the class runs the static load that resolves skiko's hostOs lazy.
+            Class.forName("org.jetbrains.skia.Surface")
+            skikoLatched = true
         }
     }
 }

@@ -377,6 +377,52 @@ Submit crash logs by opening a GitHub Issue and attaching the file.
 3. Run `./gradlew :composeApp:run` to verify the build works
 4. Read this entire guide before making changes
 
+### Running the tests, per platform
+
+The app's own suite is `./gradlew :composeApp:check`. It needs **JDK 21** and the submodules
+checked out (`git clone --recurse-submodules`, or `git submodule update --init --recursive`) —
+`composeApp` mounts their sources via `kotlin.srcDir` and will not compile without them.
+
+Beyond that there is nothing platform-specific to install:
+
+| Platform | Status |
+|----------|--------|
+| **Linux** | What CI runs (`ubuntu-latest`), fully headless. |
+| **Windows** | Runs the full suite, including the Compose UI tests. |
+| **macOS** | Unverified — no one has run the suite on it. Treat a failure there as unknown territory rather than a regression. |
+
+**If Compose UI tests fail with `NoClassDefFoundError: Could not initialize class
+org.jetbrains.skia.Surface`**, that is not a stale build and `--rerun-tasks` will not clear it.
+Skiko resolves its host OS from `os.name` in a JVM-wide `by lazy` and throws on a name it does not
+know, so a test that fakes `os.name` and is the first to touch Compose kills every Compose test
+after it in that JVM. `TestSingletons.latchSkikoHostOs()` exists to prevent exactly this and must
+be called *before* any `os.name` swap — `withOsName` already does. Whether it bites depends on test
+execution order, so it can appear on one machine and not another.
+
+### The six sub-builds
+
+`:composeApp:check` does **not** reach them — each is its own Gradle build with its own wrapper,
+under `composeApp/src/jvmMain/appResources/common/`. CI runs them as separate steps. To run one
+yourself, from its directory:
+
+```bash
+./gradlew test        # macOS/Linux — jvmTest for ChurchPresenter-Cross, which is Multiplatform
+```
+```shell
+.\gradlew.bat test    # Windows — .\gradlew.bat jvmTest for ChurchPresenter-Cross
+```
+
+### DeckLink hardware tests
+
+`DeckLinkHardwareTest` drives a real Blackmagic card and is **opt-in**, because opening the output
+pushes a frame to whatever that card is wired to — a visible glitch on the program feed if it were
+to run mid-service — and installs a JVM shutdown hook. It is inert in every ordinary run. To do a
+deliberate hardware pass on a machine with a card fitted:
+
+```bash
+./gradlew :composeApp:jvmTest -PdecklinkHardware=true --tests '*DeckLinkHardwareTest*'
+```
+
 ### Pull Request Guidelines
 
 - Keep PRs focused on a single feature or fix

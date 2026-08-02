@@ -204,6 +204,16 @@ When writing tests here:
   construction and then write or delete there. `CrashReporter`, `InstanceLinkLogger` and
   `TrainingDataLogger` resolve theirs once per JVM, so touch them before any swap or they latch
   onto a temp dir that gets deleted.
+- **Isolate `os.name` the same way** — skiko maps it onto a known OS in a JVM-wide `by lazy` and
+  throws `Error: Unknown OS <name>` on anything else, from `org.jetbrains.skia.Surface`'s static
+  initializer. So a Compose test composed inside a faked `os.name` permanently breaks every later
+  Compose test in that JVM with `NoClassDefFoundError: Could not initialize class
+  org.jetbrains.skia.Surface`, blamed on whichever class ran next. Call
+  `TestSingletons.latchSkikoHostOs()` before the swap; `withOsName` already does.
 - Tests run headless (`java.awt.headless=true`); anything reaching `GraphicsEnvironment` throws.
   `BibleBookAbbreviations.resolveBookId` does so indirectly (Compose string resources) — stub it.
 - Assert invariants over exact pixel values — font metrics differ across the three target platforms.
+- **Build paths from real directories, not POSIX literals.** `Path("/tmp/x.png").parent` is `\tmp`
+  on Windows and does not exist, so `FileChooser` silently falls back to the home directory; and a
+  chosen path stored via `absolutePathString()` gains a drive letter. Create a temp dir and derive
+  the expectation from it rather than asserting a `/`-rooted string.

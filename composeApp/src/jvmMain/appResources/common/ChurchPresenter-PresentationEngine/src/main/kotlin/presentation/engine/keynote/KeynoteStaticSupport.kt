@@ -46,11 +46,13 @@ internal object KeynoteStaticSupport {
         val thumbnailEntries = mutableListOf<String>()
         var apxlXml: String? = null
         val iwaNotes = mutableMapOf<Long, String>()
+        val allEntryNames = mutableSetOf<String>()
 
         ZipFile(file).use { zip ->
             for (entry in zip.entries()) {
                 if (entry.isDirectory) continue
                 val name = entry.name
+                allEntryNames.add(name)
                 val base = name.substringAfterLast("/")
                 when {
                     name.equals(PREVIEW_PDF_ENTRY, ignoreCase = true) && entry.size != 0L ->
@@ -84,9 +86,38 @@ internal object KeynoteStaticSupport {
 
         return Analysis(
             hasPreviewPdf = hasPreviewPdf,
-            orderedThumbnailEntries = orderThumbnails(thumbnailEntries, slideIwaOrder),
+            orderedThumbnailEntries = resolveThumbnails(
+                modern = orderThumbnails(thumbnailEntries, slideIwaOrder),
+                apxlXml = apxlXml,
+                exists = { it in allEntryNames },
+            ),
             notes = resolveNotes(apxlXml, iwaNotes)
         )
+    }
+
+    /**
+     * Modern thumbnails when there are any, otherwise the ones a legacy document names for itself.
+     *
+     * Keynote '09 puts per-slide thumbnails in `thumbs/` as `st<n>.jpg` / `st<n>-<m>.jpg`, which
+     * matches neither the `Data/` location nor the `st-` prefix the modern rule looks for — so
+     * before this, a legacy deck with nine perfectly good thumbnails was reported as having none
+     * and failed to open at all, with a message saying there were no thumbnails.
+     *
+     * Their names cannot be sorted into slide order (a real document runs `st2-1, st2-2, st3, …,
+     * st2, st7, st6, st186`), but they do not need to be: the apxl states the slide-to-thumbnail
+     * mapping itself, in document order. That is the only reliable source, and the same file is
+     * already parsed here for notes.
+     */
+    private fun resolveThumbnails(
+        modern: List<String>,
+        apxlXml: String?,
+        exists: (String) -> Boolean,
+    ): List<String> {
+        if (modern.isNotEmpty()) return modern
+        val declared = apxlXml?.let { parseApxlThumbnails(it) } ?: return modern
+        // Only offer entries the document actually contains; a stale reference must not become a
+        // blank slide in the middle of a deck.
+        return declared.filter(exists)
     }
 
     private fun analyzeDirectory(dir: File): Analysis {
@@ -111,7 +142,13 @@ internal object KeynoteStaticSupport {
         val previewPdf = File(dir, PREVIEW_PDF_ENTRY)
         return Analysis(
             hasPreviewPdf = previewPdf.isFile && previewPdf.length() > 0,
-            orderedThumbnailEntries = orderThumbnails(thumbnails, slideIwaOrder),
+            // A package-format legacy document declares the same relative paths; resolve them
+            // against the bundle and hand back absolute ones, as this branch does throughout.
+            orderedThumbnailEntries = resolveThumbnails(
+                modern = orderThumbnails(thumbnails, slideIwaOrder),
+                apxlXml = apxlXml,
+                exists = { File(dir, it).isFile },
+            ).map { if (File(it).isAbsolute) it else File(dir, it).absolutePath },
             notes = resolveNotes(apxlXml, iwaNotes)
         )
     }
@@ -193,6 +230,56 @@ internal object KeynoteStaticSupport {
             return iwaNotes.entries.sortedBy { it.key }.map { it.value }
         }
         return emptyList()
+    }
+
+    /**
+     * Per-slide thumbnail paths a legacy document declares for itself, in document order.
+     *
+     * Shape: `<key:slide><key:thumbnails><key:binary><sf:data sf:path="thumbs/st3.jpg"/>`. The
+     * lookup is scoped to the slide's own `thumbnails` child rather than any descendant `data`
+     * element, because a slide's page content carries `sf:data` references to its images too —
+     * taking the first one found anywhere would hand back a photo from the slide instead of the
+     * slide's thumbnail. Master slides use a different element name and so never appear here.
+     */
+    internal fun parseApxlThumbnails(xml: String): List<String> {
+        val result = mutableListOf<String>()
+        try {
+            val factory = DocumentBuilderFactory.newInstance()
+            factory.isNamespaceAware = true
+            val doc = factory.newDocumentBuilder().parse(InputSource(StringReader(xml)))
+            val slides = doc.getElementsByTagNameNS("*", "slide")
+            for (i in 0 until slides.length) {
+                val thumbnails = childNamed(slides.item(i), "thumbnails") ?: continue
+                val path = firstDataPath(thumbnails) ?: continue
+                result.add(path)
+            }
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return result
+    }
+
+    private fun childNamed(node: Node, localName: String): Node? {
+        val children = node.childNodes
+        for (i in 0 until children.length) {
+            val child = children.item(i)
+            if (child.localName == localName) return child
+        }
+        return null
+    }
+
+    /** Depth-first search for the first `sf:data` carrying an `sf:path`. */
+    private fun firstDataPath(node: Node): String? {
+        if (node.localName == "data") {
+            val path = node.attributes?.getNamedItemNS("*", "path")?.nodeValue
+                ?: node.attributes?.getNamedItem("sf:path")?.nodeValue
+            if (!path.isNullOrBlank()) return path
+        }
+        val children = node.childNodes
+        for (i in 0 until children.length) {
+            firstDataPath(children.item(i))?.let { return it }
+        }
+        return null
     }
 
     /** Legacy (pre-IWA) Keynote documents carry an XML manifest with per-slide notes. */
