@@ -33,9 +33,10 @@ import kotlin.test.assertTrue
  * With the flag on: the `available` field is a private memoizing `Boolean?`, so once the
  * guard-clause tests in [DeckLinkManagerTest] latch it to `false` it stays false for the rest of
  * the JVM. This class resets it to `null` and sets `compose.application.resources.dir` to the
- * directory holding `decklink_jni.dll`, giving `isAvailable()` a fresh chance to load the native
- * library; both are restored afterwards so [DeckLinkManagerTest]'s assumptions still hold if it
- * runs later in the same JVM.
+ * directory holding the platform's DeckLink JNI library — chosen by the same `os.name` split
+ * `isAvailable()` itself uses, so a card fitted to a Linux or macOS box is reachable too — giving
+ * `isAvailable()` a fresh chance to load it; both are restored afterwards so
+ * [DeckLinkManagerTest]'s assumptions still hold if it runs later in the same JVM.
  *
  * The `println`s below are the point of a manual harness rather than stray debug output — what a
  * card reported is the result you run this for — and are the same exemption the PresentationEngine's
@@ -64,19 +65,28 @@ class DeckLinkHardwareTest {
         savedAvailable = availableField.get(DeckLinkManager)
         savedResDir = System.getProperty("compose.application.resources.dir")
 
-        // Reset the memoized availability and point at the DLL's directory.
+        // Reset the memoized availability and point at the native library's directory.
         // Gradle's test working dir may differ from the project root, so walk up to find it.
         availableField.set(DeckLinkManager, null)
+        // The same os.name split DeckLinkManager.isAvailable() uses to choose the library name,
+        // kept in step with it so the harness looks for the file the loader will actually load.
+        // The repo ships all three, so a card on Linux or macOS is reachable too.
+        val osName = System.getProperty("os.name").lowercase()
+        val (platformDir, libName) = when {
+            osName.contains("win") -> "windows" to "decklink_jni.dll"
+            osName.contains("mac") -> "macos" to "libdecklink_jni.dylib"
+            else -> "linux" to "libdecklink_jni.so"
+        }
         val candidates = listOf(
-            File("composeApp/src/jvmMain/appResources/windows"),
-            File("src/jvmMain/appResources/windows"),
-            File("../composeApp/src/jvmMain/appResources/windows"),
+            File("composeApp/src/jvmMain/appResources/$platformDir"),
+            File("src/jvmMain/appResources/$platformDir"),
+            File("../composeApp/src/jvmMain/appResources/$platformDir"),
         )
-        val dllDir = candidates.firstOrNull { File(it, "decklink_jni.dll").exists() }
-        if (dllDir != null) {
-            System.setProperty("compose.application.resources.dir", dllDir.absolutePath)
+        val libDir = candidates.firstOrNull { File(it, libName).exists() }
+        if (libDir != null) {
+            System.setProperty("compose.application.resources.dir", libDir.absolutePath)
         } else {
-            println("[DeckLinkHardwareTest] Could not find decklink_jni.dll; cwd=${File(".").absolutePath}")
+            println("[DeckLinkHardwareTest] Could not find $libName; cwd=${File(".").absolutePath}")
         }
     }
 
