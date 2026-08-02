@@ -5,6 +5,7 @@ package org.churchpresenter.app.churchpresenter
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -15,15 +16,27 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import org.churchpresenter.app.churchpresenter.data.StrongsEntry
+import org.churchpresenter.app.churchpresenter.data.settings.DictionarySettings
 import org.churchpresenter.app.churchpresenter.data.settings.MetronomePosition
+import org.churchpresenter.app.churchpresenter.data.settings.QASettings
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorContentType
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorSettings
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZone
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorStyleZone
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZoneStyle
 import org.churchpresenter.app.churchpresenter.models.LyricSection
+import org.churchpresenter.app.churchpresenter.models.Question
+import org.churchpresenter.app.churchpresenter.models.Scene
+import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
+import java.awt.image.BufferedImage
+import java.io.File
+import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,8 +55,12 @@ import kotlin.test.assertTrue
  * involved. Announcements are deliberately additive rather than exclusive — an announcement on the
  * stage monitor must not blank out the verse the reader is following — which is asserted directly.
  *
- * Not covered here: MEDIA (needs a loaded VLC player) and LOWER_THIRD/WEB/STT, which the screen has
- * no live data plumbed through for yet and draws as empty.
+ * Not covered here: actual video playback for MEDIA (needs a loaded VLC player — the routing and the
+ * view-model presence/loaded/audio guards ahead of it are covered instead), LOWER_THIRD/WEB/STT
+ * (the screen has no live data plumbed through for yet and draws them as empty — that emptiness is
+ * covered), and the picture-decode failure path (loadImageBitmapFromPath's catch block): there is no
+ * observable state change between "still loading" and "failed and stayed null", so a test can't wait
+ * on a positive signal for it without racing the background decode.
  */
 class StageMonitorScreenTest {
 
@@ -83,26 +100,41 @@ class StageMonitorScreenTest {
         displayedVerses: List<SelectedVerse> = emptyList(),
         nextVerses: List<SelectedVerse> = emptyList(),
         announcementText: String = "",
+        displayedImagePath: String? = null,
         displayedSlide: ImageBitmap? = null,
         presenterNotes: String = "",
+        activeScene: Scene? = null,
+        displayedQuestion: Question? = null,
+        qaSettings: QASettings = QASettings(),
+        displayedDictionaryEntry: StrongsEntry? = null,
+        dictionarySettings: DictionarySettings = DictionarySettings(),
+        mediaViewModel: MediaViewModel? = null,
         block: ComposeUiTest.() -> Unit,
     ) = runComposeUiTest {
         setContent {
             MaterialTheme {
-                Box(modifier = Modifier.size(800.dp, 600.dp)) {
-                    StageMonitorScreen(
-                        sm = sm,
-                        presentingMode = presentingMode,
-                        announcementActive = announcementActive,
-                        currentLyricSection = currentLyricSection,
-                        allLyricSections = allLyricSections,
-                        songDisplaySectionIndex = songDisplaySectionIndex,
-                        displayedVerses = displayedVerses,
-                        nextVerses = nextVerses,
-                        announcementText = announcementText,
-                        displayedSlide = displayedSlide,
-                        presenterNotes = presenterNotes,
-                    )
+                CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
+                    Box(modifier = Modifier.size(800.dp, 600.dp)) {
+                        StageMonitorScreen(
+                            sm = sm,
+                            presentingMode = presentingMode,
+                            announcementActive = announcementActive,
+                            currentLyricSection = currentLyricSection,
+                            allLyricSections = allLyricSections,
+                            songDisplaySectionIndex = songDisplaySectionIndex,
+                            displayedVerses = displayedVerses,
+                            nextVerses = nextVerses,
+                            announcementText = announcementText,
+                            displayedImagePath = displayedImagePath,
+                            displayedSlide = displayedSlide,
+                            presenterNotes = presenterNotes,
+                            activeScene = activeScene,
+                            displayedQuestion = displayedQuestion,
+                            qaSettings = qaSettings,
+                            displayedDictionaryEntry = displayedDictionaryEntry,
+                            dictionarySettings = dictionarySettings,
+                        )
+                    }
                 }
             }
         }
@@ -402,6 +434,164 @@ class StageMonitorScreenTest {
             displayedSlide = null,
         ) {
             assertEquals(0, imageCount())
+        }
+    }
+
+    // ── Pictures ────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a picture is decoded from disk and drawn`() {
+        val file = File.createTempFile("stage-monitor-picture", ".png")
+        try {
+            ImageIO.write(BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB), "png", file)
+            screen(
+                sm = routing(StageMonitorContentType.PICTURES to StageMonitorZone.TOP_LEFT),
+                presentingMode = Presenting.PICTURES,
+                displayedImagePath = file.absolutePath,
+            ) {
+                waitUntil("the picture is decoded and drawn") { imageCount() == 1 }
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `a pictures zone with nothing loaded yet draws no image`() {
+        screen(
+            sm = routing(StageMonitorContentType.PICTURES to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.PICTURES,
+            displayedImagePath = null,
+        ) {
+            assertEquals(0, imageCount())
+        }
+    }
+
+    // ── Canvas ──────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a live scene is drawn`() {
+        val scene = Scene(
+            sources = listOf(
+                SceneSource.TextSource(id = "t1", name = "Text 1", text = "Welcome Home"),
+            ),
+        )
+        screen(
+            sm = routing(StageMonitorContentType.CANVAS to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.CANVAS,
+            activeScene = scene,
+        ) {
+            assertTrue(rendersContaining("Welcome Home"), renderedText().toString())
+        }
+    }
+
+    @Test
+    fun `a canvas zone with no active scene draws nothing`() {
+        screen(
+            sm = routing(StageMonitorContentType.CANVAS to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.CANVAS,
+            activeScene = null,
+        ) {
+            assertEquals(emptySet(), renderedText())
+        }
+    }
+
+    // ── Q&A ─────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a live question is shown`() {
+        screen(
+            sm = routing(StageMonitorContentType.QA to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.QA,
+            displayedQuestion = Question(id = "q1", text = "What time is the potluck?", timestamp = 0L),
+            qaSettings = QASettings(),
+        ) {
+            assertTrue(rendersContaining("What time is the potluck?"), renderedText().toString())
+        }
+    }
+
+    @Test
+    fun `a qa zone with no live question draws nothing`() {
+        screen(
+            sm = routing(StageMonitorContentType.QA to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.QA,
+            displayedQuestion = null,
+        ) {
+            assertEquals(emptySet(), renderedText())
+        }
+    }
+
+    // ── Dictionary ──────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a live dictionary entry is shown`() {
+        screen(
+            sm = routing(StageMonitorContentType.DICTIONARY to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.DICTIONARY,
+            displayedDictionaryEntry = StrongsEntry(
+                number = "H430",
+                word = "אֱלֹהִים",
+                transliteration = "elohim",
+                pronunciation = "el-o-heem'",
+                definition = "gods in the ordinary sense",
+            ),
+            dictionarySettings = DictionarySettings(),
+        ) {
+            assertTrue(rendersContaining("elohim"), renderedText().toString())
+        }
+    }
+
+    @Test
+    fun `a dictionary zone with no live entry draws nothing`() {
+        screen(
+            sm = routing(StageMonitorContentType.DICTIONARY to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.DICTIONARY,
+            displayedDictionaryEntry = null,
+        ) {
+            assertEquals(emptySet(), renderedText())
+        }
+    }
+
+    // ── Not-yet-plumbed content types ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `lower third, website and STT zones exist but draw nothing yet`() {
+        for ((presentingMode, contentType) in listOf(
+            Presenting.LOWER_THIRD to StageMonitorContentType.LOWER_THIRD,
+            Presenting.WEBSITE to StageMonitorContentType.WEB,
+            Presenting.STT to StageMonitorContentType.STT,
+        )) {
+            screen(
+                sm = routing(contentType to StageMonitorZone.TOP_LEFT),
+                presentingMode = presentingMode,
+            ) {
+                assertEquals(emptySet(), renderedText(), "presentingMode=$presentingMode")
+            }
+        }
+    }
+
+    // ── Media ───────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a media zone with no view model draws nothing`() {
+        screen(
+            sm = routing(StageMonitorContentType.MEDIA to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.MEDIA,
+            mediaViewModel = null,
+        ) {
+            assertEquals(emptySet(), renderedText())
+        }
+    }
+
+    @Test
+    fun `a media zone with an audio file selected draws nothing`() {
+        val viewModel = MediaViewModel().apply { loadMedia("file:///tmp/song.mp3", Constants.MEDIA_TYPE_LOCAL) }
+        screen(
+            sm = routing(StageMonitorContentType.MEDIA to StageMonitorZone.TOP_LEFT),
+            presentingMode = Presenting.MEDIA,
+            mediaViewModel = viewModel,
+        ) {
+            assertEquals(emptySet(), renderedText())
         }
     }
 
