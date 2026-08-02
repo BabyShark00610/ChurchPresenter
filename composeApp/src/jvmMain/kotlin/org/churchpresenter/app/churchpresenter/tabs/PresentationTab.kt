@@ -721,7 +721,11 @@ fun PresentationTab(
                         contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                     )
                 ) {
-                    Icon(painterResource(Res.drawable.ic_refresh), contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(
+                        painterResource(Res.drawable.ic_refresh),
+                        contentDescription = stringResource(if (viewModel.isLooping) Res.string.loop_on else Res.string.loop_off),
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
 
