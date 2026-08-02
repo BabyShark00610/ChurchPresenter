@@ -279,6 +279,29 @@ internal class FakeAtemSwitcher(
     fun commandsNamed(name: String): List<ByteArray> =
         synchronized(received) { received.filter { it.first == name }.map { it.second } }
 
+    /**
+     * Waits until [count] commands named [name] have arrived, then returns them.
+     *
+     * Needed for the one command the client sends without awaiting its ack — the closing
+     * `LOCK` release, deliberately fire-and-forget so a dead socket there cannot mask the
+     * failure that preceded it. The upload returning is therefore *not* a signal that the
+     * unlock has landed, and asserting on it directly races the datagram: it passes on a
+     * quiet machine and fails on a loaded two-core CI runner.
+     *
+     * The arrival is the positive signal; the timeout exists only to fail the test.
+     */
+    fun awaitCommandsNamed(name: String, count: Int, timeoutMs: Long = 5_000): List<ByteArray> {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val got = commandsNamed(name)
+            if (got.size >= count) return got
+            Thread.sleep(5)
+        }
+        throw AssertionError(
+            "timed out after ${timeoutMs}ms waiting for $count $name commands, got ${commandsNamed(name).size}"
+        )
+    }
+
     override fun close() {
         running.set(false)
         socket.close()
