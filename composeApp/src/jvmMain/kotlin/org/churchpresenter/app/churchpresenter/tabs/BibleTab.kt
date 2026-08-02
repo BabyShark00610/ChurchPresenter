@@ -261,6 +261,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
 
+internal fun withBibleColumnWidths(settings: AppSettings, isMaximized: Boolean, bookWidthDp: Int, chapterWidthDp: Int): AppSettings =
+    if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(bibleColWidthBook = bookWidthDp, bibleColWidthChapter = chapterWidthDp))
+    else settings.copy(windowedLayout = settings.windowedLayout.copy(bibleColWidthBook = bookWidthDp, bibleColWidthChapter = chapterWidthDp))
+
+internal fun withBibleSplitPanelWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
+    if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(splitLivePanelWidth = widthDp))
+    else settings.copy(windowedLayout = settings.windowedLayout.copy(splitLivePanelWidth = widthDp))
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun BibleTab(
@@ -615,10 +623,7 @@ fun BibleTab(
     fun saveColWidths() {
         val bookDp = with(density) { colWBook.toDp().value.toInt() }
         val chapterDp = with(density) { colWChapter.toDp().value.toInt() }
-        onSettingsChangeState.value { s ->
-            if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(bibleColWidthBook = bookDp, bibleColWidthChapter = chapterDp))
-            else s.copy(windowedLayout = s.windowedLayout.copy(bibleColWidthBook = bookDp, bibleColWidthChapter = chapterDp))
-        }
+        onSettingsChangeState.value { s -> withBibleColumnWidths(s, isMaximized, bookDp, chapterDp) }
     }
 
     var colWSplit by remember(currentLayout.splitLivePanelWidth, isMaximized) {
@@ -627,10 +632,7 @@ fun BibleTab(
 
     fun saveColWSplit() {
         val widthDp = with(density) { colWSplit.toDp().value.toInt() }
-        onSettingsChangeState.value { s ->
-            if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(splitLivePanelWidth = widthDp))
-            else s.copy(windowedLayout = s.windowedLayout.copy(splitLivePanelWidth = widthDp))
-        }
+        onSettingsChangeState.value { s -> withBibleSplitPanelWidth(s, isMaximized, widthDp) }
     }
 
 

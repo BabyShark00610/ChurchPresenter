@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
 import org.churchpresenter.app.churchpresenter.data.settings.BibleEngineSettings
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -53,13 +54,20 @@ class BibleTabDetectionBadgesTest {
         BibleEngineSettings(enabled = true, helpDevMode = helpDev)
 
     /** A detection with the engine's own `matchType` string, which is what picks the badge. */
-    private fun BibleViewModel.detect(matchType: String, verseStart: Int = 17) = onEngineScripture(
+    private fun BibleViewModel.detect(
+        matchType: String,
+        verseStart: Int = 17,
+        tracks: List<String> = emptyList(),
+        detectedVersion: String? = null,
+    ) = onEngineScripture(
         bookId = 43,
         chapter = 3,
         verseStart = verseStart,
         verseEnd = null,
         verseText = "For God so loved the world.",
         matchType = matchType,
+        tracks = tracks,
+        detectedVersion = detectedVersion,
     )
 
     /** Every content description on screen — the badges publish themselves this way. */
@@ -151,6 +159,70 @@ class BibleTabDetectionBadgesTest {
     }
 
     @Test
+    fun `a track corroborated by transcription is badged`() {
+        bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
+            vm.detect("explicit", tracks = listOf("transcription"))
+            waitForIdle()
+
+            assertTrue(descriptions().contains(Track.TRANSCRIPTION), descriptions().toString())
+            assertFalse(descriptions().contains(Track.TRANSLATION))
+        }
+    }
+
+    @Test
+    fun `a track corroborated by translation is badged`() {
+        bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
+            vm.detect("explicit", tracks = listOf("translation"))
+            waitForIdle()
+
+            assertTrue(descriptions().contains(Track.TRANSLATION), descriptions().toString())
+            assertFalse(descriptions().contains(Track.TRANSCRIPTION))
+        }
+    }
+
+    @Test
+    fun `a detection corroborated by both tracks carries both badges`() {
+        bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
+            vm.detect("explicit", tracks = listOf("transcription", "translation"))
+            waitForIdle()
+
+            assertTrue(descriptions().contains(Track.TRANSCRIPTION), descriptions().toString())
+            assertTrue(descriptions().contains(Track.TRANSLATION))
+        }
+    }
+
+    @Test
+    fun `a detection with no corroborating track carries neither badge`() {
+        bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
+            vm.detect("explicit")
+            waitForIdle()
+
+            assertFalse(descriptions().contains(Track.TRANSCRIPTION), descriptions().toString())
+            assertFalse(descriptions().contains(Track.TRANSLATION))
+        }
+    }
+
+    @Test
+    fun `the detected translation is shown alongside the reference`() {
+        bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
+            vm.detect("explicit", detectedVersion = "NASB")
+            waitForIdle()
+
+            assertTrue(showsExactly("NASB"), renderedText().toString())
+        }
+    }
+
+    @Test
+    fun `with no detected translation nothing extra is shown`() {
+        bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
+            vm.detect("explicit")
+            waitForIdle()
+
+            assertFalse(showsExactly("NASB"))
+        }
+    }
+
+    @Test
     fun `two different verses keep their own badges`() {
         bibleTab(settings = { it.copy(bibleEngineSettings = engine()) }, stt = connectedStt()) { vm, _ ->
             vm.detect("explicit", verseStart = 17)
@@ -195,6 +267,26 @@ class BibleTabDetectionBadgesTest {
     }
 
     @Test
+    fun `the wrong-passage pill is clickable once something is live`() {
+        val presenter = PresenterManager()
+        bibleTab(
+            settings = { it.copy(bibleEngineSettings = engine(helpDev = true)) },
+            stt = connectedStt(),
+            presenter = presenter,
+        ) { vm, _ ->
+            runOnIdle { presenter.setDisplayedVerses(vm.getSelectedVerses()) }
+            waitForIdle()
+
+            assertTrue(clickable(Flag.WRONG), renderedText().toString())
+
+            onNode(hasText(Flag.WRONG) and hasClickAction()).performClick()
+            waitForIdle()
+
+            assertTrue(showsExactly(Flag.WRONG))
+        }
+    }
+
+    @Test
     fun `the missed-passage pill is clickable with nothing live`() {
         bibleTab(settings = { it.copy(bibleEngineSettings = engine(helpDev = true)) }, stt = connectedStt()) { _, _ ->
             // It reports that the engine found nothing, so it needs nothing on screen.
@@ -220,6 +312,11 @@ class BibleTabDetectionBadgesTest {
         const val CONTINUATION = "Following along"
         const val CHAPTER_SCAN = "Found in current chapter"
         const val CHAPTER_HISTORY = "Matched an earlier chapter"
+    }
+
+    private object Track {
+        const val TRANSCRIPTION = "Heard in transcription"
+        const val TRANSLATION = "Heard in translation"
     }
 
     private object Flag {

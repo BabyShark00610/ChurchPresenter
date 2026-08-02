@@ -71,6 +71,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -367,6 +368,7 @@ fun PresentationTab(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .testTag("presentation_root")
             .focusRequester(focusRequester)
             .onFocusChanged { focusRescue.onFocusChanged(it.hasFocus) }
             .focusRescuePressHook(focusRescue)
@@ -721,7 +723,11 @@ fun PresentationTab(
                         contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                     )
                 ) {
-                    Icon(painterResource(Res.drawable.ic_refresh), contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(
+                        painterResource(Res.drawable.ic_refresh),
+                        contentDescription = stringResource(if (viewModel.isLooping) Res.string.loop_on else Res.string.loop_off),
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
 
