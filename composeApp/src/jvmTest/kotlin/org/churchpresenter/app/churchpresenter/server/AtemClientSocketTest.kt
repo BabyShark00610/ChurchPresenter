@@ -108,7 +108,9 @@ class AtemClientSocketTest {
                 client.disconnect()
             }
 
-            val locks = fake.commandsNamed("LOCK")
+            // The closing unlock is sent without waiting for its ack, so the upload returning
+            // does not mean it has arrived — wait for the datagram itself.
+            val locks = fake.awaitCommandsNamed("LOCK", 2)
             assertEquals(2, locks.size, "the store is locked before the transfer and unlocked after")
             assertEquals(1, locks.first()[2].toInt(), "first LOCK acquires")
             assertEquals(0, locks.last()[2].toInt(), "last LOCK releases")
