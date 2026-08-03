@@ -179,6 +179,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.server.applyRemoteLiveState
 import org.churchpresenter.app.churchpresenter.server.downloadMirroredBackgroundSettings
+import org.churchpresenter.app.churchpresenter.server.addScheduleItem
 import org.churchpresenter.app.churchpresenter.server.executeProjectItem
 import org.churchpresenter.app.churchpresenter.server.instanceLinkBackgroundCacheDir
 import org.churchpresenter.app.churchpresenter.server.instanceLinkPictureCacheDir
@@ -1045,64 +1046,8 @@ fun main() {
                                             (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
                                         ) {
                                             val item = pending.item
-                                            when (item) {
-                                                is ScheduleItem.SongItem -> {
-                                                    currentScheduleActions.addSong(
-                                                        item.songNumber,
-                                                        item.title,
-                                                        item.songbook,
-                                                        item.songId
-                                                    )
-                                                    coroutineScope.launch { remoteSelectSongFlow.emit(item) }
-                                                }
-
-                                                is ScheduleItem.BibleVerseItem ->
-                                                    currentScheduleActions.addBibleVerse(
-                                                        item.bookName,
-                                                        item.chapter,
-                                                        item.verseNumber,
-                                                        item.verseText,
-                                                        item.verseRange,
-                                                        item.bookId
-                                                    )
-
-                                                is ScheduleItem.PresentationItem ->
-                                                    currentScheduleActions.addPresentation(
-                                                        item.filePath,
-                                                        item.fileName,
-                                                        item.slideCount,
-                                                        item.fileType
-                                                    )
-
-                                                is ScheduleItem.PictureItem ->
-                                                    currentScheduleActions.addPicture(
-                                                        item.folderPath,
-                                                        item.folderName,
-                                                        item.imageCount
-                                                    )
-
-                                                is ScheduleItem.MediaItem ->
-                                                    currentScheduleActions.addMedia(
-                                                        item.mediaUrl,
-                                                        item.mediaTitle,
-                                                        item.mediaType
-                                                    )
-
-                                                is ScheduleItem.DictionaryItem ->
-                                                    currentScheduleActions.addDictionary(
-                                                        item.number,
-                                                        item.word,
-                                                        item.transliteration,
-                                                        item.definition
-                                                    )
-
-                                                is ScheduleItem.AnnouncementItem ->
-                                                    currentScheduleActions.addAnnouncement(item)
-
-                                                is ScheduleItem.WebsiteItem ->
-                                                    currentScheduleActions.addWebsite(item.url, item.title)
-
-                                                else -> Unit
+                                            addScheduleItem(item, currentScheduleActions) { song ->
+                                                coroutineScope.launch { remoteSelectSongFlow.emit(song) }
                                             }
                                             pending.decision.complete(true)
                                             // Show activity toast so operator is aware
@@ -1126,64 +1071,8 @@ fun main() {
                                             clientLabel = remoteClientManager.getLabel(clientId)
                                         )
                                         val allow: () -> Unit = {
-                                            when (item) {
-                                                is ScheduleItem.SongItem -> {
-                                                    currentScheduleActions.addSong(
-                                                        item.songNumber,
-                                                        item.title,
-                                                        item.songbook,
-                                                        item.songId
-                                                    )
-                                                    coroutineScope.launch { remoteSelectSongFlow.emit(item) }
-                                                }
-
-                                                is ScheduleItem.BibleVerseItem ->
-                                                    currentScheduleActions.addBibleVerse(
-                                                        item.bookName,
-                                                        item.chapter,
-                                                        item.verseNumber,
-                                                        item.verseText,
-                                                        item.verseRange,
-                                                        item.bookId
-                                                    )
-
-                                                is ScheduleItem.PresentationItem ->
-                                                    currentScheduleActions.addPresentation(
-                                                        item.filePath,
-                                                        item.fileName,
-                                                        item.slideCount,
-                                                        item.fileType
-                                                    )
-
-                                                is ScheduleItem.PictureItem ->
-                                                    currentScheduleActions.addPicture(
-                                                        item.folderPath,
-                                                        item.folderName,
-                                                        item.imageCount
-                                                    )
-
-                                                is ScheduleItem.MediaItem ->
-                                                    currentScheduleActions.addMedia(
-                                                        item.mediaUrl,
-                                                        item.mediaTitle,
-                                                        item.mediaType
-                                                    )
-
-                                                is ScheduleItem.DictionaryItem ->
-                                                    currentScheduleActions.addDictionary(
-                                                        item.number,
-                                                        item.word,
-                                                        item.transliteration,
-                                                        item.definition
-                                                    )
-
-                                                is ScheduleItem.AnnouncementItem ->
-                                                    currentScheduleActions.addAnnouncement(item)
-
-                                                is ScheduleItem.WebsiteItem ->
-                                                    currentScheduleActions.addWebsite(item.url, item.title)
-
-                                                else -> Unit
+                                            addScheduleItem(item, currentScheduleActions) { song ->
+                                                coroutineScope.launch { remoteSelectSongFlow.emit(song) }
                                             }
                                             pending.decision.complete(true)
                                         }
@@ -1252,50 +1141,8 @@ fun main() {
                                             (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
                                         ) {
                                             for (item in pending.items) {
-                                                when (item) {
-                                                    is ScheduleItem.SongItem -> {
-                                                        currentScheduleActions.addSong(
-                                                            item.songNumber,
-                                                            item.title,
-                                                            item.songbook,
-                                                            item.songId
-                                                        )
-                                                        coroutineScope.launch { remoteSelectSongFlow.emit(item) }
-                                                    }
-
-                                                    is ScheduleItem.BibleVerseItem ->
-                                                        currentScheduleActions.addBibleVerse(
-                                                            item.bookName,
-                                                            item.chapter,
-                                                            item.verseNumber,
-                                                            item.verseText,
-                                                            item.verseRange,
-                                                            item.bookId
-                                                        )
-
-                                                    is ScheduleItem.PresentationItem ->
-                                                        currentScheduleActions.addPresentation(
-                                                            item.filePath,
-                                                            item.fileName,
-                                                            item.slideCount,
-                                                            item.fileType
-                                                        )
-
-                                                    is ScheduleItem.PictureItem ->
-                                                        currentScheduleActions.addPicture(
-                                                            item.folderPath,
-                                                            item.folderName,
-                                                            item.imageCount
-                                                        )
-
-                                                    is ScheduleItem.MediaItem ->
-                                                        currentScheduleActions.addMedia(
-                                                            item.mediaUrl,
-                                                            item.mediaTitle,
-                                                            item.mediaType
-                                                        )
-
-                                                    else -> Unit
+                                                addScheduleItem(item, currentScheduleActions) { song ->
+                                                    coroutineScope.launch { remoteSelectSongFlow.emit(song) }
                                                 }
                                             }
                                             pending.decision.complete(true)
@@ -1347,50 +1194,8 @@ fun main() {
                                         )
                                         val allow: () -> Unit = {
                                             for (item in pending.items) {
-                                                when (item) {
-                                                    is ScheduleItem.SongItem -> {
-                                                        currentScheduleActions.addSong(
-                                                            item.songNumber,
-                                                            item.title,
-                                                            item.songbook,
-                                                            item.songId
-                                                        )
-                                                        coroutineScope.launch { remoteSelectSongFlow.emit(item) }
-                                                    }
-
-                                                    is ScheduleItem.BibleVerseItem ->
-                                                        currentScheduleActions.addBibleVerse(
-                                                            item.bookName,
-                                                            item.chapter,
-                                                            item.verseNumber,
-                                                            item.verseText,
-                                                            item.verseRange,
-                                                            item.bookId
-                                                        )
-
-                                                    is ScheduleItem.PresentationItem ->
-                                                        currentScheduleActions.addPresentation(
-                                                            item.filePath,
-                                                            item.fileName,
-                                                            item.slideCount,
-                                                            item.fileType
-                                                        )
-
-                                                    is ScheduleItem.PictureItem ->
-                                                        currentScheduleActions.addPicture(
-                                                            item.folderPath,
-                                                            item.folderName,
-                                                            item.imageCount
-                                                        )
-
-                                                    is ScheduleItem.MediaItem ->
-                                                        currentScheduleActions.addMedia(
-                                                            item.mediaUrl,
-                                                            item.mediaTitle,
-                                                            item.mediaType
-                                                        )
-
-                                                    else -> Unit
+                                                addScheduleItem(item, currentScheduleActions) { song ->
+                                                    coroutineScope.launch { remoteSelectSongFlow.emit(song) }
                                                 }
                                             }
                                             pending.decision.complete(true)
