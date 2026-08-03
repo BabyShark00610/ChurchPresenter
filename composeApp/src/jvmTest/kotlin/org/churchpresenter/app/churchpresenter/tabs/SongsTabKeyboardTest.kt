@@ -35,21 +35,7 @@ class SongsTabKeyboardTest {
     private fun lineMode() =
         SongSettings(fullscreenDisplayMode = Constants.SONG_DISPLAY_MODE_LINE)
 
-    /**
-     * The only configuration in which left and right walk between songs.
-     *
-     * `isSongLineMode` is true if **any** of the four display modes is "line", and two of them —
-     * `lowerThirdDisplayMode` and `lowerThirdLookAheadDisplayMode` — default to it. So out of the box
-     * the arrow keys are already in line mode, and every one of these four has to say "verse" before
-     * left/right move between songs at all. Worth knowing before changing any of them: turning the
-     * lower third onto lines silently changes what the arrow keys do to the *song list*.
-     */
-    private fun verseMode() = SongSettings(
-        fullscreenDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
-        lowerThirdDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
-        lookAheadDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
-        lowerThirdLookAheadDisplayMode = Constants.SONG_DISPLAY_MODE_VERSE,
-    )
+    // verseMode() lives in SongsTabTestSupport.kt, shared with SongsTabLyricsClickTest.
 
     /**
      * Presses [key] on the tab.

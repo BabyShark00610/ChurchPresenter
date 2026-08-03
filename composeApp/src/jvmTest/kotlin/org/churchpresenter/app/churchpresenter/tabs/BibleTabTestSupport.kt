@@ -24,8 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
@@ -146,6 +148,8 @@ internal fun bibleTab(
      * Left null everywhere else, which gives the tab the whole test window — the wide branch.
      */
     width: Dp? = null,
+    selectedVerseItem: ScheduleItem.BibleVerseItem? = null,
+    bibleEngineClient: BibleEngineClient? = null,
     block: ComposeUiTest.(vm: BibleViewModel, reports: BibleReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-bible-tab").toFile()
@@ -198,6 +202,8 @@ internal fun bibleTab(
                             }
                         },
                         onInstanceLinkSendBibleHold = onInstanceLinkSendBibleHold,
+                        selectedVerseItem = selectedVerseItem,
+                        bibleEngineClient = bibleEngineClient,
                     )
                     }
                 }

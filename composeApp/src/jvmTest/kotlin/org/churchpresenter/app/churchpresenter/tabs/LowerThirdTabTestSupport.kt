@@ -10,6 +10,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -46,6 +49,12 @@ internal fun lottieFolder(vararg names: String): File =
     Files.createTempDirectory("cp-lowerthird-tab").toFile().apply {
         names.forEach { File(this, "$it.json").writeText(LOWER_THIRD_LOTTIE) }
         File(this, "notes.txt").writeText("not a preset")
+    }
+
+/** A folder holding one real Lottie file per (name, json) pair, each with its own content. */
+internal fun lottieFolderWithContent(vararg files: Pair<String, String>): File =
+    Files.createTempDirectory("cp-lowerthird-tab").toFile().apply {
+        files.forEach { (name, json) -> File(this, "$name.json").writeText(json) }
     }
 
 // ── Harness ─────────────────────────────────────────────────────────────────────────────────────
@@ -88,6 +97,8 @@ internal fun lowerThirdTab(
      * the tab looks for the majority of churches, who have no switcher.
      */
     atemReachable: Boolean = false,
+    /** Whether the ATEM row shows one-click upload buttons instead of opening the dialog. */
+    quickUpload: Boolean = false,
     /** A lower third clicked in the schedule, which the tab resolves back to one of its presets. */
     selectedLowerThirdItem: ScheduleItem.LowerThirdItem? = null,
     block: ComposeUiTest.(reports: LowerThirdReports) -> Unit,
@@ -103,7 +114,7 @@ internal fun lowerThirdTab(
                                 lowerThirdFolder = folder?.absolutePath ?: ""
                             ),
                             atemSettings = if (atemReachable) {
-                                AtemSettings(host = "10.0.0.9")
+                                AtemSettings(host = "10.0.0.9", quickUpload = quickUpload)
                             } else {
                                 AtemSettings()
                             },
@@ -144,6 +155,7 @@ internal object LowerThirdLabel {
     const val SELECT_PRESET = "Select a preset to preview"
     const val GO_LIVE = "Go Live"
     const val ADD_TO_SCHEDULE = "Add to Schedule"
+    const val PLAY = "Play"
     const val PAUSE = "Pause"
     const val REMOVE = "Remove"
     const val GENERATE = "Generate"
@@ -165,4 +177,31 @@ internal fun ComposeUiTest.hasLtButton(label: String): Boolean =
 internal fun ComposeUiTest.selectPreset(name: String) {
     onAllNodesWithText(name)[0].performClick()
     waitForIdle()
+}
+
+/** The upload button's tooltip, which is also its content description. */
+internal const val ATEM_UPLOAD_LABEL = "Send to ATEM"
+
+/**
+ * Selects [presetName] — the upload button is disabled until one is chosen — then opens the ATEM
+ * upload dialog.
+ *
+ * Both waits below replace a bare `waitForIdle()` that made this helper intermittently fail under
+ * load (reliably when the ATEM suites ran together, never in isolation). Selecting a preset enables
+ * the upload button asynchronously, and **a click on a disabled control is silently swallowed** — so
+ * the click landed on nothing and the dialog never opened, which surfaced much later as "there are
+ * no existing nodes for that selector" at whatever the test did next. Each wait ends on a positive
+ * signal; the timeouts exist only to fail the test.
+ */
+internal fun ComposeUiTest.openAtemDialog(presetName: String = "Welcome") {
+    selectPreset(presetName)
+    waitUntil("the ATEM upload button is enabled", 5_000L) {
+        onAllNodes(hasContentDescription(ATEM_UPLOAD_LABEL) and isEnabled())
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            .isNotEmpty()
+    }
+    ltButton(ATEM_UPLOAD_LABEL).performClick()
+    waitUntil("the dialog's upload-mode rows are composed", 5_000L) {
+        onAllNodes(isSelectable()).fetchSemanticsNodes().size >= 2
+    }
 }

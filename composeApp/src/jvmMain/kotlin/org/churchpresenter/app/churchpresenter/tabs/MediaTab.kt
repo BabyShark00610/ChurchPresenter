@@ -109,6 +109,7 @@ import churchpresenter.composeapp.generated.resources.media_select_file
 import churchpresenter.composeapp.generated.resources.media_select_to_begin
 import churchpresenter.composeapp.generated.resources.media_unmute
 import churchpresenter.composeapp.generated.resources.media_url_placeholder
+import churchpresenter.composeapp.generated.resources.media_volume
 import churchpresenter.composeapp.generated.resources.media_vlc_arch_mismatch
 import churchpresenter.composeapp.generated.resources.media_vlc_install
 import churchpresenter.composeapp.generated.resources.media_vlc_load_failed
@@ -509,7 +510,11 @@ fun MediaTab(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
-                        Icon(painterResource(if (viewModel.isPlaying) Res.drawable.ic_pause else Res.drawable.ic_play), contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(
+                            painterResource(if (viewModel.isPlaying) Res.drawable.ic_pause else Res.drawable.ic_play),
+                            contentDescription = stringResource(if (viewModel.isPlaying) Res.string.pause else Res.string.play),
+                            modifier = Modifier.size(15.dp),
+                        )
                     }
                 }
                 TooltipArea(
@@ -545,7 +550,7 @@ fun MediaTab(
                     IconButton(onClick = { volumeExpanded = !volumeExpanded }, enabled = viewModel.isLoaded, modifier = Modifier.size(30.dp)) {
                         Icon(
                             painter = painterResource(if (viewModel.isMuted || viewModel.volume == 0f) Res.drawable.ic_volume_off else Res.drawable.ic_volume_up),
-                            contentDescription = null,
+                            contentDescription = stringResource(Res.string.media_volume),
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (viewModel.isLoaded) 0.7f else 0.35f)
                         )
@@ -561,7 +566,11 @@ fun MediaTab(
                         Surface(shape = RoundedCornerShape(8.dp), tonalElevation = 8.dp, shadowElevation = 8.dp) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 IconButton(onClick = { viewModel.toggleMute() }, modifier = Modifier.size(24.dp)) {
-                                    Icon(painterResource(if (viewModel.isMuted || viewModel.volume == 0f) Res.drawable.ic_volume_off else Res.drawable.ic_volume_up), contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(
+                                        painterResource(if (viewModel.isMuted || viewModel.volume == 0f) Res.drawable.ic_volume_off else Res.drawable.ic_volume_up),
+                                        contentDescription = stringResource(if (viewModel.isMuted) Res.string.media_unmute else Res.string.media_mute),
+                                        modifier = Modifier.size(18.dp),
+                                    )
                                 }
                                 SlimSlider(
                                     value = if (viewModel.isMuted) 0f else viewModel.volume,

@@ -73,6 +73,20 @@ internal fun dictionaryTab(
     getVerseText: ((bookId: Int, chapter: Int, verse: Int) -> String?)? = null,
     /** Resolves a book's name; null makes rows fall back to "Book <id>". */
     getBookName: ((bookId: Int) -> String?)? = null,
+    /**
+     * Which books/chapters have tagged data at all — drives the entry-*list*'s own book/chapter/
+     * verse filter row (a separate control from the detail pane's "In Scripture" card filter, which
+     * is driven by [verses] instead since it only ever looks at the selected entry's own verses).
+     */
+    booksWithGreekData: List<Int> = emptyList(),
+    booksWithHebrewData: List<Int> = emptyList(),
+    chaptersForBook: Map<Int, List<Int>> = emptyMap(),
+    versesInChapter: Map<Pair<Int, Int>, List<Int>> = emptyMap(),
+    /** Which Strong's numbers the entry-list filter should keep once a book is chosen — keyed by
+     *  book id only; this harness does not model chapter/verse-level granularity. */
+    strongsForBookChapter: Map<Int, Set<String>> = emptyMap(),
+    withOnAddToSchedule: Boolean = true,
+    withOnGoLive: Boolean = true,
     block: ComposeUiTest.(vm: DictionaryViewModel, reports: DictionaryReports) -> Unit,
 ) {
     DictionaryFixture.stubResources()
@@ -83,11 +97,17 @@ internal fun dictionaryTab(
     verses.forEach { (number, forEntry) ->
         every { anyConstructed<InterlinearRepository>().getVersesForEntry(number) } returns forEntry
     }
-    every { anyConstructed<InterlinearRepository>().getBooksWithGreekData() } returns emptyList()
-    every { anyConstructed<InterlinearRepository>().getBooksWithHebrewData() } returns emptyList()
-    every { anyConstructed<InterlinearRepository>().getChaptersForBook(any()) } returns emptyList()
-    every { anyConstructed<InterlinearRepository>().getVersesInChapter(any(), any()) } returns emptyList()
-    every { anyConstructed<InterlinearRepository>().getStrongsForBookChapter(any(), any(), any()) } returns emptySet()
+    every { anyConstructed<InterlinearRepository>().getBooksWithGreekData() } returns booksWithGreekData
+    every { anyConstructed<InterlinearRepository>().getBooksWithHebrewData() } returns booksWithHebrewData
+    every { anyConstructed<InterlinearRepository>().getChaptersForBook(any()) } answers {
+        chaptersForBook[firstArg()] ?: emptyList()
+    }
+    every { anyConstructed<InterlinearRepository>().getVersesInChapter(any(), any()) } answers {
+        versesInChapter[firstArg<Int>() to secondArg<Int>()] ?: emptyList()
+    }
+    every { anyConstructed<InterlinearRepository>().getStrongsForBookChapter(any(), any(), any()) } answers {
+        strongsForBookChapter[firstArg()] ?: emptySet()
+    }
     val vm = DictionaryViewModel()
     val reports = DictionaryReports()
     try {
@@ -96,10 +116,10 @@ internal fun dictionaryTab(
                 MaterialTheme {
                     DictionaryTab(
                         viewModel = vm,
-                        onAddToSchedule = { number, word, transliteration, definition ->
+                        onAddToSchedule = if (withOnAddToSchedule) { { number, word, transliteration, definition ->
                             reports.scheduled += listOf(number, word, transliteration, definition)
-                        },
-                        onGoLive = { reports.live += it },
+                        } } else null,
+                        onGoLive = if (withOnGoLive) { { reports.live += it } } else null,
                         getVerseText = getVerseText,
                         getBookName = getBookName,
                         onWordClick = { reports.wordClicks += it },

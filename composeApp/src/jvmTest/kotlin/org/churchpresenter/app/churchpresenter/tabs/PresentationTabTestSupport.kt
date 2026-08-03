@@ -10,9 +10,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
 import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import java.awt.image.BufferedImage
+import java.io.File
+import java.nio.file.Files
+import javax.imageio.ImageIO
 
 /**
  * Harness and fixtures for the `PresentationTab` test classes.
@@ -29,6 +34,27 @@ import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
  * that faked it would be asserting the fake. The tab is composed with an empty view model throughout,
  * so every test here is about the no-deck state and the controls that surround it.
  */
+
+// ── Fixtures ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Writes [count] small, genuinely decodable JPEGs, as the rasterizer would leave behind.
+ *
+ * `PresentationViewModel.slideFiles` is a public `SnapshotStateList<File>`, so a test can put real
+ * JPEGs there directly without a real deck — the rasterizer's own job is the presentation engine's
+ * suite to cover, not this tab's. `viewModel.deck` stays null this way, so any behavior gated on a
+ * real deck (step-aware navigation, animated playback) takes its no-deck fallback path, which is
+ * itself a real branch worth exercising.
+ */
+internal fun fakeSlideFiles(count: Int): Pair<File, List<File>> {
+    val dir = Files.createTempDirectory("cp-presentation-slides").toFile()
+    val files = (1..count).map { n ->
+        File(dir, "slide-$n.jpg").also { f ->
+            ImageIO.write(BufferedImage(16, 9, BufferedImage.TYPE_INT_RGB), "jpg", f)
+        }
+    }
+    return dir to files
+}
 
 // ── Harness ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -56,6 +82,11 @@ internal fun presentationTab(
     presentationDisplayUrl: String = "",
     /** Whether VLC is usable — only decides the missing-VLC banner for a deck containing video. */
     vlcAvailable: Boolean = true,
+    selectedPresentationItem: ScheduleItem.PresentationItem? = null,
+    instanceLinkFetchPresentationSlideBytes: (suspend (id: String, index: Int) -> ByteArray?)? = null,
+    onInstanceLinkSendNextSlide: (() -> Unit)? = null,
+    onInstanceLinkSendPreviousSlide: (() -> Unit)? = null,
+    onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null,
     block: ComposeUiTest.(vm: PresentationViewModel, reports: PresentationReports) -> Unit,
 ) {
     // PresentationViewModel's slide disk cache resolves under user.home.
@@ -86,6 +117,11 @@ internal fun presentationTab(
                     onFreezeToggle = { reports.freezeToggles++ },
                     onClearPresentation = { reports.clears++ },
                     vlcAvailable = vlcAvailable,
+                    selectedPresentationItem = selectedPresentationItem,
+                    instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
+                    onInstanceLinkSendNextSlide = onInstanceLinkSendNextSlide,
+                    onInstanceLinkSendPreviousSlide = onInstanceLinkSendPreviousSlide,
+                    onInstanceLinkSendProject = onInstanceLinkSendProject,
                 )
             }
         }
