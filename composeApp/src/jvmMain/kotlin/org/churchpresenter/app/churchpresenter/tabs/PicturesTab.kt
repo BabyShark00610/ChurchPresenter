@@ -147,7 +147,15 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 
-private object RecentPictureFolders {
+/**
+ * Recent picture folders, mirroring `data/RecentPresentationFiles` for the Pictures tab.
+ *
+ * `internal` rather than private so the bar it feeds can be driven from a test by seeding [folders]
+ * and [pinned] — they are the state the bar renders from, and the sibling object this copies is
+ * public for the same reason. Nothing else is widened: the JSON paths stay private and are still
+ * resolved once per JVM at class-init.
+ */
+internal object RecentPictureFolders {
     private const val MAX = 10
     private val file = File(System.getProperty("user.home"), ".churchpresenter/recent_picture_folders.json")
     private val pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_picture_folders.json")
