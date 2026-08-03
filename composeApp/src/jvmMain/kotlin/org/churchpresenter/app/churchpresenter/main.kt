@@ -179,6 +179,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.server.applyRemoteLiveState
 import org.churchpresenter.app.churchpresenter.server.downloadMirroredBackgroundSettings
+import org.churchpresenter.app.churchpresenter.server.RemoteAccess
+import org.churchpresenter.app.churchpresenter.server.remoteAccessDecision
 import org.churchpresenter.app.churchpresenter.server.addScheduleItem
 import org.churchpresenter.app.churchpresenter.server.executeProjectItem
 import org.churchpresenter.app.churchpresenter.server.instanceLinkBackgroundCacheDir
@@ -1031,20 +1033,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onAddToSchedule.collect { pending ->
                                         val clientId = pending.clientId
-                                        // Permanent block → auto-reject
-                                        if (remoteClientManager.isBlocked(clientId)) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        // Session block → auto-reject
-                                        if (clientId.isNotBlank() && sessionBlockedClients.contains(clientId)) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        // Permanent allow or session allow → auto-approve
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             val item = pending.item
                                             addScheduleItem(item, currentScheduleActions) { song ->
                                                 coroutineScope.launch { remoteSelectSongFlow.emit(song) }
@@ -1085,20 +1083,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onRemoveFromSchedule.collect { pending ->
                                         val clientId = pending.clientId
-                                        // Permanent block → auto-reject
-                                        if (remoteClientManager.isBlocked(clientId)) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        // Session block → auto-reject
-                                        if (clientId.isNotBlank() && sessionBlockedClients.contains(clientId)) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        // Permanent allow or session allow → auto-approve
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             currentScheduleActions.removeById(pending.id)
                                             pending.decision.complete(true)
                                             // Show activity toast so operator is aware
@@ -1129,17 +1123,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onAddBatchToSchedule.collect { pending ->
                                         val clientId = pending.clientId
-                                        // Permanent block or session block → auto-reject
-                                        if (remoteClientManager.isBlocked(clientId) ||
-                                            (clientId.isNotBlank() && sessionBlockedClients.contains(clientId))
-                                        ) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        // Permanent allow or session allow → auto-approve
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             for (item in pending.items) {
                                                 addScheduleItem(item, currentScheduleActions) { song ->
                                                     coroutineScope.launch { remoteSelectSongFlow.emit(song) }
@@ -1209,17 +1202,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onProject.collect { pending ->
                                         val clientId = pending.clientId
-                                        // Permanent block or session block → auto-reject
-                                        if (remoteClientManager.isBlocked(clientId) ||
-                                            (clientId.isNotBlank() && sessionBlockedClients.contains(clientId))
-                                        ) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        // Permanent allow or session allow → auto-approve
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             val item = pending.item
                                             if (item is ScheduleItem.AnnouncementItem) {
                                                 appSettings = appSettings.withAnnouncement(item)
@@ -1350,15 +1342,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onQAAdminRequest.collect { pending ->
                                         val clientId = pending.clientId
-                                        if (remoteClientManager.isBlocked(clientId) ||
-                                            (clientId.isNotBlank() && sessionBlockedClients.contains(clientId))
-                                        ) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             pending.decision.complete(true)
                                             remoteActivityNotifications.add(RemoteActivityNotification(
                                                 type = qaActionType(pending.action),
@@ -1385,15 +1378,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onPresentationRemoteConnect.collect { pending ->
                                         val clientId = pending.clientId
-                                        if (remoteClientManager.isBlocked(clientId) ||
-                                            (clientId.isNotBlank() && sessionBlockedClients.contains(clientId))
-                                        ) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             pending.decision.complete(true)
                                             remoteActivityNotifications.add(RemoteActivityNotification(
                                                 type = RemoteEventType.PRESENTATION_CONNECT,
@@ -1419,15 +1413,16 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     companionServer.onQaAdminConnect.collect { pending ->
                                         val clientId = pending.clientId
-                                        if (remoteClientManager.isBlocked(clientId) ||
-                                            (clientId.isNotBlank() && sessionBlockedClients.contains(clientId))
-                                        ) {
+                                        val access = remoteAccessDecision(
+                                            clientId,
+                                            remoteClientManager.allowedClients, remoteClientManager.blockedClients,
+                                            sessionAllowedClients, sessionBlockedClients,
+                                        )
+                                        if (access == RemoteAccess.AUTO_REJECT) {
                                             pending.decision.complete(false)
                                             return@collect
                                         }
-                                        if (remoteClientManager.isAllowed(clientId) ||
-                                            (clientId.isNotBlank() && sessionAllowedClients.contains(clientId))
-                                        ) {
+                                        if (access == RemoteAccess.AUTO_APPROVE) {
                                             pending.decision.complete(true)
                                             remoteActivityNotifications.add(RemoteActivityNotification(
                                                 type = RemoteEventType.QA_ADMIN_CONNECT,
