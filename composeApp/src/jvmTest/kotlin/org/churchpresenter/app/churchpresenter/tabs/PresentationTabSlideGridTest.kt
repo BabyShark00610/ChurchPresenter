@@ -60,15 +60,6 @@ class PresentationTabSlideGridTest {
         }
     }
 
-    /**
-     * Slide [n]'s thumbnail, once its bitmap has actually decoded.
-     *
-     * The grid decodes each JPEG in a `produceState` that hops to `Dispatchers.IO` — a real
-     * dispatcher the test scheduler does not drive — and `SlideThumbnail` only emits the `Image`
-     * carrying the "Slide n" content description once that decode lands. So `waitForIdle` returns
-     * with the tile drawn but still describing nothing, and every lookup here has to wait for the
-     * decode itself rather than for the composition to settle.
-     */
     private fun ComposeUiTest.slideThumbnail(n: Int): SemanticsNodeInteraction {
         waitUntil("slide $n's thumbnail to have decoded", 5_000) {
             onAllNodesWithContentDescription("Slide $n")

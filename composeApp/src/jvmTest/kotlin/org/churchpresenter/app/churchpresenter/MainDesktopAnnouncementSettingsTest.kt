@@ -7,18 +7,6 @@ import kotlin.reflect.full.memberProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/**
- * Putting a scheduled announcement back on screen exactly as it was saved.
- *
- * Two paths reach [withAnnouncementFrom] — going live with an announcement row, and selecting one —
- * and until this was extracted each carried its own byte-identical 27-field copy. Both hazards of
- * that shape are what these tests are for: a field added on one side only, and a mis-typed pairing
- * such as `targetMinute = item.targetSecond`, neither of which shows up until the announcement is
- * in front of the room.
- *
- * Every value in the fixture is therefore distinct from every other value of its type, so a swapped
- * pair fails rather than coincidentally matching.
- */
 class MainDesktopAnnouncementSettingsTest {
 
     private val item = ScheduleItem.AnnouncementItem(
@@ -85,12 +73,6 @@ class MainDesktopAnnouncementSettingsTest {
         assertEquals(listOf(18, 45, 30), listOf(after.targetHour, after.targetMinute, after.targetSecond))
     }
 
-    /**
-     * The anti-drift guard: a field added to [AnnouncementsSettings] and to the schedule item but
-     * left out of the copy would silently keep whatever the tab happened to hold. Comparing against
-     * a settings object whose every value differs from the fixture's means an unwired field shows up
-     * as the old value surviving.
-     */
     @Test
     fun `no announcement setting is left behind at its previous value`() {
         val stale = AnnouncementsSettings(
