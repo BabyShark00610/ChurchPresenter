@@ -2,11 +2,14 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
@@ -44,7 +47,7 @@ class PresentationTabSlideGridTest {
         return dir to files
     }
 
-    private fun withSlides(count: Int, block: androidx.compose.ui.test.ComposeUiTest.(vm: org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel, reports: PresentationReports) -> Unit) {
+    private fun withSlides(count: Int, block: ComposeUiTest.(vm: PresentationViewModel, reports: PresentationReports) -> Unit) {
         val (dir, files) = slideFiles(count)
         try {
             presentationTab { vm, reports ->
@@ -57,6 +60,15 @@ class PresentationTabSlideGridTest {
         }
     }
 
+    private fun ComposeUiTest.slideThumbnail(n: Int): SemanticsNodeInteraction {
+        waitUntil("slide $n's thumbnail to have decoded", 5_000) {
+            onAllNodesWithContentDescription("Slide $n")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        return onNodeWithContentDescription("Slide $n")
+    }
+
     // ── The grid itself ─────────────────────────────────────────────────────────
 
     @Test
@@ -65,13 +77,13 @@ class PresentationTabSlideGridTest {
         // Each thumbnail is described by its slide number, which is also what an operator reads off
         // the screen when someone says "go to slide three".
         (1..4).forEach { n ->
-            onNodeWithContentDescription("Slide $n").assertExists("slide $n must be in the grid")
+            slideThumbnail(n).assertExists("slide $n must be in the grid")
         }
     }
 
     @Test
     fun `the grid is numbered from one, not from zero`() = withSlides(3) { _, _ ->
-        onNodeWithContentDescription("Slide 1").assertExists()
+        slideThumbnail(1).assertExists()
         assertTrue(
             onAllNodesWithContentDescription("Slide 0")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
@@ -84,7 +96,7 @@ class PresentationTabSlideGridTest {
 
     @Test
     fun `clicking a thumbnail selects that slide`() = withSlides(4) { vm, _ ->
-        onNodeWithContentDescription("Slide 3").performScrollTo().performClick()
+        slideThumbnail(3).performScrollTo().performClick()
         waitForIdle()
 
         // Zero-based on the inside, one-based on screen — the off-by-one between them is exactly
@@ -100,9 +112,9 @@ class PresentationTabSlideGridTest {
     @Test
     fun `selecting a different slide moves the selection rather than adding one`() =
         withSlides(4) { vm, _ ->
-            onNodeWithContentDescription("Slide 2").performScrollTo().performClick()
+            slideThumbnail(2).performScrollTo().performClick()
             waitForIdle()
-            onNodeWithContentDescription("Slide 4").performScrollTo().performClick()
+            slideThumbnail(4).performScrollTo().performClick()
             waitForIdle()
 
             assertEquals(3, vm.selectedSlideIndex, "the last click wins")
@@ -138,7 +150,7 @@ class PresentationTabSlideGridTest {
 
     @Test
     fun `loading a shorter deck drops the thumbnails that are gone`() = withSlides(5) { vm, _ ->
-        onNodeWithContentDescription("Slide 5").assertExists()
+        slideThumbnail(5).assertExists()
 
         vm.slideFiles.removeAt(4)
         vm.slideFiles.removeAt(3)
@@ -150,6 +162,6 @@ class PresentationTabSlideGridTest {
                 .isEmpty(),
             "a slide that is no longer in the deck must leave the grid",
         )
-        onNodeWithContentDescription("Slide 3").assertExists("and the rest must stay")
+        slideThumbnail(3).assertExists("and the rest must stay")
     }
 }
