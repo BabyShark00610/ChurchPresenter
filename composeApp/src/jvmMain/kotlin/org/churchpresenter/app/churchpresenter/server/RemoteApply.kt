@@ -655,3 +655,78 @@ internal fun executeProjectItem(
         else -> Unit
     }
 }
+
+/**
+ * Adds a remotely-requested [item] to the schedule, reporting whether anything was added.
+ *
+ * The same eight-way dispatch was written out four times in `main.kt` — twice for the single-add
+ * path and twice for the batch path — and the batch copies were missing the dictionary,
+ * announcement and website branches. `RemoteItemDto.toScheduleItem` produces all three and
+ * `POST /api/schedule/add-batch` answers `{"ok":true,"added":N}` counting every item it parsed, so
+ * a batch containing one of them told the phone it had been added while nothing reached the
+ * schedule. Having one dispatch is what stops the two paths drifting again.
+ *
+ * [onSongAdded] is how the Songs tab is told to navigate to the song it just received; the caller
+ * supplies it because the flow it emits on is scoped to the composable.
+ *
+ * Deliberately **not** shared with [executeProjectItem]: that path drives dictionary and
+ * announcement items onto the presenter *without* adding them to the schedule, so routing it
+ * through here would start adding a row every time one is projected.
+ *
+ * @return true when a schedule action fired; false for the types that are not schedule content
+ *         (label, lower third — and scene, which has an `addScene` action no remote path uses).
+ */
+internal fun addScheduleItem(
+    item: ScheduleItem,
+    scheduleActions: ScheduleActions,
+    onSongAdded: (ScheduleItem.SongItem) -> Unit = {}
+): Boolean {
+    when (item) {
+        is ScheduleItem.SongItem -> {
+            scheduleActions.addSong(item.songNumber, item.title, item.songbook, item.songId)
+            onSongAdded(item)
+        }
+
+        is ScheduleItem.BibleVerseItem -> scheduleActions.addBibleVerse(
+            item.bookName,
+            item.chapter,
+            item.verseNumber,
+            item.verseText,
+            item.verseRange,
+            item.bookId
+        )
+
+        is ScheduleItem.PresentationItem -> scheduleActions.addPresentation(
+            item.filePath,
+            item.fileName,
+            item.slideCount,
+            item.fileType
+        )
+
+        is ScheduleItem.PictureItem -> scheduleActions.addPicture(
+            item.folderPath,
+            item.folderName,
+            item.imageCount
+        )
+
+        is ScheduleItem.MediaItem -> scheduleActions.addMedia(
+            item.mediaUrl,
+            item.mediaTitle,
+            item.mediaType
+        )
+
+        is ScheduleItem.DictionaryItem -> scheduleActions.addDictionary(
+            item.number,
+            item.word,
+            item.transliteration,
+            item.definition
+        )
+
+        is ScheduleItem.AnnouncementItem -> scheduleActions.addAnnouncement(item)
+
+        is ScheduleItem.WebsiteItem -> scheduleActions.addWebsite(item.url, item.title)
+
+        else -> return false
+    }
+    return true
+}
