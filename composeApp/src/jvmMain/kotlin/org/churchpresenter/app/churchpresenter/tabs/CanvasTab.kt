@@ -130,6 +130,19 @@ import churchpresenter.composeapp.generated.resources.canvas_toggle_lock
 import churchpresenter.composeapp.generated.resources.canvas_aspect_ratio_warning
 import churchpresenter.composeapp.generated.resources.canvas_fix_aspect_ratio
 
+/**
+ * Where a left-panel drag's final width is written back — mirrors `MainDesktop.withScheduleWidth`,
+ * pulled out of the composable the same way so the windowed-vs-maximized branch is testable without
+ * driving an actual drag gesture through the divider.
+ */
+internal fun withCanvasLeftPanelWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
+    if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(canvasLeftPanelWidthDp = widthDp))
+    else settings.copy(windowedLayout = settings.windowedLayout.copy(canvasLeftPanelWidthDp = widthDp))
+
+internal fun withCanvasRightPanelWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
+    if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(canvasRightPanelWidthDp = widthDp))
+    else settings.copy(windowedLayout = settings.windowedLayout.copy(canvasRightPanelWidthDp = widthDp))
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CanvasTab(
@@ -156,18 +169,12 @@ fun CanvasTab(
 
     fun saveLeftPanel() {
         val dp = with(density) { leftPanelPx.toDp().value.toInt() }
-        onSettingsChangeState.value { s ->
-            if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(canvasLeftPanelWidthDp = dp))
-            else s.copy(windowedLayout = s.windowedLayout.copy(canvasLeftPanelWidthDp = dp))
-        }
+        onSettingsChangeState.value { s -> withCanvasLeftPanelWidth(s, isMaximized, dp) }
     }
 
     fun saveRightPanel() {
         val dp = with(density) { rightPanelPx.toDp().value.toInt() }
-        onSettingsChangeState.value { s ->
-            if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(canvasRightPanelWidthDp = dp))
-            else s.copy(windowedLayout = s.windowedLayout.copy(canvasRightPanelWidthDp = dp))
-        }
+        onSettingsChangeState.value { s -> withCanvasRightPanelWidth(s, isMaximized, dp) }
     }
     var renamingSceneId by remember { mutableStateOf<String?>(null) }
     var renameText by remember { mutableStateOf("") }

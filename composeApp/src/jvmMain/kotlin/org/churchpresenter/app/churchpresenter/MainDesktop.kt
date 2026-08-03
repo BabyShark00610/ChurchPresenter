@@ -96,6 +96,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 
 import org.churchpresenter.app.churchpresenter.composables.ConnectionStatusRow
@@ -110,6 +111,7 @@ import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
@@ -238,6 +240,200 @@ internal fun withScheduleWidth(settings: AppSettings, isMaximized: Boolean, widt
 internal fun withPreviewWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
     if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(previewPanelWidthDp = widthDp))
     else settings.copy(windowedLayout = settings.windowedLayout.copy(previewPanelWidthDp = widthDp))
+
+/**
+ * Applies a scheduled announcement onto [settings], so the Announcements tab and the output show
+ * exactly what was saved into the service order.
+ *
+ * Pulled out of the two composable lambdas that used to carry it — going live with a scheduled
+ * announcement, and selecting its row — which held **byte-identical** 27-field copies. Every field
+ * of `AnnouncementsSettings` comes from the item, so a field added to one side and forgotten on the
+ * other silently drops it; and a mis-typed pairing (`targetMinute = item.targetSecond`) puts the
+ * wrong countdown on screen with nothing to see until it is live.
+ */
+internal fun withAnnouncementFrom(settings: AppSettings, item: ScheduleItem.AnnouncementItem): AppSettings =
+    settings.copy(
+        announcementsSettings = settings.announcementsSettings.copy(
+            text                = item.text,
+            textColor           = item.textColor,
+            backgroundColor     = item.backgroundColor,
+            fontSize            = item.fontSize,
+            fontType            = item.fontType,
+            bold                = item.bold,
+            italic              = item.italic,
+            underline           = item.underline,
+            shadow              = item.shadow,
+            shadowColor         = item.shadowColor,
+            shadowSize          = item.shadowSize,
+            shadowOpacity       = item.shadowOpacity,
+            horizontalAlignment = item.horizontalAlignment,
+            position            = item.position,
+            animationType       = item.animationType,
+            animationDuration   = item.animationDuration,
+            loopCount           = item.loopCount,
+            timerHours          = item.timerHours,
+            timerMinutes        = item.timerMinutes,
+            timerSeconds        = item.timerSeconds,
+            timerTextColor      = item.timerTextColor,
+            timerExpiredText    = item.timerExpiredText,
+            timerMode           = item.timerMode,
+            targetHour          = item.targetHour,
+            targetMinute        = item.targetMinute,
+            targetSecond        = item.targetSecond,
+            liveClockFormat     = item.liveClockFormat
+        )
+    )
+
+/**
+ * The bible files the lookup engine indexes, as a stable re-index key.
+ *
+ * Sorted because it is a *set*: the engine restarts — and re-indexes — whenever this changes, so
+ * swapping primary↔secondary must produce the same key and leave a running engine alone, while
+ * genuinely switching to another translation must produce a different one. Sorting is what makes
+ * "same bibles, different order" compare equal.
+ *
+ * File names only, which is why the call site keys the effect on the storage directory separately:
+ * moving to another folder holding the same names does not change this.
+ */
+internal fun engineBibleFiles(bibleSettings: BibleSettings): List<String> =
+    bibleSettings.translationList().map { it.fileName }.sorted()
+
+/**
+ * Whether the Bible Lookup Engine should be running.
+ *
+ * All three have to hold: the engine reads its audio from the speech-to-text feed, so it is useless
+ * without one; it is opt-in; and with no bibles to index there is nothing to match against. The
+ * else-branch at the call site stops the engine and expires any references already detected, so
+ * getting this wrong either leaves stale verses staged or silently stops auto-follow mid-service.
+ */
+internal fun shouldRunBibleEngine(
+    sttConnected: Boolean,
+    engineEnabled: Boolean,
+    engineBibles: List<String>,
+): Boolean = sttConnected && engineEnabled && engineBibles.isNotEmpty()
+
+/**
+ * Whether a remote next/previous-slide command should push a slide to the presenter.
+ *
+ * Both halves matter. Presentation has to be the *live* content already — these commands only step
+ * whatever is on screen, so pushing while a song or a verse is live would replace it with a slide
+ * nobody asked for. And the index has to be a slide that exists, which it is not at either end of
+ * the deck once `nextSlide`/`previousSlide` has clamped, or before a deck is loaded at all.
+ */
+internal fun shouldPushSlide(presentingMode: Presenting, selectedIndex: Int, slideCount: Int): Boolean =
+    presentingMode == Presenting.PRESENTATION && selectedIndex in 0 until slideCount
+
+/**
+ * The current slide and the one after it, decoded for the presenter and the stage monitor.
+ *
+ * Shared by the two paths that push a slide — the remote step commands and remote slide selection —
+ * which carried identical copies of this. The second value is the *next* slide, which is null on the
+ * last slide of the deck; the stage monitor draws its "next" pane from it, so returning the current
+ * slide there would show the operator the wrong thing to prepare for.
+ *
+ * A file that will not decode throws, as it did inline: unlike the slide grid, which falls back to a
+ * blank thumbnail, there is no sensible blank frame to put on the output here.
+ */
+internal suspend fun decodeSlideBitmaps(slideFiles: List<File>, index: Int): Pair<ImageBitmap?, ImageBitmap?> {
+    val current = slideFiles.getOrNull(index)?.let { f ->
+        withContext(Dispatchers.IO) {
+            org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
+        }
+    }
+    val next = slideFiles.getOrNull(index + 1)?.let { f ->
+        withContext(Dispatchers.IO) {
+            org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
+        }
+    }
+    return current to next
+}
+
+/**
+ * Whether the main window, rather than the Bible tab, should apply an auto-follow detection.
+ *
+ * `BibleTab` sits inside `AnimatedContent` and leaves the composition when the operator switches
+ * away, taking its own auto-follow handler — and the history, statistics and training-log writes
+ * that go with it — with it. This is the stand-in for exactly that window, so both conditions are
+ * about not doing the wrong thing while it is gone:
+ *
+ * - While the Bible tab *is* the active one it owns the detection; handling it here as well would
+ *   put the verse live twice and log it twice.
+ * - Only when Bible is already the live content. Auto-follow keeps a passage in step with the
+ *   speaker; it must never take the screen away from a song or a slide on its own.
+ *
+ * [bibleTabIndex] is `-1` when the Bible tab is hidden altogether, which can never equal a real
+ * [activeTabIndex] — so with the tab hidden the main window always handles it, there being no
+ * `BibleTab` in the composition to defer to.
+ */
+internal fun shouldMainHandleAutoFollow(
+    activeTabIndex: Int,
+    bibleTabIndex: Int,
+    presentingMode: Presenting,
+): Boolean = activeTabIndex != bibleTabIndex && presentingMode == Presenting.BIBLE
+
+/**
+ * The index the stage monitor should preload as the *next* picture, or `-1` for none.
+ *
+ * Fed straight to `getOrNull`, so both "there is no next" cases collapse to null: the last picture
+ * in the folder, and a requested [index] that is not in the folder at all. The out-of-range check is
+ * what makes the second true — a bare `index + 1` would turn a request for index `-1` into a preload
+ * of picture 0, showing the platform a "next" slide that is really the first one.
+ */
+internal fun nextImageIndex(index: Int, imageCount: Int): Int =
+    if (index in 0 until imageCount) index + 1 else -1
+
+/**
+ * The verses to put on screen for a remote "select bible verse" request.
+ *
+ * Two different situations, and the fallback is the one that matters. [resolved] is what this
+ * machine's own bibles made of the reference; when they made nothing — the phone is showing a
+ * translation that is not installed here, or names the book differently — the request carries its
+ * own [SelectBibleVerseRequest.verseText], and showing that is far better than showing nothing at
+ * all. The bible metadata is still this instance's, since that is what the styling is keyed to.
+ *
+ * When it did resolve, the request's [SelectBibleVerseRequest.verseRange] is stamped onto every
+ * verse: the local lookup knows the verses but not the span the client asked for, and the range is
+ * what the reference line renders from, so dropping it turns "John 3:16-18" into "John 3:16".
+ */
+internal fun remoteSelectedVerses(
+    resolved: List<SelectedVerse>,
+    request: SelectBibleVerseRequest,
+    translationFileName: String,
+    bibleAbbreviation: String,
+    bibleName: String,
+): List<SelectedVerse> =
+    if (resolved.isNotEmpty()) {
+        resolved.map { it.copy(verseRange = request.verseRange) }
+    } else {
+        listOf(
+            SelectedVerse(
+                translationFileName = translationFileName,
+                bibleAbbreviation = bibleAbbreviation,
+                bibleName = bibleName,
+                bookName = request.bookName,
+                chapter = request.chapter,
+                verseNumber = request.verseNumber,
+                verseText = request.verseText,
+                verseRange = request.verseRange,
+            ),
+        )
+    }
+
+/**
+ * Whether this instance should mirror the primary's content over Instance Link.
+ *
+ * Both halves are load-bearing, and the role half is the one that is easy to lose: a **Controller**
+ * is also connected, but it drives the primary rather than following it, so it must keep browsing
+ * its own local songs, bibles and schedule. Mirroring in that role would replace the operator's own
+ * library with the far end's, mid-service, on the machine that is meant to be in charge.
+ *
+ * Shared by the songs, bible and schedule mirrors so all three follow — and stop following —
+ * together; they previously spelled this out three times over.
+ */
+internal fun shouldMirrorFromPrimary(
+    status: InstanceLinkStatus,
+    role: InstanceLinkRole,
+): Boolean = status == InstanceLinkStatus.CONNECTED && role == InstanceLinkRole.CONTROLLED
 
 internal fun sttUrlToPersist(settings: AppSettings, sttConnected: Boolean): String? {
     if (!sttConnected) return null
@@ -599,7 +795,7 @@ fun MainDesktop(
     // mode — a Controller keeps browsing its own local song library and drives the primary instead.
     LaunchedEffect(instanceLinkConnectionStatus, instanceLinkRemoteSongCatalog, instanceLinkRole) {
         songsViewModel.setInstanceLinkSource(
-            active = instanceLinkConnectionStatus == InstanceLinkStatus.CONNECTED && instanceLinkRole == InstanceLinkRole.CONTROLLED,
+            active = shouldMirrorFromPrimary(instanceLinkConnectionStatus, instanceLinkRole),
             catalog = instanceLinkRemoteSongCatalog,
             fetchDetail = instanceLinkFetchSongDetail
         )
@@ -642,7 +838,7 @@ fun MainDesktop(
             bibleViewModel.invalidateInstanceLinkBibleCache()
         }
         bibleViewModel.setInstanceLinkSource(
-            active = instanceLinkConnectionStatus == InstanceLinkStatus.CONNECTED && instanceLinkRole == InstanceLinkRole.CONTROLLED,
+            active = shouldMirrorFromPrimary(instanceLinkConnectionStatus, instanceLinkRole),
             mode = instanceLinkBibleSyncMode,
             fetchBibleFile = instanceLinkFetchBibleFile,
             fetchSecondaryBibleFile = instanceLinkFetchSecondaryBibleFile,
@@ -684,7 +880,7 @@ fun MainDesktop(
     // The SET of bibles to index (sorted, blanks removed). Keying the restart on this means swapping
     // primary↔secondary (same set) does NOT re-index, while changing to a different bible does.
     val engineBibles = remember(appSettings.bibleSettings.translationList()) {
-        appSettings.bibleSettings.translationList().map { it.fileName }.sorted()
+        engineBibleFiles(appSettings.bibleSettings)
     }
     // storageDirectory is a key because it is READ below as bibleRoot: without it, changing the
     // Bible folder mid-service leaves the engine on the old root — old verse index, and a version
@@ -695,7 +891,7 @@ fun MainDesktop(
         bibleEngineSettings.host, bibleEngineSettings.port, engineBibles,
         appSettings.bibleSettings.storageDirectory,
     ) {
-        if (sttConnected && bibleEngineSettings.enabled && engineBibles.isNotEmpty()) {
+        if (shouldRunBibleEngine(sttConnected, bibleEngineSettings.enabled, engineBibles)) {
             bibleEngineClient.start(
                 sttUrl = appSettings.sttSettings.serverUrl,
                 bibleRoot = appSettings.bibleSettings.storageDirectory,
@@ -728,7 +924,7 @@ fun MainDesktop(
     // back to the operator on disconnect (see ScheduleViewModel.applyRemoteSchedule/stopFollowingRemote).
     // Only in Controlled mode — a Controller keeps its own local schedule, same reasoning as above.
     LaunchedEffect(instanceLinkConnectionStatus, instanceLinkRemoteSchedule, instanceLinkRole) {
-        if (instanceLinkConnectionStatus == InstanceLinkStatus.CONNECTED && instanceLinkRole == InstanceLinkRole.CONTROLLED) {
+        if (shouldMirrorFromPrimary(instanceLinkConnectionStatus, instanceLinkRole)) {
             scheduleViewModel.applyRemoteSchedule(instanceLinkRemoteSchedule)
         } else {
             scheduleViewModel.stopFollowingRemote()
@@ -761,10 +957,12 @@ fun MainDesktop(
     val mainAutoFollowTokenGate = rememberTokenGate(autoFollowLiveToken)
     LaunchedEffect(autoFollowLiveToken) {
         if (!mainAutoFollowTokenGate.consume()) return@LaunchedEffect
-        // Defer to BibleTab's own handler (history, stats, training log) when it's active.
-        if (effectiveTabIndex == visibleTabs.indexOf(Tabs.BIBLE)) return@LaunchedEffect
-        // Don't steal the screen — only update verse content when Bible is already presenting.
-        if (presentingMode != Presenting.BIBLE) return@LaunchedEffect
+        if (!shouldMainHandleAutoFollow(
+                activeTabIndex = effectiveTabIndex,
+                bibleTabIndex = visibleTabs.indexOf(Tabs.BIBLE),
+                presentingMode = presentingMode,
+            )
+        ) return@LaunchedEffect
         val verses = bibleViewModel.getSelectedVerses()
         if (verses.isNotEmpty()) {
             onVerseSelected(verses)
@@ -852,7 +1050,7 @@ fun MainDesktop(
                 }
                 // Now syncWithPresenter will read the correct file via getCurrentImageFile().
                 presenterManager.setSelectedImagePath(imageFile.absolutePath)
-                val nextIdx = if (index in picturesViewModel.images.indices) index + 1 else -1
+                val nextIdx = nextImageIndex(index, picturesViewModel.images.size)
                 presenterManager.setNextImagePath(picturesViewModel.images.getOrNull(nextIdx)?.absolutePath)
                 presenterManager.setPresentingMode(Presenting.PICTURES)
                 presenterManager.setShowPresenterWindow(true)
@@ -864,7 +1062,9 @@ fun MainDesktop(
                     val currentImage = picturesViewModel.getCurrentImageFile()
                     if (currentImage != null) {
                         presenterManager.setSelectedImagePath(currentImage.absolutePath)
-                        presenterManager.setNextImagePath(picturesViewModel.images.getOrNull(index + 1)?.absolutePath)
+                        presenterManager.setNextImagePath(
+                            picturesViewModel.images.getOrNull(nextImageIndex(index, images.size))?.absolutePath
+                        )
                         presenterManager.setPresentingMode(Presenting.PICTURES)
                         presenterManager.setShowPresenterWindow(true)
                     }
@@ -893,19 +1093,9 @@ fun MainDesktop(
     // Instance Link commands below. Only pushes when Presentation is actually the live content,
     // same gate PresentationTab's own slide-push effect uses.
     suspend fun pushCurrentSlideIfLive() {
-        if (presenterManager.presentingMode.value != Presenting.PRESENTATION) return
         val index = presentationViewModel.selectedSlideIndex
-        if (index !in presentationViewModel.slideFiles.indices) return
-        val bitmap = presentationViewModel.slideFiles.getOrNull(index)?.let { f ->
-            withContext(Dispatchers.IO) {
-                org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
-            }
-        }
-        val nextBitmap = presentationViewModel.slideFiles.getOrNull(index + 1)?.let { f ->
-            withContext(Dispatchers.IO) {
-                org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
-            }
-        }
+        if (!shouldPushSlide(presenterManager.presentingMode.value, index, presentationViewModel.slideFiles.size)) return
+        val (bitmap, nextBitmap) = decodeSlideBitmaps(presentationViewModel.slideFiles, index)
         presenterManager.setSelectedSlide(bitmap)
         presenterManager.setNextSlide(nextBitmap)
         presenterManager.setPresenterNotes(presentationViewModel.slideNotes.getOrElse(index) { "" })
@@ -933,16 +1123,7 @@ fun MainDesktop(
         selectSlideFlow?.collect { (_, index) ->
             if (index in presentationViewModel.slideFiles.indices) {
                 presentationViewModel.selectSlide(index)
-                val bitmap = presentationViewModel.slideFiles.getOrNull(index)?.let { f ->
-                    withContext(Dispatchers.IO) {
-                        org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
-                    }
-                }
-                val nextBitmap = presentationViewModel.slideFiles.getOrNull(index + 1)?.let { f ->
-                    withContext(Dispatchers.IO) {
-                        org.jetbrains.skia.Image.makeFromEncoded(f.readBytes()).toComposeImageBitmap()
-                    }
-                }
+                val (bitmap, nextBitmap) = decodeSlideBitmaps(presentationViewModel.slideFiles, index)
                 presenterManager.setSelectedSlide(bitmap)
                 presenterManager.setNextSlide(nextBitmap)
                 presenterManager.setPresenterNotes(presentationViewModel.slideNotes.getOrElse(index) { "" })
@@ -969,22 +1150,13 @@ fun MainDesktop(
             val bookId = if (bookIndex >= 0) primaryBible?.getBookId(bookIndex) ?: 0 else 0
 
             val resolved = bibleViewModel.getVersesForDisplay(req.bookName, req.chapter, req.verseNumber)
-            val verses = if (resolved.isNotEmpty()) {
-                resolved.map { it.copy(verseRange = req.verseRange) }
-            } else {
-                listOf(
-                    SelectedVerse(
-                        translationFileName = appSettings.bibleSettings.translationList().firstOrNull()?.fileName.orEmpty(),
-                        bibleAbbreviation = primaryBible?.getBibleAbbreviation() ?: "",
-                        bibleName = primaryBible?.getBibleTitle() ?: "",
-                        bookName = req.bookName,
-                        chapter = req.chapter,
-                        verseNumber = req.verseNumber,
-                        verseText = req.verseText,
-                        verseRange = req.verseRange,
-                    ),
-                )
-            }
+            val verses = remoteSelectedVerses(
+                resolved = resolved,
+                request = req,
+                translationFileName = appSettings.bibleSettings.translationList().firstOrNull()?.fileName.orEmpty(),
+                bibleAbbreviation = primaryBible?.getBibleAbbreviation() ?: "",
+                bibleName = primaryBible?.getBibleTitle() ?: "",
+            )
 
             presenterManager.setSelectedVerses(verses)
             presenterManager.setPresentingMode(Presenting.BIBLE)
@@ -1386,37 +1558,7 @@ fun MainDesktop(
                         },
                         onPresentAnnouncement = { item ->
                             onSettingsChange { settings ->
-                                settings.copy(
-                                    announcementsSettings = settings.announcementsSettings.copy(
-                                        text                = item.text,
-                                        textColor           = item.textColor,
-                                        backgroundColor     = item.backgroundColor,
-                                        fontSize            = item.fontSize,
-                                        fontType            = item.fontType,
-                                        bold                = item.bold,
-                                        italic              = item.italic,
-                                        underline           = item.underline,
-                                        shadow              = item.shadow,
-                                        shadowColor         = item.shadowColor,
-                                        shadowSize          = item.shadowSize,
-                                        shadowOpacity       = item.shadowOpacity,
-                                        horizontalAlignment = item.horizontalAlignment,
-                                        position            = item.position,
-                                        animationType       = item.animationType,
-                                        animationDuration   = item.animationDuration,
-                                        loopCount           = item.loopCount,
-                                        timerHours          = item.timerHours,
-                                        timerMinutes        = item.timerMinutes,
-                                        timerSeconds        = item.timerSeconds,
-                                        timerTextColor      = item.timerTextColor,
-                                        timerExpiredText    = item.timerExpiredText,
-                                        timerMode           = item.timerMode,
-                                        targetHour          = item.targetHour,
-                                        targetMinute        = item.targetMinute,
-                                        targetSecond        = item.targetSecond,
-                                        liveClockFormat     = item.liveClockFormat
-                                    )
-                                )
+                                withAnnouncementFrom(settings, item)
                             }
                             if (item.isTimer) {
                                 presenterManager.goLiveAnnouncementTimer(
@@ -1497,39 +1639,7 @@ fun MainDesktop(
                                 }
 
                                 is ScheduleItem.AnnouncementItem -> {
-                                    onSettingsChange { settings ->
-                                        settings.copy(
-                                            announcementsSettings = settings.announcementsSettings.copy(
-                                                text                = item.text,
-                                                textColor           = item.textColor,
-                                                backgroundColor     = item.backgroundColor,
-                                                fontSize            = item.fontSize,
-                                                fontType            = item.fontType,
-                                                bold                = item.bold,
-                                                italic              = item.italic,
-                                                underline           = item.underline,
-                                                shadow              = item.shadow,
-                                                shadowColor         = item.shadowColor,
-                                                shadowSize          = item.shadowSize,
-                                                shadowOpacity       = item.shadowOpacity,
-                                                horizontalAlignment = item.horizontalAlignment,
-                                                position            = item.position,
-                                                animationType       = item.animationType,
-                                                animationDuration   = item.animationDuration,
-                                                loopCount           = item.loopCount,
-                                                timerHours          = item.timerHours,
-                                                timerMinutes        = item.timerMinutes,
-                                                timerSeconds        = item.timerSeconds,
-                                                timerTextColor      = item.timerTextColor,
-                                                timerExpiredText    = item.timerExpiredText,
-                                                timerMode           = item.timerMode,
-                                                targetHour          = item.targetHour,
-                                                targetMinute        = item.targetMinute,
-                                                targetSecond        = item.targetSecond,
-                                                liveClockFormat     = item.liveClockFormat
-                                            )
-                                        )
-                                    }
+                                    onSettingsChange { settings -> withAnnouncementFrom(settings, item) }
                                 }
 
                                 is ScheduleItem.WebsiteItem -> {
