@@ -111,6 +111,17 @@ class PicturesTabSettingsTest {
         }
 
     @Test
+    fun `cancelling the transition editor changes nothing`() = picturesTab { vm, reports ->
+        openTransitionEditor()
+        editorField().performTextReplacement("900")
+        onNodeWithText("Cancel").performClick()
+        waitForIdle()
+
+        assertEquals(500f, vm.transitionDuration, "the slideshow is untouched")
+        assertEquals(0, reports.settingsChanges, "and nothing was persisted")
+    }
+
+    @Test
     fun `choosing an animation applies it and asks for it to be remembered`() =
         picturesTab { vm, reports ->
             openAnimationDropdown()

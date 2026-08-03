@@ -2,13 +2,17 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
@@ -29,6 +33,15 @@ internal fun webTab(
     cefInitialized: Boolean = true,
     cefMacOsUnsupported: Boolean = false,
     includeAddToSchedule: Boolean = true,
+    /**
+     * Constrains the tab's width.
+     *
+     * The toolbar lays itself out from `BoxWithConstraints`, sitting in one row above
+     * navButtonsWidth(440dp) + minUrlWidth(200dp) + actionButtonsWidth(320dp) and stacking into two
+     * rows below it. Left null everywhere else, which gives the tab the whole test window — the
+     * single-row branch.
+     */
+    width: Dp? = null,
     block: ComposeUiTest.(presenter: PresenterManager, reports: WebReports) -> Unit,
 ) {
     TestSingletons.latchToTestHome()
@@ -37,19 +50,21 @@ internal fun webTab(
     runComposeUiTest {
         setContent {
             MaterialTheme {
-                WebTab(
-                    presenterManager = presenterManager,
-                    selectedWebsiteItem = selectedWebsiteItem,
-                    appSettings = appSettings,
-                    onSettingsChange = { transform ->
-                        reports.settingsChanges++
-                        reports.settingsAfterChange = transform(reports.settingsAfterChange ?: appSettings)
-                    },
-                    onAddToSchedule = if (includeAddToSchedule) { url, title -> reports.scheduled += url to title } else null,
-                    onUpdateScheduleTitle = { url, title -> reports.titleUpdates += url to title },
-                    cefInitialized = cefInitialized,
-                    cefMacOsUnsupported = cefMacOsUnsupported,
-                )
+                Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
+                    WebTab(
+                        presenterManager = presenterManager,
+                        selectedWebsiteItem = selectedWebsiteItem,
+                        appSettings = appSettings,
+                        onSettingsChange = { transform ->
+                            reports.settingsChanges++
+                            reports.settingsAfterChange = transform(reports.settingsAfterChange ?: appSettings)
+                        },
+                        onAddToSchedule = if (includeAddToSchedule) { url, title -> reports.scheduled += url to title } else null,
+                        onUpdateScheduleTitle = { url, title -> reports.titleUpdates += url to title },
+                        cefInitialized = cefInitialized,
+                        cefMacOsUnsupported = cefMacOsUnsupported,
+                    )
+                }
             }
         }
         block(presenterManager, reports)
