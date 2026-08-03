@@ -1,6 +1,5 @@
 package org.churchpresenter.app.churchpresenter.server
 
-import org.churchpresenter.app.churchpresenter.ScheduleActions
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -27,21 +26,8 @@ import kotlin.test.assertTrue
  */
 class ExecuteProjectItemTest {
 
-    /** Records what the schedule was asked to add, in order. */
-    private class Recorder {
-        val added = mutableListOf<String>()
-        fun actions() = ScheduleActions(
-            addSong = { n, t, b, _ -> added += "song:$n:$t:$b" },
-            addBibleVerse = { book, ch, v, _, _, _ -> added += "bible:$book:$ch:$v" },
-            addPicture = { path, name, count -> added += "picture:$path:$name:$count" },
-            addPresentation = { path, name, slides, type -> added += "presentation:$path:$name:$slides:$type" },
-            addMedia = { url, title, type -> added += "media:$url:$title:$type" },
-            addWebsite = { url, title -> added += "website:$url:$title" },
-        )
-    }
-
-    private fun project(item: ScheduleItem): Pair<Recorder, PresenterManager> {
-        val recorder = Recorder()
+    private fun project(item: ScheduleItem): Pair<ScheduleActionsRecorder, PresenterManager> {
+        val recorder = ScheduleActionsRecorder()
         val presenter = PresenterManager()
         executeProjectItem(item, recorder.actions(), presenter)
         return recorder to presenter
@@ -55,7 +41,7 @@ class ExecuteProjectItemTest {
             ScheduleItem.SongItem(id = "1", songNumber = 42, title = "Amazing Grace", songbook = "Hymnal", songId = "Hymnal::42")
         )
 
-        assertEquals(listOf("song:42:Amazing Grace:Hymnal"), recorder.added)
+        assertEquals(listOf("song:42:Amazing Grace:Hymnal:Hymnal::42"), recorder.added)
         assertEquals(Presenting.LYRICS, presenter.presentingMode.value)
         assertTrue(presenter.showPresenterWindow.value, "projecting must open the output")
     }
@@ -80,7 +66,7 @@ class ExecuteProjectItemTest {
             )
         )
 
-        assertEquals(listOf("bible:John:3:16"), recorder.added)
+        assertEquals(listOf("bible:John:3:16:For God so loved the world.:16-18:43"), recorder.added)
         assertEquals(Presenting.BIBLE, presenter.presentingMode.value)
         assertTrue(presenter.showPresenterWindow.value)
     }
@@ -146,7 +132,7 @@ class ExecuteProjectItemTest {
 
     @Test
     fun `a label is not projectable and leaves the output as it was`() {
-        val recorder = Recorder()
+        val recorder = ScheduleActionsRecorder()
         val presenter = PresenterManager()
         // Put something real on the output first, so "unchanged" means it survived rather than
         // meaning nothing was ever set.
@@ -234,7 +220,7 @@ class ExecuteProjectItemTest {
                     timerHours = 1, timerMinutes = 2, timerSeconds = 3,
                     timerMode = Constants.TIMER_MODE_DURATION, timerExpiredText = "Time!",
                 ),
-                Recorder().actions(),
+                ScheduleActionsRecorder().actions(),
                 presenter,
             )
 
@@ -255,7 +241,7 @@ class ExecuteProjectItemTest {
                 ScheduleItem.AnnouncementItem(
                     id = "a", text = "", isTimer = true, timerMode = Constants.TIMER_MODE_COUNT_UP,
                 ),
-                Recorder().actions(),
+                ScheduleActionsRecorder().actions(),
                 presenter,
             )
 
@@ -281,7 +267,7 @@ class ExecuteProjectItemTest {
                         id = "a", text = "", isTimer = true, timerMode = mode,
                         targetHour = 11, targetMinute = 0, targetSecond = 0, liveClockFormat = "HH:mm",
                     ),
-                    Recorder().actions(),
+                    ScheduleActionsRecorder().actions(),
                     presenter,
                 )
 
