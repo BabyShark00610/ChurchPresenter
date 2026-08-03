@@ -238,8 +238,8 @@ class OBSWebSocketManagerTest {
 
         obs.connect("127.0.0.1", server.port, "")
 
-        awaitUntil("the bad greeting to be reported") {
-            obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR
+        awaitUntil("the bad greeting to be reported, with a reason") {
+            obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR && obs.errorMessage.value.isNotEmpty()
         }
         assertTrue(obs.errorMessage.value.isNotEmpty(), "the operator needs to know why it will not connect")
     }
@@ -251,8 +251,8 @@ class OBSWebSocketManagerTest {
 
         obs.connect("127.0.0.1", server.port, "wrong-password")
 
-        awaitUntil("the rejection to be reported") {
-            obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR
+        awaitUntil("the rejection to be reported, with a reason") {
+            obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR && obs.errorMessage.value.isNotEmpty()
         }
         assertTrue(
             obs.errorMessage.value.contains("password", ignoreCase = true),
@@ -266,8 +266,8 @@ class OBSWebSocketManagerTest {
 
         obs.connect("127.0.0.1", unusedPort(), "") // nothing listening there
 
-        awaitUntil("the failed connection to be reported") {
-            obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR
+        awaitUntil("the failed connection to be reported, with a reason") {
+            obs.status.value == OBSWebSocketManager.ConnectionStatus.ERROR && obs.errorMessage.value.isNotEmpty()
         }
         assertTrue(obs.errorMessage.value.isNotEmpty())
     }
