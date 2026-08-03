@@ -110,6 +110,7 @@ import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
@@ -238,6 +239,49 @@ internal fun withScheduleWidth(settings: AppSettings, isMaximized: Boolean, widt
 internal fun withPreviewWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
     if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(previewPanelWidthDp = widthDp))
     else settings.copy(windowedLayout = settings.windowedLayout.copy(previewPanelWidthDp = widthDp))
+
+/**
+ * Applies a scheduled announcement onto [settings], so the Announcements tab and the output show
+ * exactly what was saved into the service order.
+ *
+ * Pulled out of the two composable lambdas that used to carry it — going live with a scheduled
+ * announcement, and selecting its row — which held **byte-identical** 27-field copies. Every field
+ * of `AnnouncementsSettings` comes from the item, so a field added to one side and forgotten on the
+ * other silently drops it; and a mis-typed pairing (`targetMinute = item.targetSecond`) puts the
+ * wrong countdown on screen with nothing to see until it is live.
+ */
+internal fun withAnnouncementFrom(settings: AppSettings, item: ScheduleItem.AnnouncementItem): AppSettings =
+    settings.copy(
+        announcementsSettings = settings.announcementsSettings.copy(
+            text                = item.text,
+            textColor           = item.textColor,
+            backgroundColor     = item.backgroundColor,
+            fontSize            = item.fontSize,
+            fontType            = item.fontType,
+            bold                = item.bold,
+            italic              = item.italic,
+            underline           = item.underline,
+            shadow              = item.shadow,
+            shadowColor         = item.shadowColor,
+            shadowSize          = item.shadowSize,
+            shadowOpacity       = item.shadowOpacity,
+            horizontalAlignment = item.horizontalAlignment,
+            position            = item.position,
+            animationType       = item.animationType,
+            animationDuration   = item.animationDuration,
+            loopCount           = item.loopCount,
+            timerHours          = item.timerHours,
+            timerMinutes        = item.timerMinutes,
+            timerSeconds        = item.timerSeconds,
+            timerTextColor      = item.timerTextColor,
+            timerExpiredText    = item.timerExpiredText,
+            timerMode           = item.timerMode,
+            targetHour          = item.targetHour,
+            targetMinute        = item.targetMinute,
+            targetSecond        = item.targetSecond,
+            liveClockFormat     = item.liveClockFormat
+        )
+    )
 
 internal fun sttUrlToPersist(settings: AppSettings, sttConnected: Boolean): String? {
     if (!sttConnected) return null
@@ -1386,37 +1430,7 @@ fun MainDesktop(
                         },
                         onPresentAnnouncement = { item ->
                             onSettingsChange { settings ->
-                                settings.copy(
-                                    announcementsSettings = settings.announcementsSettings.copy(
-                                        text                = item.text,
-                                        textColor           = item.textColor,
-                                        backgroundColor     = item.backgroundColor,
-                                        fontSize            = item.fontSize,
-                                        fontType            = item.fontType,
-                                        bold                = item.bold,
-                                        italic              = item.italic,
-                                        underline           = item.underline,
-                                        shadow              = item.shadow,
-                                        shadowColor         = item.shadowColor,
-                                        shadowSize          = item.shadowSize,
-                                        shadowOpacity       = item.shadowOpacity,
-                                        horizontalAlignment = item.horizontalAlignment,
-                                        position            = item.position,
-                                        animationType       = item.animationType,
-                                        animationDuration   = item.animationDuration,
-                                        loopCount           = item.loopCount,
-                                        timerHours          = item.timerHours,
-                                        timerMinutes        = item.timerMinutes,
-                                        timerSeconds        = item.timerSeconds,
-                                        timerTextColor      = item.timerTextColor,
-                                        timerExpiredText    = item.timerExpiredText,
-                                        timerMode           = item.timerMode,
-                                        targetHour          = item.targetHour,
-                                        targetMinute        = item.targetMinute,
-                                        targetSecond        = item.targetSecond,
-                                        liveClockFormat     = item.liveClockFormat
-                                    )
-                                )
+                                withAnnouncementFrom(settings, item)
                             }
                             if (item.isTimer) {
                                 presenterManager.goLiveAnnouncementTimer(
@@ -1497,39 +1511,7 @@ fun MainDesktop(
                                 }
 
                                 is ScheduleItem.AnnouncementItem -> {
-                                    onSettingsChange { settings ->
-                                        settings.copy(
-                                            announcementsSettings = settings.announcementsSettings.copy(
-                                                text                = item.text,
-                                                textColor           = item.textColor,
-                                                backgroundColor     = item.backgroundColor,
-                                                fontSize            = item.fontSize,
-                                                fontType            = item.fontType,
-                                                bold                = item.bold,
-                                                italic              = item.italic,
-                                                underline           = item.underline,
-                                                shadow              = item.shadow,
-                                                shadowColor         = item.shadowColor,
-                                                shadowSize          = item.shadowSize,
-                                                shadowOpacity       = item.shadowOpacity,
-                                                horizontalAlignment = item.horizontalAlignment,
-                                                position            = item.position,
-                                                animationType       = item.animationType,
-                                                animationDuration   = item.animationDuration,
-                                                loopCount           = item.loopCount,
-                                                timerHours          = item.timerHours,
-                                                timerMinutes        = item.timerMinutes,
-                                                timerSeconds        = item.timerSeconds,
-                                                timerTextColor      = item.timerTextColor,
-                                                timerExpiredText    = item.timerExpiredText,
-                                                timerMode           = item.timerMode,
-                                                targetHour          = item.targetHour,
-                                                targetMinute        = item.targetMinute,
-                                                targetSecond        = item.targetSecond,
-                                                liveClockFormat     = item.liveClockFormat
-                                            )
-                                        )
-                                    }
+                                    onSettingsChange { settings -> withAnnouncementFrom(settings, item) }
                                 }
 
                                 is ScheduleItem.WebsiteItem -> {
