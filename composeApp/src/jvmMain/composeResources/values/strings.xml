@@ -118,6 +118,8 @@
     <string name="instance_link_host_hint">e.g. 192.168.1.10</string>
     <string name="instance_link_port">Port</string>
     <string name="instance_link_autoconnect">Connect automatically on launch</string>
+    <string name="instance_link_reconnect_delay">Minimum reconnect delay</string>
+    <string name="instance_link_reconnect_delay_hint">Shortest wait before retrying a dropped link. Repeated failures back off further on their own.</string>
     <string name="instance_link_allow_push_to_schedule">Allow adding items to the primary's schedule</string>
     <string name="instance_link_mirror_backgrounds">Also mirror the primary's backgrounds</string>
     <string name="instance_link_role">Connection role</string>

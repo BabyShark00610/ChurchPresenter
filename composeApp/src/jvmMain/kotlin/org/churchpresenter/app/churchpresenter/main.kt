@@ -184,6 +184,9 @@ import org.churchpresenter.app.churchpresenter.server.instanceLinkBackgroundCach
 import org.churchpresenter.app.churchpresenter.server.instanceLinkPictureCacheDir
 import org.churchpresenter.app.churchpresenter.server.qaActionType
 import org.churchpresenter.app.churchpresenter.server.remoteEventLabel
+import org.churchpresenter.app.churchpresenter.server.shouldMirrorRemoteBackgrounds
+import org.churchpresenter.app.churchpresenter.server.shouldMirrorRemoteOutput
+import org.churchpresenter.app.churchpresenter.server.shouldUseRemoteContent
 import org.churchpresenter.app.churchpresenter.server.withAnnouncement
 
 
@@ -479,6 +482,14 @@ fun main() {
         // only the plain Scene list crosses here) — used to resolve a mirrored CANVAS live state
         // by scene id.
         var scenesForInstanceLink by remember { mutableStateOf<List<Scene>>(emptyList()) }
+        // Records the operator's connect/disconnect intent so it survives a restart: without this,
+        // `enabled` was only ever written as true and Disconnect was silently undone by the next
+        // launch's auto-connect, with no way to turn the link off short of editing settings.json.
+        fun setInstanceLinkEnabled(enabled: Boolean) {
+            if (appSettings.instanceLink.enabled == enabled) return
+            appSettings = appSettings.copy(instanceLink = appSettings.instanceLink.copy(enabled = enabled))
+            settingsManager.saveSettings(appSettings)
+        }
         // Auto-connect on launch (and reconnect if the saved connection details change while
         // enabled). Keys are the CONNECTION parameters only — role/bibleSyncMode/mirrorBackgrounds
         // are consumed reactively elsewhere and must not force a spurious reconnect when toggled.
@@ -506,7 +517,9 @@ fun main() {
         // collectLatest: applying a state does suspend network fetches (pictures, lottie JSON), so
         // a newer state must cancel an in-flight apply instead of queueing behind it — otherwise a
         // slow fetch can finish late and clobber content the operator has already moved past.
-        LaunchedEffect(instanceLinkViewModel) {
+        // Controlled mode only — see shouldMirrorRemoteOutput for why a Controller must not mirror.
+        LaunchedEffect(instanceLinkViewModel, appSettings.instanceLink.role) {
+            if (!shouldMirrorRemoteOutput(appSettings.instanceLink.role)) return@LaunchedEffect
             instanceLinkViewModel.remoteLiveState.collectLatest { state ->
                 if (state == null) return@collectLatest
                 applyRemoteLiveState(
@@ -523,9 +536,14 @@ fun main() {
         }
         // Presentations have their own dedicated broadcast (richer than LiveStateDto's mode-only
         // PRESENTATION entry) — fetch and mirror whichever slide the primary is currently showing.
-        LaunchedEffect(instanceLinkViewModel) {
+        // Controlled mode only, same reasoning as the live-state mirror above.
+        LaunchedEffect(instanceLinkViewModel, appSettings.instanceLink.role) {
+            if (!shouldMirrorRemoteOutput(appSettings.instanceLink.role)) return@LaunchedEffect
             instanceLinkViewModel.remotePresentationSlide.collectLatest { slide ->
                 if (slide == null) return@collectLatest
+                // The connect snapshot always sends this event, with an empty id when the primary
+                // has no presentation loaded — nothing to fetch, and the request would 404.
+                if (slide.id.isBlank()) return@collectLatest
                 val bytes = instanceLinkViewModel.fetchPresentationSlideBytes(slide.id, slide.index)
                 if (bytes == null) {
                     InstanceLinkLogger.log(
@@ -555,8 +573,16 @@ fun main() {
                 )
             }
         }
-        LaunchedEffect(instanceLinkViewModel) {
-            instanceLinkViewModel.displayClearedSignal.collect {
+        // Controlled mode only — a Controller sending Clear must not have its own display cleared by
+        // the echo of the primary acting on that command.
+        LaunchedEffect(instanceLinkViewModel, appSettings.instanceLink.role) {
+            if (!shouldMirrorRemoteOutput(appSettings.instanceLink.role)) return@LaunchedEffect
+            // Skip the value the StateFlow replays on subscribe (and on any re-subscribe when the
+            // role changes) — only an actual increment past the count seen here is a fresh clear.
+            var lastSeen = instanceLinkViewModel.displayClearedSignal.value
+            instanceLinkViewModel.displayClearedSignal.collect { signal ->
+                if (signal == lastSeen) return@collect
+                lastSeen = signal
                 presenterManager.requestClearDisplay()
             }
         }
@@ -592,11 +618,11 @@ fun main() {
         // the asset cache is cleared first so the per-file exists() gate re-downloads fresh bytes.
         val instanceLinkBackgroundsSignal by instanceLinkViewModel.backgroundsUpdatedSignal.collectAsState()
         LaunchedEffect(instanceLinkConnectionStatusForBackgrounds, appSettings.instanceLink.mirrorBackgrounds, appSettings.instanceLink.role, instanceLinkBackgroundsSignal) {
-            // Only in Controlled mode — a Controller keeps its own local backgrounds, same reasoning
-            // as the Bible/Songs/Schedule mirror gating in MainDesktop.kt.
-            if (instanceLinkConnectionStatusForBackgrounds != InstanceLinkStatus.CONNECTED ||
-                !appSettings.instanceLink.mirrorBackgrounds ||
-                appSettings.instanceLink.role != InstanceLinkRole.CONTROLLED
+            if (!shouldMirrorRemoteBackgrounds(
+                    status = instanceLinkConnectionStatusForBackgrounds,
+                    role = appSettings.instanceLink.role,
+                    mirrorBackgrounds = appSettings.instanceLink.mirrorBackgrounds
+                )
             ) {
                 mirroredBackgroundSettings = null
                 return@LaunchedEffect
@@ -990,6 +1016,15 @@ fun main() {
                                 // Activity toasts for already-allowed clients (auto-approved actions)
                                 val remoteActivityNotifications =
                                     remember { mutableStateListOf<RemoteActivityNotification>() }
+
+                                // Both block lists reach the server itself, so a blocked device is
+                                // refused at the socket instead of only at the approval-gated
+                                // commands — see CompanionServer.blockedClientIds for what that
+                                // used to leave open.
+                                LaunchedEffect(remoteClientManager.blockedClients, sessionBlockedClients.toList()) {
+                                    companionServer.blockedClientIds =
+                                        remoteClientManager.blockedClients + sessionBlockedClients
+                                }
 
                                 // ── Remote add-to-schedule requests ──────────────────────────────────────────
                                 LaunchedEffect(Unit) {
@@ -1754,9 +1789,14 @@ fun main() {
                                     }
                                 }
 
+                                val instanceLinkStatus = instanceLinkViewModel.connectionStatus.collectAsState().value
                                 val instanceLinkIsControllerConnected =
-                                    instanceLinkViewModel.connectionStatus.collectAsState().value == InstanceLinkStatus.CONNECTED &&
+                                    instanceLinkStatus == InstanceLinkStatus.CONNECTED &&
                                         appSettings.instanceLink.role == InstanceLinkRole.CONTROLLER
+                                // See shouldUseRemoteContent — the remote-asset fallbacks belong to a
+                                // mirrored schedule, so they are Controlled-only.
+                                val instanceLinkUsesRemoteContent =
+                                    shouldUseRemoteContent(instanceLinkStatus, appSettings.instanceLink.role)
                                 MainDesktop(
                                     hostWindow = window,
                                     instanceLinkConnectionStatus = instanceLinkViewModel.connectionStatus.collectAsState().value,
@@ -1767,12 +1807,16 @@ fun main() {
                                     connectedInstanceLinkFollowerCount = companionServer.connectedInstanceLinkFollowers.collectAsState().value.size,
                                     onInstanceLinkConnect = {
                                         val link = appSettings.instanceLink
+                                        setInstanceLinkEnabled(true)
                                         instanceLinkViewModel.connect(
                                             link.primaryHost, link.primaryPort, link.apiKey, link.deviceId,
                                             link.reconnectDelayMs.toLong()
                                         )
                                     },
-                                    onInstanceLinkDisconnect = { instanceLinkViewModel.disconnect() },
+                                    onInstanceLinkDisconnect = {
+                                        setInstanceLinkEnabled(false)
+                                        instanceLinkViewModel.disconnect()
+                                    },
                                     instanceLinkRemoteSchedule = instanceLinkViewModel.remoteSchedule.collectAsState().value,
                                     instanceLinkRemoteSongCatalog = instanceLinkViewModel.remoteSongCatalog.collectAsState().value,
                                     instanceLinkFetchSongDetail = { number, songbook -> instanceLinkViewModel.fetchSongDetail(number, songbook) },
@@ -1824,15 +1868,15 @@ fun main() {
                                     instanceLinkSendPreviousSlide = if (instanceLinkIsControllerConnected) {
                                         { instanceLinkViewModel.sendPreviousSlide() }
                                     } else null,
-                                    instanceLinkFetchPictureImageBytes = if (instanceLinkViewModel.connectionStatus.collectAsState().value == InstanceLinkStatus.CONNECTED) {
+                                    instanceLinkFetchPictureImageBytes = if (instanceLinkUsesRemoteContent) {
                                         { folderId, index -> instanceLinkViewModel.fetchPictureImageBytes(folderId, index) }
                                     } else null,
-                                    instanceLinkFetchPresentationSlideBytes = if (instanceLinkViewModel.connectionStatus.collectAsState().value == InstanceLinkStatus.CONNECTED) {
+                                    instanceLinkFetchPresentationSlideBytes = if (instanceLinkUsesRemoteContent) {
                                         { id, index -> instanceLinkViewModel.fetchPresentationSlideBytes(id, index) }
                                     } else null,
                                     instanceLinkMediaStreamUrl = run {
                                         val link = appSettings.instanceLink
-                                        if (instanceLinkViewModel.connectionStatus.collectAsState().value == InstanceLinkStatus.CONNECTED) {
+                                        if (instanceLinkUsesRemoteContent) {
                                             ({ itemId: String ->
                                                 val keyParam = if (link.apiKey.isNotEmpty()) "?${Constants.QUERY_PARAM_API_KEY}=${link.apiKey}" else ""
                                                 "http://${link.primaryHost}:${link.primaryPort}${Constants.ENDPOINT_MEDIA_STREAM}/$itemId$keyParam"
@@ -2056,27 +2100,26 @@ fun main() {
                                     remoteLiveState = instanceLinkViewModel.remoteLiveState.collectAsState().value,
                                     remoteScheduleCount = instanceLinkViewModel.remoteSchedule.collectAsState().value.size,
                                     lastMessageAtMs = instanceLinkViewModel.lastMessageAtMs.collectAsState().value,
-                                    onConnect = { host, port, apiKey, autoConnect, allowPushToSchedule, bibleSyncMode, mirrorBackgrounds, role ->
-                                        appSettings = appSettings.copy(
-                                            instanceLink = appSettings.instanceLink.copy(
-                                                enabled = true,
-                                                primaryHost = host,
-                                                primaryPort = port,
-                                                apiKey = apiKey,
-                                                autoConnect = autoConnect,
-                                                allowPushToSchedule = allowPushToSchedule,
-                                                bibleSyncMode = bibleSyncMode,
-                                                mirrorBackgrounds = mirrorBackgrounds,
-                                                role = role
-                                            )
-                                        )
+                                    onConnect = { edited ->
+                                        val link = edited.copy(enabled = true)
+                                        appSettings = appSettings.copy(instanceLink = link)
                                         settingsManager.saveSettings(appSettings)
                                         instanceLinkViewModel.connect(
-                                            host, port, apiKey, appSettings.instanceLink.deviceId,
-                                            appSettings.instanceLink.reconnectDelayMs.toLong()
+                                            link.primaryHost, link.primaryPort, link.apiKey, link.deviceId,
+                                            link.reconnectDelayMs.toLong()
                                         )
                                     },
-                                    onDisconnect = { instanceLinkViewModel.disconnect() },
+                                    // Persist only — the connection is left exactly as it is, and the
+                                    // reactive settings (role, Bible sync, backgrounds) take effect
+                                    // from appSettings without one.
+                                    onSave = { edited ->
+                                        appSettings = appSettings.copy(instanceLink = edited)
+                                        settingsManager.saveSettings(appSettings)
+                                    },
+                                    onDisconnect = {
+                                        setInstanceLinkEnabled(false)
+                                        instanceLinkViewModel.disconnect()
+                                    },
                                     onDismiss = { showInstanceLinkDialog = false; dialogDismissSignal++ }
                                 )
                                 AboutDialog(

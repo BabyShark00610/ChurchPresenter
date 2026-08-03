@@ -1221,6 +1221,23 @@ class CompanionServer {
      *  (as opposed to a regular mobile/browser companion client) — see [Constants.HEADER_CLIENT_ROLE]. */
     private val _connectedInstanceLinkFollowers = MutableStateFlow<Set<String>>(emptySet())
     val connectedInstanceLinkFollowers: StateFlow<Set<String>> = _connectedInstanceLinkFollowers.asStateFlow()
+
+    /**
+     * Device ids the operator has permanently blocked (mirrored from `RemoteClientManager`, which
+     * owns the list and its persistence).
+     *
+     * Blocking used to stop only the requests that ask for approval — adding to the schedule,
+     * projecting, removing. Everything instant went straight through: a blocked phone or linked
+     * instance could still put a verse, a picture or a slide on the main screen, and still received
+     * the whole live feed. Enforced here rather than at each of the ~15 command branches so a new
+     * command cannot be added without it.
+     */
+    @Volatile
+    var blockedClientIds: Set<String> = emptySet()
+
+    /** Blank ids are anonymous clients, which cannot be blocked (there is nothing to block). */
+    internal fun isClientBlocked(clientId: String): Boolean =
+        clientId.isNotBlank() && clientId in blockedClientIds
     /** schedule item UUID → absolute local media file path — populated by updateSchedule, serves /api/media/stream */
     private val _scheduleItemToMediaPath = ConcurrentHashMap<String, String>()
 
@@ -3398,6 +3415,17 @@ class CompanionServer {
                     val wsClientId = call.request.headers[Constants.HEADER_DEVICE_ID]
                         ?: call.request.queryParameters[Constants.HEADER_DEVICE_ID]
                         ?: ""
+                    // A blocked device gets no session at all: no live feed to watch, and no socket
+                    // to send commands down. Checked before the follower registration below so a
+                    // blocked instance never appears in the connected-followers count either.
+                    if (isClientBlocked(wsClientId)) {
+                        InstanceLinkLogger.log(
+                            InstanceLinkLogSide.PRIMARY, "follower_unauthorized",
+                            mapOf("reason" to "blocked", "deviceId" to wsClientId)
+                        )
+                        send(Frame.Text("{\"error\":\"Blocked\"}"))
+                        return@webSocket
+                    }
                     val isInstanceLinkFollower = call.request.headers[Constants.HEADER_CLIENT_ROLE] ==
                         Constants.CLIENT_ROLE_INSTANCE_LINK
                     if (isInstanceLinkFollower && wsClientId.isNotEmpty()) {
@@ -3515,6 +3543,16 @@ class CompanionServer {
                                     InstanceLinkLogSide.PRIMARY, "ws_command_received",
                                     mapOf("type" to msg.type, "deviceId" to wsClientId)
                                 )
+                                // Blocked *during* this session — the handshake check above cannot
+                                // see a decision the operator makes while the socket is already open.
+                                if (isClientBlocked(wsClientId)) {
+                                    InstanceLinkLogger.log(
+                                        InstanceLinkLogSide.PRIMARY, "ws_command_refused",
+                                        mapOf("type" to msg.type, "deviceId" to wsClientId, "reason" to "blocked")
+                                    )
+                                    sendCommandAck(msg.commandId, ok = false, reason = "blocked")
+                                    continue
+                                }
                                 when (msg.type) {
                                     Constants.WS_CMD_SELECT_SONG -> {
                                         val song = json.decodeFromString(ScheduleSongDto.serializer(), msg.payload)

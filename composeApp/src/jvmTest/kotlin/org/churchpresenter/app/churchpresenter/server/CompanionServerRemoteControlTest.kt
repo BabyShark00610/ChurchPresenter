@@ -43,6 +43,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -107,6 +108,7 @@ class CompanionServerRemoteControlTest {
         server.clearPresentationState()
         server.updateSongs(emptyList())
         server.updateSchedule(emptyList())
+        server.blockedClientIds = emptySet()
     }
 
     @AfterTest
@@ -572,6 +574,43 @@ class CompanionServerRemoteControlTest {
                 while (true) {
                     val frame = withTimeoutOrNull(quietMs) { incoming.receive() } ?: break
                     if (frame is Frame.Text) received.add(frame.readText())
+                }
+            }
+        }
+        received
+    }
+
+    /**
+     * [sendOverWebSocket] with a device identity, and a hook that runs once the session is open.
+     *
+     * Blocking is per-device, so these tests need a client the server can tell apart; [beforeSend]
+     * exists for the case the operator blocks a device that is *already* connected, which the
+     * handshake check cannot see. Tolerates the server closing the session, which is the whole
+     * point of one of the tests below.
+     */
+    private fun sendAsDevice(
+        deviceId: String,
+        vararg frames: String,
+        quietMs: Long = 250,
+        beforeSend: () -> Unit = {},
+    ): List<String> = runBlocking {
+        val received = mutableListOf<String>()
+        withTimeoutOrNull(quietMs + 10_000) {
+            runCatching {
+                client.webSocket(
+                    urlString = "ws://127.0.0.1:$port${Constants.ENDPOINT_WS}",
+                    request = { header(Constants.HEADER_DEVICE_ID, deviceId) },
+                ) {
+                    while (true) {
+                        val frame = withTimeoutOrNull(quietMs) { incoming.receive() } ?: break
+                        if (frame is Frame.Text) received.add(frame.readText())
+                    }
+                    beforeSend()
+                    frames.forEach { send(Frame.Text(it)) }
+                    while (true) {
+                        val frame = withTimeoutOrNull(quietMs) { incoming.receive() } ?: break
+                        if (frame is Frame.Text) received.add(frame.readText())
+                    }
                 }
             }
         }
@@ -1379,5 +1418,92 @@ class CompanionServerRemoteControlTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    // ── Blocking a device ───────────────────────────────────────────────────────
+    //
+    // Blocking used to reach only the approval-gated requests. Everything instant — a verse, a
+    // picture, a slide, Clear — went straight through, and the blocked device still received the
+    // whole live feed. "Blocked" has to mean blocked, or the button is decoration.
+
+    @Test
+    fun `a blocked device is refused the socket outright`() {
+        server.updateSongs(listOf(song("42", "Amazing Grace")))
+        server.blockedClientIds = setOf("phone-9")
+
+        val received = sendAsDevice("phone-9")
+
+        assertTrue(
+            received.none { Constants.WS_EVENT_SONGS_UPDATED in it },
+            "a blocked device must not be handed the live feed either: $received",
+        )
+        assertTrue(received.any { "Blocked" in it }, "it should be told why: $received")
+    }
+
+    @Test
+    fun `a blocked device's instant command never reaches the app`() {
+        val cleared = CompletableDeferred<Unit>()
+        collecting(server.onClear) { cleared.complete(Unit) }
+        server.blockedClientIds = setOf("phone-9")
+
+        val received = sendAsDevice("phone-9", command(Constants.WS_CMD_CLEAR, commandId = "cmd-blocked"))
+
+        // The refusal frame is the positive signal that the handler returned before reading any
+        // command at all, so nothing can still be in flight behind this assertion.
+        assertTrue(received.any { "Blocked" in it }, "expected the refusal frame: $received")
+        assertFalse(
+            cleared.isCompleted,
+            "Clear is instant and ungated by approval — blocking is the only thing standing in front of it",
+        )
+    }
+
+    @Test
+    fun `blocking a device that is already connected refuses its next command by name`() {
+        // The handshake check cannot see a decision the operator makes mid-session, so the command
+        // path re-checks. Until it did, blocking someone only took effect on their next reconnect.
+        val cleared = CompletableDeferred<Unit>()
+        collecting(server.onClear) { cleared.complete(Unit) }
+
+        val ack = sendAsDevice(
+            "phone-9",
+            command(Constants.WS_CMD_CLEAR, commandId = "cmd-mid"),
+            beforeSend = { server.blockedClientIds = setOf("phone-9") },
+        ).ackFor("cmd-mid")
+
+        // The ack is the positive signal: the refusal branch sends it and then skips the dispatch
+        // outright, so once it is in hand no emission can still be pending behind it.
+        assertEquals(false, assertNotNull(ack).ok)
+        assertEquals("blocked", ack.reason)
+        assertFalse(
+            cleared.isCompleted,
+            "refusing it in the ack while still acting on it would be worse than not refusing at all",
+        )
+    }
+
+    @Test
+    fun `a device that is not blocked is unaffected`() {
+        val cleared = CompletableDeferred<Unit>()
+        collecting(server.onClear) { cleared.complete(Unit) }
+        server.blockedClientIds = setOf("some-other-phone")
+
+        val ack = sendAsDevice("phone-9", command(Constants.WS_CMD_CLEAR, commandId = "cmd-ok")).ackFor("cmd-ok")
+
+        assertEquals(true, assertNotNull(ack).ok)
+        assertNotNull(runBlocking { withTimeoutOrNull(2_000) { cleared.await() } })
+    }
+
+    @Test
+    fun `an anonymous client is not blocked by a blank entry in the list`() {
+        // A device id is optional on this socket. A blank one identifies nobody, so it can never be
+        // the id the operator blocked — and treating it as a match would lock out every client that
+        // does not send the header.
+        val cleared = CompletableDeferred<Unit>()
+        collecting(server.onClear) { cleared.complete(Unit) }
+        server.blockedClientIds = setOf("")
+
+        val ack = sendAsDevice("", command(Constants.WS_CMD_CLEAR, commandId = "cmd-anon")).ackFor("cmd-anon")
+
+        assertEquals(true, assertNotNull(ack).ok)
+        assertNotNull(runBlocking { withTimeoutOrNull(2_000) { cleared.await() } })
     }
 }

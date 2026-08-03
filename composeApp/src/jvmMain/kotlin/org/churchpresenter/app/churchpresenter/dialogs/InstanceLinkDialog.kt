@@ -47,6 +47,8 @@ import churchpresenter.composeapp.generated.resources.instance_link_last_receive
 import churchpresenter.composeapp.generated.resources.instance_link_last_update_age
 import churchpresenter.composeapp.generated.resources.instance_link_mirror_backgrounds
 import churchpresenter.composeapp.generated.resources.instance_link_port
+import churchpresenter.composeapp.generated.resources.instance_link_reconnect_delay
+import churchpresenter.composeapp.generated.resources.instance_link_reconnect_delay_hint
 import churchpresenter.composeapp.generated.resources.instance_link_role
 import churchpresenter.composeapp.generated.resources.instance_link_role_controlled
 import churchpresenter.composeapp.generated.resources.instance_link_role_controller
@@ -64,7 +66,9 @@ import churchpresenter.composeapp.generated.resources.obs_mode_presentation
 import churchpresenter.composeapp.generated.resources.obs_mode_qa
 import churchpresenter.composeapp.generated.resources.obs_mode_songs
 import churchpresenter.composeapp.generated.resources.obs_mode_website
+import churchpresenter.composeapp.generated.resources.save
 import churchpresenter.composeapp.generated.resources.tab_dictionary
+import churchpresenter.composeapp.generated.resources.unit_ms
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import org.churchpresenter.app.churchpresenter.centeredOnMainWindow
 import kotlinx.coroutines.delay
@@ -89,7 +93,9 @@ fun InstanceLinkDialog(
     remoteScheduleCount: Int,
     /** Wall-clock ms of the last WS message from the primary, null while not connected. */
     lastMessageAtMs: Long? = null,
-    onConnect: (host: String, port: Int, apiKey: String, autoConnect: Boolean, allowPushToSchedule: Boolean, bibleSyncMode: BibleSyncMode, mirrorBackgrounds: Boolean, role: InstanceLinkRole) -> Unit,
+    onConnect: (InstanceLinkSettings) -> Unit,
+    /** Persists the edited settings without touching the connection — see [InstanceLinkDialogContent]. */
+    onSave: (InstanceLinkSettings) -> Unit,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -116,11 +122,30 @@ fun InstanceLinkDialog(
             remoteScheduleCount = remoteScheduleCount,
             lastMessageAtMs = lastMessageAtMs,
             onConnect = onConnect,
+            onSave = onSave,
             onDisconnect = onDisconnect,
             onDismiss = onDismiss,
         )
     }
 }
+
+/**
+ * Lower bound on the reconnect delay: the setting is the *floor* of the client's exponential
+ * backoff, so a zero (or a stray "1") would have a dropped link retry in a tight loop against a
+ * primary that is probably still restarting. The upper bound keeps a mistyped extra digit from
+ * silently turning a link into one that looks dead for the rest of a service.
+ */
+internal const val INSTANCE_LINK_MIN_RECONNECT_DELAY_MS = 250
+internal const val INSTANCE_LINK_MAX_RECONNECT_DELAY_MS = 60_000
+
+/**
+ * Reads the reconnect-delay field, falling back to [fallback] for anything unusable — an empty
+ * field, or a number too long to be an Int — and clamping the rest into the supported range.
+ * Never throws: this runs on the operator's keystrokes during a service.
+ */
+internal fun parseReconnectDelayMs(text: String, fallback: Int): Int =
+    text.trim().toIntOrNull()?.coerceIn(INSTANCE_LINK_MIN_RECONNECT_DELAY_MS, INSTANCE_LINK_MAX_RECONNECT_DELAY_MS)
+        ?: fallback
 
 @Composable
 internal fun InstanceLinkDialogContent(
@@ -130,7 +155,13 @@ internal fun InstanceLinkDialogContent(
     remoteLiveState: LiveStateDto?,
     remoteScheduleCount: Int,
     lastMessageAtMs: Long? = null,
-    onConnect: (host: String, port: Int, apiKey: String, autoConnect: Boolean, allowPushToSchedule: Boolean, bibleSyncMode: BibleSyncMode, mirrorBackgrounds: Boolean, role: InstanceLinkRole) -> Unit,
+    onConnect: (InstanceLinkSettings) -> Unit,
+    /**
+     * Persists the edited settings and leaves the connection alone. Connect used to be the only way
+     * to save, so changing a setting that is consumed reactively — the role, Bible sync mode,
+     * background mirroring — forced a reconnect that nothing about the change required.
+     */
+    onSave: (InstanceLinkSettings) -> Unit,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -138,10 +169,25 @@ internal fun InstanceLinkDialogContent(
     var portText by remember(isVisible) { mutableStateOf(if (settings.primaryPort > 0) settings.primaryPort.toString() else "") }
     var apiKey by remember(isVisible) { mutableStateOf(settings.apiKey) }
     var autoConnect by remember(isVisible) { mutableStateOf(settings.autoConnect) }
+    var reconnectDelayText by remember(isVisible) { mutableStateOf(settings.reconnectDelayMs.toString()) }
     var allowPushToSchedule by remember(isVisible) { mutableStateOf(settings.allowPushToSchedule) }
     var bibleSyncMode by remember(isVisible) { mutableStateOf(settings.bibleSyncMode) }
     var mirrorBackgrounds by remember(isVisible) { mutableStateOf(settings.mirrorBackgrounds) }
     var role by remember(isVisible) { mutableStateOf(settings.role) }
+
+    // Everything the operator has edited, folded back onto the settings this dialog was opened with
+    // so the fields it does not show (deviceId, enabled) are carried through untouched.
+    fun edited(): InstanceLinkSettings = settings.copy(
+        primaryHost = host.trim(),
+        primaryPort = portText.toIntOrNull() ?: settings.primaryPort,
+        apiKey = apiKey.trim(),
+        autoConnect = autoConnect,
+        reconnectDelayMs = parseReconnectDelayMs(reconnectDelayText, settings.reconnectDelayMs),
+        allowPushToSchedule = allowPushToSchedule,
+        bibleSyncMode = bibleSyncMode,
+        mirrorBackgrounds = mirrorBackgrounds,
+        role = role
+    )
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -251,13 +297,19 @@ internal fun InstanceLinkDialogContent(
                             spacing = 12.dp,
                         )
 
-                        LabeledSwitch(
-                            checked = allowPushToSchedule,
-                            onCheckedChange = { allowPushToSchedule = it },
-                            label = stringResource(Res.string.instance_link_allow_push_to_schedule),
-                            modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            spacing = 12.dp,
+                        SettingRow(label = stringResource(Res.string.instance_link_reconnect_delay)) {
+                            SettingsTextField(
+                                value = reconnectDelayText,
+                                onValueChange = { new -> if (new.all(Char::isDigit)) reconnectDelayText = new },
+                                placeholder = { Text(stringResource(Res.string.unit_ms)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                        Text(
+                            text = stringResource(Res.string.instance_link_reconnect_delay_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -293,10 +345,20 @@ internal fun InstanceLinkDialogContent(
                             spacing = 12.dp,
                         )
 
-                        // Bible sync mode / background mirroring only matter in Controlled mode — a
-                        // Controller keeps its own local content entirely, so these settings would
-                        // have no effect there.
+                        // Pushing to the schedule, the Bible sync mode and background mirroring only
+                        // matter in Controlled mode — a Controller keeps its own local content
+                        // entirely, and its schedule is never the primary's, so a push has nothing
+                        // to push to. Shown only where they do something.
                         if (role == InstanceLinkRole.CONTROLLED) {
+                            LabeledSwitch(
+                                checked = allowPushToSchedule,
+                                onCheckedChange = { allowPushToSchedule = it },
+                                label = stringResource(Res.string.instance_link_allow_push_to_schedule),
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                spacing = 12.dp,
+                            )
+
                             Text(
                                 stringResource(Res.string.instance_link_bible_sync_mode),
                                 style = MaterialTheme.typography.labelLarge,
@@ -361,11 +423,29 @@ internal fun InstanceLinkDialogContent(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    // Always available, including with no host yet: turning autoConnect back off, or
+                    // switching role, is a legitimate edit on its own and must not require a live
+                    // connection to persist.
+                    TextButton(
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = {
+                            onSave(edited())
+                            onDismiss()
+                        }
+                    ) {
+                        Text(
+                            stringResource(Res.string.save),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Button(
                         shape = RoundedCornerShape(6.dp),
                         onClick = {
-                            val port = portText.toIntOrNull() ?: return@Button
-                            onConnect(host.trim(), port, apiKey.trim(), autoConnect, allowPushToSchedule, bibleSyncMode, mirrorBackgrounds, role)
+                            if (portText.toIntOrNull() == null) return@Button
+                            onConnect(edited())
                             onDismiss()
                         },
                         enabled = host.isNotBlank() && portText.toIntOrNull() != null,

@@ -137,6 +137,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.server.followerMediaUrl
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.presenterAspectRatio
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
@@ -268,13 +269,13 @@ fun MediaTab(
                 Constants.MEDIA_TYPE_URL -> { selectedSourceType = Constants.MEDIA_TYPE_URL; urlInput = it.mediaUrl }
                 else -> selectedSourceType = Constants.MEDIA_TYPE_LOCAL
             }
-            // A mirrored schedule item's local path only exists on the primary's disk — stream it
-            // over HTTP from there instead when following via Instance Link.
-            val effectiveUrl = if (it.mediaType == Constants.MEDIA_TYPE_LOCAL && instanceLinkMediaStreamUrl != null) {
-                instanceLinkMediaStreamUrl(it.id)
-            } else {
-                it.mediaUrl
-            }
+            // Local file when it resolves here, the primary's stream when it doesn't — see
+            // followerMediaUrl.
+            val effectiveUrl = followerMediaUrl(
+                mediaType = it.mediaType,
+                localUrl = it.mediaUrl,
+                remoteStreamUrl = instanceLinkMediaStreamUrl?.invoke(it.id)
+            )
             viewModel.loadMediaFromSchedule(url = effectiveUrl, title = it.mediaTitle, type = it.mediaType)
             focusRequester.requestFocus()
         }
