@@ -68,4 +68,23 @@ object TestSingletons {
             skikoLatched = true
         }
     }
+
+    /**
+     * Forces skiko to unpack and load its native library against the real `user.home`, before any
+     * test swaps that property.
+     *
+     * `org.jetbrains.skiko.Library.unpackIfNeeded` extracts the native binary into a cache directory
+     * under `user.home` and `Files.move`s it into place, once per JVM. A test that swaps `user.home`
+     * to a temp dir and is the first to touch skia unpacks into that dir; the dir is deleted in
+     * teardown, and every later skia class in the JVM fails with `NoClassDefFoundError: Could not
+     * initialize class org.jetbrains.skia.Image` — in whichever innocent class ran next. It surfaces
+     * as an `Error`, so the `catch (e: Exception)` around a thumbnail decode does not contain it and
+     * the whole coroutine dies.
+     *
+     * Same one-time class load as [latchSkikoHostOs] — either call pins both properties — but the
+     * two failures are unrelated, so a caller isolating only `user.home` says so by name.
+     *
+     * Call as the FIRST line of `@BeforeTest`, before `System.setProperty("user.home", …)`.
+     */
+    fun latchSkikoNativeLibrary() = latchSkikoHostOs()
 }
