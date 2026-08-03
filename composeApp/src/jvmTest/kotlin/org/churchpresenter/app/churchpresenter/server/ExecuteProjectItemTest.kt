@@ -3,9 +3,11 @@ package org.churchpresenter.app.churchpresenter.server
 import org.churchpresenter.app.churchpresenter.ScheduleActions
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -182,6 +184,113 @@ class ExecuteProjectItemTest {
         cases.forEach { (item, expected) ->
             val (_, presenter) = project(item)
             assertEquals(expected, presenter.presentingMode.value, "${item::class.simpleName} must reach its own renderer")
+        }
+    }
+
+    // ── Dictionary and announcements: projected without joining the schedule ────
+
+    @Test
+    fun `a dictionary entry reaches the renderer without joining the schedule`() {
+        // The asymmetry is deliberate and is why `addScheduleItem` is a separate function rather than
+        // something this one delegates to: projecting a word puts it on screen, it does not file it
+        // in the service order. Merging the two would add a row every time one is projected.
+        val (recorder, presenter) = project(
+            ScheduleItem.DictionaryItem(
+                id = "d", number = "G5485", word = "χάρις", transliteration = "charis", definition = "grace",
+            )
+        )
+
+        assertTrue(recorder.added.isEmpty(), "a projected word must not be filed in the schedule, got ${recorder.added}")
+        assertEquals(Presenting.DICTIONARY, presenter.presentingMode.value)
+        assertTrue(presenter.showPresenterWindow.value)
+
+        val shown = presenter.displayedDictionaryEntry.value
+        assertEquals("G5485", shown?.number)
+        assertEquals("χάρις", shown?.word)
+        assertEquals("grace", shown?.definition)
+    }
+
+    @Test
+    fun `a plain announcement puts its text on screen without joining the schedule`() {
+        val (recorder, presenter) = project(
+            ScheduleItem.AnnouncementItem(id = "a", text = "Service starts at 10")
+        )
+
+        assertTrue(recorder.added.isEmpty(), "got ${recorder.added}")
+        assertEquals("Service starts at 10", presenter.announcementText.value)
+        assertEquals(Presenting.ANNOUNCEMENTS, presenter.presentingMode.value)
+        assertTrue(presenter.showPresenterWindow.value)
+    }
+
+    @Test
+    fun `a countdown announcement starts at the total the operator set`() {
+        // The arithmetic is the point: hours*3600 + minutes*60 + seconds. Getting it wrong is a
+        // countdown that reaches zero at the wrong moment, which is the one thing a countdown is for.
+        val presenter = PresenterManager()
+        try {
+            executeProjectItem(
+                ScheduleItem.AnnouncementItem(
+                    id = "a", text = "", isTimer = true,
+                    timerHours = 1, timerMinutes = 2, timerSeconds = 3,
+                    timerMode = Constants.TIMER_MODE_DURATION, timerExpiredText = "Time!",
+                ),
+                Recorder().actions(),
+                presenter,
+            )
+
+            assertEquals(3_723, presenter.timerRemainingSeconds.value, "1h 2m 3s is 3723 seconds")
+            assertTrue(presenter.timerRunning.value)
+            assertTrue(presenter.announcementTickerLive.value, "the ticker has to be live or the screen never updates")
+            assertEquals(Presenting.ANNOUNCEMENTS, presenter.presentingMode.value)
+        } finally {
+            presenter.pauseAnnouncementTimer()
+        }
+    }
+
+    @Test
+    fun `a count-up announcement starts from zero and runs`() {
+        val presenter = PresenterManager()
+        try {
+            executeProjectItem(
+                ScheduleItem.AnnouncementItem(
+                    id = "a", text = "", isTimer = true, timerMode = Constants.TIMER_MODE_COUNT_UP,
+                ),
+                Recorder().actions(),
+                presenter,
+            )
+
+            assertEquals(0, presenter.timerRemainingSeconds.value, "a count-up starts at nothing elapsed")
+            assertTrue(presenter.timerRunning.value)
+            assertTrue(presenter.announcementTickerLive.value)
+        } finally {
+            presenter.pauseAnnouncementTimer()
+        }
+    }
+
+    @Test
+    fun `the clock modes run a ticker without a countdown behind it`() {
+        // Both clock modes are always-on displays rather than something counting down, so they leave
+        // timerRunning false. They are covered together because what separates them — the text each
+        // ticker writes — only appears on the next tick, and waiting a second for it would be
+        // asserting on the clock rather than on the routing.
+        listOf(Constants.TIMER_MODE_CLOCK, Constants.TIMER_MODE_CLOCK_DISPLAY).forEach { mode ->
+            val presenter = PresenterManager()
+            try {
+                executeProjectItem(
+                    ScheduleItem.AnnouncementItem(
+                        id = "a", text = "", isTimer = true, timerMode = mode,
+                        targetHour = 11, targetMinute = 0, targetSecond = 0, liveClockFormat = "HH:mm",
+                    ),
+                    Recorder().actions(),
+                    presenter,
+                )
+
+                assertFalse(presenter.timerRunning.value, "$mode is a display, not a countdown")
+                assertTrue(presenter.announcementTickerLive.value, "$mode still has to drive the screen")
+                assertEquals(Presenting.ANNOUNCEMENTS, presenter.presentingMode.value)
+            } finally {
+                presenter.pauseAnnouncementTimer()
+            }
         }
     }
 }
