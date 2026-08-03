@@ -715,8 +715,6 @@ tasks.register<JacocoReport>("jacocoTestReport") {
             // `while (true) { withFrameNanos { ... } }` confetti animation loop — can't be composed
             // headless and has no terminating state to assert on.
             exclude("**/KonamiEasterEggDialogKt*")
-            // Deliberately out of scope for this coverage effort.
-            exclude("**/CrosswordTabKt*")
         }
     )
     sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
@@ -758,8 +756,6 @@ tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             // Kept in sync with jacocoTestReport above -- both are untestable-by-construction.
             exclude("**/MacWindowActivationKt*")
             exclude("**/KonamiEasterEggDialogKt*")
-            // Kept in sync with jacocoTestReport above.
-            exclude("**/CrosswordTabKt*")
             // App entry / window wiring: `main` itself, the root composable tree and the top bar.
             // MainKt's ~200 synthetic lambda classes come along via the `$` globs.
             exclude("org/churchpresenter/app/churchpresenter/MainKt*")
