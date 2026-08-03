@@ -209,13 +209,19 @@ class DictionaryViewModelBiblePickerTest {
         val file = writeBible("kjv.spb")
         val d = vm()
         d.setDictBible(file.absolutePath)
-        awaitUntil("the bible to load") { d.dictBible != null }
+        // Both, not just the Bible: `setDictBible` assigns `dictBible` inside the coroutine and only
+        // clears `isDictBibleLoading` in its `finally`, so waiting on the Bible alone can return
+        // between the two. This test then asserts the flag, and on a loaded CI runner it lost that
+        // race — the failure it produced was a bare "Expected value to be true".
+        awaitUntil("the bible to load and the loading flag to clear") {
+            d.dictBible != null && !d.isDictBibleLoading
+        }
         val loaded = d.dictBible
 
         d.setDictBible(file.absolutePath)
 
         assertTrue(d.dictBible === loaded, "re-picking the current entry must not re-parse the whole module")
-        assertTrue(!d.isDictBibleLoading)
+        assertTrue(!d.isDictBibleLoading, "re-picking must not put the picker back into a loading state")
     }
 
     /**
