@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AnnouncementsSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 
 /**
@@ -55,6 +56,8 @@ internal class AnnouncementReports {
 internal fun announcementsTab(
     initial: AnnouncementsSettings = AnnouncementsSettings(),
     withPresenter: Boolean = true,
+    withOnAddToSchedule: Boolean = true,
+    projectionSettings: ProjectionSettings = ProjectionSettings(),
     block: ComposeUiTest.(presenter: PresenterManager, reports: AnnouncementReports) -> Unit,
 ) {
     val presenter = PresenterManager()
@@ -62,7 +65,7 @@ internal fun announcementsTab(
     runComposeUiTest {
         setContent {
             var settings by remember {
-                mutableStateOf(AppSettings(announcementsSettings = initial))
+                mutableStateOf(AppSettings(announcementsSettings = initial, projectionSettings = projectionSettings))
             }
             MaterialTheme {
                 AnnouncementsTab(
@@ -73,7 +76,7 @@ internal fun announcementsTab(
                         reports.settings = settings.announcementsSettings
                     },
                     presenterManager = presenter.takeIf { withPresenter },
-                    onAddToSchedule = { reports.scheduled += it },
+                    onAddToSchedule = if (withOnAddToSchedule) { { s: AnnouncementsSettings -> reports.scheduled += s } } else null,
                 )
             }
         }
@@ -102,6 +105,9 @@ internal object AnnouncementLabel {
     const val CENTER = "Center"
     const val TOP_LEFT = "Top Left"
     const val EXPIRED_HINT = "Enter message to show when done…"
+    const val SEND_TO_STAGE_MONITOR = "Send to Stage Monitor"
+    const val HIDE_FROM_STAGE_MONITOR = "Hide Announcement"
+    const val TRANSPARENT = "Transparent (Default)"
 }
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────
@@ -138,6 +144,19 @@ private fun ComposeUiTest.sortedButton(label: String, position: Int): SemanticsN
     val unsorted = onAllNodesWithContentDescription(label)
         .fetchSemanticsNodes(atLeastOneRootRequired = false)
     return onAllNodesWithContentDescription(label)[unsorted.indexOfFirst { it.boundsInRoot.top == target }]
+}
+
+/**
+ * The loop count field's own increment button.
+ *
+ * "Increment"/"Decrement" also label the font-size field's arrows, so a bare lookup is ambiguous.
+ * Loop count sits lower on screen (in the right column, below the preview), so it is the one with
+ * the larger `top`.
+ */
+internal fun ComposeUiTest.loopCountIncrement(): SemanticsNodeInteraction {
+    val nodes = onAllNodesWithContentDescription("Increment").fetchSemanticsNodes(atLeastOneRootRequired = false)
+    val lowest = nodes.indices.maxByOrNull { nodes[it].boundsInRoot.top } ?: error("no Increment button is on screen")
+    return onAllNodesWithContentDescription("Increment")[lowest]
 }
 
 internal fun ComposeUiTest.hasAnnButton(label: String): Boolean =

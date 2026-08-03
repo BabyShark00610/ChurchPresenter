@@ -2,10 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
-import androidx.compose.ui.test.ComposeUiTest
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -33,7 +30,7 @@ import kotlin.test.assertTrue
 class LowerThirdAtemDialogTest {
 
     /** The upload button's tooltip, which is also its content description. */
-    private val ATEM_UPLOAD = "Send to ATEM"
+    private val ATEM_UPLOAD = ATEM_UPLOAD_LABEL
 
     private fun state(
         fps: Double = 25.0,
@@ -51,28 +48,7 @@ class LowerThirdAtemDialogTest {
         clipMaxFrames = clipMaxFrames,
     )
 
-    /**
-     * Selects a preset — the upload button is disabled until one is chosen — then opens the dialog.
-     *
-     * Both waits below replace a bare `waitForIdle()` that made this helper intermittently fail
-     * under load (reliably when the ATEM suites ran together, never in isolation). Selecting a
-     * preset enables the upload button asynchronously, and **a click on a disabled control is
-     * silently swallowed** — so the click landed on nothing and the dialog never opened, which
-     * surfaced much later as "there are no existing nodes for that selector" at whatever the test
-     * did next. Each wait ends on a positive signal; the timeouts exist only to fail the test.
-     */
-    private fun ComposeUiTest.openAtemDialog() {
-        selectPreset("Welcome")
-        waitUntil("the ATEM upload button is enabled", 5_000L) {
-            onAllNodes(hasContentDescription(ATEM_UPLOAD) and isEnabled())
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        ltButton(ATEM_UPLOAD).performClick()
-        waitUntil("the dialog's upload-mode rows are composed", 5_000L) {
-            onAllNodes(isSelectable()).fetchSemanticsNodes().size >= 2
-        }
-    }
+    // openAtemDialog() now lives in LowerThirdTabTestSupport.kt, shared with LowerThirdAtemDialogExtraTest.
 
     @Test
     fun `the dialog opens and offers both upload modes`() =

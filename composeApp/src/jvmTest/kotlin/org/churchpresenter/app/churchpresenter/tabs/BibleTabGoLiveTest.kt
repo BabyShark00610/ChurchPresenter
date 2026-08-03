@@ -4,6 +4,7 @@ package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -99,6 +100,28 @@ class BibleTabGoLiveTest {
     }
 
     @Test
+    fun `double-clicking a history entry takes it live again`() = bibleTab { vm, reports ->
+        actionButton(BibleLabel.GO_LIVE).performClick()
+        waitForIdle()
+        onNodeWithText("John").performClick()
+        waitForIdle()
+        assertEquals(2, vm.selectedBookIndex.value, "moved away to John")
+
+        val historyEntry = onNodeWithText("Genesis 1:1  In the beginning God created the heaven and the earth.")
+        historyEntry.performClick()
+        historyEntry.performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(Presenting.BIBLE, Presenting.BIBLE),
+            reports.presenting,
+            "the original go-live, then the history double-click going live again",
+        )
+        assertEquals("Genesis", reports.live?.firstOrNull()?.bookName)
+        assertEquals(1, reports.live?.firstOrNull()?.verseNumber)
+    }
+
+    @Test
     fun `clearing the history removes the panel`() = bibleTab { vm, _ ->
         actionButton(BibleLabel.GO_LIVE).performClick()
         waitForIdle()
@@ -131,4 +154,20 @@ class BibleTabGoLiveTest {
             "scheduling is not presenting — nothing was recorded as shown: ${vm.history}",
         )
     }
+
+    @Test
+    fun `going live with multiple verses selected clears the multi-verse selection afterward`() =
+        bibleTab { vm, _ ->
+            vm.ctrlClickVerse(1)
+            waitForIdle()
+            assertTrue(vm.multiVerseEnabled.value, "ctrl-clicking a second verse enters multi-verse mode")
+
+            actionButton(BibleLabel.GO_LIVE).performClick()
+            waitForIdle()
+
+            assertFalse(
+                vm.multiVerseEnabled.value,
+                "multi-verse mode must not linger into the next selection after going live",
+            )
+        }
 }
