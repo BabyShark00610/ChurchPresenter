@@ -340,7 +340,12 @@ class STTManager {
         }
     }
 
-    private fun fetchWordHighlighting(baseUrl: String) {
+    /**
+     * The highlighted-word list is not pushed on connect, so it is pulled over REST once the socket
+     * comes up. `internal` rather than private for the same reason as the `handle*Update` parsers:
+     * in production it is only reachable from a socket callback, and it is plain HTTP otherwise.
+     */
+    internal fun fetchWordHighlighting(baseUrl: String) {
         try {
             val client = HttpClient.newHttpClient()
             val request = HttpRequest.newBuilder()
@@ -396,7 +401,7 @@ class STTManager {
      * never triggers its file_mover, which defaults to deleting the source file). Gated by
      * [helpDevModeEnabled] so ordinary users never pay the periodic download cost.
      */
-    private fun startDbCapture(baseUrl: String) {
+    internal fun startDbCapture(baseUrl: String) {
         captureBaseUrl = baseUrl
         dbCaptureJob?.cancel()
         dbCaptureJob = scope.launch(Dispatchers.IO) {
@@ -407,7 +412,7 @@ class STTManager {
         }
     }
 
-    private fun captureDbSnapshot(baseUrl: String) {
+    internal fun captureDbSnapshot(baseUrl: String) {
         // Shares TrainingDataLogger's 30-day retention sweep so these .db snapshots don't
         // accumulate forever in bible-stt-logs — see cleanupOldLogsOnce()'s doc for why this
         // cross-package call is `internal` instead of TrainingDataLogger writing the file itself.
