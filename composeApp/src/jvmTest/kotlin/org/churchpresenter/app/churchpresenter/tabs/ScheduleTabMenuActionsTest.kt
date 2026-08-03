@@ -2,10 +2,20 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import java.io.File
+import java.nio.file.Files
+import javax.swing.filechooser.FileNameExtensionFilter
+import kotlin.io.path.Path
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import java.nio.file.Path as NioPath
 
 /**
  * The action set the tab publishes to its parent through `onActionsReady`.
@@ -17,12 +27,21 @@ import kotlin.test.assertTrue
  * instead of the id it was handed — would look perfect on screen and still ruin a service order.
  * Each action is invoked and the resulting schedule asserted.
  *
- * **Not covered: `openSchedule`, `saveSchedule` and `saveScheduleAs`.** All three open a native file
- * chooser, which throws headless; the view-model half of each is covered by `ScheduleFileTest`.
+ * `openSchedule`, `saveSchedule` and `saveScheduleAs` normally open a native file chooser, which
+ * throws headless; here `FileChooser.platformInstance` is swapped for a fake the same way
+ * `QATabFileChooserTest` does it, so the wiring runs for real without touching a native dialog. Each
+ * runs in the tab's own `coroutineScope.launch` around a suspend chooser call, so a click is not a
+ * barrier — tests wait on the chooser having answered, or on the file it wrote, rather than on
+ * `waitForIdle()`. The view-model half of each is covered by `ScheduleFileTest`.
  *
  * See `ScheduleTabTestSupport.kt` for the harness.
  */
 class ScheduleTabMenuActionsTest {
+
+    @AfterTest
+    fun cleanUpFileChooser() {
+        unmockkObject(FileChooser.Companion)
+    }
 
     @Test
     fun `the tab publishes its actions to the parent`() =
@@ -312,5 +331,110 @@ class ScheduleTabMenuActionsTest {
 
             // A page title arriving late must not overwrite the name someone chose deliberately.
             assertEquals("Notices", (vm.scheduleItems.last() as ScheduleItem.WebsiteItem).title)
+        }
+
+    // ── Saving and opening, via the File menu ──────────────────────────────────
+
+    private class FakeChooser(private val picked: File?) : FileChooser() {
+        @Volatile
+        var answered: Int = 0
+            private set
+
+        override suspend fun chooseImpl(
+            path: NioPath,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+            selectDirectory: Boolean,
+            multiple: Boolean,
+        ): List<NioPath>? = picked?.let { listOf(Path(it.absolutePath)) }.also { answered++ }
+
+        override suspend fun saveImpl(
+            location: NioPath,
+            suggestedName: String,
+            filters: List<FileNameExtensionFilter>,
+            title: String,
+        ): NioPath? = picked?.let { Path(it.absolutePath) }.also { answered++ }
+    }
+
+    private fun givenChooserReturns(picked: File?): FakeChooser {
+        mockkObject(FileChooser.Companion)
+        return FakeChooser(picked).also { every { FileChooser.platformInstance } returns it }
+    }
+
+    @Test
+    fun `saveScheduleAs writes the service to the chosen file`() {
+        val dest = File(Files.createTempDirectory("cp-schedule-menu-save").toFile(), "service.cps")
+
+        scheduleTab(seed = { seedService() }) { _, reports ->
+            givenChooserReturns(dest)
+
+            registeredActions(reports).saveScheduleAs()
+            waitUntil(timeoutMillis = 2_000) { dest.exists() }
+
+            assertTrue(dest.exists())
+        }
+    }
+
+    @Test
+    fun `cancelling saveScheduleAs writes nothing`() {
+        scheduleTab(seed = { seedService() }) { _, reports ->
+            val chooser = givenChooserReturns(null)
+
+            registeredActions(reports).saveScheduleAs()
+            waitUntil(timeoutMillis = 2_000) { chooser.answered == 1 }
+        }
+    }
+
+    @Test
+    fun `saveSchedule falls back to save-as the first time, same as the button does`() {
+        val dest = File(Files.createTempDirectory("cp-schedule-menu-save-fallback").toFile(), "service.cps")
+
+        scheduleTab(seed = { seedService() }) { _, reports ->
+            givenChooserReturns(dest)
+
+            registeredActions(reports).saveSchedule()
+            waitUntil(timeoutMillis = 2_000) { dest.exists() }
+
+            assertTrue(dest.exists(), "with no path chosen yet, Save must prompt just like Save As")
+        }
+    }
+
+    @Test
+    fun `openSchedule replaces the current service with the file chosen`() {
+        val dir = Files.createTempDirectory("cp-schedule-menu-open").toFile()
+        val src = File(dir, "saved.cps")
+
+        scheduleTab(seed = { seedService() }) { _, savedReports ->
+            givenChooserReturns(src)
+            registeredActions(savedReports).saveScheduleAs()
+            waitUntil(timeoutMillis = 2_000) { src.exists() }
+        }
+        unmockkObject(FileChooser.Companion)
+
+        scheduleTab(seed = { addSong(9, "Pre-existing", "Hymnal") }) { vm, reports ->
+            val chooser = givenChooserReturns(src)
+
+            registeredActions(reports).openSchedule()
+            waitUntil(timeoutMillis = 2_000) { chooser.answered == 1 }
+            waitUntil(timeoutMillis = 2_000) { vm.scheduleItems.size == 4 }
+
+            assertEquals(
+                listOf("Welcome", "42 - Amazing Grace", "John 3:16", "Notices"),
+                vm.scheduleItems.map { it.displayText },
+                "the previously open service is replaced by the one just opened",
+            )
+        }
+    }
+
+    @Test
+    fun `cancelling openSchedule leaves the service untouched`() =
+        scheduleTab(seed = { seedService() }) { vm, reports ->
+            val chooser = givenChooserReturns(null)
+            val before = vm.scheduleItems.map { it.displayText }
+
+            registeredActions(reports).openSchedule()
+            waitUntil(timeoutMillis = 2_000) { chooser.answered == 1 }
+
+            assertEquals(before, vm.scheduleItems.map { it.displayText })
         }
 }
