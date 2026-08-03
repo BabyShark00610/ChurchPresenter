@@ -137,6 +137,41 @@ class SongsTabSelectionTest {
             )
         }
 
+    @Test
+    fun `clicking a different row while presenting live drops the live section highlight`() =
+        songsTab(isPresenting = true) { vm, _ ->
+            clickRow("Amazing Grace")
+            goLive()
+            assertTrue(vm.selectedSectionIndex.value >= 0, "a section is live to begin with")
+
+            clickRow("Be Thou My Vision")
+
+            assertEquals(
+                "Be Thou My Vision",
+                vm.filteredSongItems.value[vm.selectedSongIndex.value].title,
+                "the click must still move the preview to the row that was clicked",
+            )
+            assertEquals(
+                -1,
+                vm.selectedSectionIndex.value,
+                "browsing away from the live song while presenting must not leave a stale section highlighted",
+            )
+        }
+
+    @Test
+    fun `clicking a different row while nothing is live keeps whatever section it lands on`() =
+        songsTab(isPresenting = true) { vm, _ ->
+            clickRow("Amazing Grace")
+            // Deliberately not going live: liveSongId stays null, so the -1 reset below must not fire.
+
+            clickRow("Be Thou My Vision")
+
+            assertTrue(
+                vm.selectedSectionIndex.value >= 0,
+                "with nothing live yet, selecting a row must not blank out its section",
+            )
+        }
+
     // ── Favourites ──────────────────────────────────────────────────────────────
 
     @Test

@@ -49,6 +49,8 @@ internal fun mediaTab(
     vlcAvailable: Boolean = true,
     vlcArchMismatch: Boolean = false,
     vlcLoadFailed: Boolean = false,
+    instanceLinkMediaStreamUrl: ((itemId: String) -> String)? = null,
+    onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null,
     block: ComposeUiTest.(vm: MediaViewModel, reports: MediaReports) -> Unit,
 ) {
     // The tab's recents list persists under user.home; pin the JVM-wide loggers first.
@@ -70,6 +72,8 @@ internal fun mediaTab(
                     vlcAvailable = vlcAvailable,
                     vlcArchMismatch = vlcArchMismatch,
                     vlcLoadFailed = vlcLoadFailed,
+                    instanceLinkMediaStreamUrl = instanceLinkMediaStreamUrl,
+                    onInstanceLinkSendProject = onInstanceLinkSendProject,
                 )
                 }
             }
@@ -88,6 +92,17 @@ internal object MediaLabel {
     const val SELECT_FILE = "Select File"
     const val URL_PLACEHOLDER = "Enter URL (http://, rtsp://, ...)"
     const val ADD_TO_SCHEDULE = "Add to Schedule"
+    const val GO_LIVE = "Go Live"
+    const val PLAY = "Play"
+    const val PAUSE = "Pause"
+    const val STOP = "Stop"
+    const val SEEK_BACKWARD = "Seek Backward 10s"
+    const val SEEK_FORWARD = "Seek Forward 10s"
+    const val VOLUME = "Volume"
+    const val MUTE = "Mute"
+    const val UNMUTE = "Unmute"
+    const val NOW_PRESENTING = "Now presenting on screen"
+    const val NO_SOURCE = "No media loaded"
 }
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────

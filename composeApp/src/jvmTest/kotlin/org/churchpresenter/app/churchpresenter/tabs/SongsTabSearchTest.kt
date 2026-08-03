@@ -2,6 +2,13 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import org.churchpresenter.app.churchpresenter.data.SongFileParser
+import org.churchpresenter.app.churchpresenter.data.SongItem
+import org.churchpresenter.app.churchpresenter.utils.Constants
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -117,6 +124,95 @@ class SongsTabSearchTest {
     fun `a query of nothing but spaces lists everything, as an empty box does`() = songsTab { _, _ ->
         search("     ")
         assertEquals(4, listedTitles().size, "whitespace alone is not a search")
+    }
+
+    // ── Filter mode ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `switching to Starts With stops matching the middle of a title`() = songsTab { vm, _ ->
+        onNodeWithText("FILTER", substring = true).performClick()
+        waitForIdle()
+        onNodeWithText(SongsLabel.STARTS_WITH).performClick()
+        waitForIdle()
+
+        assertEquals(Constants.STARTS_WITH, vm.filterType.value)
+
+        search("Vision")
+        assertEquals(emptyList(), listedTitles(), "\"Vision\" is mid-title, not a start, in Starts With mode")
+
+        search("Be Thou")
+        assertEquals(listOf("Be Thou My Vision"), listedTitles())
+    }
+
+    @Test
+    fun `switching to Exact Match requires the whole title`() = songsTab { vm, _ ->
+        onNodeWithText("FILTER", substring = true).performClick()
+        waitForIdle()
+        onNodeWithText(SongsLabel.EXACT_MATCH).performClick()
+        waitForIdle()
+
+        assertEquals(Constants.EXACT_MATCH, vm.filterType.value)
+
+        search("Amazing")
+        assertEquals(emptyList(), listedTitles(), "a partial title must not match in Exact Match mode")
+
+        search("Amazing Grace")
+        assertEquals(listOf("Amazing Grace"), listedTitles())
+    }
+
+    @Test
+    fun `switching back to Contains restores the middle-of-title match`() = songsTab { vm, _ ->
+        onNodeWithText("FILTER", substring = true).performClick()
+        waitForIdle()
+        onNodeWithText(SongsLabel.EXACT_MATCH).performClick()
+        waitForIdle()
+        onNodeWithText("FILTER", substring = true).performClick()
+        waitForIdle()
+        onNodeWithText(SongsLabel.CONTAINS).performClick()
+        waitForIdle()
+
+        assertEquals(Constants.CONTAINS, vm.filterType.value)
+        search("Vision")
+        assertEquals(listOf("Be Thou My Vision"), listedTitles())
+    }
+
+    // ── Hidden rebuild ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `three rapid clicks on the search button reload songs from disk`() = songsTab { _, reports ->
+        val parser = SongFileParser()
+        val book = File(reports.songsDir, "Hymnal")
+        parser.writeSongFile(
+            SongItem(number = "99", title = "Added After Load", songbook = "Hymnal"),
+            File(book, "99 - Added After Load.song").absolutePath,
+        )
+        assertFalse(shows("Added After Load"), "not yet loaded — the file only just landed on disk")
+
+        val searchButton = onNodeWithContentDescription("Search")
+        searchButton.performClick()
+        searchButton.performClick()
+        searchButton.performClick()
+        waitForIdle()
+
+        assertTrue(shows("Added After Load"), "three rapid clicks must force a reload from disk")
+    }
+
+    @Test
+    fun `two clicks alone do not trigger a reload`() = songsTab { _, reports ->
+        val parser = SongFileParser()
+        val book = File(reports.songsDir, "Hymnal")
+        parser.writeSongFile(
+            SongItem(number = "99", title = "Added After Load", songbook = "Hymnal"),
+            File(book, "99 - Added After Load.song").absolutePath,
+        )
+
+        val searchButton = onNodeWithContentDescription("Search")
+        searchButton.performClick()
+        waitForIdle()
+        searchButton.performClick()
+        waitForIdle()
+
+        assertFalse(shows("Added After Load"), "the threshold is three clicks, not two")
     }
 
     // ── What the tab shows around the list ──────────────────────────────────────
