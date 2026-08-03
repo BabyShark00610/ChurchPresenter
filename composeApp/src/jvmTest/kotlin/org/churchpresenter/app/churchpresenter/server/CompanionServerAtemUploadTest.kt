@@ -45,8 +45,19 @@ import kotlin.test.assertTrue
  * run-length-encodes to about fifty bytes — one chunk — so "every byte arrives" would pass without a
  * transfer having been exercised at all. `payloadIsWorthTransferring` pins that.
  *
- * Not covered: the clip endpoint. A clip renders every frame, so its cost really is per-frame and
- * scales with duration — the one thing the warm-up trick does not fix.
+ * The clip endpoint is covered too. The reason #155 deferred it — "a clip renders every frame" — was
+ * measured and is not the obstacle: sixty frames at this size render in **89 ms** once skiko is warm,
+ * about 1.5 ms each. Two other things are what actually make it work:
+ *
+ * - [FakeAtemSwitcher] completes a transfer at a **single** `expectedTransferBytes`, and a clip is
+ *   one transfer per frame. This fixture is static — every keyframe is `a: 0` — so all sixty frames
+ *   encode to the same size and one expectation fits them all. An animated fixture would need the
+ *   fake to learn per-frame sizes.
+ * - The fake already answers `SMPC` with an `MPCS` describing the bank as fully ingested, so
+ *   `awaitClipReady` ends on a real message rather than on its fifteen-second timeout.
+ *
+ * Still not covered: a clip upload that also cuts a key. That path sleeps for the clip's own
+ * duration before taking the key off again, which is a wait rather than work.
  */
 class CompanionServerAtemUploadTest {
 
@@ -68,6 +79,7 @@ class CompanionServerAtemUploadTest {
             """"p":{"a":0,"k":[160,90,0]},"a":{"a":0,"k":[160,90,0]},"s":{"a":0,"k":[100,100,100]}},""" +
             """"sc":"#ff8800","sw":320,"sh":180,"ip":0,"op":60,"st":0}]}"""
 
+        private const val CLIP_FPS = 30.0
         private const val RENDER_W = 320
         private const val RENDER_H = 180
 
@@ -78,6 +90,10 @@ class CompanionServerAtemUploadTest {
 
         /** Size of the encoded frame the route will send, read from the warmed cache. */
         private var payloadBytes: Int = 0
+
+        /** Frames in the clip variant, and the size of each (identical — the fixture is static). */
+        private var clipFrames: Int = 0
+        private var clipFrameBytes: Int = 0
 
         private val port = 39_880
 
@@ -101,6 +117,21 @@ class CompanionServerAtemUploadTest {
             val cached = runBlocking { LottieRenderCache.prepare(LOTTIE, variant).await() }
             payloadBytes = LottieRenderCache.Reader(cached).use {
                 it.nextAtemFrame(RENDER_W, RENDER_H).data.size
+            }
+
+            // Same again for the clip variant. Every frame is the same size here, which is what lets
+            // one expectedTransferBytes serve all of them; assert that rather than trust it.
+            val clipVariant = LottieRenderCache.atemVariant(
+                LOTTIE, settings(host = "127.0.0.1", port = 1), clip = true, fps = CLIP_FPS
+            )
+            val cachedClip = runBlocking { LottieRenderCache.prepare(LOTTIE, clipVariant).await() }
+            LottieRenderCache.Reader(cachedClip).use { reader ->
+                clipFrames = reader.frameCount
+                val sizes = (0 until clipFrames).map { reader.nextAtemFrame(RENDER_W, RENDER_H).data.size }
+                clipFrameBytes = sizes.first()
+                check(sizes.all { it == clipFrameBytes }) {
+                    "the clip fixture stopped being static — frame sizes $sizes cannot share one expectation"
+                }
             }
 
             server = CompanionServer()
@@ -129,6 +160,7 @@ class CompanionServerAtemUploadTest {
             port = port,
             renderWidth = RENDER_W,
             renderHeight = RENDER_H,
+            clipFps = CLIP_FPS,
             detectedStillSlots = 64,
             detectedMixEffects = 4,
             detectedKeyersPerMe = listOf(4, 4, 4, 4),
@@ -176,6 +208,12 @@ class CompanionServerAtemUploadTest {
         assertTrue(
             payloadBytes > 1_000,
             "the rendered frame is only $payloadBytes bytes — the fixture has stopped producing detail"
+        )
+        // And the clip has to be worth calling a clip: "one transfer per frame" says nothing if the
+        // fixture renders to a single frame.
+        assertTrue(
+            clipFrames > 30,
+            "the clip is only $clipFrames frames — the per-frame transfer assertions would prove nothing"
         )
     }
 
@@ -233,6 +271,75 @@ class CompanionServerAtemUploadTest {
             assertTrue(body.contains(""""slot":8"""), "the response reports the 1-based slot: $body")
             fake.awaitCommandsNamed("LOCK", 2)
             assertEquals(7, frameIndexOf(fake))
+        }
+    }
+
+    // ── Clips ───────────────────────────────────────────────────────────────────
+
+    private fun clipSwitcher() = FakeAtemSwitcher(mixEffects = 4, downstreamKeyers = 2, keyersPerMe = 4)
+        .also {
+            it.expectedTransferBytes = clipFrameBytes
+            // What the switcher reports back once the clip is committed; awaitClipReady waits for it.
+            it.clipFramesOnCommit = clipFrames
+        }
+
+    private fun uploadClip(query: String): HttpResponse =
+        runBlocking { http().post("http://127.0.0.1:$port/api/atem/clip/Welcome$query") }
+
+    @Test
+    fun `a clip is rendered and every frame of it is transferred`() {
+        clipSwitcher().use { fake ->
+            configure(fake)
+
+            val response = uploadClip("?slot=1")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = runBlocking { response.bodyAsText() }
+            assertTrue(body.contains(""""type":"clip""""), body)
+            assertTrue(body.contains(""""slot":1"""), body)
+
+            // The commit is the last thing the client sends, so it is the signal the whole clip is up.
+            fake.awaitCommandsNamed("SMPC", 1)
+            assertEquals(
+                clipFrames, fake.commandsNamed("FTSD").size,
+                "one transfer per frame — a clip that stops early plays as a freeze on air"
+            )
+            val sent = fake.commandsNamed("FTDa").sumOf {
+                ((it[2].toInt() and 0xFF) shl 8) or (it[3].toInt() and 0xFF)
+            }
+            assertEquals(clipFrames * clipFrameBytes, sent, "every encoded byte of every frame reaches the switcher")
+        }
+    }
+
+    @Test
+    fun `the clip lands in the slot the operator asked for`() {
+        clipSwitcher().use { fake ->
+            configure(fake)
+
+            uploadClip("?slot=2")
+
+            val commit = fake.awaitCommandsNamed("SMPC", 1).single()
+            // SMPC byte 0 is a field mask, not the index — reading it would look like slot 4 here.
+            assertEquals(1, commit[1].toInt() and 0xFF, "slot 2 on the request is clip index 1 on the wire")
+        }
+    }
+
+    @Test
+    fun `a clip too long for its slot is refused before anything is rendered`() {
+        // The capacity comes from the last connection to the switcher, so the refusal happens up
+        // front and the caller gets a real error rather than a silent half-ingested clip.
+        clipSwitcher().use { fake ->
+            server.updateAtemConfig(
+                settings("127.0.0.1", fake.port).copy(detectedClipMaxFrames = listOf(5, 5)),
+                lowerThirdFolder = lottieFolder.absolutePath
+            )
+
+            val response = uploadClip("?slot=1")
+
+            assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+            val body = runBlocking { response.bodyAsText() }
+            assertTrue(body.contains("frames"), body)
+            assertTrue(fake.commandsNamed("FTSD").isEmpty(), "nothing may be sent for a clip that cannot fit")
         }
     }
 
