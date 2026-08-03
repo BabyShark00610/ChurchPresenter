@@ -49,6 +49,17 @@ class WebTabTest {
     }
 
     @Test
+    fun `clicking the star again removes an already-bookmarked URL`() = webTab(
+        settings = { it.copy(webBookmarks = listOf(WebBookmark(url = "https://example.com", title = "Example"))) },
+    ) { _, reports ->
+        onNodeWithText(WebLabel.URL_PLACEHOLDER_DEFAULT).performTextReplacement("example.com")
+        webButton(WebLabel.BOOKMARK_REMOVE).performClick()
+
+        assertEquals(1, reports.settingsChanges)
+        assertEquals(emptyList(), reports.settingsAfterChange?.webBookmarks)
+    }
+
+    @Test
     fun `clicking Add to Schedule reports the normalised URL and a title falling back to the URL`() = webTab { _, reports ->
         onNodeWithText(WebLabel.URL_PLACEHOLDER_DEFAULT).performTextReplacement("example.com")
         webButton(WebLabel.ADD_TO_SCHEDULE).performClick()
