@@ -97,6 +97,20 @@ internal fun lowerThirdTab(
      * the tab looks for the majority of churches, who have no switcher.
      */
     atemReachable: Boolean = false,
+    /**
+     * Where the in-app ATEM upload actually connects. The default is unroutable on purpose — most
+     * tests only need the dialog, and reaching a real switcher would cost a 5s socket timeout.
+     * `LowerThirdAtemUploadTest` points these at a `FakeAtemSwitcher` on loopback.
+     */
+    atemHost: String = "10.0.0.9",
+    atemPort: Int = 9910,
+    /**
+     * Raster the ATEM dialog reasons about. Defaults MUST match `AtemSettings()`'s own — the dialog
+     * compares the design's size against them to decide whether it is upscaling, so a smaller
+     * default here silently changes what other tests in this package are asserting.
+     */
+    atemRenderWidth: Int = 1920,
+    atemRenderHeight: Int = 1080,
     /** Whether the ATEM row shows one-click upload buttons instead of opening the dialog. */
     quickUpload: Boolean = false,
     /** A lower third clicked in the schedule, which the tab resolves back to one of its presets. */
@@ -114,7 +128,13 @@ internal fun lowerThirdTab(
                                 lowerThirdFolder = folder?.absolutePath ?: ""
                             ),
                             atemSettings = if (atemReachable) {
-                                AtemSettings(host = "10.0.0.9", quickUpload = quickUpload)
+                                AtemSettings(
+                                    host = atemHost,
+                                    port = atemPort,
+                                    quickUpload = quickUpload,
+                                    renderWidth = atemRenderWidth,
+                                    renderHeight = atemRenderHeight,
+                                )
                             } else {
                                 AtemSettings()
                             },
