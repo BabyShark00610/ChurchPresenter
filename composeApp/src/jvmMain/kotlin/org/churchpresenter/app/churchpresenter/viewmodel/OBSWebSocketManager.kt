@@ -78,8 +78,12 @@ class OBSWebSocketManager {
                 throw e
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    _status.value = ConnectionStatus.ERROR
+                    // Order is load-bearing: the message is written first so that ERROR is never
+                    // observable beside an empty or stale one. Anything watching the status — the
+                    // settings chip, a test — reads both, and the two writes are separate, so
+                    // setting the status first leaves a window showing "failed" with no reason.
                     _errorMessage.value = e.message ?: "Connection failed"
+                    _status.value = ConnectionStatus.ERROR
                 }
             } finally {
                 activeSession = null
