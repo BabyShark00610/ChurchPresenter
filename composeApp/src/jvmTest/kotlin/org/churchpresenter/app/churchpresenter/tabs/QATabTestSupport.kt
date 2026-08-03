@@ -101,6 +101,7 @@ internal fun QAManager.askAll(vararg texts: String) {
 internal object QALabel {
     const val ALL = "All"
     const val INCOMING = "Incoming"
+    const val FINISHED = "Finished"
     const val APPROVED = "Approved"
     const val DONE = "Done"
     const val DENIED = "Denied"
@@ -125,6 +126,21 @@ internal object QALabel {
     const val CLEAR = "Clear"
     const val BACK_TO_INCOMING = "Back to Incoming"
     const val CONFIRM_GO_LIVE = "Confirm Go Live"
+    const val INCOMING_APPROVED = "Incoming + Approved"
+    const val NO_FINISHED = "No finished questions"
+    const val NO_DENIED = "No denied questions"
+    const val SHOW_QR = "Show QR on Display"
+    const val HIDE_QR = "Hide QR from Display"
+    const val VOTING_ENABLED = "Voting Enabled"
+    const val VOTING_DISABLED = "Voting Disabled"
+    const val SORT_OLDEST = "Oldest First"
+    const val SORT_MOST_VOTES = "Most Votes"
+    const val SORT_LEAST_VOTES = "Least Votes"
+    const val DONE_CLEAR = "Done & Clear"
+    const val DELETE_ALL_HISTORY = "Delete All History"
+    const val EXPORT_TO_FILE = "Export to File"
+    const val IMPORT_FROM_FILE = "Import from File"
+    const val EXPORT_AND_CLEAR = "Export & Clear"
 }
 
 // ── Reading and driving what was rendered ───────────────────────────────────────────────────────
@@ -170,6 +186,14 @@ internal fun ComposeUiTest.selectFilter(name: String) {
     onAllNodes(hasText("FILTER", substring = true))[0].performClick()
     waitForIdle()
     onAllNodes(hasText("$name (", substring = true))[0].performClick()
+    waitForIdle()
+}
+
+/** Chooses an ordering from the SORT dropdown — its options carry no count, unlike FILTER's. */
+internal fun ComposeUiTest.selectSort(name: String) {
+    onAllNodes(hasText("SORT", substring = true))[0].performClick()
+    waitForIdle()
+    onAllNodes(hasText(name))[0].performClick()
     waitForIdle()
 }
 

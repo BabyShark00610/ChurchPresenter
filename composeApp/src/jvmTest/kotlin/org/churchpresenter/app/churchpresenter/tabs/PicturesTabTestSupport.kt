@@ -16,7 +16,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.PictureSettings
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
@@ -67,11 +69,30 @@ internal class PictureReports {
  *
  * `storageDirectory` points at the folder so nothing resolves under the real `user.home`. Pass
  * `folder = null` for the no-folder-selected state.
+ *
+ * [presenterManager] is left null in most tests — passing one renders the Go Live button and turns
+ * on the presenter-sync effects. [selectedPictureItem] and the Instance Link callbacks are also left
+ * out of most tests; each is exercised on its own where it matters.
+ *
+ * Deliberately never touches `RecentPictureFolders` — that object is a JVM-wide singleton private to
+ * `PicturesTab.kt` that persists to real JSON files under the real `~/.churchpresenter` directory on
+ * first touch, with no test seam to redirect it. Every existing test already reads it (composing the
+ * tab evaluates the recent-folders row unconditionally), which is harmless; nothing here calls
+ * `add`/`togglePin`/`clear`, which
+ * would write, because JVM-wide latching means an isolated `user.home` in this file could not
+ * guarantee it wins the race to be first (see `TestSingletons`'s own doc comment for the same failure
+ * mode on `CrashReporter`/`InstanceLinkLogger`). The "Select Folder" button and the recent-folder
+ * chips are left untested for the same reason — both call `RecentPictureFolders.add` in the same
+ * click handler as the part that would otherwise be worth testing.
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun picturesTab(
     folder: File? = pictureFolder(),
     settings: (AppSettings) -> AppSettings = { it },
+    presenterManager: PresenterManager? = null,
+    selectedPictureItem: ScheduleItem.PictureItem? = null,
+    onInstanceLinkSendNextPicture: (() -> Unit)? = null,
+    onInstanceLinkSendPreviousPicture: (() -> Unit)? = null,
     block: ComposeUiTest.(vm: PicturesViewModel, reports: PictureReports) -> Unit,
 ) {
     val appSettings = settings(
@@ -89,6 +110,10 @@ internal fun picturesTab(
                     PicturesTab(
                         viewModel = vm,
                         appSettings = appSettings,
+                        presenterManager = presenterManager,
+                        selectedPictureItem = selectedPictureItem,
+                        onInstanceLinkSendNextPicture = onInstanceLinkSendNextPicture,
+                        onInstanceLinkSendPreviousPicture = onInstanceLinkSendPreviousPicture,
                         onAddToSchedule = { path, name, count ->
                             reports.scheduled += Triple(path, name, count)
                         },
