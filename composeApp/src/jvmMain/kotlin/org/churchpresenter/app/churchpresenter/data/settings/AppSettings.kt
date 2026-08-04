@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.data.settings
 import kotlinx.serialization.Serializable
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.UpdateCheckInterval
+import org.churchpresenter.app.churchpresenter.models.SongTuning
 
 @Serializable
 data class AppSettings(
@@ -59,6 +60,7 @@ data class AppSettings(
     val songFavorites: List<String> = emptyList(),
     val songFavoritesPanelHeightDp: Int = 120,
     val songBpm: Map<String, Int> = emptyMap(), // songId -> metronome BPM (0 = off), not stored in the .song file
+    val songCapo: Map<String, Int> = emptyMap(), // songId -> capo fret (0 = none), not stored in the .song file
     val songColOrder: List<String> = emptyList(),
     val songHiddenCols: Set<String> = setOf("tune", "play_count", "author", "composer"),
     val setupWizardShown: Boolean = false,
@@ -67,6 +69,16 @@ data class AppSettings(
     val updateCheckInterval: UpdateCheckInterval = UpdateCheckInterval.EVERY_LAUNCH,
     val lastUpdateCheckTimestamp: Long = 0L
 ) {
+    /** What the song identified by [songId] is played at — tempo and capo together. */
+    fun tuningFor(songId: String): SongTuning =
+        SongTuning(bpm = songBpm[songId] ?: 0, capo = songCapo[songId] ?: 0)
+
+    /** These settings with [songId]'s tuning replaced by [tuning]. */
+    fun withTuning(songId: String, tuning: SongTuning): AppSettings = copy(
+        songBpm = songBpm + (songId to tuning.bpm),
+        songCapo = songCapo + (songId to tuning.capo),
+    )
+
     companion object {
         /**
          * The schema version this build writes. Bump by one whenever a settings field changes in a

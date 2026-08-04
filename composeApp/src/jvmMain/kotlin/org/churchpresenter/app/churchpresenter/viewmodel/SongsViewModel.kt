@@ -21,6 +21,7 @@ import org.churchpresenter.app.churchpresenter.server.SongDetailDto
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogSide
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
+import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
 import org.churchpresenter.app.churchpresenter.utils.isChorusHeader
 import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
 import java.io.File
@@ -437,6 +438,7 @@ class SongsViewModel(
         // First pass: parse raw sections
         val rawSections = mutableListOf<LyricSection>()
         val currentLines = mutableListOf<String>()
+        val currentChordLines = mutableListOf<String>()
         var currentHeader: String? = null
         var sectionType = Constants.SECTION_TYPE_VERSE
 
@@ -448,10 +450,18 @@ class SongsViewModel(
                         title = title,
                         songNumber = number.toIntOrNull() ?: 0,
                         lines = currentLines.toList(),
-                        type = sectionType
+                        type = sectionType,
+                        // Only when the section actually carries chords — otherwise the stage
+                        // monitor's chord zone would just repeat the lyrics zone.
+                        chordLines = if (currentChordLines.any { ChordTransposer.hasChords(it) }) {
+                            currentChordLines.toList()
+                        } else {
+                            emptyList()
+                        },
                     )
                 )
                 currentLines.clear()
+                currentChordLines.clear()
             }
         }
 
@@ -461,18 +471,29 @@ class SongsViewModel(
                 currentHeader = line
                 sectionType = if (isChorusHeader(line)) Constants.SECTION_TYPE_CHORUS else Constants.SECTION_TYPE_VERSE
             } else if (line.isNotBlank()) {
-                currentLines.add(line)
+                // Kept as written, for the band's chart only.
+                currentChordLines.add(line)
+                // The one place lyrics become presentable text, and so the one place chords have to
+                // come off: everything downstream — presenter, stage monitor, companion server —
+                // reads LyricSection.lines, and none of them should ever see a [G].
+                val stripped = ChordTransposer.stripChords(line)
+                // A line that was nothing but chords — an intro, a turnaround — has no words to
+                // show, so it contributes no slide. A section left with none at all is folded into
+                // the one it leads into; see [foldChordOnlySections].
+                if (stripped.isNotBlank()) currentLines.add(stripped)
             }
         }
 
         flushSection()
 
+        val sections = foldChordOnlySections(rawSections)
+
         // Second pass: auto-repeat chorus after each verse
-        val chorusSection = rawSections.firstOrNull { it.type == Constants.SECTION_TYPE_CHORUS }
-        if (chorusSection == null) return rawSections
+        val chorusSection = sections.firstOrNull { it.type == Constants.SECTION_TYPE_CHORUS }
+        if (chorusSection == null) return sections
 
         val result = mutableListOf<LyricSection>()
-        for (section in rawSections) {
+        for (section in sections) {
             if (section.type == Constants.SECTION_TYPE_CHORUS) continue // skip original, will be inserted after verses
             result.add(section)
             if (section.type == Constants.SECTION_TYPE_VERSE) {
@@ -481,6 +502,46 @@ class SongsViewModel(
         }
 
         return result
+    }
+
+    /**
+     * Folds a section that is nothing but chords into the one it leads into.
+     *
+     * An intro, or a turnaround between verses, is written as a header and a row of chords with no
+     * words under it. There is nothing to put on screen for it, so it should not be a section of its
+     * own: it would sit in the list as a blank slide, and — because a bracketed header is typed as a
+     * verse — the chorus auto-repeat below would insert a chorus straight after it, putting the
+     * chorus ahead of verse 1.
+     *
+     * So its chart is carried onto the next section instead, and the band reads the intro above the
+     * words it runs into. A chord-only section with nothing after it — an outro — goes onto the
+     * previous one. When the section it lands on has no chords of its own, that section's words
+     * become the rest of the chart, so the chart is never just the intro with the verse missing.
+     */
+    private fun foldChordOnlySections(sections: List<LyricSection>): List<LyricSection> {
+        val carried = mutableListOf<String>()
+        val out = mutableListOf<LyricSection>()
+
+        sections.forEach { section ->
+            if (section.lines.isEmpty() && section.chordLines.isNotEmpty()) {
+                // The header rides along so the chart can say whose chords these are — otherwise an
+                // intro folded onto verse 1 reads as a bar of the verse.
+                section.header?.takeIf { it.isNotBlank() }?.let { carried.add(it) }
+                carried.addAll(section.chordLines)
+                return@forEach
+            }
+            val own = section.chordLines.ifEmpty { if (carried.isEmpty()) emptyList() else section.lines }
+            out.add(section.copy(chordLines = if (carried.isEmpty()) section.chordLines else carried + own))
+            carried.clear()
+        }
+
+        if (carried.isNotEmpty()) {
+            val last = out.removeLastOrNull()
+            if (last == null) return sections // nothing but chords — leave the song as it was written
+            val own = last.chordLines.ifEmpty { last.lines }
+            out.add(last.copy(chordLines = own + carried))
+        }
+        return out
     }
 
     fun getSelectedLyricSection(): LyricSection? {

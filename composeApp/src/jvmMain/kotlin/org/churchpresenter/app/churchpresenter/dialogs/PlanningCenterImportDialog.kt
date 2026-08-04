@@ -226,7 +226,8 @@ fun PlanningCenterImportDialog(
             addSongForItem = null
             addSongPrefill = null
         },
-        onSave = { savedSong ->
+        // Tempo and capo are not offered here (showTuningFields defaults off), so they come back unset.
+        onSave = { savedSong, _ ->
             val saved = viewModel.createLocalSong(savedSong)
             if (saved != null && targetItem != null) {
                 viewModel.markItemResolved(targetItem.id, saved.songId)

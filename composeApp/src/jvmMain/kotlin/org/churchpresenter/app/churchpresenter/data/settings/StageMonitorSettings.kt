@@ -63,7 +63,13 @@ data class StageMonitorZoneStyle(
     val shadowSize: Int = 100,
     val shadowOpacity: Int = 80,
     val verticalAlignment: String = Constants.TOP,
-    val horizontalAlignment: String = Constants.LEFT
+    val horizontalAlignment: String = Constants.LEFT,
+    /**
+     * Colour the chords are drawn in when this zone shows a song's chart. Everything else about
+     * them — face, size, weight — follows [color] and [fontType], so a chart reads as this zone's
+     * own words with the chords lifted above them; only the colour separates the two.
+     */
+    val chordColor: String = "#4FD3E8"
 )
 
 @Serializable

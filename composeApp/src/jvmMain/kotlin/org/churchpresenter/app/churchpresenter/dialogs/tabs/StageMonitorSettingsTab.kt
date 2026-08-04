@@ -46,6 +46,8 @@ import churchpresenter.composeapp.generated.resources.stage_monitor_quadrant_clo
 import churchpresenter.composeapp.generated.resources.stage_monitor_quadrant_next
 import churchpresenter.composeapp.generated.resources.stage_monitor_quadrant_notes
 import churchpresenter.composeapp.generated.resources.shadow_settings
+import churchpresenter.composeapp.generated.resources.song_chord_color
+import churchpresenter.composeapp.generated.resources.song_lyrics_color
 import churchpresenter.composeapp.generated.resources.stage_monitor_layout_section
 import churchpresenter.composeapp.generated.resources.stage_monitor_zone_bottom_left
 import churchpresenter.composeapp.generated.resources.stage_monitor_zone_bottom_center
@@ -134,6 +136,7 @@ fun StageMonitorSettingsTab(
                             title = styleZoneLabel(zone),
                             style = sm.styleFor(zone),
                             availableFonts = availableFonts,
+                            showChordColor = true,
                             onStyleChange = { block ->
                                 update { copy(zoneStyles = zoneStyles + (zone to styleFor(zone).block())) }
                             }
@@ -362,12 +365,17 @@ private fun ZoneStyleSection(
     title: String,
     style: StageMonitorZoneStyle,
     availableFonts: List<String>,
+    // Only the zones a song's chart can land in are asked for a chord colour; on a clock or a
+    // notes zone the setting would never do anything.
+    showChordColor: Boolean = false,
     onStyleChange: (StageMonitorZoneStyle.() -> StageMonitorZoneStyle) -> Unit
 ) {
     SettingsSection(title = title) {
         QuadrantFontSettings(
             fontType = style.fontType, fontSize = style.fontSize,
             color = style.color, bgColor = style.bgColor,
+            chordColor = if (showChordColor) style.chordColor else null,
+            onChordColorChange = { v -> onStyleChange { copy(chordColor = v) } },
             shadowColor = style.shadowColor, shadowSize = style.shadowSize, shadowOpacity = style.shadowOpacity,
             availableFonts = availableFonts,
             onFontTypeChange = { v -> onStyleChange { copy(fontType = v) } },
@@ -412,6 +420,10 @@ private fun QuadrantFontSettings(
     fontType: String, fontSize: Int,
     color: String, bgColor: String,
     shadowColor: String, shadowSize: Int, shadowOpacity: Int,
+    // Non-null only for a zone a song's chart can land in. Its presence also renames the text
+    // colour to "Lyrics Color", because once chords are on screen "Color" no longer says which.
+    chordColor: String? = null,
+    onChordColorChange: (String) -> Unit = {},
     availableFonts: List<String>,
     onFontTypeChange: (String) -> Unit,
     onFontSizeChange: (Int) -> Unit,
@@ -441,9 +453,19 @@ private fun QuadrantFontSettings(
         ColorPickerField(
             color = color,
             onColorChange = onColorChange,
-            label = stringResource(Res.string.color).removeSuffix(":"),
+            label = stringResource(
+                if (chordColor != null) Res.string.song_lyrics_color else Res.string.color
+            ).removeSuffix(":"),
             modifier = Modifier.widthIn(max = 150.dp)
         )
+        if (chordColor != null) {
+            ColorPickerField(
+                color = chordColor,
+                onColorChange = onChordColorChange,
+                label = stringResource(Res.string.song_chord_color),
+                modifier = Modifier.widthIn(max = 150.dp)
+            )
+        }
         ColorPickerField(
             color = bgColor,
             onColorChange = onBgColorChange,

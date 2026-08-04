@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,6 +62,14 @@ import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.utils.Utils.parseHexColor
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import churchpresenter.composeapp.generated.resources.song_key
+import churchpresenter.composeapp.generated.resources.song_capo
+import churchpresenter.composeapp.generated.resources.song_play
+import churchpresenter.composeapp.generated.resources.unit_bpm
+import churchpresenter.composeapp.generated.resources.Res
+import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.composables.ChordChart
+import org.churchpresenter.app.churchpresenter.composables.songInfoOf
 import org.churchpresenter.app.churchpresenter.composables.MetronomeDot
 import org.churchpresenter.app.churchpresenter.composables.SoftwareVideoPlayer
 import org.churchpresenter.app.churchpresenter.composables.toAlignment
@@ -163,6 +172,23 @@ fun StageMonitorScreen(
 
     val renderData = ZoneRenderData(
         currentText = currentText,
+        chordLines = currentLyricSection.chordLines,
+        songInfo = if (presentingMode == Presenting.LYRICS) {
+            songInfoOf(
+                section = currentLyricSection,
+                keyLabel = stringResource(Res.string.song_key),
+                capoLabel = stringResource(Res.string.song_capo),
+                playLabel = stringResource(Res.string.song_play),
+                bpmLabel = stringResource(Res.string.unit_bpm),
+            )
+        } else {
+            null
+        },
+        nextChordLines = if (presentingMode == Presenting.LYRICS) {
+            allLyricSections.getOrNull(songDisplaySectionIndex + 1)?.chordLines.orEmpty()
+        } else {
+            emptyList()
+        },
         nextText = nextText,
         currentImageBitmap = currentImageBitmap,
         displayedSlide = displayedSlide,
@@ -284,6 +310,9 @@ private fun StageZoneBox(
 /** Bundles the derived per-frame state so it can be passed to whichever zone needs it. */
 private data class ZoneRenderData(
     val currentText: String,
+    val chordLines: List<String>,
+    val nextChordLines: List<String>,
+    val songInfo: String?,
     val nextText: String,
     val currentImageBitmap: ImageBitmap?,
     val displayedSlide: ImageBitmap?,
@@ -296,6 +325,37 @@ private data class ZoneRenderData(
     val displayedDictionaryEntry: StrongsEntry?,
     val dictionarySettings: DictionarySettings
 )
+
+/**
+ * A chord chart drawn in a zone's own styling, so it reads as that zone's text with the chords
+ * lifted above it rather than as something pasted in from elsewhere.
+ */
+@Composable
+private fun ZoneChordChart(
+    style: StageMonitorZoneStyle,
+    lines: List<String>,
+    songInfo: String? = null,
+) {
+    val ink = parseHexColor(style.color)
+    val chordColor = parseHexColor(style.chordColor)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (!songInfo.isNullOrBlank()) {
+            Text(
+                text = songInfo,
+                color = chordColor,
+                fontSize = (style.fontSize * 0.5f).sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        ChordChart(
+            lines = lines,
+            textColor = ink,
+            chordColor = chordColor,
+            fontSize = style.fontSize.sp,
+        )
+    }
+}
 
 private fun zoneContentAlignment(style: StageMonitorZoneStyle): Alignment {
     val vertical = when (style.verticalAlignment) {
@@ -319,8 +379,12 @@ private fun ZoneContent(
     mediaViewModel: MediaViewModel?
 ) {
     when (content) {
-        StageMonitorContentType.BIBLE,
-        StageMonitorContentType.SONGS -> TextContent(style, data.currentText)
+        StageMonitorContentType.BIBLE -> TextContent(style, data.currentText)
+        // A song with chords is shown as its chart; without them it is the words alone, exactly as
+        // before. The Next zone follows the same rule for the section coming up.
+        StageMonitorContentType.SONGS ->
+            if (data.chordLines.isEmpty()) TextContent(style, data.currentText)
+            else ZoneChordChart(style, data.chordLines, data.songInfo)
         StageMonitorContentType.PRESENTATION -> SlideContent(data.displayedSlide)
         StageMonitorContentType.PRESENTATION_NOTES -> ScrollingTextContent(style, data.presenterNotes)
         StageMonitorContentType.PICTURES -> SlideContent(data.currentImageBitmap)
@@ -338,7 +402,9 @@ private fun ZoneContent(
         StageMonitorContentType.CANVAS -> ScenePresenter(modifier = Modifier.fillMaxSize(), scene = data.activeScene)
         StageMonitorContentType.QA -> QAPresenter(question = data.displayedQuestion, qaSettings = data.qaSettings)
         StageMonitorContentType.DICTIONARY -> DictionaryPresenter(entry = data.displayedDictionaryEntry, dictionarySettings = data.dictionarySettings)
-        StageMonitorContentType.NEXT -> TextContent(style, data.nextText)
+        StageMonitorContentType.NEXT ->
+            if (data.nextChordLines.isEmpty()) TextContent(style, data.nextText)
+            else ZoneChordChart(style, data.nextChordLines)
         // No live data is plumbed through to the stage monitor for these yet.
         StageMonitorContentType.LOWER_THIRD,
         StageMonitorContentType.WEB,

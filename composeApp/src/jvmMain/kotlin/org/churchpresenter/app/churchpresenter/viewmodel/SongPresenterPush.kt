@@ -2,6 +2,7 @@ package org.churchpresenter.app.churchpresenter.viewmodel
 
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.models.LyricSection
+import org.churchpresenter.app.churchpresenter.models.SongTuning
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
 /**
@@ -21,12 +22,12 @@ internal fun songCreditLine(song: SongItem): String =
     listOf(song.author, song.composer).filter { it.isNotBlank() }.joinToString(" / ")
 
 /**
- * The title-slide [LyricSection] for [song] at [bpm]: a heading line plus a credit line when there is
+ * The title-slide [LyricSection] for [song] at [tuning]: a heading line plus a credit line when there is
  * one. Its `songNumber` is the numeric part of the song number, or 0 when the number isn't numeric.
  */
 internal fun titleSlideSection(
     song: SongItem,
-    bpm: Int,
+    tuning: SongTuning,
     showSongNumber: Boolean = true,
 ): LyricSection = LyricSection(
     type = "title_slide",
@@ -38,7 +39,8 @@ internal fun titleSlideSection(
         val credit = songCreditLine(song)
         if (credit.isNotBlank()) add(credit)
     },
-    bpm = bpm,
+    bpm = tuning.bpm,
+    capo = tuning.capo,
 )
 
 /** Where a live-edited song lands: the section/line to select and the section to send. */
@@ -48,14 +50,14 @@ internal data class EditedSongPush(val sectionIndex: Int, val lineIndex: Int, va
  * Resolves where a live edit of [editedSong] should land. The previously-live [liveSectionIndex] is
  * clamped into `[-1, sections.lastIndex]`; when it points at no section (empty list, or the -1
  * "whole song" slot) a fallback section is built straight from the edited song. The line index is
- * then clamped into that section's line range, and [bpm] is stamped onto the section that goes out.
+ * then clamped into that section's line range, and [tuning] is stamped onto the section that goes out.
  */
 internal fun resolveEditedSongPush(
     sections: List<LyricSection>,
     liveSectionIndex: Int,
     liveLineIndex: Int,
     editedSong: SongItem,
-    bpm: Int,
+    tuning: SongTuning,
 ): EditedSongPush {
     val sectionIndex = liveSectionIndex.coerceIn(-1, sections.size - 1)
     val section = sections.getOrNull(sectionIndex) ?: LyricSection(
@@ -67,5 +69,5 @@ internal fun resolveEditedSongPush(
         type = Constants.SECTION_TYPE_SONG,
     )
     val lineIndex = liveLineIndex.coerceIn(0, (section.lines.size - 1).coerceAtLeast(0))
-    return EditedSongPush(sectionIndex, lineIndex, section.copy(bpm = bpm))
+    return EditedSongPush(sectionIndex, lineIndex, section.copy(bpm = tuning.bpm, capo = tuning.capo))
 }
