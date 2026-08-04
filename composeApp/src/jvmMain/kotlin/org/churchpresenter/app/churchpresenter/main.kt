@@ -1042,44 +1042,31 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
-                                            val item = pending.item
-                                            addScheduleItem(item, currentScheduleActions) { song ->
-                                                coroutineScope.launch { remoteSelectSongFlow.emit(song) }
-                                            }
-                                            pending.decision.complete(true)
-                                            // Show activity toast so operator is aware
-                                            val (eTitle, eDetail) = remoteEventLabel(item)
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = RemoteEventType.ADD_TO_SCHEDULE,
-                                                title = eTitle,
-                                                detail = eDetail,
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
-                                        }
                                         val item = pending.item
-                                        val (eventTitle, eventDetail) = remoteEventLabel(item)
-                                        val event = RemoteEvent(
-                                            type = RemoteEventType.ADD_TO_SCHEDULE,
-                                            title = eventTitle,
-                                            detail = eventDetail,
-                                            clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = {
+                                        val add: () -> Unit = {
                                             addScheduleItem(item, currentScheduleActions) { song ->
                                                 coroutineScope.launch { remoteSelectSongFlow.emit(song) }
                                             }
                                             pending.decision.complete(true)
                                         }
-                                        val deny: () -> Unit = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
+                                        val (eTitle, eDetail) = remoteEventLabel(item)
+                                        when (val outcome = remoteApproval(
+                                            access,
+                                            type = RemoteEventType.ADD_TO_SCHEDULE,
+                                            title = eTitle,
+                                            detail = eDetail,
+                                            clientId = clientId,
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                add()
+                                                remoteActivityNotifications.add(outcome.notification)
+                                            }
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event, add, { pending.decision.complete(false) },
+                                            ))
+                                        }
                                     }
                                 }
 
@@ -1092,34 +1079,26 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
+                                        val remove: () -> Unit = {
                                             currentScheduleActions.removeById(pending.id)
                                             pending.decision.complete(true)
-                                            // Show activity toast so operator is aware
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = RemoteEventType.REMOVE_FROM_SCHEDULE,
-                                                title = pending.label,
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
                                         }
-                                        val event = RemoteEvent(
+                                        when (val outcome = remoteApproval(
+                                            access,
                                             type = RemoteEventType.REMOVE_FROM_SCHEDULE,
                                             title = pending.label,
                                             clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = {
-                                            currentScheduleActions.removeById(pending.id)
-                                            pending.decision.complete(true)
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                remove()
+                                                remoteActivityNotifications.add(outcome.notification)
+                                            }
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event, remove, { pending.decision.complete(false) },
+                                            ))
                                         }
-                                        val deny: () -> Unit = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
                                     }
                                 }
 
@@ -1132,47 +1111,33 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
+                                        val addAll: () -> Unit = {
                                             for (item in pending.items) {
                                                 addScheduleItem(item, currentScheduleActions) { song ->
                                                     coroutineScope.launch { remoteSelectSongFlow.emit(song) }
                                                 }
                                             }
                                             pending.decision.complete(true)
-                                            // Show activity toast so operator is aware
-                                            val (batchTitle, batchDetail) = batchEventSummary(pending.items)
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = RemoteEventType.ADD_TO_SCHEDULE,
-                                                title = batchTitle,
-                                                detail = batchDetail,
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
                                         }
-                                        // Build a human-readable summary: first 3 items joined, then "…" if more
-                                        val (summaryTitle, summaryDetail) = batchEventSummary(pending.items)
-                                        val event = RemoteEvent(
+                                        // First 3 items joined, then "…" if more
+                                        val (batchTitle, batchDetail) = batchEventSummary(pending.items)
+                                        when (val outcome = remoteApproval(
+                                            access,
                                             type = RemoteEventType.ADD_TO_SCHEDULE,
-                                            title = summaryTitle,
-                                            detail = summaryDetail,
+                                            title = batchTitle,
+                                            detail = batchDetail,
                                             clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = {
-                                            for (item in pending.items) {
-                                                addScheduleItem(item, currentScheduleActions) { song ->
-                                                    coroutineScope.launch { remoteSelectSongFlow.emit(song) }
-                                                }
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                addAll()
+                                                remoteActivityNotifications.add(outcome.notification)
                                             }
-                                            pending.decision.complete(true)
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event, addAll, { pending.decision.complete(false) },
+                                            ))
                                         }
-                                        val deny: () -> Unit = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
                                     }
                                 }
 
@@ -1185,49 +1150,8 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
-                                            val item = pending.item
-                                            if (item is ScheduleItem.AnnouncementItem) {
-                                                appSettings = appSettings.withAnnouncement(item)
-                                            }
-                                            executeProjectItem(
-                                                item,
-                                                currentScheduleActions,
-                                                presenterManager,
-                                                statisticsManager
-                                            )
-                                            coroutineScope.launch {
-                                                emitRemoteTabSelection(
-                                                    item, remoteSelectSongFlow,
-                                                    remoteSelectPictureFlow, remoteSelectPresentationFlow,
-                                                )
-                                            }
-                                            pending.decision.complete(true)
-                                            // Show activity toast so operator is aware
-                                            val (pTitle, pDetail) = remoteEventLabel(item)
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = RemoteEventType.PROJECT,
-                                                title = pTitle,
-                                                detail = pDetail,
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
-                                        }
                                         val item = pending.item
-                                        val (eventTitle, eventDetail) = remoteEventLabel(item)
-                                        val event = RemoteEvent(
-                                            type = RemoteEventType.PROJECT,
-                                            title = eventTitle,
-                                            detail = eventDetail,
-                                            clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = {
+                                        val project: () -> Unit = {
                                             if (item is ScheduleItem.AnnouncementItem) {
                                                 appSettings = appSettings.withAnnouncement(item)
                                             }
@@ -1246,8 +1170,24 @@ fun main() {
                                             }
                                             pending.decision.complete(true)
                                         }
-                                        val deny: () -> Unit = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
+                                        val (pTitle, pDetail) = remoteEventLabel(item)
+                                        when (val outcome = remoteApproval(
+                                            access,
+                                            type = RemoteEventType.PROJECT,
+                                            title = pTitle,
+                                            detail = pDetail,
+                                            clientId = clientId,
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                project()
+                                                remoteActivityNotifications.add(outcome.notification)
+                                            }
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event, project, { pending.decision.complete(false) },
+                                            ))
+                                        }
                                     }
                                 }
 
