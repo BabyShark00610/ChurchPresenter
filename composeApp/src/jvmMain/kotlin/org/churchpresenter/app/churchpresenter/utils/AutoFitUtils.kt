@@ -135,3 +135,79 @@ fun calculateAutoFitForAllSections(
     }
     return (low - 1).coerceAtLeast(MIN_AUTO_FIT_FONT_SIZE)
 }
+
+/**
+ * The largest size at or below [maxFontSize] at which a chord chart fits the space it is given.
+ *
+ * Measuring a chart as if it were ordinary text does not work. `ChordChart` stacks a chord row above
+ * every row of words — the chord `Text` is composed even where a segment carries no chord, so it
+ * takes its line box regardless — and a long line wraps into several such rows, each one costing
+ * both heights again. Summing the words alone under-reports all of that, which is how a chart that
+ * had already been "fitted" still ran off the bottom of the zone.
+ *
+ * So height comes from what the chart actually draws, and the measurer is used for the one thing it
+ * is needed for: how many rows a line takes once it has wrapped to the width available. Wrapping is
+ * allowed — forbidding it would fit the longest line rather than the zone, and shrink the whole
+ * chart to suit one line nobody asked to be unbroken.
+ *
+ * A line of chords with no words under it is a single row, not a stacked pair — that is the intro
+ * case, written along the line rather than above it.
+ */
+fun calculateChordChartFontSize(
+    textMeasurer: TextMeasurer,
+    lines: List<String>,
+    baseStyle: TextStyle,
+    availableWidth: Int,
+    availableHeight: Int,
+    maxFontSize: Int,
+    hasInfoLine: Boolean = false,
+): Int {
+    if (lines.isEmpty() || availableWidth <= 0 || availableHeight <= 0) return maxFontSize
+    val referenceDensity = Density(1f)
+    val widthConstraints = Constraints(maxWidth = availableWidth)
+
+    // What ChordChart itself lays out with, kept beside the model that depends on them.
+    val chordRowHeight = 1.1f
+    val lyricRowHeight = 1.5f
+    val chordSizeRatio = 0.82f
+    val gapBetweenLines = 4f
+    val infoRowHeight = 0.5f * 1.4f
+    val gapBelowInfo = 6f
+
+    fun rowsFor(text: String, size: Float): Int {
+        if (text.isBlank()) return 1
+        return textMeasurer.measure(
+            text = text,
+            style = baseStyle.copy(fontSize = size.sp),
+            constraints = widthConstraints,
+            density = referenceDensity,
+        ).lineCount.coerceAtLeast(1)
+    }
+
+    fun fits(size: Int): Boolean {
+        var height = if (hasInfoLine) size * infoRowHeight + gapBelowInfo else 0f
+        lines.forEachIndexed { index, line ->
+            if (index > 0) height += gapBetweenLines
+            val words = ChordTransposer.stripChords(line).trim()
+            height += if (words.isBlank()) {
+                val chords = ChordTransposer.parseLine(line)
+                    .mapNotNull { it.chord.ifBlank { null } }
+                    .joinToString(" ")
+                rowsFor(chords, size * chordSizeRatio) * size * lyricRowHeight
+            } else {
+                rowsFor(words, size.toFloat()) * size * (chordRowHeight + lyricRowHeight)
+            }
+            if (height > availableHeight) return false
+        }
+        return height <= availableHeight
+    }
+
+    if (fits(maxFontSize)) return maxFontSize
+    var low = MIN_AUTO_FIT_FONT_SIZE
+    var high = maxFontSize
+    while (low < high) {
+        val mid = (low + high + 1) / 2
+        if (fits(mid)) low = mid else high = mid - 1
+    }
+    return low.coerceAtLeast(MIN_AUTO_FIT_FONT_SIZE)
+}
