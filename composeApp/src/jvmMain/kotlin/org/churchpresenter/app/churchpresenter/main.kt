@@ -183,6 +183,7 @@ import org.churchpresenter.app.churchpresenter.server.RemoteAccess
 import org.churchpresenter.app.churchpresenter.server.remoteAccessDecision
 import org.churchpresenter.app.churchpresenter.server.addScheduleItem
 import org.churchpresenter.app.churchpresenter.server.batchEventSummary
+import org.churchpresenter.app.churchpresenter.server.emitRemoteTabSelection
 import org.churchpresenter.app.churchpresenter.server.executeProjectItem
 import org.churchpresenter.app.churchpresenter.server.instanceLinkBackgroundCacheDir
 import org.churchpresenter.app.churchpresenter.server.instanceLinkPictureCacheDir
@@ -1197,14 +1198,11 @@ fun main() {
                                                 presenterManager,
                                                 statisticsManager
                                             )
-                                            if (item is ScheduleItem.SongItem) {
-                                                coroutineScope.launch { remoteSelectSongFlow.emit(item) }
-                                            }
-                                            if (item is ScheduleItem.PictureItem) {
-                                                coroutineScope.launch { remoteSelectPictureFlow.emit(item) }
-                                            }
-                                            if (item is ScheduleItem.PresentationItem) {
-                                                coroutineScope.launch { remoteSelectPresentationFlow.emit(item) }
+                                            coroutineScope.launch {
+                                                emitRemoteTabSelection(
+                                                    item, remoteSelectSongFlow,
+                                                    remoteSelectPictureFlow, remoteSelectPresentationFlow,
+                                                )
                                             }
                                             pending.decision.complete(true)
                                             // Show activity toast so operator is aware
@@ -1237,15 +1235,12 @@ fun main() {
                                                 presenterManager,
                                                 statisticsManager
                                             )
-                                            // Also drive Songs tab selection for song items
-                                            if (item is ScheduleItem.SongItem) {
-                                                coroutineScope.launch { remoteSelectSongFlow.emit(item) }
-                                            }
-                                            if (item is ScheduleItem.PictureItem) {
-                                                coroutineScope.launch { remoteSelectPictureFlow.emit(item) }
-                                            }
-                                            if (item is ScheduleItem.PresentationItem) {
-                                                coroutineScope.launch { remoteSelectPresentationFlow.emit(item) }
+                                            // Also drive the owning tab so it loads the real content
+                                            coroutineScope.launch {
+                                                emitRemoteTabSelection(
+                                                    item, remoteSelectSongFlow,
+                                                    remoteSelectPictureFlow, remoteSelectPresentationFlow,
+                                                )
                                             }
                                             pending.decision.complete(true)
                                         }
