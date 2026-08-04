@@ -184,6 +184,8 @@ import org.churchpresenter.app.churchpresenter.server.remoteAccessDecision
 import org.churchpresenter.app.churchpresenter.server.addScheduleItem
 import org.churchpresenter.app.churchpresenter.server.batchEventSummary
 import org.churchpresenter.app.churchpresenter.server.emitRemoteTabSelection
+import org.churchpresenter.app.churchpresenter.server.RemoteApproval
+import org.churchpresenter.app.churchpresenter.server.remoteApproval
 import org.churchpresenter.app.churchpresenter.server.executeProjectItem
 import org.churchpresenter.app.churchpresenter.server.instanceLinkBackgroundCacheDir
 import org.churchpresenter.app.churchpresenter.server.instanceLinkPictureCacheDir
@@ -1317,30 +1319,24 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
-                                            pending.decision.complete(true)
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = qaActionType(pending.action),
-                                                title = pending.text.take(80),
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
-                                        }
-                                        val eventType = qaActionType(pending.action)
-                                        val event = RemoteEvent(
-                                            type = eventType,
+                                        when (val outcome = remoteApproval(
+                                            access,
+                                            type = qaActionType(pending.action),
                                             title = pending.text.take(80),
                                             clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = { pending.decision.complete(true) }
-                                        val deny: () -> Unit  = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                pending.decision.complete(true)
+                                                remoteActivityNotifications.add(outcome.notification)
+                                            }
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event,
+                                                { pending.decision.complete(true) },
+                                                { pending.decision.complete(false) },
+                                            ))
+                                        }
                                     }
                                 }
 
@@ -1353,29 +1349,24 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
-                                            pending.decision.complete(true)
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = RemoteEventType.PRESENTATION_CONNECT,
-                                                title = "",
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
-                                        }
-                                        val event = RemoteEvent(
+                                        when (val outcome = remoteApproval(
+                                            access,
                                             type = RemoteEventType.PRESENTATION_CONNECT,
                                             title = "",
                                             clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = { pending.decision.complete(true) }
-                                        val deny: () -> Unit  = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                pending.decision.complete(true)
+                                                remoteActivityNotifications.add(outcome.notification)
+                                            }
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event,
+                                                { pending.decision.complete(true) },
+                                                { pending.decision.complete(false) },
+                                            ))
+                                        }
                                     }
                                 }
 
@@ -1388,29 +1379,24 @@ fun main() {
                                             remoteClientManager.allowedClients, remoteClientManager.blockedClients,
                                             sessionAllowedClients, sessionBlockedClients,
                                         )
-                                        if (access == RemoteAccess.AUTO_REJECT) {
-                                            pending.decision.complete(false)
-                                            return@collect
-                                        }
-                                        if (access == RemoteAccess.AUTO_APPROVE) {
-                                            pending.decision.complete(true)
-                                            remoteActivityNotifications.add(RemoteActivityNotification(
-                                                type = RemoteEventType.QA_ADMIN_CONNECT,
-                                                title = "",
-                                                clientId = clientId,
-                                                clientLabel = remoteClientManager.getLabel(clientId)
-                                            ))
-                                            return@collect
-                                        }
-                                        val event = RemoteEvent(
+                                        when (val outcome = remoteApproval(
+                                            access,
                                             type = RemoteEventType.QA_ADMIN_CONNECT,
                                             title = "",
                                             clientId = clientId,
-                                            clientLabel = remoteClientManager.getLabel(clientId)
-                                        )
-                                        val allow: () -> Unit = { pending.decision.complete(true) }
-                                        val deny: () -> Unit  = { pending.decision.complete(false) }
-                                        remoteEventQueue.add(Triple(event, allow, deny))
+                                            clientLabel = remoteClientManager.getLabel(clientId),
+                                        )) {
+                                            RemoteApproval.Reject -> pending.decision.complete(false)
+                                            is RemoteApproval.Approve -> {
+                                                pending.decision.complete(true)
+                                                remoteActivityNotifications.add(outcome.notification)
+                                            }
+                                            is RemoteApproval.Ask -> remoteEventQueue.add(Triple(
+                                                outcome.event,
+                                                { pending.decision.complete(true) },
+                                                { pending.decision.complete(false) },
+                                            ))
+                                        }
                                     }
                                 }
 
