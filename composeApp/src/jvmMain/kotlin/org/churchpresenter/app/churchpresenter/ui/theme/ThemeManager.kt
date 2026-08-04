@@ -46,3 +46,18 @@ fun ProvideThemeManager(
 fun rememberThemeManager(): ThemeManager {
     return LocalThemeManager.current
 }
+
+/**
+ * The [ThemeMode] a saved settings string means, falling back to [ThemeMode.SYSTEM] when it names
+ * nothing recognisable — a settings file from a newer version, or hand-edited.
+ *
+ * Matched against [ThemeMode.entries] rather than a hand-written `when`, so it cannot fall behind the
+ * enum. It already had: the `when` this replaces listed nine of the ten modes and omitted
+ * [ThemeMode.STUDIO], which is offered in the top bar, the theme switcher and the setup wizard — so
+ * choosing Studio and restarting silently landed the user back on System, with no error anywhere.
+ *
+ * The stored form is [ThemeMode.toString], i.e. the enum name; [saved] is upper-cased first because
+ * older settings files hold lower-case values.
+ */
+fun themeFromSettings(saved: String): ThemeMode =
+    ThemeMode.entries.find { it.name == saved.uppercase() } ?: ThemeMode.SYSTEM

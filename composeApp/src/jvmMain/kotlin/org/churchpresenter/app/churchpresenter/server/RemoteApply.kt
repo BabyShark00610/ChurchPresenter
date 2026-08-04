@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.key.type
 import java.io.File
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
@@ -501,6 +502,33 @@ internal fun remoteEventLabel(item: ScheduleItem): Pair<String, String> = when (
 }
 
 /**
+ * Returns a (title, detail) pair summarising a batch add-to-schedule request for the operator's
+ * approval prompt and activity toast.
+ *
+ * A single item is described by [remoteEventLabel] rather than as "1 items" — the operator is being
+ * asked to approve something specific and a count tells them nothing.
+ *
+ * The detail lists the first three items joined by " · ", with " …" appended only when a fourth
+ * exists; exactly three items get no ellipsis.
+ *
+ * Deliberately does **not** reuse [remoteEventLabel] for the per-item detail text: this renders a
+ * song with an en dash and a verse without its [ScheduleItem.BibleVerseItem.verseRange], because the
+ * detail is a compact one-line list rather than a banner heading.
+ */
+internal fun batchEventSummary(items: List<ScheduleItem>): Pair<String, String> {
+    val count = items.size
+    val title = if (count == 1) remoteEventLabel(items.first()).first else "$count items"
+    val detail = items.take(3).joinToString(" · ") { item ->
+        when (item) {
+            is ScheduleItem.BibleVerseItem -> "${item.bookName} ${item.chapter}:${item.verseNumber}"
+            is ScheduleItem.SongItem -> "${item.songNumber} – ${item.title}"
+            else -> item.displayText.take(30)
+        }
+    }.let { if (count > 3) "$it …" else it }
+    return title to detail
+}
+
+/**
  * Executes a project request — adds to schedule and sets presenter state.
  * Fixes the original bug where SongItem projection never selected the song in the Songs tab.
  */
@@ -542,6 +570,35 @@ internal fun AppSettings.withAnnouncement(item: ScheduleItem.AnnouncementItem): 
             liveClockFormat     = item.liveClockFormat
         )
     )
+
+/**
+ * Hands a remotely-projected item to whichever tab has to load its real content, and reports whether
+ * any tab was asked.
+ *
+ * [executeProjectItem] adds the item to the schedule and flips `presentingMode`, but deliberately
+ * does **not** push picture or slide content itself — the tab that owns that content does, driven by
+ * these flows. So a type missing from this `when` goes live as an empty screen: the mode changes and
+ * nothing loads.
+ *
+ * **Only the project path drives all three.** The add-to-schedule path
+ * ([addScheduleItem]) navigates the Songs tab and nothing else, on purpose — adding a picture to the
+ * schedule must not hijack the Pictures tab away from what the operator is showing. Merging the two
+ * would do exactly that, which is why this is a separate function rather than a flag on that one.
+ *
+ * Returns false for every other type, so a test can pin "this drives no tab" as a positive result
+ * rather than as the absence of an emission.
+ */
+internal suspend fun emitRemoteTabSelection(
+    item: ScheduleItem,
+    songFlow: MutableSharedFlow<ScheduleItem.SongItem>,
+    pictureFlow: MutableSharedFlow<ScheduleItem.PictureItem>,
+    presentationFlow: MutableSharedFlow<ScheduleItem.PresentationItem>,
+): Boolean = when (item) {
+    is ScheduleItem.SongItem -> { songFlow.emit(item); true }
+    is ScheduleItem.PictureItem -> { pictureFlow.emit(item); true }
+    is ScheduleItem.PresentationItem -> { presentationFlow.emit(item); true }
+    else -> false
+}
 
 internal fun executeProjectItem(
     item: ScheduleItem,

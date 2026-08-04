@@ -435,6 +435,38 @@ internal fun shouldMirrorFromPrimary(
     role: InstanceLinkRole,
 ): Boolean = status == InstanceLinkStatus.CONNECTED && role == InstanceLinkRole.CONTROLLED
 
+/**
+ * The tab a function-key shortcut jumps to, or null when the key is not one of them.
+ *
+ * F6–F12 in tab order. These are pressed by feel during a service — the operator is looking at the
+ * platform, not the screen — so a key wired to the neighbouring tab is not noticed until the wrong
+ * panel is already open.
+ */
+internal fun tabForFunctionKey(key: Key): Tabs? = when (key) {
+    Key.F6 -> Tabs.BIBLE
+    Key.F7 -> Tabs.SONGS
+    Key.F8 -> Tabs.PICTURES
+    Key.F9 -> Tabs.PRESENTATION
+    Key.F10 -> Tabs.MEDIA
+    Key.F11 -> Tabs.LOWER_THIRD
+    Key.F12 -> Tabs.ANNOUNCEMENTS
+    else -> null
+}
+
+/**
+ * The width a collapsible side panel actually renders at, in pixels.
+ *
+ * Order matters: the cap is applied to the requested width *before* the collapse fraction scales it.
+ * Capping afterwards would make a panel that is only wide because the window shrank animate open
+ * from its old, too-large width and overshoot past the resize handles on the way.
+ *
+ * [visibleFraction] runs 0f (collapsed) to 1f (open) and is driven by an `Animatable`, which can
+ * overshoot slightly below zero mid-spring — hence the floor, since a negative width is not a legal
+ * measurement constraint.
+ */
+internal fun panelRenderWidthPx(requestedPx: Float, capPx: Float, visibleFraction: Float): Int =
+    (requestedPx.coerceAtMost(capPx) * visibleFraction).roundToInt().coerceAtLeast(0)
+
 internal fun sttUrlToPersist(settings: AppSettings, sttConnected: Boolean): String? {
     if (!sttConnected) return null
     val url = settings.sttSettings.serverUrl
@@ -1261,6 +1293,7 @@ fun MainDesktop(
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
+                    val shortcutTab = tabForFunctionKey(keyEvent.key)
                     when {
                         keyEvent.key == Key.Z && keyEvent.isCtrlPressed && keyEvent.isShiftPressed -> {
                             scheduleViewModel.redo(); true
@@ -1307,13 +1340,7 @@ fun MainDesktop(
                             }
                             true
                         }
-                        keyEvent.key == Key.F6 -> { selectTab(Tabs.BIBLE); true }
-                        keyEvent.key == Key.F7 -> { selectTab(Tabs.SONGS); true }
-                        keyEvent.key == Key.F8 -> { selectTab(Tabs.PICTURES); true }
-                        keyEvent.key == Key.F9 -> { selectTab(Tabs.PRESENTATION); true }
-                        keyEvent.key == Key.F10 -> { selectTab(Tabs.MEDIA); true }
-                        keyEvent.key == Key.F11 -> { selectTab(Tabs.LOWER_THIRD); true }
-                        keyEvent.key == Key.F12 -> { selectTab(Tabs.ANNOUNCEMENTS); true }
+                        shortcutTab != null -> { selectTab(shortcutTab); true }
                         else -> {
                             if (presentingMode != Presenting.NONE) {
                                 // Suppress both easter egg sequences while live
@@ -1451,8 +1478,7 @@ fun MainDesktop(
                     Column(
                         modifier = Modifier
                             .layout { measurable, constraints ->
-                                val targetWidthPx = schedulePanelPx.coerceAtMost(maxScheduleState.value)
-                                val widthPx = (targetWidthPx * scheduleVisibleFraction.value).roundToInt().coerceAtLeast(0)
+                                val widthPx = panelRenderWidthPx(schedulePanelPx, maxScheduleState.value, scheduleVisibleFraction.value)
                                 val placeable = measurable.measure(constraints.copy(minWidth = widthPx, maxWidth = widthPx))
                                 layout(widthPx, placeable.height) {
                                     placeable.placeRelative(0, 0)
@@ -2176,8 +2202,7 @@ fun MainDesktop(
                     Column(
                         modifier = Modifier
                             .layout { measurable, constraints ->
-                                val targetWidthPx = previewPanelPx.coerceAtMost(maxPreviewState.value)
-                                val widthPx = (targetWidthPx * previewVisibleFraction.value).roundToInt().coerceAtLeast(0)
+                                val widthPx = panelRenderWidthPx(previewPanelPx, maxPreviewState.value, previewVisibleFraction.value)
                                 val placeable = measurable.measure(constraints.copy(minWidth = widthPx, maxWidth = widthPx))
                                 layout(widthPx, placeable.height) {
                                     placeable.placeRelative(0, 0)
