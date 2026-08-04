@@ -86,6 +86,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteS
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.data.settings.ResolvedDisplay
+import org.churchpresenter.app.churchpresenter.data.settings.obsSceneFor
 import org.churchpresenter.app.churchpresenter.data.settings.reconcileScreenAssignments
 import org.churchpresenter.app.churchpresenter.data.settings.withBundledBible
 import org.churchpresenter.app.churchpresenter.data.Language
@@ -668,11 +669,7 @@ fun main() {
         LaunchedEffect(Unit) {
             snapshotFlow { presenterManager.presentingMode.value }
                 .collect { mode ->
-                    val obs = appSettings.obsSettings
-                    if (!obs.enabled) return@collect
-                    val sceneName = obs.sceneMappings[mode.name]?.takeIf { it.isNotBlank() }
-                        ?: obs.defaultScene.takeIf { it.isNotBlank() }
-                        ?: return@collect
+                    val sceneName = obsSceneFor(mode, appSettings.obsSettings) ?: return@collect
                     obsManager.setScene(sceneName)
                 }
         }
