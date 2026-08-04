@@ -182,6 +182,7 @@ import org.churchpresenter.app.churchpresenter.server.downloadMirroredBackground
 import org.churchpresenter.app.churchpresenter.server.RemoteAccess
 import org.churchpresenter.app.churchpresenter.server.remoteAccessDecision
 import org.churchpresenter.app.churchpresenter.server.addScheduleItem
+import org.churchpresenter.app.churchpresenter.server.batchEventSummary
 import org.churchpresenter.app.churchpresenter.server.executeProjectItem
 import org.churchpresenter.app.churchpresenter.server.instanceLinkBackgroundCacheDir
 import org.churchpresenter.app.churchpresenter.server.instanceLinkPictureCacheDir
@@ -1140,17 +1141,7 @@ fun main() {
                                             }
                                             pending.decision.complete(true)
                                             // Show activity toast so operator is aware
-                                            val batchCount = pending.items.size
-                                            val batchTitle = if (batchCount == 1)
-                                                remoteEventLabel(pending.items.first()).first
-                                            else "$batchCount items"
-                                            val batchDetail = pending.items.take(3).joinToString(" · ") { item ->
-                                                when (item) {
-                                                    is ScheduleItem.BibleVerseItem -> "${item.bookName} ${item.chapter}:${item.verseNumber}"
-                                                    is ScheduleItem.SongItem -> "${item.songNumber} – ${item.title}"
-                                                    else -> item.displayText.take(30)
-                                                }
-                                            }.let { if (batchCount > 3) "$it …" else it }
+                                            val (batchTitle, batchDetail) = batchEventSummary(pending.items)
                                             remoteActivityNotifications.add(RemoteActivityNotification(
                                                 type = RemoteEventType.ADD_TO_SCHEDULE,
                                                 title = batchTitle,
@@ -1160,24 +1151,8 @@ fun main() {
                                             ))
                                             return@collect
                                         }
-                                        val count = pending.items.size
                                         // Build a human-readable summary: first 3 items joined, then "…" if more
-                                        val summaryTitle = if (count == 1) {
-                                            remoteEventLabel(pending.items.first()).first
-                                        } else {
-                                            "$count items"
-                                        }
-                                        val summaryDetail = pending.items.take(3).joinToString(" · ") { item ->
-                                            when (item) {
-                                                is ScheduleItem.BibleVerseItem ->
-                                                    "${item.bookName} ${item.chapter}:${item.verseNumber}"
-
-                                                is ScheduleItem.SongItem ->
-                                                    "${item.songNumber} – ${item.title}"
-
-                                                else -> item.displayText.take(30)
-                                            }
-                                        }.let { if (count > 3) "$it …" else it }
+                                        val (summaryTitle, summaryDetail) = batchEventSummary(pending.items)
                                         val event = RemoteEvent(
                                             type = RemoteEventType.ADD_TO_SCHEDULE,
                                             title = summaryTitle,

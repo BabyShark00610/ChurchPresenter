@@ -501,6 +501,33 @@ internal fun remoteEventLabel(item: ScheduleItem): Pair<String, String> = when (
 }
 
 /**
+ * Returns a (title, detail) pair summarising a batch add-to-schedule request for the operator's
+ * approval prompt and activity toast.
+ *
+ * A single item is described by [remoteEventLabel] rather than as "1 items" — the operator is being
+ * asked to approve something specific and a count tells them nothing.
+ *
+ * The detail lists the first three items joined by " · ", with " …" appended only when a fourth
+ * exists; exactly three items get no ellipsis.
+ *
+ * Deliberately does **not** reuse [remoteEventLabel] for the per-item detail text: this renders a
+ * song with an en dash and a verse without its [ScheduleItem.BibleVerseItem.verseRange], because the
+ * detail is a compact one-line list rather than a banner heading.
+ */
+internal fun batchEventSummary(items: List<ScheduleItem>): Pair<String, String> {
+    val count = items.size
+    val title = if (count == 1) remoteEventLabel(items.first()).first else "$count items"
+    val detail = items.take(3).joinToString(" · ") { item ->
+        when (item) {
+            is ScheduleItem.BibleVerseItem -> "${item.bookName} ${item.chapter}:${item.verseNumber}"
+            is ScheduleItem.SongItem -> "${item.songNumber} – ${item.title}"
+            else -> item.displayText.take(30)
+        }
+    }.let { if (count > 3) "$it …" else it }
+    return title to detail
+}
+
+/**
  * Executes a project request — adds to schedule and sets presenter state.
  * Fixes the original bug where SongItem projection never selected the song in the Songs tab.
  */
