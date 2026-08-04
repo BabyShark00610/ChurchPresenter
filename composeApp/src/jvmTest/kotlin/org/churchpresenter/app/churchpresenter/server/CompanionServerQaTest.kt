@@ -12,8 +12,10 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -149,6 +151,13 @@ class CompanionServerQaTest {
                     pending.decision.complete(allow)
                 }
             }
+        }
+        // The collector is not subscribed the moment `launch` returns, and onQAAdminRequest has no
+        // replay: a request arriving before it subscribes has its prompt dropped, its decision
+        // never completed, and the call hangs until the client gives up. Wait for the subscription
+        // itself — a positive signal, so this ends as soon as the collector is live.
+        runBlocking {
+            withTimeout(5_000) { server.onQAAdminRequest.subscriptionCount.first { it > 0 } }
         }
         return seen
     }
