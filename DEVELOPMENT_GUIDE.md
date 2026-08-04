@@ -377,6 +377,24 @@ Submit crash logs by opening a GitHub Issue and attaching the file.
 3. Run `./gradlew :composeApp:run` to verify the build works
 4. Read this entire guide before making changes
 
+### Never commit directly to `main`
+
+`main` is protected on GitHub for everyone, admins included — it takes a pull request with the
+`test` check passing. To catch it earlier, the repo also ships a `pre-commit` hook in `.githooks/`
+that refuses a commit made while `main` (or `master`) is checked out.
+
+Git never clones `core.hooksPath` — a checkout is not allowed to activate hooks on your machine by
+itself — so it is set per working copy. **Any `./gradlew` invocation sets it for you**; the root
+build script does it on configuration when it isn't already pointing at `.githooks`. To set it by
+hand instead:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Work on a branch and open a PR. `git commit --no-verify` skips the hook, but the server-side
+protection still stands, so that only buys you a commit you will have to move onto a branch anyway.
+
 ### Running the tests, per platform
 
 The app's own suite is `./gradlew :composeApp:check`. It needs **JDK 21** and the submodules

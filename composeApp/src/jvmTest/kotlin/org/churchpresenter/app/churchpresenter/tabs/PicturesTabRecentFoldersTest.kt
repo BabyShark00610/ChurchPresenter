@@ -14,17 +14,16 @@ import kotlin.test.assertTrue
  *
  * Same shape as [PresentationTabRecentFilesTest], and the same reasoning. [RecentPictureFolders]
  * renders the bar straight off two `mutableStateListOf`s, so seeding those drives it with no file
- * I/O, no `user.home` swap and no new seam — the object was only ever `private`, which is the single
- * production change here.
+ * I/O and no `user.home` swap.
  *
- * As there, nothing clicks a chip, a star or the clear button. The two JSON paths are resolved at
- * class-init, so whichever test touches the object first decides where the whole JVM writes, and
- * `clear` against a real home would rewrite the developer's own recent-folders list. Those lines
- * stay uncovered on purpose.
+ * `add`/`togglePin`/`clear` themselves — and the JSON they read and write — are covered separately
+ * in [RecentPictureFoldersLogicTest], which repoints [RecentPictureFolders.file] and
+ * [RecentPictureFolders.pinnedFile] at a temp dir rather than clicking through this bar; nothing here
+ * clicks a chip, a star or the clear button.
  *
- * One difference from the presentation bar is worth pinning: `clear` here **keeps pinned folders**.
- * That is not covered for the reason above, but it is why the ordering tests treat pinned and recent
- * as overlapping sets rather than as two disjoint lists.
+ * One difference from the presentation bar is worth pinning: `clear` here **keeps pinned folders**,
+ * which is why the ordering tests below treat pinned and recent as overlapping sets rather than as
+ * two disjoint lists.
  */
 class PicturesTabRecentFoldersTest {
 

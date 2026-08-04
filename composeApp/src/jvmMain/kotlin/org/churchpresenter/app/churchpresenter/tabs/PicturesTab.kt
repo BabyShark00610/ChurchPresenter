@@ -152,13 +152,15 @@ import kotlinx.coroutines.delay
  *
  * `internal` rather than private so the bar it feeds can be driven from a test by seeding [folders]
  * and [pinned] — they are the state the bar renders from, and the sibling object this copies is
- * public for the same reason. Nothing else is widened: the JSON paths stay private and are still
- * resolved once per JVM at class-init.
+ * public for the same reason. [file], [pinnedFile] and [load] are `internal var`/`internal fun` for
+ * the same reason: a test points them at a temp dir before calling [add]/[togglePin]/[clear]/[load],
+ * so the real read/write logic runs without ever touching the developer's own recent/pinned JSON
+ * files under `~/.churchpresenter`. Nothing else is widened.
  */
 internal object RecentPictureFolders {
     private const val MAX = 10
-    private val file = File(System.getProperty("user.home"), ".churchpresenter/recent_picture_folders.json")
-    private val pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_picture_folders.json")
+    internal var file = File(System.getProperty("user.home"), ".churchpresenter/recent_picture_folders.json")
+    internal var pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_picture_folders.json")
     val folders = androidx.compose.runtime.mutableStateListOf<String>()
     val pinned = androidx.compose.runtime.mutableStateListOf<String>()
 
@@ -188,7 +190,7 @@ internal object RecentPictureFolders {
         save()
     }
 
-    private fun load() {
+    internal fun load() {
         try {
             if (file.exists()) {
                 val json = Json { ignoreUnknownKeys = true }
