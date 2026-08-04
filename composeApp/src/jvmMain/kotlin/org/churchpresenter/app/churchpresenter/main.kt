@@ -85,6 +85,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.data.settings.ResolvedDisplay
+import org.churchpresenter.app.churchpresenter.data.settings.reconcileScreenAssignments
 import org.churchpresenter.app.churchpresenter.data.settings.withBundledBible
 import org.churchpresenter.app.churchpresenter.data.Language
 import org.churchpresenter.app.churchpresenter.data.RemoteClientManager
@@ -328,49 +330,18 @@ fun main() {
         remember {
             val screenDevicesAll = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
             val primaryDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
-            val nonPrimaryDevices = screenDevicesAll.filter { it != primaryDevice }
+            val nonPrimaryDisplays = screenDevicesAll.filter { it != primaryDevice }.map { device ->
+                val bounds = device.defaultConfiguration.bounds
+                ResolvedDisplay(
+                    deviceIndex = screenDevicesAll.indexOf(device),
+                    x = bounds.x, y = bounds.y, width = bounds.width, height = bounds.height,
+                )
+            }
             val deckLinkCount = if (DeckLinkManager.isAvailable()) DeckLinkManager.listDevices().size else 0
-            val slotCount = (nonPrimaryDevices.size + deckLinkCount).coerceAtLeast(0)
 
             val proj = appSettings.projectionSettings
-            var changed = false
-            val assignments = proj.screenAssignments.toMutableList()
-            while (assignments.size < slotCount) {
-                val npIdx = assignments.size
-                val device = nonPrimaryDevices.getOrNull(npIdx)
-                val deviceIdx = if (device != null) screenDevicesAll.indexOf(device) else Constants.KEY_TARGET_NONE
-                val bounds = device?.defaultConfiguration?.bounds
-                assignments.add(
-                    ScreenAssignment(
-                        targetDisplay = deviceIdx,
-                        targetBoundsX = bounds?.x ?: Int.MIN_VALUE,
-                        targetBoundsY = bounds?.y ?: Int.MIN_VALUE,
-                        targetBoundsW = bounds?.width ?: 0,
-                        targetBoundsH = bounds?.height ?: 0
-                    )
-                )
-                changed = true
-            }
-            for (idx in assignments.indices) {
-                if (assignments[idx].targetDisplay == -1) {
-                    val device = nonPrimaryDevices.getOrNull(idx)
-                    if (device != null) {
-                        val deviceIdx = screenDevicesAll.indexOf(device)
-                        val bounds = device.defaultConfiguration.bounds
-                        assignments[idx] = assignments[idx].copy(
-                            targetDisplay = deviceIdx,
-                            targetBoundsX = bounds.x,
-                            targetBoundsY = bounds.y,
-                            targetBoundsW = bounds.width,
-                            targetBoundsH = bounds.height
-                        )
-                    } else {
-                        assignments[idx] = assignments[idx].copy(targetDisplay = Constants.KEY_TARGET_NONE)
-                    }
-                    changed = true
-                }
-            }
-            if (changed) {
+            val assignments = reconcileScreenAssignments(proj.screenAssignments, nonPrimaryDisplays, deckLinkCount)
+            if (assignments != null) {
                 appSettings = appSettings.copy(
                     projectionSettings = proj.copy(screenAssignments = assignments)
                 )
