@@ -60,12 +60,12 @@ class StageMonitorSettingsTabRecompositionTest {
     @Test
     fun `the tab survives a recomposition that changes none of its inputs`() = rerenderable { set ->
         onAllNodesWithText("Screen Content").assertCountEquals(1)
-        colorFields().assertCountEquals(ZoneOrdinal.COUNT * 3)
+        colorFields().assertCountEquals(ZoneOrdinal.COUNT * 3 + CHORD_COLOUR_ZONES)
 
         set { this }
 
         onAllNodesWithText("Screen Content").assertCountEquals(1)
-        colorFields().assertCountEquals(ZoneOrdinal.COUNT * 3)
+        colorFields().assertCountEquals(ZoneOrdinal.COUNT * 3 + CHORD_COLOUR_ZONES)
         numberFields().assertCountEquals(ZoneOrdinal.COUNT * 3)
     }
 

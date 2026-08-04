@@ -607,6 +607,11 @@ class SystemSettingsTabTest {
             }
         }
 
+        // The scan is async, so wait for the line rather than for the composition to settle — the
+        // sibling test above waits the same way. Asserting straight away passed only when an
+        // earlier test had already warmed the folder scan, which made this order-dependent.
+        waitUntil { onAllNodesWithText("No files detected").fetchSemanticsNodes().isNotEmpty() }
+
         // The bible picker is unset, so its detected-files line is absent entirely: this is the
         // songs section speaking for itself.
         onAllNodesWithText("No files detected").assertCountEquals(1)

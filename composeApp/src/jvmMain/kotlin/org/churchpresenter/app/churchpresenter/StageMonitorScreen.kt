@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,10 +32,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +65,17 @@ import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.utils.Utils.parseHexColor
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import churchpresenter.composeapp.generated.resources.song_key
+import churchpresenter.composeapp.generated.resources.song_capo
+import churchpresenter.composeapp.generated.resources.song_play
+import churchpresenter.composeapp.generated.resources.unit_bpm
+import churchpresenter.composeapp.generated.resources.Res
+import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
+import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
+import org.churchpresenter.app.churchpresenter.utils.calculateChordChartFontSize
+import org.churchpresenter.app.churchpresenter.composables.ChordChart
+import org.churchpresenter.app.churchpresenter.composables.songInfoOf
 import org.churchpresenter.app.churchpresenter.composables.MetronomeDot
 import org.churchpresenter.app.churchpresenter.composables.SoftwareVideoPlayer
 import org.churchpresenter.app.churchpresenter.composables.toAlignment
@@ -163,6 +178,23 @@ fun StageMonitorScreen(
 
     val renderData = ZoneRenderData(
         currentText = currentText,
+        chordLines = if (sm.showChords) currentLyricSection.chordLines else emptyList(),
+        songInfo = if (presentingMode == Presenting.LYRICS) {
+            songInfoOf(
+                section = currentLyricSection,
+                keyLabel = stringResource(Res.string.song_key),
+                capoLabel = stringResource(Res.string.song_capo),
+                playLabel = stringResource(Res.string.song_play),
+                bpmLabel = stringResource(Res.string.unit_bpm),
+            )
+        } else {
+            null
+        },
+        nextChordLines = if (sm.showChords && presentingMode == Presenting.LYRICS) {
+            allLyricSections.getOrNull(songDisplaySectionIndex + 1)?.chordLines.orEmpty()
+        } else {
+            emptyList()
+        },
         nextText = nextText,
         currentImageBitmap = currentImageBitmap,
         displayedSlide = displayedSlide,
@@ -284,6 +316,9 @@ private fun StageZoneBox(
 /** Bundles the derived per-frame state so it can be passed to whichever zone needs it. */
 private data class ZoneRenderData(
     val currentText: String,
+    val chordLines: List<String>,
+    val nextChordLines: List<String>,
+    val songInfo: String?,
     val nextText: String,
     val currentImageBitmap: ImageBitmap?,
     val displayedSlide: ImageBitmap?,
@@ -296,6 +331,102 @@ private data class ZoneRenderData(
     val displayedDictionaryEntry: StrongsEntry?,
     val dictionarySettings: DictionarySettings
 )
+
+/**
+ * A chord chart drawn in a zone's own styling, so it reads as that zone's text with the chords
+ * lifted above it rather than as something pasted in from elsewhere.
+ */
+@Composable
+private fun ZoneChordChart(
+    style: StageMonitorZoneStyle,
+    lines: List<String>,
+    songInfo: String? = null,
+) {
+    val ink = parseHexColor(style.color)
+    val chordColor = parseHexColor(style.chordColor)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val measurer = rememberTextMeasurer()
+        val baseStyle = buildTextStyle(
+            fontType = style.fontType,
+            fontSize = style.fontSize,
+            color = ink,
+            bold = style.bold,
+            italic = style.italic,
+        )
+        val fitted = remember(lines, songInfo, style, maxWidth, maxHeight) {
+            calculateChordChartFontSize(
+                textMeasurer = measurer,
+                lines = lines,
+                baseStyle = baseStyle,
+                availableWidth = maxWidth.value.toInt(),
+                availableHeight = maxHeight.value.toInt(),
+                maxFontSize = style.fontSize,
+                hasInfoLine = !songInfo.isNullOrBlank(),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!songInfo.isNullOrBlank()) {
+                Text(
+                    text = songInfo,
+                    color = chordColor,
+                    fontSize = (fitted * 0.5f).sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            ChordChart(
+                lines = lines,
+                textColor = ink,
+                chordColor = chordColor,
+                fontSize = fitted.sp,
+            )
+        }
+    }
+}
+
+/**
+ * The largest size at or below the zone's own that fits [text] in the space given.
+ *
+ * The configured size is a ceiling, not a target: a zone set to 35 stays at 35 until the words stop
+ * fitting, and only then steps down. Measurement is in the reference units
+ * [calculateAutoFitFontSize] works in, where one sp of type occupies one dp of line box, so the
+ * constraints are handed over as their dp values rather than as raw pixels.
+ */
+@Composable
+private fun fittedFontSize(
+    style: StageMonitorZoneStyle,
+    text: String,
+    maxWidth: Dp,
+    maxHeight: Dp,
+): Int {
+    val measurer = rememberTextMeasurer()
+    val baseStyle = buildTextStyle(
+        fontType = style.fontType,
+        fontSize = style.fontSize,
+        color = parseHexColor(style.color),
+        bold = style.bold,
+        italic = style.italic,
+    )
+    return remember(text, style, maxWidth, maxHeight) {
+        if (text.isBlank()) style.fontSize
+        else calculateAutoFitFontSize(
+            textMeasurer = measurer,
+            text = text,
+            baseStyle = baseStyle,
+            availableWidth = maxWidth.value.toInt(),
+            availableHeight = maxHeight.value.toInt(),
+        ).coerceAtMost(style.fontSize)
+    }
+}
+
+/** [TextContent], but stepped down to whatever size the words actually fit at. */
+@Composable
+private fun FittedTextContent(style: StageMonitorZoneStyle, text: String) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val fitted = fittedFontSize(style, text, maxWidth, maxHeight)
+        TextContent(style.copy(fontSize = fitted), text)
+    }
+}
 
 private fun zoneContentAlignment(style: StageMonitorZoneStyle): Alignment {
     val vertical = when (style.verticalAlignment) {
@@ -319,8 +450,12 @@ private fun ZoneContent(
     mediaViewModel: MediaViewModel?
 ) {
     when (content) {
-        StageMonitorContentType.BIBLE,
-        StageMonitorContentType.SONGS -> TextContent(style, data.currentText)
+        StageMonitorContentType.BIBLE -> TextContent(style, data.currentText)
+        // A song with chords is shown as its chart; without them it is the words alone, exactly as
+        // before. The Next zone follows the same rule for the section coming up.
+        StageMonitorContentType.SONGS ->
+            if (data.chordLines.isEmpty()) FittedTextContent(style, data.currentText)
+            else ZoneChordChart(style, data.chordLines, data.songInfo)
         StageMonitorContentType.PRESENTATION -> SlideContent(data.displayedSlide)
         StageMonitorContentType.PRESENTATION_NOTES -> ScrollingTextContent(style, data.presenterNotes)
         StageMonitorContentType.PICTURES -> SlideContent(data.currentImageBitmap)
@@ -338,7 +473,9 @@ private fun ZoneContent(
         StageMonitorContentType.CANVAS -> ScenePresenter(modifier = Modifier.fillMaxSize(), scene = data.activeScene)
         StageMonitorContentType.QA -> QAPresenter(question = data.displayedQuestion, qaSettings = data.qaSettings)
         StageMonitorContentType.DICTIONARY -> DictionaryPresenter(entry = data.displayedDictionaryEntry, dictionarySettings = data.dictionarySettings)
-        StageMonitorContentType.NEXT -> TextContent(style, data.nextText)
+        StageMonitorContentType.NEXT ->
+            if (data.nextChordLines.isEmpty()) TextContent(style, data.nextText)
+            else ZoneChordChart(style, data.nextChordLines)
         // No live data is plumbed through to the stage monitor for these yet.
         StageMonitorContentType.LOWER_THIRD,
         StageMonitorContentType.WEB,

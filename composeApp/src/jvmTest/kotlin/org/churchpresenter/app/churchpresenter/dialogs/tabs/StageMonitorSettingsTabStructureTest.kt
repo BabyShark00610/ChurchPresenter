@@ -72,7 +72,8 @@ class StageMonitorSettingsTabStructureTest {
     /** Three per zone: the text colour, the background colour and the shadow colour. */
     @Test
     fun `each zone editor offers three colour fields`() = stageMonitorTab { _ ->
-        colorFields().assertCountEquals(ZoneOrdinal.COUNT * 3)
+        // Plus a chord colour in the two zones a song's chart can land in.
+        colorFields().assertCountEquals(ZoneOrdinal.COUNT * 3 + CHORD_COLOUR_ZONES)
         onAllNodesWithText("BACKGROUND COLOR").assertCountEquals(ZoneOrdinal.COUNT)
     }
 
