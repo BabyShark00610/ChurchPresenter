@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
@@ -59,6 +60,7 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.editableText
@@ -136,6 +138,8 @@ fun EditSongDialog(
     theme: ThemeMode,
     tuning: SongTuning = SongTuning(),
     showTuningFields: Boolean = false,
+    chordsVisible: Boolean = true,
+    onChordsVisibleChange: (Boolean) -> Unit = {},
     onDismiss: () -> Unit,
     onSave: (SongItem, SongTuning) -> Unit
 ) {
@@ -160,6 +164,8 @@ fun EditSongDialog(
             theme = theme,
             tuning = tuning,
             showTuningFields = showTuningFields,
+            chordsVisible = chordsVisible,
+            onChordsVisibleChange = onChordsVisibleChange,
             isVisible = isVisible,
             onDismiss = onDismiss,
             onSave = onSave
@@ -209,6 +215,9 @@ internal fun insertSnippet(value: TextFieldValue, snippet: String, ownLine: Bool
  * file. They are handed back through [onSave] so the caller commits everything in one place, and
  * only if the save took. [showTuningFields] hides them where they would mean nothing — there is no
  * stage monitor to read them.
+ *
+ * [chordsVisible] is the stored editor preference, reported back through [onChordsVisibleChange] so
+ * the switch is remembered for the next song rather than reset with each one.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -220,6 +229,8 @@ internal fun EditSongContent(
     theme: ThemeMode,
     tuning: SongTuning = SongTuning(),
     showTuningFields: Boolean = false,
+    chordsVisible: Boolean = true,
+    onChordsVisibleChange: (Boolean) -> Unit = {},
     isVisible: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (SongItem, SongTuning) -> Unit
@@ -249,7 +260,9 @@ internal fun EditSongContent(
     }
 
     var pane by remember(isVisible, song) { mutableStateOf(LyricPane.PRIMARY) }
-    var showChords by remember(isVisible, song) { mutableStateOf(true) }
+    // Keyed on the setting rather than on the song: the switch is remembered across songs, so it
+    // resyncs when the stored preference changes and survives opening the next song.
+    var showChords by remember(chordsVisible) { mutableStateOf(chordsVisible) }
     var steps by remember(isVisible, song) { mutableStateOf(0) }
 
     val paneValue = if (pane == LyricPane.PRIMARY) editedLyrics else editedSecondaryLyrics
@@ -387,8 +400,10 @@ internal fun EditSongContent(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Row(
+                                // A recessed track, so the filled tab on it is the brightest thing
+                                // in the row rather than one of two similar surfaces.
                                 modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(9.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(9.dp))
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(9.dp))
                                     .padding(2.dp),
                                 horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -401,7 +416,10 @@ internal fun EditSongContent(
                                 }
                             }
                             Spacer(Modifier.weight(1f))
-                            ChordsToggle(on = showChords) { showChords = !showChords }
+                            ChordsToggle(on = showChords) {
+                                showChords = !showChords
+                                onChordsVisibleChange(showChords)
+                            }
                         }
 
                         // Section markers, inserted at the caret.
@@ -713,17 +731,23 @@ private fun RowScope.TempoCard(bpm: String, onBpmChange: (String) -> Unit, weigh
     }
 }
 
-/** One of the two lyric panes' tabs. */
+/**
+ * One of the two lyric panes' tabs.
+ *
+ * The selected one is filled with the accent rather than merely a shade lighter than its neighbour:
+ * these two tabs decide which set of words every edit lands in, so which is live has to be readable
+ * at a glance, not inferred from a small difference in surface tint.
+ */
 @Composable
 private fun PaneTab(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
         fontSize = 12.sp,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .background(
-                if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
+                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
                 RoundedCornerShape(7.dp),
             )
             .clickable(onClick = onClick)
@@ -733,33 +757,26 @@ private fun PaneTab(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /** The switch that decides whether the preview shows chords at all. */
 @Composable
-private fun ChordsToggle(on: Boolean, onClick: () -> Unit) {
-    val accent = MaterialTheme.colorScheme.primary
-    val ink = if (on) accent else MaterialTheme.colorScheme.onSurfaceVariant
+private fun ChordsToggle(on: Boolean, onToggle: () -> Unit) {
     HoverLabel(stringResource(Res.string.song_chords_toggle)) {
-    Row(
-        modifier = Modifier
-            .background(
-                if (on) accent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainer,
-                RoundedCornerShape(8.dp),
+        Row(
+            modifier = Modifier.clickable(onClick = onToggle).padding(start = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.song_chords),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (on) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            .border(
-                1.dp,
-                if (on) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant,
-                RoundedCornerShape(8.dp),
+            Switch(
+                checked = on,
+                onCheckedChange = { onToggle() },
+                modifier = Modifier.scale(0.75f),
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Text(
-            text = stringResource(Res.string.song_chords),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = ink,
-        )
-    }
+        }
     }
 }
 

@@ -73,6 +73,13 @@ data class SongSettings(
     val lyricsLowerThirdUnderline: Boolean = false,
     val lyricsLowerThirdShadow: Boolean = false,
 
+    /**
+     * Whether the song editor's preview shows chords. An editor preference rather than a per-song
+     * one: someone who works with chord charts wants them on for every song they open, and someone
+     * who never uses them should not have to switch them off again each time.
+     */
+    val editorShowChords: Boolean = true,
+
     // Song Title Slide settings
     val titleSlideEnabled: Boolean = false,
     val titleSlideShowSongNumber: Boolean = true,

@@ -1754,6 +1754,10 @@ fun SongsTab(
         theme = theme,
         tuning = songToEdit?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
         showTuningFields = hasStageMonitorScreen,
+        chordsVisible = appSettings.songSettings.editorShowChords,
+        onChordsVisibleChange = { visible ->
+            onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
+        },
         onDismiss = { showEditDialog = false },
         onSave = { updatedSong, tuning ->
             songToEdit?.let { oldSong ->
@@ -1828,6 +1832,10 @@ fun SongsTab(
         isNewSong = true,
         theme = theme,
         showTuningFields = hasStageMonitorScreen,
+        chordsVisible = appSettings.songSettings.editorShowChords,
+        onChordsVisibleChange = { visible ->
+            onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
+        },
         onDismiss = { showNewSongDialog = false },
         onSave = { newSong, tuning ->
             val success = viewModel.createSong(newSong)

@@ -279,7 +279,9 @@ fun SongChordPreview(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            // Without chord rows there is nothing to leave room for, so the whole chart closes up
+            // and reads as a plain lyric sheet.
+            verticalArrangement = Arrangement.spacedBy(if (showChords) 18.dp else 10.dp),
         ) {
             sections.forEach { section ->
                 Column(verticalArrangement = Arrangement.spacedBy(if (showChords) 5.dp else 2.dp)) {
@@ -573,7 +575,7 @@ private fun ChordLine(
                     fontSize = fontSize,
                     color = textColor,
                     softWrap = false,
-                    style = textStyle.copy(lineHeight = fontSize * 1.5f),
+                    style = textStyle.copy(lineHeight = fontSize * if (showChords) 1.5f else 1.25f),
                 )
             }
         }

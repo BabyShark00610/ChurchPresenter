@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Image
@@ -360,7 +361,7 @@ internal fun PlanningCenterImportDialogContent(
             ) {
                 DropdownSelector(
                     label = stringResource(Res.string.planning_center_import_service_type),
-                    value = viewModel.selectedServiceTypeId ?: "",
+                    value = viewModel.selectedServiceTypeId,
                     options = viewModel.serviceTypes.map { it.id to it.name },
                     onValueChange = { id -> viewModel.selectServiceType(id) },
                     modifier = Modifier.weight(1f)
@@ -516,7 +517,7 @@ internal fun PlanningCenterImportDialogContent(
                                                 checked = entry.selected,
                                                 onCheckedChange = { viewModel.toggleItemSelected(pco.id) }
                                             )
-                                            PlanItemTypeIcon(Icons.Filled.Label, tint = PC_HEADER_AMBER)
+                                            PlanItemTypeIcon(Icons.AutoMirrored.Filled.Label, tint = PC_HEADER_AMBER)
                                             Text(
                                                 pco.title,
                                                 style = MaterialTheme.typography.titleSmall,
