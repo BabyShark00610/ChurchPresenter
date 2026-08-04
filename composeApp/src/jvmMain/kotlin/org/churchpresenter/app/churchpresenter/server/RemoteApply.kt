@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.key.type
 import java.io.File
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
@@ -569,6 +570,35 @@ internal fun AppSettings.withAnnouncement(item: ScheduleItem.AnnouncementItem): 
             liveClockFormat     = item.liveClockFormat
         )
     )
+
+/**
+ * Hands a remotely-projected item to whichever tab has to load its real content, and reports whether
+ * any tab was asked.
+ *
+ * [executeProjectItem] adds the item to the schedule and flips `presentingMode`, but deliberately
+ * does **not** push picture or slide content itself — the tab that owns that content does, driven by
+ * these flows. So a type missing from this `when` goes live as an empty screen: the mode changes and
+ * nothing loads.
+ *
+ * **Only the project path drives all three.** The add-to-schedule path
+ * ([addScheduleItem]) navigates the Songs tab and nothing else, on purpose — adding a picture to the
+ * schedule must not hijack the Pictures tab away from what the operator is showing. Merging the two
+ * would do exactly that, which is why this is a separate function rather than a flag on that one.
+ *
+ * Returns false for every other type, so a test can pin "this drives no tab" as a positive result
+ * rather than as the absence of an emission.
+ */
+internal suspend fun emitRemoteTabSelection(
+    item: ScheduleItem,
+    songFlow: MutableSharedFlow<ScheduleItem.SongItem>,
+    pictureFlow: MutableSharedFlow<ScheduleItem.PictureItem>,
+    presentationFlow: MutableSharedFlow<ScheduleItem.PresentationItem>,
+): Boolean = when (item) {
+    is ScheduleItem.SongItem -> { songFlow.emit(item); true }
+    is ScheduleItem.PictureItem -> { pictureFlow.emit(item); true }
+    is ScheduleItem.PresentationItem -> { presentationFlow.emit(item); true }
+    else -> false
+}
 
 internal fun executeProjectItem(
     item: ScheduleItem,
