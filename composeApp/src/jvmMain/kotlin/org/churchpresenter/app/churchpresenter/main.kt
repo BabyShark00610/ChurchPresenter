@@ -135,6 +135,7 @@ import org.churchpresenter.app.churchpresenter.models.QuestionStatus
 import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.churchpresenter.app.churchpresenter.ui.theme.LanguageProvider
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.ui.theme.themeFromSettings
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkCommandFailure
 import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
@@ -378,20 +379,7 @@ fun main() {
         var identifyingScreen by remember { mutableStateOf(false) }
         val coroutineScope = rememberCoroutineScope { coroutineExceptionHandler }
 
-        var theme by remember {
-            val savedTheme = when (appSettings.theme.uppercase()) {
-                "LIGHT" -> ThemeMode.LIGHT
-                "DARK" -> ThemeMode.DARK
-                "WARM" -> ThemeMode.WARM
-                "OCEAN" -> ThemeMode.OCEAN
-                "ROSE" -> ThemeMode.ROSE
-                "MIDNIGHT" -> ThemeMode.MIDNIGHT
-                "FOREST" -> ThemeMode.FOREST
-                "MOCHA" -> ThemeMode.MOCHA
-                else -> ThemeMode.SYSTEM
-            }
-            mutableStateOf(savedTheme)
-        }
+        var theme by remember { mutableStateOf(themeFromSettings(appSettings.theme)) }
         val companionServer = remember { CompanionServer() }
         val qaManager = remember { QAManager() }
         val sttManager = remember { STTManager() }
