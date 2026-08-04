@@ -1439,6 +1439,7 @@
     <string name="song_pane_lyrics">Lyrics</string>
     <string name="song_pane_secondary">Secondary</string>
     <string name="song_chords">Chords</string>
+    <string name="stage_monitor_show_chords">Show Chords</string>
     <string name="song_chords_toggle">Show chords in the preview</string>
     <string name="song_insert_section">Insert</string>
     <string name="song_syntax">Syntax</string>

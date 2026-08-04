@@ -59,6 +59,9 @@ class StageMonitorSettingsTabLabelsTest {
         "Arial" to 6,
         "BACKGROUND COLOR" to 6,
         "Shadow" to 6,
+
+        // The one switch in Screen Content: whether a song with chords is drawn as a chart.
+        "Show Chords" to 1,
         "SIZE (%)" to 6,
         "INTENSITY (%)" to 6,
         "B" to 6, "I" to 6, "U" to 6, "S" to 6,

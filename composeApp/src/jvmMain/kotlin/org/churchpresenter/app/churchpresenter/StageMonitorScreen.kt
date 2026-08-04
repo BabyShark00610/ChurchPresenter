@@ -178,7 +178,7 @@ fun StageMonitorScreen(
 
     val renderData = ZoneRenderData(
         currentText = currentText,
-        chordLines = currentLyricSection.chordLines,
+        chordLines = if (sm.showChords) currentLyricSection.chordLines else emptyList(),
         songInfo = if (presentingMode == Presenting.LYRICS) {
             songInfoOf(
                 section = currentLyricSection,
@@ -190,7 +190,7 @@ fun StageMonitorScreen(
         } else {
             null
         },
-        nextChordLines = if (presentingMode == Presenting.LYRICS) {
+        nextChordLines = if (sm.showChords && presentingMode == Presenting.LYRICS) {
             allLyricSections.getOrNull(songDisplaySectionIndex + 1)?.chordLines.orEmpty()
         } else {
             emptyList()

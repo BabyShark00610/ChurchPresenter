@@ -2182,4 +2182,5 @@
     <string name="song_stats">Розділів: %1$d · Рядків: %2$d · Слів: %3$d</string>
     <string name="bible_catalog_language_named">%1$s · %2$s (%3$d)</string>
     <string name="bible_catalog_language_named_native">%1$s · %2$s · %3$s (%4$d)</string>
+    <string name="stage_monitor_show_chords">Показувати акорди</string>
 </resources>

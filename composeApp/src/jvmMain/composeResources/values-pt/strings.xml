@@ -2211,4 +2211,5 @@
     <string name="song_stats">%1$d secções · %2$d linhas · %3$d palavras</string>
     <string name="bible_catalog_language_named">%1$s · %2$s (%3$d)</string>
     <string name="bible_catalog_language_named_native">%1$s · %2$s · %3$s (%4$d)</string>
+    <string name="stage_monitor_show_chords">Mostrar acordes</string>
 </resources>

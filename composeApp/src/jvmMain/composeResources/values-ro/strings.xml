@@ -2212,4 +2212,5 @@
     <string name="song_stats">%1$d secțiuni · %2$d rânduri · %3$d cuvinte</string>
     <string name="bible_catalog_language_named">%1$s · %2$s (%3$d)</string>
     <string name="bible_catalog_language_named_native">%1$s · %2$s · %3$s (%4$d)</string>
+    <string name="stage_monitor_show_chords">Arată acordurile</string>
 </resources>
