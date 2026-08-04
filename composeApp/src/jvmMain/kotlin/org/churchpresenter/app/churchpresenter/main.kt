@@ -87,6 +87,9 @@ import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.data.settings.ResolvedDisplay
 import org.churchpresenter.app.churchpresenter.data.settings.obsSceneFor
+import org.churchpresenter.app.churchpresenter.data.settings.withWindowGeometry
+import org.churchpresenter.app.churchpresenter.utils.windowPlacementFromSettings
+import org.churchpresenter.app.churchpresenter.utils.windowPlacementToSettings
 import org.churchpresenter.app.churchpresenter.data.settings.reconcileScreenAssignments
 import org.churchpresenter.app.churchpresenter.data.settings.withBundledBible
 import org.churchpresenter.app.churchpresenter.data.Language
@@ -906,11 +909,7 @@ fun main() {
 
 
         val screens = rememberScreenDevices()
-        val savedPlacement = when (appSettings.windowPlacement) {
-            "floating" -> WindowPlacement.Floating
-            "fullscreen" -> WindowPlacement.Fullscreen
-            else -> WindowPlacement.Maximized
-        }
+        val savedPlacement = windowPlacementFromSettings(appSettings.windowPlacement)
         // Use OS primary monitor bounds so maximized/fullscreen stays on one screen
         val primaryBounds = GraphicsEnvironment.getLocalGraphicsEnvironment()
             .defaultScreenDevice.defaultConfiguration.bounds
@@ -932,18 +931,13 @@ fun main() {
         if (appReady && eulaAccepted) {
             Window(
                 onCloseRequest = {
-                    val placementStr = when (state.placement) {
-                        WindowPlacement.Floating -> "floating"
-                        WindowPlacement.Fullscreen -> "fullscreen"
-                        WindowPlacement.Maximized -> "maximized"
-                    }
-                    val isFloating = state.placement == WindowPlacement.Floating
-                    appSettings = appSettings.copy(
-                        windowPlacement = placementStr,
-                        windowWidth = if (isFloating) state.size.width.value.toInt() else appSettings.windowWidth,
-                        windowHeight = if (isFloating) state.size.height.value.toInt() else appSettings.windowHeight,
-                        windowX = if (isFloating) state.position.x.value.toInt() else -1,
-                        windowY = if (isFloating) state.position.y.value.toInt() else -1
+                    appSettings = appSettings.withWindowGeometry(
+                        placement = windowPlacementToSettings(state.placement),
+                        isFloating = state.placement == WindowPlacement.Floating,
+                        width = state.size.width.value.toInt(),
+                        height = state.size.height.value.toInt(),
+                        x = state.position.x.value.toInt(),
+                        y = state.position.y.value.toInt(),
                     )
                     settingsManager.saveSettings(appSettings)
                     if (qaManager.sessionActive) qaManager.toggleSession()
