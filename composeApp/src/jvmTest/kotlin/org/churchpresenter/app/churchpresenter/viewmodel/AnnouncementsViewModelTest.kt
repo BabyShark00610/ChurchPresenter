@@ -204,31 +204,50 @@ class AnnouncementsViewModelTest {
     }
 
     /**
-     * Documents a CURRENT INCONSISTENCY rather than desired behaviour. [stepTargetHour] wraps
-     * around midnight on purpose (its own comment says so), but the hour *carry* performed by
-     * [stepTargetMinute] goes through `setTargetHour`, which coerces into 0..23 instead of
-     * wrapping. So the minute wraps while the hour sticks:
-     *   23:59 --step minute up--> 23:00   (rather than 00:00)
-     *   00:00 --step minute down--> 00:59  (rather than 23:59)
+     * The minute spinner's hour carry has to wrap across midnight, like [stepTargetHour] does.
      *
-     * Only reachable by stepping the minute spinner across the hour boundary at the very top or
-     * bottom of the clock. Fix would be to route the carry through `stepTargetHour`, which already
-     * wraps correctly -- deliberately not changed here, since this slate is tests only.
+     * This used to document the opposite as a known inconsistency: the carry went through
+     * `setTargetHour`, which coerces into 0..23, so the minute wrapped while the hour stuck —
+     * 23:59 stepped up to **23:00** instead of 00:00, and 00:00 stepped down to **00:59** instead of
+     * 23:59. A countdown aimed at midnight is exactly the one a church sets, and it was 23 hours out.
+     *
+     * Both directions are asserted because they fail through different halves of the carry.
      */
     @Test
-    fun `minute carry clamps the hour at midnight instead of wrapping -- known inconsistency`() {
+    fun `stepping the minute across midnight wraps the hour rather than clamping it`() {
         val vm = vm()
         vm.setTargetHour(23)
         vm.setTargetMinute(59)
         vm.stepTargetMinute(1)
         assertEquals(0, vm.targetMinute)
-        assertEquals(23, vm.targetHour, "current behaviour: hour clamps rather than wrapping to 0")
+        assertEquals(0, vm.targetHour, "23:59 + 1min is 00:00, not 23:00")
 
         vm.setTargetHour(0)
         vm.setTargetMinute(0)
         vm.stepTargetMinute(-1)
         assertEquals(59, vm.targetMinute)
-        assertEquals(0, vm.targetHour, "current behaviour: hour clamps rather than wrapping to 23")
+        assertEquals(23, vm.targetHour, "00:00 - 1min is 23:59, not 00:59")
+    }
+
+    /**
+     * The seconds spinner reached the same defect one level deeper, and is a separate user action.
+     *
+     * `stepTargetSecond` already carried through `stepTargetMinute` — the correct pattern, and the
+     * reason the fix was to make the minute carry match it rather than to invent a new convention.
+     * But the hour it eventually reached was still clamped, so stepping seconds down from midnight
+     * landed on hour 0 instead of 23.
+     */
+    @Test
+    fun `stepping the second down from midnight carries all the way through the hour`() {
+        val vm = vm()
+        vm.setTargetHour(0)
+        vm.setTargetMinute(0)
+        vm.setTargetSecond(0)
+
+        vm.stepTargetSecond(-1)
+
+        assertEquals(23, vm.targetHour, "00:00:00 stepped down is 23:59:55")
+        assertEquals(59, vm.targetMinute)
     }
 
     @Test
