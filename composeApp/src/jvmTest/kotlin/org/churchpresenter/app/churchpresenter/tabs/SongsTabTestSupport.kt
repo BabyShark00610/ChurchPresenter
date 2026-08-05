@@ -3,6 +3,8 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
@@ -19,6 +21,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.models.LyricSection
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 import java.io.File
@@ -133,6 +136,15 @@ internal fun songsTab(
     /** Whether the tab is given somewhere to add a song to the schedule — off to test that the
      *  add-to-schedule actions are hidden rather than merely disabled when there is nowhere to send it. */
     withOnAddToSchedule: Boolean = true,
+    /**
+     * The schedule row the operator has clicked, and its version.
+     *
+     * Held as state the caller owns so a test can set it *after* the tab is composed — which is how
+     * it arrives in the app — and can bump the version to re-fire the same song, the case the
+     * version exists for. Left null and 0 by default, which is the tab with nothing selected.
+     */
+    scheduleSelection: MutableState<ScheduleItem.SongItem?> = mutableStateOf(null),
+    scheduleSelectionVersion: MutableState<Int> = mutableStateOf(0),
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -189,6 +201,8 @@ internal fun songsTab(
                         onLineIndexChanged = { reports.lineIndex = it },
                         onPresenting = { reports.presenting += it },
                         isPresenting = isPresenting,
+                        selectedSongItem = scheduleSelection.value,
+                        selectedSongItemVersion = scheduleSelectionVersion.value,
                     )
                 }
             }
