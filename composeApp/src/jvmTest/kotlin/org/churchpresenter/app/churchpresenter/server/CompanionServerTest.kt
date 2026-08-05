@@ -171,6 +171,10 @@ class CompanionServerTest {
             Constants.WS_EVENT_SONGS_UPDATED,
             Constants.WS_EVENT_SCHEDULE_UPDATED,
             Constants.WS_EVENT_BACKGROUNDS_UPDATED,
+            // Both of the pure invalidation signals belong here. They carry no payload, so there is
+            // no "nothing is loaded" case to withhold them for — a follower needs them on every
+            // reconnect or it trusts a cache the primary may have changed while it was away.
+            Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED,
         )) {
             assertTrue(expected in types, "connect snapshot is missing $expected; got $types")
         }
@@ -190,22 +194,25 @@ class CompanionServerTest {
     }
 
     /**
-     * Documents a KNOWN GAP, deliberately not fixed here.
+     * A follower must not be left trusting a secondary bible it cached in an earlier session.
      *
-     * `secondary_bible_updated` is broadcast live whenever the secondary bible changes, but it is
-     * absent from the connect snapshot — the exact bug already found and fixed for
-     * `backgrounds_updated`. A follower that reconnects (app restart, network blip, or the normal
-     * backoff reconnect) therefore keeps serving its previously cached secondary bible forever.
+     * `secondary_bible_updated` is broadcast live whenever the secondary bible changes, but it used
+     * to be absent from the connect snapshot — the exact bug already found and fixed for
+     * `backgrounds_updated`. A follower that reconnected (app restart, network blip, or the normal
+     * backoff reconnect) therefore kept serving its previously cached `.spb` **forever**, with no
+     * error and nothing in any log to notice by.
      *
-     * When the missing resend is added, this test will fail — flip it to the positive assertion
-     * and move the event up into the snapshot test above.
+     * The positive assertion now lives in the snapshot test above, alongside `backgrounds_updated`;
+     * what is checked here is the property that makes it unconditional — it is sent even though this
+     * server has no secondary bible configured, because the event is an invalidation signal with an
+     * empty payload rather than a catalogue.
      */
     @Test
-    fun `secondary bible is missing from the connect snapshot -- known gap`() {
+    fun `the secondary bible invalidation is resent even with none configured`() {
         val types = connectAndCollect().types()
-        assertFalse(
+        assertTrue(
             Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED in types,
-            "secondary_bible_updated is now resent on connect — the gap is fixed, update this test",
+            "a reconnecting follower must be told to re-check; got $types",
         )
     }
 
