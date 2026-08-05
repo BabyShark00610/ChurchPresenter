@@ -5,6 +5,7 @@ package org.churchpresenter.app.churchpresenter.tabs
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -35,7 +36,12 @@ class PresentationTabControlsTest {
         try {
             presentationTab(presenterManager = presenterManager) { vm, reports ->
                 vm.slideFiles.addAll(files)
-                waitForIdle()
+                // The thumbnails are decoded off the composition, so an idle composition does not
+                // mean they are on screen yet. Waiting for the first one — a positive signal — is
+                // what makes this independent of whatever ran before it.
+                waitUntil {
+                    onAllNodesWithContentDescription("Slide 1").fetchSemanticsNodes().isNotEmpty()
+                }
                 onNodeWithContentDescription("Slide 1").performClick()
                 waitForIdle()
                 block(vm, reports)
