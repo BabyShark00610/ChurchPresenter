@@ -10,10 +10,12 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -65,8 +67,12 @@ class EditSongContentTest {
         /** Where the songbook lands once Add New turns it into a typed field. */
         const val SONGBOOK_TYPED = 2
 
-        /** Tempo sits after Tune, and only when the editor is asked to offer it. */
-        const val TEMPO = 7
+        // With a stage monitor configured, capo and tempo are inserted after Tune and before the
+        // lyrics box, which moves down to 9. Verified against the rendered tree, not assumed — the
+        // constant that used to live here put TEMPO at 7, which is where capo actually is.
+        const val CAPO = 7
+        const val TEMPO = 8
+        const val COUNT_WITH_TUNING = 10
     }
 
     private object Label {
@@ -74,6 +80,12 @@ class EditSongContentTest {
         const val SECONDARY_PANE = "Secondary"
         const val CANCEL = "Cancel"
         const val ADD_NEW = "Add New..."
+
+        // Card captions go through CardLabel, which uppercases them — so these must be matched in
+        // upper case. Asserting on "Tempo" finds nothing whether the field is present or not, which
+        // makes an absence check pass for the wrong reason.
+        const val TEMPO_CAPTION = "TEMPO"
+        const val CAPO_CAPTION = "CAPO"
     }
 
     /**
@@ -460,4 +472,80 @@ class EditSongContentTest {
         assertEquals(1, saved.dismissed)
         assertNull(saved.song, "an abandoned edit must not reach the library")
     }
+
+    // ── Tempo and capo ──────────────────────────────────────────────────────────
+    //
+    // These are per-machine settings, not part of the song file, and only the stage monitor reads
+    // them — so the editor offers them only where there is one. They still ride through Save on
+    // every machine, which is the part that is easy to get wrong.
+
+    private fun ComposeUiTest.fieldText(ordinal: Int): String =
+        field(ordinal).fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text ?: ""
+
+    @Test
+    fun `without a stage monitor the tempo and capo fields are not offered`() = editor { _ ->
+        assertEquals(Field.COUNT, fieldCount())
+        onAllNodesWithText(Label.TEMPO_CAPTION).assertCountEquals(0)
+        onAllNodesWithText(Label.CAPO_CAPTION).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a stage monitor adds them after the tune field`() =
+        editor(showTuningFields = true) { _ ->
+            assertEquals(Field.COUNT_WITH_TUNING, fieldCount())
+            onNodeWithText(Label.TEMPO_CAPTION).assertExists()
+            onNodeWithText(Label.CAPO_CAPTION).assertExists()
+        }
+
+    @Test
+    fun `a stored tempo and capo are offered for editing`() =
+        editor(tuning = SongTuning(bpm = 120, capo = 3), showTuningFields = true) { _ ->
+            assertEquals("120", fieldText(Field.TEMPO))
+            assertEquals("3", fieldText(Field.CAPO))
+        }
+
+    @Test
+    fun `an unset tempo is an empty box, not a zero`() =
+        editor(tuning = SongTuning(), showTuningFields = true) { _ ->
+            // 0 is the "off" value, so showing it would read as a deliberate setting of zero rather
+            // than as nothing set.
+            assertEquals("", fieldText(Field.TEMPO))
+            assertEquals("", fieldText(Field.CAPO))
+        }
+
+    @Test
+    fun `edited tempo and capo come back through Save`() =
+        editor(showTuningFields = true) { saved ->
+            type(Field.TEMPO, "96")
+            type(Field.CAPO, "2")
+            save()
+
+            assertEquals(96, saved.tuning?.bpm)
+            assertEquals(2, saved.tuning?.capo)
+        }
+
+    @Test
+    fun `a tempo or capo beyond what an instrument can do is clamped on the way out`() =
+        editor(showTuningFields = true) { saved ->
+            // The boxes accept three and two digits respectively, so these are reachable by typing.
+            type(Field.TEMPO, "999")
+            type(Field.CAPO, "99")
+            save()
+
+            assertEquals(300, saved.tuning?.bpm, "300bpm is the ceiling")
+            assertEquals(12, saved.tuning?.capo, "a guitar has twelve usable frets here")
+        }
+
+    @Test
+    fun `editing on a machine with no stage monitor keeps the tuning someone else set`() =
+        editor(tuning = SongTuning(bpm = 120, capo = 3)) { saved ->
+            // The fields are hidden here, but their buffers are still seeded from the stored tuning
+            // and still feed Save. Were they not, editing a lyric on the booth machine would wipe
+            // the tempo set on the one driving the stage monitor.
+            type(Field.TITLE, "Retitled From The Booth")
+            save()
+
+            assertEquals(120, saved.tuning?.bpm)
+            assertEquals(3, saved.tuning?.capo)
+        }
 }
