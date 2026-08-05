@@ -28,12 +28,18 @@ import kotlin.test.assertTrue
  * sequence — a wrong answer at this stage is a button that silently does nothing mid-service, or a
  * key cut on a bus that isn't there.
  *
- * Two paths are deliberately not driven, both because their cost is a wait rather than work. A
- * *successful* run/show hands off to [LowerThirdSequencer], which talks to a switcher and holds the
- * animation for its full duration ([LowerThirdSequencerTest] covers the sequencer itself). And the
- * case where the topology is undetected — key counts of 0, meaning the app has never connected — is
- * accepted by validation by design and so has to reach the switcher; with no ATEM on the network
- * that ends in a 5-second socket timeout, which is a duration, not a test.
+ * The successful run/show path **is** driven, below. This comment used to defer it on the grounds
+ * that it "holds the animation for its full duration" — that is not what happens.
+ * [LowerThirdSequencer.run] performs the hold inside a `scope.launch` and returns as soon as it has
+ * started it, so the request answers immediately; and the switcher is only touched when a key target
+ * *and* a non-blank ATEM host are both present, which the "no ATEM" default here never satisfies.
+ * The tests must stop what they start, though — `show` mode parks its job on `delay(Long.MAX_VALUE)`
+ * until something calls stop.
+ *
+ * One path is still deliberately not driven, because its cost genuinely is a wait: the case where
+ * the topology is undetected — key counts of 0, meaning the app has never connected — is accepted by
+ * validation by design and so has to reach the switcher; with no ATEM on the network that ends in a
+ * 5-second socket timeout, which is a duration, not a test.
  *
  * Same harness as the sibling classes — a real `CompanionServer` on a free port, driven over real
  * HTTP — because `start()` builds its own Netty server rather than exposing a separable Ktor module.
@@ -207,6 +213,78 @@ class CompanionServerLowerThirdTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.text().contains(""""status":"stopped""""), response.text())
+    }
+
+    // ── Actually starting one ───────────────────────────────────────────────────
+    //
+    // `?key=0` means "drive no keyer", which is also what a church with no switcher gets. It keeps
+    // these away from the ATEM entirely and off the validation branches the tests above already own.
+    //
+    // Every one of these starts a sequencer job, so each hides afterwards: `show` mode would
+    // otherwise leave a coroutine parked on `delay(Long.MAX_VALUE)` for the rest of the suite.
+
+    /** Default `AtemSettings` roll either side of the animation — 300ms each, and both are counted. */
+    private val rolls = AtemSettings().keyPreRollMs + AtemSettings().keyPostRollMs
+
+    private fun runningThenHiding(path: String): String {
+        val body = posting(path).text()
+        posting("/api/lowerthirds/hide")
+        return body
+    }
+
+    @Test
+    fun `running a timed preset starts it and reports the animation's own duration`() {
+        val body = runningThenHiding("/api/lowerthirds/Welcome/run?key=0")
+
+        assertTrue(body.contains(""""status":"started""""), body)
+        assertTrue(body.contains(""""name":"Welcome""""), body)
+        // 60 frames at 30fps, read from the Lottie rather than from anything the caller sent.
+        assertTrue(body.contains(""""durationMs":2000"""), body)
+        // No key was targeted, so nothing could have failed on a switcher.
+        assertTrue(body.contains(""""keyError":null"""), body)
+    }
+
+    @Test
+    fun `the reported total is what the caller must wait through, not just the animation`() {
+        val body = runningThenHiding("/api/lowerthirds/Welcome/run?key=0")
+
+        // A Stream Deck lights its button for totalMs. It has to cover the key pre-roll and
+        // post-roll as well, or the button clears while the graphic is still on air.
+        assertTrue(body.contains(""""totalMs":${2000 + rolls}"""), "expected 2000+$rolls: $body")
+    }
+
+    @Test
+    fun `pausing on the hold frame adds its own two seconds to the total`() {
+        val body = runningThenHiding("/api/lowerthirds/Welcome/run?key=0&pause=true")
+
+        // 2000ms is the documented default for the hold when none is given.
+        assertTrue(body.contains(""""totalMs":${2000 + 2000 + rolls}"""), body)
+    }
+
+    @Test
+    fun `a caller can set its own hold length`() {
+        val body = runningThenHiding("/api/lowerthirds/Welcome/run?key=0&pause=true&pauseDurationMs=500")
+
+        assertTrue(body.contains(""""totalMs":${2000 + 500 + rolls}"""), body)
+    }
+
+    @Test
+    fun `a hold length sent without asking to pause is ignored`() {
+        val body = runningThenHiding("/api/lowerthirds/Welcome/run?key=0&pauseDurationMs=5000")
+
+        // The flag is what decides, not the presence of the number — otherwise a client that always
+        // sends both would hold on every graphic.
+        assertTrue(body.contains(""""totalMs":${2000 + rolls}"""), body)
+    }
+
+    @Test
+    fun `show mode reports no total, because nothing ends it but the operator`() {
+        val body = runningThenHiding("/api/lowerthirds/Welcome/show?key=0")
+
+        assertTrue(body.contains(""""status":"started""""), body)
+        // -1 rather than a duration: a button that cleared itself here would suggest the graphic had
+        // come off air while it is in fact still up.
+        assertTrue(body.contains(""""totalMs":-1"""), body)
     }
 
     @Test
