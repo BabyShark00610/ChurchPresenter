@@ -50,6 +50,8 @@ import churchpresenter.composeapp.generated.resources.song_transpose_up
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.utils.ChordSegment
 import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
+import org.churchpresenter.app.churchpresenter.utils.SongSectionWordGroup
+import org.churchpresenter.app.churchpresenter.utils.SongSectionWords
 import org.jetbrains.compose.resources.stringResource
 
 /** How a section reads in the preview — the colour tells verses from choruses at a glance. */
@@ -66,31 +68,21 @@ data class PreviewSection(
 data class SongStats(val sections: Int, val lines: Int, val words: Int)
 
 /**
- * The words a header may open with, per kind, in the languages song files actually arrive in — the
- * same set `ChordSheetImporter` canonicalises by, so a song written with Russian markers colours
- * like the English one it would import to. Verse is the fallback and needs no list.
- *
- * Order is the match order: no word here is a prefix of one in a later kind, so it is only a
- * reading aid today, but a new word has to be checked against it.
- */
-private val SECTION_WORDS: List<Pair<SongSectionKind, List<String>>> = listOf(
-    SongSectionKind.CHORUS to listOf("chorus", "refrain", "припев", "приспів"),
-    SongSectionKind.BRIDGE to listOf("bridge", "бридж", "мост", "міст"),
-    SongSectionKind.TAG to listOf("tag", "outro", "ending", "кода", "концовка", "закінчення"),
-)
-
-/**
  * Which kind of section a header names.
  *
- * Matched on the section words the song format itself uses — these are file markers, not interface
- * text, so they are not translated, but the same file may write them in its own language. Anything
- * unrecognised reads as a verse, which is what an unlabelled block is anyway; that also covers
- * "Pre-Chorus", which is deliberately not a chorus here.
+ * Matched on the section words the song format itself uses, in every language at once — see
+ * [SongSectionWords], which the wrapping and importing sides read too, so a song written with
+ * Polish or Russian markers colours like the English one it would import to.
+ *
+ * Only the four kinds that have an ink of their own are distinguished. Everything else — an intro,
+ * an instrumental, a pre-chorus, an unrecognised name — reads as a verse, which is what an
+ * unlabelled block is anyway.
  */
-fun sectionKindOf(label: String): SongSectionKind {
-    val l = label.trim().lowercase()
-    return SECTION_WORDS.firstOrNull { (_, words) -> words.any { l.startsWith(it) } }?.first
-        ?: SongSectionKind.VERSE
+fun sectionKindOf(label: String): SongSectionKind = when (SongSectionWords.groupOf(label)) {
+    SongSectionWordGroup.CHORUS -> SongSectionKind.CHORUS
+    SongSectionWordGroup.BRIDGE -> SongSectionKind.BRIDGE
+    SongSectionWordGroup.TAG -> SongSectionKind.TAG
+    else -> SongSectionKind.VERSE
 }
 
 /**

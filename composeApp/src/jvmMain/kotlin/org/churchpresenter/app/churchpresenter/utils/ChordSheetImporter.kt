@@ -16,22 +16,6 @@ package org.churchpresenter.app.churchpresenter.utils
  */
 object ChordSheetImporter {
 
-    /**
-     * Section words, in the languages these sheets actually arrive in, mapped onto the markers the
-     * app parses. Canonicalised to English on purpose: [isChorusHeader] keys the chorus off braces,
-     * and the preview colours sections by the English words in `sectionKindOf`.
-     */
-    private val SECTION_WORDS: List<Pair<Regex, String>> = listOf(
-        // Pre-chorus has to be tested before chorus, or it matches as a plain chorus.
-        Regex("pre[- ]?chorus|предприпев|передприспів") to "Pre-Chorus",
-        Regex("chorus|refrain|припев|приспів") to "Chorus",
-        Regex("bridge|бридж|мост|міст") to "Bridge",
-        Regex("intro|интро|вступление|вступ") to "Intro",
-        Regex("instrumental|проигрыш|програш") to "Instrumental",
-        Regex("tag|outro|ending|кода|концовка|закінчення") to "Tag",
-        Regex("verse|куплет") to "Verse",
-    )
-
     private val URL = Regex("^\\s*https?://\\S+\\s*$")
 
     /** Splits a line into its whitespace-separated tokens with the column each one starts on. */
@@ -51,21 +35,24 @@ object ChordSheetImporter {
         return tokens.size >= 2 || tokens.first().length >= 2 || line.first().isWhitespace()
     }
 
-    /** The marker a section heading becomes, or null when the line is not a heading. */
+    /**
+     * The marker a section heading becomes, or null when the line is not a heading.
+     *
+     * Canonicalised to English on purpose — [isChorusHeader] keys the chorus off braces, and
+     * everything downstream reads the marker rather than the language it was written in. The words
+     * themselves come from [SongSectionWords], shared with the parser and the preview's colouring.
+     */
     fun sectionMarkerOf(line: String, verseCounter: () -> Int): String? {
         val t = line.trim()
         if (t.isEmpty()) return null
         // Already in the app's own form — take it as it stands.
         if (ChordTransposer.isSectionHeader(t)) return t
-        // A heading is short and names a section; a lyric line that merely contains the word is not.
-        if (t.length > 32) return null
-        val lower = t.lowercase()
-        val (_, name) = SECTION_WORDS.firstOrNull { (pattern, _) -> pattern.containsMatchIn(lower) }
-            ?: return null
-        if (name == "Chorus") return "{Chorus}"
-        if (name != "Verse") return "[$name]"
+        val group = SongSectionWords.looseGroupOf(t) ?: return null
+        val name = SongSectionWords.CANONICAL.getValue(group)
+        if (group == SongSectionWordGroup.CHORUS) return "{$name}"
+        if (group != SongSectionWordGroup.VERSE) return "[$name]"
         val number = Regex("\\d+").find(t)?.value?.toIntOrNull() ?: verseCounter()
-        return "[Verse $number]"
+        return "[$name $number]"
     }
 
     /**
