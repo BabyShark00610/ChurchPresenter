@@ -3496,6 +3496,12 @@ class CompanionServer {
                     // primary's background changed while it was disconnected.
                     send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
                         WebSocketMessage(Constants.WS_EVENT_BACKGROUNDS_UPDATED, payload = ""))))
+                    // The secondary bible needs exactly the same treatment, and for exactly the same
+                    // reason: it is an invalidation signal with an empty payload, so a follower that
+                    // reconnects without it keeps serving the .spb it cached last session even if the
+                    // primary changed translation while it was away.
+                    send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
+                        WebSocketMessage(Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED, payload = ""))))
                     send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
                         WebSocketMessage(
                             type = Constants.WS_EVENT_PRESENTATION_SLIDE_CHANGED,
