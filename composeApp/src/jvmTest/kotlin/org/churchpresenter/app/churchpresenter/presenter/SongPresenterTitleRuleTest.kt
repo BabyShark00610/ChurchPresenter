@@ -124,20 +124,26 @@ class SongPresenterTitleRuleTest {
     }
 
     /**
-     * Documents a KNOWN GAP: the rule is "ends with 1", so verse 11, 21 and 31 all read as the
-     * first page and the title reappears over them.
+     * Only verse *one* is the first page — not every verse whose number happens to end in a 1.
      *
-     * Reachable in any song with eleven or more numbered sections — long hymns and psalm settings
-     * do reach that. The fix is to match the trailing number as a whole (`\b1$`); this expectation
-     * then becomes false.
+     * The rule used to be `endsWith("1")`, so verses 11, 21 and 31 all read as the opening slide and
+     * the title reappeared over them part-way through the song. Any hymn or psalm setting with
+     * eleven or more numbered sections reaches it, and the failure is quiet: the title simply covers
+     * the lyric again with nothing to say why.
      */
     @Test
-    fun `verse eleven is mistaken for verse one -- known gap`() {
-        assertTrue(
-            shouldShowText(Constants.FIRST_PAGE, section("[Verse 11]")),
-            "current behaviour: the title comes back over verse 11",
-        )
-        assertTrue(shouldShowText(Constants.FIRST_PAGE, section("[Verse 21]")))
+    fun `a verse whose number merely ends in one is not the first page`() {
+        assertFalse(shouldShowText(Constants.FIRST_PAGE, section("[Verse 11]")))
+        assertFalse(shouldShowText(Constants.FIRST_PAGE, section("[Verse 21]")))
+        assertFalse(shouldShowText(Constants.FIRST_PAGE, section("[Verse 31]")))
+        assertFalse(shouldShowText(Constants.FIRST_PAGE, section("[Куплет 11]")), "and in any language")
+    }
+
+    @Test
+    fun `a zero-padded first verse is still the first page`() {
+        // Numbering typed as 01/02 is read as a number, not as a string ending in "1".
+        assertTrue(shouldShowText(Constants.FIRST_PAGE, section("[Verse 01]")))
+        assertFalse(shouldShowText(Constants.FIRST_PAGE, section("[Verse 011]")))
     }
 
     // ── Turning it off ──────────────────────────────────────────────────────────

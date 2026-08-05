@@ -1028,7 +1028,11 @@ private fun shouldShowText(display: String, lyricSection: LyricSection): Boolean
             // Chorus/bridge sections are not "first page"
             if (lyricSection.type == Constants.SECTION_TYPE_CHORUS) return false
             val inner = header.trim().removePrefix("[").removePrefix("{").removeSuffix("]").removeSuffix("}").trim()
-            inner.endsWith("1") || !inner.any { it.isDigit() }
+            // The trailing number is compared as a number, not as a string ending in "1" — that read
+            // verses 11, 21 and 31 as the opening slide, so the title came back over them part-way
+            // through any hymn long enough to have eleven sections.
+            val sectionNumber = inner.takeLastWhile { it.isDigit() }.toIntOrNull()
+            sectionNumber == 1 || !inner.any { it.isDigit() }
         }
 
         else -> false
