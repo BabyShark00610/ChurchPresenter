@@ -5,10 +5,23 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
+/**
+ * Recently-opened presentation files, and the pinned subset that survives "clear recents".
+ *
+ * [file], [pinnedFile] and [load] are `internal var`/`internal fun` so a test can point them at a
+ * temp directory before calling [add]/[togglePin]/[clear], exactly as `RecentPictureFolders` and
+ * `RecentMediaFiles` already allow. Use `RecentFilesSwap` from the test source set rather than
+ * assigning them by hand — it restores both paths and both lists in one place, so a test cannot
+ * leave the object pointing somewhere the next test does not expect.
+ *
+ * This is not about protecting the developer's own files: the Gradle test config already points
+ * `user.home` at `build/test-home` for the whole JVM. It is about each test getting its own file
+ * instead of sharing one across the class.
+ */
 object RecentPresentationFiles {
     private const val MAX = 10
-    private val file = File(System.getProperty("user.home"), ".churchpresenter/recent_presentation_files.json")
-    private val pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_presentation_files.json")
+    internal var file = File(System.getProperty("user.home"), ".churchpresenter/recent_presentation_files.json")
+    internal var pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_presentation_files.json")
     val files = mutableStateListOf<String>()
     val pinned = mutableStateListOf<String>()
 
@@ -38,7 +51,7 @@ object RecentPresentationFiles {
         save()
     }
 
-    private fun load() {
+    internal fun load() {
         try {
             if (file.exists()) {
                 val json = Json { ignoreUnknownKeys = true }

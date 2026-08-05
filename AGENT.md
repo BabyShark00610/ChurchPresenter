@@ -130,9 +130,19 @@ When writing tests here:
     function parameters adds four uncovered methods at each call site and can score *worse* than
     the inline code it replaced. Take one function parameter — the unreachable step — and call the
     rest directly. Measure before and after; the report is the arbiter, not the intent.
-  - What must NOT be done to reach coverage: adding a mutable `internal var` seam on a singleton
-    (leaks between tests — see the flaky-test rule below), or asserting that a stub was called
-    instead of that something works. If a test can only prove a mock was invoked, don't write it.
+  - What must NOT be done to reach coverage: adding an **ad-hoc** mutable `internal var` seam on a
+    singleton and restoring it by hand in each test (leaks between tests — see the flaky-test rule
+    below), or asserting that a stub was called instead of that something works. If a test can only
+    prove a mock was invoked, don't write it.
+  - **The one permitted seam of that shape is the recent-files singletons**, and only through
+    `RecentFilesSwap` in `jvmTest`. `RecentPictureFolders`, `RecentMediaFiles` and
+    `RecentPresentationFiles` expose `internal var file`/`pinnedFile`; a test repoints them via that
+    helper, which restores both paths and both lists in one place, so the restore is structural
+    rather than something each author remembers. **Never assign those fields directly.** The
+    alternative — keeping them private and reaching in with `getDeclaredField` — is what this
+    replaced: it hides renames from the compiler (see the reflection rule below) and, run outside
+    Gradle, it deleted the developer's own recents. Adding a *fourth* such seam is not covered by
+    this exception; raise it first.
 - **Prefer `internal` over reflection to reach non-public code.** `jvmTest` is a friend of
   `jvmMain`, so an `internal` member is callable straight from a test. Reflection costs a lookup
   per call, throws at runtime instead of failing to compile when a signature changes, loses the

@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.data
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import org.churchpresenter.app.churchpresenter.RecentFilesSwap
 import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -19,37 +20,31 @@ import kotlin.test.assertTrue
  * keeps the file they use every single service from scrolling off the end.
  *
  * [RecentPresentationFiles] is a JVM-wide object that resolves its two JSON files when the class is
- * first loaded and reads them in its initialiser, so it cannot be rebuilt per test. Its own paths
- * are therefore read back by reflection, and each test starts by emptying both the in-memory lists
- * and those files — swapping `user.home` here would have no effect, since the paths were already
- * fixed by then.
+ * first loaded, so every test in this class would otherwise share one file and see the previous
+ * test's writes. [RecentFilesSwap] gives each test its own temp pair and puts the object back
+ * afterwards.
+ *
+ * This used to reach the paths by reflection and `delete()` them before and after every test, which
+ * both hid renames from the compiler and left the class unable to run its tests independently.
  */
 class RecentPresentationFilesTest {
 
-    private fun pathField(name: String): File =
-        RecentPresentationFiles::class.java
-            .getDeclaredField(name)
-            .apply { isAccessible = true }
-            .get(RecentPresentationFiles) as File
+    private val swap = RecentFilesSwap(
+        readPaths = { RecentPresentationFiles.file to RecentPresentationFiles.pinnedFile },
+        writePaths = { f, p -> RecentPresentationFiles.file = f; RecentPresentationFiles.pinnedFile = p },
+        entries = RecentPresentationFiles.files,
+        pinned = RecentPresentationFiles.pinned,
+        prefix = "cp-recent-presentation-files",
+    )
 
-    private val recentsFile: File get() = pathField("file")
-    private val pinnedFile: File get() = pathField("pinnedFile")
+    private val recentsFile: File get() = swap.recentFile
+    private val pinnedFile: File get() = swap.pinnedFile
 
     @BeforeTest
-    fun emptyEverything() {
-        RecentPresentationFiles.files.clear()
-        RecentPresentationFiles.pinned.clear()
-        recentsFile.delete()
-        pinnedFile.delete()
-    }
+    fun setUp() = swap.install()
 
     @AfterTest
-    fun leaveNothingBehind() {
-        RecentPresentationFiles.files.clear()
-        RecentPresentationFiles.pinned.clear()
-        recentsFile.delete()
-        pinnedFile.delete()
-    }
+    fun tearDown() = swap.restore()
 
     private fun savedRecents(): List<String> =
         if (!recentsFile.exists()) emptyList()
@@ -217,12 +212,7 @@ class RecentPresentationFilesTest {
      * loaded by the JVM, so a restart cannot be staged any other way — and the load path is the half
      * of this feature that the saving tests above never touch.
      */
-    private fun reload() {
-        RecentPresentationFiles::class.java
-            .getDeclaredMethod("load")
-            .apply { isAccessible = true }
-            .invoke(RecentPresentationFiles)
-    }
+    private fun reload() = RecentPresentationFiles.load()
 
     @Test
     fun `the recent list comes back in order`() {
