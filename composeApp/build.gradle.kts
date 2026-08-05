@@ -763,20 +763,17 @@ tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             // Kept in sync with jacocoTestReport above -- a hidden easter egg, out of scope for the
             // coverage floor regardless of how well tested it happens to be.
             exclude("**/CrosswordTabKt*")
-            // App entry / window wiring: `main` itself and the root composable tree.
-            // MainKt's ~200 synthetic lambda classes come along via the `$` globs.
+            // The app entry point: `main` itself, which opens real windows and binds real ports and
+            // so only runs under a display. MainKt's ~200 synthetic lambda classes come along via
+            // the `$` globs.
             //
-            // NavigationTopBar.kt used to be listed here too. It is now covered in full by
-            // NavigationTopBarTest, so excluding it would claim it cannot be tested when it
-            // demonstrably can — and would keep 212 covered lines out of the enforced number for
-            // no reason. This list is only worth reading if every entry on it is still true.
+            // Two files have left this list rather than sitting on it out of habit.
+            // NavigationTopBar.kt is covered in full by NavigationTopBarTest. MainDesktop.kt is at
+            // ~70% via MainDesktopComposeTest and the extracted MainDesktopLogic — excluding it
+            // claimed a demonstrably testable file could not be tested, and kept ~960 covered lines
+            // out of the enforced number. Counting it costs the gate about half a point against a
+            // ~14 point margin. This list is only worth reading if every entry on it is still true.
             exclude("org/churchpresenter/app/churchpresenter/MainKt*")
-            exclude("org/churchpresenter/app/churchpresenter/MainDesktopKt*")
-            // Declared in MainDesktop.kt but not named after it, so the glob above misses it: a
-            // holder for the schedule callbacks the root composable wires up. Named explicitly
-            // because leaving it in keeps every one of MainDesktop.kt's 1,521 lines in the
-            // denominator — JaCoCo drops a source file only once every class in it is excluded.
-            exclude("org/churchpresenter/app/churchpresenter/ScheduleActions*")
         }
     )
     sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
