@@ -396,17 +396,17 @@ class QAManagerStateTest {
     }
 
     /**
-     * Documents a KNOWN GAP rather than desired behaviour: [QAManager.toggleQRCodeDisplay] clears
-     * the displayed question locally but emits no [QAEvent.DisplayChanged], so anything driven by
-     * the event stream — a connected phone, a follower instance — is never told the question came
-     * down and keeps showing it alongside the operator's QR code.
+     * Switching to the QR code takes the question down everywhere, not just on the operator's screen.
      *
-     * Every other path that clears the display does emit. The fix is one `emitEvent` call; left
-     * unmade here because this slate is tests only. When it is made, this flips to asserting the
-     * event arrives.
+     * [QAManager.toggleQRCodeDisplay] used to clear the displayed question locally and emit nothing,
+     * so every consumer of the event stream — a connected phone, a follower instance — went on
+     * showing a question the operator had already retired.
+     *
+     * The event is emitted **inline** rather than by calling [QAManager.clearDisplay], which also
+     * sets `showQRCodeOnDisplay` back to false and would undo the toggle that is being performed.
      */
     @Test
-    fun `switching to the QR code retires the question without telling anyone -- known gap`() {
+    fun `switching to the QR code broadcasts that the question came down`() {
         val qa = openSession()
         val id = qa.submitApproved("Still on the phones")
         assertTrue(qa.displayQuestion(id))
@@ -414,10 +414,33 @@ class QAManagerStateTest {
         val events = qa.eventsDuring { qa.toggleQRCodeDisplay() }
 
         assertNull(qa.displayedQuestion, "locally the question is down")
-        assertTrue(qa.showQRCodeOnDisplay)
-        assertTrue(
-            events.filterIsInstance<QAEvent.DisplayChanged>().isEmpty(),
-            "current behaviour: nothing is broadcast, so a phone still shows the retired question",
+        assertTrue(qa.showQRCodeOnDisplay, "and the QR code stays up — the toggle is not undone")
+        assertNull(
+            events.filterIsInstance<QAEvent.DisplayChanged>().single().question,
+            "a phone must be told the question is gone, not left showing it",
         )
+    }
+
+    @Test
+    fun `toggling the QR code back off leaves the display alone`() {
+        val qa = openSession()
+        qa.toggleQRCodeDisplay()
+
+        val events = qa.eventsDuring { qa.toggleQRCodeDisplay() }
+
+        // Turning the QR code off retires nothing, so there is nothing to announce. Emitting here
+        // would tell followers a question came down that was never up.
+        assertFalse(qa.showQRCodeOnDisplay)
+        assertTrue(events.filterIsInstance<QAEvent.DisplayChanged>().isEmpty())
+    }
+
+    @Test
+    fun `switching to the QR code with nothing displayed announces nothing`() {
+        val qa = openSession()
+
+        val events = qa.eventsDuring { qa.toggleQRCodeDisplay() }
+
+        assertTrue(qa.showQRCodeOnDisplay)
+        assertTrue(events.filterIsInstance<QAEvent.DisplayChanged>().isEmpty())
     }
 }
