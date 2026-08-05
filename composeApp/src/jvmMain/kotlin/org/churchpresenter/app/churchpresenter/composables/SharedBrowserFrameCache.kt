@@ -495,7 +495,7 @@ object SharedBrowserFrameCache {
         return false
     }
 
-    private fun getPageWebSocketUrl(port: Int): String? {
+    internal fun getPageWebSocketUrl(port: Int): String? {
         return try {
             val request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:$port/json"))
