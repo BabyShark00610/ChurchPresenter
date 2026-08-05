@@ -248,7 +248,17 @@ class ScheduleViewModel(
     fun getNote(itemId: String): String = _notes[itemId] ?: ""
 
     fun setNote(itemId: String, note: String) {
-        if (note.isBlank()) _notes.remove(itemId) else _notes[itemId] = note
+        // A note is an edit like any other: it has to be snapshotted so it can be undone on its own,
+        // and notified so autosave knows the schedule changed. Without the notify a note-only change
+        // was never written; without the snapshot, undoing an unrelated edit restored a notes map
+        // that predated the note and silently discarded it.
+        val next = if (note.isBlank()) "" else note
+        // The ✓ that commits a note is also how its editor is closed, so pressing it unchanged must
+        // not push an undo step that appears to do nothing.
+        if ((_notes[itemId] ?: "") == next) return
+        pushUndoSnapshot()
+        if (next.isEmpty()) _notes.remove(itemId) else _notes[itemId] = next
+        notifyChanged()
     }
 
     // ── Encryption ────────────────────────────────────────────────────────────

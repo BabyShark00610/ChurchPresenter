@@ -262,28 +262,73 @@ class ScheduleViewModelTest {
     }
 
     /**
-     * Documents a CURRENT BUG rather than desired behaviour: `setNote` calls neither
-     * `notifyChanged()` nor `pushUndoSnapshot()`. Two consequences:
-     *  - the schedule is never marked dirty, so the 60-second autosave loop skips a note-only
-     *    change entirely -- type a note, crash before touching anything else, the note is gone;
-     *  - the note change is not undoable, and an undo of an *unrelated* earlier edit will silently
-     *    revert it, because undo restores the notes map wholesale from its snapshot.
+     * A note is an edit like any other: it has to mark the schedule dirty and be undoable.
      *
-     * Left unfixed here deliberately -- this slate is tests only. If `setNote` is corrected to
-     * notify (and optionally snapshot), this test should flip to asserting the notification.
+     * `setNote` used to do neither, with two consequences. The autosave loop skips a schedule it is
+     * never told changed, so typing a note and then crashing lost it. And because undo restores the
+     * notes map wholesale from its snapshot, undoing an *unrelated* earlier edit silently reverted
+     * the note too — the operator pressed undo once and lost two things.
+     *
+     * A note is committed by the ✓ button, not on every keystroke, so one edit is one undo step.
      */
     @Test
-    fun `setNote does not mark the schedule changed -- known bug`() {
+    fun `a note edit marks the schedule changed`() {
         val vm = newViewModel()
         vm.addSongs("A")
         val id = vm.scheduleItems[0].id
         val before = notifications.size
 
         vm.setNote(id, "Key of G")
-        assertEquals(before, notifications.size, "current behaviour: note edits notify nobody")
 
-        vm.undo() // undoes the add; the note goes with it, having never been snapshotted
+        assertTrue(notifications.size > before, "autosave only runs for a schedule it knows changed")
+    }
+
+    @Test
+    fun `a note edit is undone on its own, leaving the item it belongs to`() {
+        val vm = newViewModel()
+        vm.addSongs("A")
+        val id = vm.scheduleItems[0].id
+        vm.setNote(id, "Key of G")
+
+        vm.undo()
+
+        // The most recent edit was the note, so that is what comes back off the stack — the song
+        // it was attached to must survive.
         assertEquals("", vm.getNote(id))
+        assertEquals(1, vm.scheduleItems.size, "undoing the note must not take the song with it")
+    }
+
+    @Test
+    fun `undoing an edit made before the note leaves the note alone`() {
+        val vm = newViewModel()
+        vm.addSongs("A")
+        val id = vm.scheduleItems[0].id
+        vm.setNote(id, "Key of G")
+        vm.addSongs("B")
+
+        vm.undo() // undoes adding B
+
+        // This is the case that used to lose work silently: the note was never snapshotted, so any
+        // undo restored a notes map that predated it.
+        assertEquals("Key of G", vm.getNote(id), "an unrelated undo must not discard the note")
+        assertEquals(1, vm.scheduleItems.size)
+    }
+
+    @Test
+    fun `committing the same note again is not a second undo step`() {
+        val vm = newViewModel()
+        vm.addSongs("A")
+        val id = vm.scheduleItems[0].id
+        vm.setNote(id, "Key of G")
+        val before = notifications.size
+
+        vm.setNote(id, "Key of G")
+
+        // The ✓ button is also how the editor is closed, so pressing it without having changed
+        // anything must not push an undo step that appears to do nothing.
+        assertEquals(before, notifications.size)
+        vm.undo()
+        assertEquals("", vm.getNote(id), "one edit, one undo")
     }
 
     // ── Selection ───────────────────────────────────────────────────────────────
