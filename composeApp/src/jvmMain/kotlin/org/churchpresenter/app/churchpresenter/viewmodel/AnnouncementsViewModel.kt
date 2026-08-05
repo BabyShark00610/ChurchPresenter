@@ -349,11 +349,14 @@ class AnnouncementsViewModel {
 
     fun stepTargetMinute(delta: Int) {
         val cur = _targetMinute.value
+        // The carry goes through stepTargetHour, not setTargetHour: the latter coerces into 0..23,
+        // which left the minute wrapping while the hour stuck (23:59 stepped up to 23:00, 00:00
+        // stepped down to 00:59). A countdown aimed at midnight was 23 hours out.
         if (delta > 0) {
-            if (cur >= 59) { _targetMinute.value = 0; setTargetHour(_targetHour.value + 1) }
+            if (cur >= 59) { _targetMinute.value = 0; stepTargetHour(1) }
             else setTargetMinute(cur + 1)
         } else {
-            if (cur <= 0) { _targetMinute.value = 59; setTargetHour(_targetHour.value - 1) }
+            if (cur <= 0) { _targetMinute.value = 59; stepTargetHour(-1) }
             else setTargetMinute(cur - 1)
         }
     }
