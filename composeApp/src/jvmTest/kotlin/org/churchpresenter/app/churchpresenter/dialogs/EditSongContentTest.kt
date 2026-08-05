@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.SongItem
+import org.churchpresenter.app.churchpresenter.models.SongTuning
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -51,20 +52,26 @@ class EditSongContentTest {
      * so it publishes no set-text action and is reached through [songbook] instead.
      */
     private object Field {
-        const val NUMBER = 0
-        const val TUNE = 1
-        const val TITLE = 2
-        const val SECONDARY_TITLE = 3
-        const val AUTHOR = 4
-        const val COMPOSER = 5
-        const val CCLI = 6
+        const val TITLE = 0
+        const val SECONDARY_TITLE = 1
+        const val NUMBER = 2
+        const val AUTHOR = 3
+        const val COMPOSER = 4
+        const val CCLI = 5
+        const val TUNE = 6
         const val LYRICS = 7
-        const val SECONDARY_LYRICS = 8
-        const val COUNT = 9
+        const val COUNT = 8
+
+        /** Where the songbook lands once Add New turns it into a typed field. */
+        const val SONGBOOK_TYPED = 2
+
+        /** Tempo sits after Tune, and only when the editor is asked to offer it. */
+        const val TEMPO = 7
     }
 
     private object Label {
         const val SAVE = "Save"
+        const val SECONDARY_PANE = "Secondary"
         const val CANCEL = "Cancel"
         const val ADD_NEW = "Add New..."
     }
@@ -80,6 +87,7 @@ class EditSongContentTest {
 
     private class Saved {
         var song: SongItem? = null
+        var tuning: SongTuning? = null
         var dismissed = 0
     }
 
@@ -108,6 +116,8 @@ class EditSongContentTest {
         existingSongs: List<SongItem> = emptyList(),
         isNewSong: Boolean = false,
         songbooks: List<String> = emptyList(),
+        tuning: SongTuning = SongTuning(),
+        showTuningFields: Boolean = false,
         block: ComposeUiTest.(Saved) -> Unit,
     ) {
         val saved = Saved()
@@ -120,8 +130,10 @@ class EditSongContentTest {
                         existingSongs = existingSongs,
                         isNewSong = isNewSong,
                         theme = ThemeMode.LIGHT,
+                        tuning = tuning,
+                        showTuningFields = showTuningFields,
                         onDismiss = { saved.dismissed++ },
-                        onSave = { saved.song = it },
+                        onSave = { song, savedTuning -> saved.song = song; saved.tuning = savedTuning },
                     )
                 }
             }
@@ -152,6 +164,12 @@ class EditSongContentTest {
 
     private fun ComposeUiTest.save() = tap(Label.SAVE)
 
+    /**
+     * Moves the editor onto its second-language pane. The two sets of lyrics share one box now, so
+     * reaching the secondary ones means switching to them first.
+     */
+    private fun ComposeUiTest.secondaryPane() = tap(Label.SECONDARY_PANE)
+
     // ── Structure ───────────────────────────────────────────────────────────────
 
     @Test
@@ -159,7 +177,7 @@ class EditSongContentTest {
         assertEquals(
             Field.COUNT,
             fieldCount(),
-            "the editor offers nine typed fields; the other tests address them by position",
+            "the editor offers eight typed fields; the other tests address them by position",
         )
         field(Field.NUMBER).assertTextContains("42")
         field(Field.TITLE).assertTextContains("Amazing Grace")
@@ -245,7 +263,8 @@ class EditSongContentTest {
     @Test
     fun `secondary lyrics that are only section headers are discarded`() = editor { saved ->
         // A second language left with nothing but the structure copied over is not a translation.
-        type(Field.SECONDARY_LYRICS, "[Verse 1]\n\n[Chorus]\n  ")
+        secondaryPane()
+        type(Field.LYRICS, "[Verse 1]\n\n[Chorus]\n  ")
         save()
         assertEquals(
             emptyList(),
@@ -256,7 +275,8 @@ class EditSongContentTest {
 
     @Test
     fun `secondary lyrics with real content are kept`() = editor { saved ->
-        type(Field.SECONDARY_LYRICS, "[Verse 1]\nO Gnade Gottes")
+        secondaryPane()
+        type(Field.LYRICS, "[Verse 1]\nO Gnade Gottes")
         save()
         assertEquals(
             listOf("[Verse 1]", "O Gnade Gottes"),
@@ -424,9 +444,9 @@ class EditSongContentTest {
             waitForIdle()
             tap(Label.ADD_NEW)
 
-            // Add New turns the picker into a tenth, typeable field.
+            // Add New turns the picker into a ninth, typeable field.
             assertEquals(Field.COUNT + 1, fieldCount(), "the songbook becomes a typed field")
-            type(Field.NUMBER + 1, "Youth Songbook")
+            type(Field.SONGBOOK_TYPED, "Youth Songbook")
             save()
             assertEquals("Youth Songbook", saved.song?.songbook)
         }

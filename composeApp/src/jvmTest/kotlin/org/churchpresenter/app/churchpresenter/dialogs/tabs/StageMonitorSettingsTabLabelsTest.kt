@@ -59,12 +59,20 @@ class StageMonitorSettingsTabLabelsTest {
         "Arial" to 6,
         "BACKGROUND COLOR" to 6,
         "Shadow" to 6,
+
+        // The one switch in Screen Content: whether a song with chords is drawn as a chart.
+        "Show Chords" to 1,
         "SIZE (%)" to 6,
         "INTENSITY (%)" to 6,
         "B" to 6, "I" to 6, "U" to 6, "S" to 6,
 
-        // "COLOR" captions both the text colour and the shadow colour in every editor.
-        "COLOR" to 12,
+        // "COLOR" captions the text colour and the shadow colour in every editor — except in the
+        // two zones a chart can land in, where the text colour is named "LYRICS COLOR" instead so
+        // it says which of the two colours it is.
+        "COLOR" to 10,
+        "LYRICS COLOR" to CHORD_COLOUR_ZONES,
+        "CHORD COLOR" to CHORD_COLOUR_ZONES,
+        "#4FD3E8" to CHORD_COLOUR_ZONES,
 
         // The stored values those controls display.
         "#FFFFFF" to 6,   // every zone's text colour

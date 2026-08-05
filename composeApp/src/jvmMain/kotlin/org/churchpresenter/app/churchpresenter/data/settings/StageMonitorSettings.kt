@@ -63,7 +63,13 @@ data class StageMonitorZoneStyle(
     val shadowSize: Int = 100,
     val shadowOpacity: Int = 80,
     val verticalAlignment: String = Constants.TOP,
-    val horizontalAlignment: String = Constants.LEFT
+    val horizontalAlignment: String = Constants.LEFT,
+    /**
+     * Colour the chords are drawn in when this zone shows a song's chart. Everything else about
+     * them — face, size, weight — follows [color] and [fontType], so a chart reads as this zone's
+     * own words with the chords lifted above them; only the colour separates the two.
+     */
+    val chordColor: String = "#4FD3E8"
 )
 
 @Serializable
@@ -75,7 +81,13 @@ data class StageMonitorSettings(
     val zoneStyles: Map<StageMonitorStyleZone, StageMonitorZoneStyle> = defaultZoneStyles(),
 
     // Where the metronome flash dot is anchored; NONE = disabled (default).
-    val metronomePosition: MetronomePosition = MetronomePosition.NONE
+    val metronomePosition: MetronomePosition = MetronomePosition.NONE,
+
+    /**
+     * Whether a song that carries chords is drawn as a chart. Off, the zone shows the words alone,
+     * which is what a speaker or a vocalist reading lyrics wants from the same screen.
+     */
+    val showChords: Boolean = true
 ) {
     /** Safe lookup that falls back to the built-in default zone for content types missing from older saved settings. */
     fun zoneFor(type: StageMonitorContentType): StageMonitorZone =

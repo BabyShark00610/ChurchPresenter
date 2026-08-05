@@ -1434,6 +1434,29 @@
     <string name="secondary_lyrics">Secondary Lyrics</string>
     <string name="enter_secondary_lyrics_here">Enter secondary lyrics here...</string>
 
+    <!-- Edit Song Dialog - Chords, tempo and preview -->
+    <string name="song_tempo">Tempo</string>
+    <string name="song_pane_lyrics">Lyrics</string>
+    <string name="song_pane_secondary">Secondary</string>
+    <string name="song_chords">Chords</string>
+    <string name="stage_monitor_show_chords">Show Chords</string>
+    <string name="song_chords_toggle">Show chords in the preview</string>
+    <string name="song_insert_section">Insert</string>
+    <string name="song_syntax">Syntax</string>
+    <string name="song_syntax_chord_hint">— chords sit inline before the syllable they land on</string>
+    <string name="song_key">Key</string>
+    <string name="song_capo">Capo</string>
+    <string name="song_play">Play</string>
+    <string name="song_chord_color">Chord Color</string>
+    <string name="song_lyrics_color">Lyrics Color</string>
+    <string name="song_transpose_down">Transpose down</string>
+    <string name="song_transpose_up">Transpose up</string>
+    <string name="song_transpose_reset">%1$s — reset</string>
+    <string name="song_chords_in_key">Chords in %1$s</string>
+    <string name="song_chords_used">%1$d used</string>
+    <string name="song_insert_chord">Insert chord</string>
+    <string name="song_stats">%1$d sections · %2$d lines · %3$d words</string>
+
     <!-- System Settings - Song Samples and File Conversion -->
     <string name="song_samples">Song Samples</string>
     <string name="folder_already_exists">Folder Already Exists</string>

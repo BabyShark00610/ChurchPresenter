@@ -94,6 +94,7 @@ import org.churchpresenter.app.churchpresenter.data.StatisticsManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import org.churchpresenter.app.churchpresenter.composables.SectionLabelRow
 import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
 import org.churchpresenter.app.churchpresenter.composables.ActionIconButton
 import org.churchpresenter.app.churchpresenter.composables.AddToScheduleButton
@@ -176,6 +177,7 @@ import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.dialogs.EditSongDialog
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import org.churchpresenter.app.churchpresenter.models.SongTuning
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -284,8 +286,10 @@ fun SongsTab(
         onLineIndexChanged(viewModel.selectedLineIndex.value)
         val idx = viewModel.selectedSongIndex.value
         val items = viewModel.filteredSongItems.value
-        val bpm = items.getOrNull(idx)?.let { appSettings.songBpm[it.songId] } ?: 0
-        viewModel.getSelectedLyricSection()?.let { onSongItemSelected(it.copy(bpm = bpm)) }
+        val tuning = items.getOrNull(idx)?.let { appSettings.tuningFor(it.songId) } ?: SongTuning()
+        viewModel.getSelectedLyricSection()?.let {
+            onSongItemSelected(it.copy(bpm = tuning.bpm, capo = tuning.capo))
+        }
         // Record song display for statistics — only when the song is actually live
         // (or being sent live), and only when a different song is presented.
         val isDifferentSong = items.getOrNull(idx)?.songId?.let { it != liveSongId } ?: false
@@ -330,10 +334,11 @@ fun SongsTab(
     // currently live. Sourced directly from `editedSong` (the dialog's just-saved SongItem)
     // rather than viewModel.getSelectedLyricSection() — the catalog reload triggered by
     // updateSong() is async, so the viewModel's own selection state isn't guaranteed fresh yet.
-    fun sendEditedSongToPresenter(editedSong: SongItem) {
+    // [tuning] is passed in rather than read back from settings: the editor saves tempo, capo and
+    // song together, and the settings write has not reached `appSettings` yet in that same frame.
+    fun sendEditedSongToPresenter(editedSong: SongItem, tuning: SongTuning) {
         val sections = viewModel.getLyricSections(editedSong)
-        val bpm = appSettings.songBpm[editedSong.songId] ?: 0
-        val push = resolveEditedSongPush(sections, liveSectionIndex, liveLineIndex, editedSong, bpm)
+        val push = resolveEditedSongPush(sections, liveSectionIndex, liveLineIndex, editedSong, tuning)
         onAllSectionsChanged(sections)
         onSectionIndexChanged(push.sectionIndex)
         onLineIndexChanged(push.lineIndex)
@@ -1407,80 +1412,12 @@ fun SongsTab(
             val addScheduleStr = stringResource(Res.string.add_to_schedule)
 
             val hasSongSelected = selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size && selectedSectionIndex >= 0
-            val hasStageMonitorScreen = appSettings.projectionSettings.screenAssignments.any {
-                it.displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR
-            }
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (hasStageMonitorScreen && selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    val selectedSong = filteredSongs[selectedSongIndex]
-                    val metronomeBpmStr = stringResource(Res.string.metronome_bpm_label)
-                    val bpmUnitStr = stringResource(Res.string.unit_bpm)
-                    val currentBpm = appSettings.songBpm[selectedSong.songId] ?: 0
-                    var editingBpm by remember { mutableStateOf(false) }
-                    var bpmInput by remember(selectedSong.songId) { mutableStateOf(currentBpm.toString()) }
-
-                    Column(
-                        modifier = Modifier
-                            .height(42.dp)
-                            .width(90.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .clickable { bpmInput = currentBpm.toString(); editingBpm = true }
-                            .padding(start = 11.dp, end = 11.dp, top = 0.dp, bottom = 6.dp),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = metronomeBpmStr.uppercase(),
-                            fontSize = TextUnit(8f, TextUnitType.Sp),
-                            lineHeight = TextUnit(9f, TextUnitType.Sp),
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.9.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            maxLines = 1
-                        )
-                        Text(
-                            text = "$currentBpm $bpmUnitStr",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-
-                    if (editingBpm) {
-                        AlertDialog(
-                            onDismissRequest = { editingBpm = false },
-                            title = { Text(metronomeBpmStr) },
-                            text = {
-                                OutlinedTextField(
-                                    value = bpmInput,
-                                    onValueChange = { bpmInput = it.filter { c -> c.isDigit() }.take(3) },
-                                    suffix = { Text(bpmUnitStr) },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-                            },
-                            confirmButton = {
-                                TextButton(
-                                    shape = RoundedCornerShape(6.dp),
-                                    onClick = {
-                                        val bpmValue = bpmInput.toIntOrNull()?.coerceIn(0, 300) ?: 0
-                                        onSettingsChangeState.value { s -> s.copy(songBpm = s.songBpm + (selectedSong.songId to bpmValue)) }
-                                        editingBpm = false
-                                    }
-                                ) { Text(stringResource(Res.string.ok)) }
-                            },
-                            dismissButton = {
-                                TextButton(shape = RoundedCornerShape(6.dp), onClick = { editingBpm = false }) { Text(stringResource(Res.string.cancel)) }
-                            }
-                        )
-                    }
-                }
-
                 if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
                     ActionIconButton(
                         onClick = { songToEdit = filteredSongs[selectedSongIndex]; showEditDialog = true; tabFocusRequester.requestFocus() },
@@ -1638,7 +1575,7 @@ fun SongsTab(
                             fun buildTitleSection() =
                                 titleSlideSection(
                                     currentSong,
-                                    appSettings.songBpm[currentSong.songId] ?: 0,
+                                    appSettings.tuningFor(currentSong.songId),
                                     appSettings.songSettings.titleSlideShowSongNumber,
                                 )
 
@@ -1734,14 +1671,12 @@ fun SongsTab(
                                 val activeLineIndex = if (isPerLineMode && sectionIndex == selectedSectionIndex)
                                     viewModel.selectedLineIndex.value else -1
 
-                                // Render section header if present
+                                // Render section header if present — the same chip the editor's
+                                // preview uses, so a verse is recognised the same way in both.
                                 section.header?.let { header ->
-                                    Text(
-                                        text = header,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    SectionLabelRow(
+                                        label = header.trim().trim('[', ']', '{', '}').trim(),
+                                        modifier = Modifier.padding(vertical = 4.dp),
                                     )
                                 }
 
@@ -1782,7 +1717,8 @@ fun SongsTab(
                                     LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
                                 }
                             }
-                            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                            // No separator between sections: each one opens with its own labelled
+                            // chip and rule, which is what divides them now.
                         }
                     } else {
                         item {
@@ -1803,6 +1739,12 @@ fun SongsTab(
         }
     }
 
+    // The metronome tempo is only ever read by the stage monitor, so the field that sets it is
+    // offered only when there is one configured.
+    val hasStageMonitorScreen = appSettings.projectionSettings.screenAssignments.any {
+        it.displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR
+    }
+
     // Edit Song Dialog — pure UI dialog state is fine here
     EditSongDialog(
         isVisible = showEditDialog,
@@ -1810,15 +1752,22 @@ fun SongsTab(
         songbooks = viewModel.songbooks.value,
         existingSongs = viewModel.songsData.value.getSongs(),
         theme = theme,
+        tuning = songToEdit?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
+        showTuningFields = hasStageMonitorScreen,
+        chordsVisible = appSettings.songSettings.editorShowChords,
+        onChordsVisibleChange = { visible ->
+            onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
+        },
         onDismiss = { showEditDialog = false },
-        onSave = { updatedSong ->
+        onSave = { updatedSong, tuning ->
             songToEdit?.let { oldSong ->
                 val wasLive = isPresenting && liveSongId == oldSong.songId
                 val success = viewModel.updateSong(oldSong, updatedSong)
                 if (success) {
+                    onSettingsChangeState.value { s -> s.withTuning(updatedSong.songId, tuning) }
                     songToEdit = null
                     showEditDialog = false
-                    if (wasLive) sendEditedSongToPresenter(updatedSong)
+                    if (wasLive) sendEditedSongToPresenter(updatedSong, tuning)
                 }
             }
         }
@@ -1882,10 +1831,18 @@ fun SongsTab(
         existingSongs = viewModel.songsData.value.getSongs(),
         isNewSong = true,
         theme = theme,
+        showTuningFields = hasStageMonitorScreen,
+        chordsVisible = appSettings.songSettings.editorShowChords,
+        onChordsVisibleChange = { visible ->
+            onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
+        },
         onDismiss = { showNewSongDialog = false },
-        onSave = { newSong ->
+        onSave = { newSong, tuning ->
             val success = viewModel.createSong(newSong)
             if (success) {
+                if (tuning != SongTuning()) {
+                    onSettingsChangeState.value { s -> s.withTuning(newSong.songId, tuning) }
+                }
                 showNewSongDialog = false
             }
         }
