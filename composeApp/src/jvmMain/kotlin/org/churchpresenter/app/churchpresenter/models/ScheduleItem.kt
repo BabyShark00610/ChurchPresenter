@@ -143,7 +143,7 @@ sealed class ScheduleItem {
         override val id: String,
         val url: String,
         val title: String = url,
-        override val displayText: String = "${title.take(60)}${if (title.length > 60) "…" else ""}"
+        override val displayText: String = websiteDisplayText(title)
     ) : ScheduleItem()
 
     @Serializable
@@ -164,4 +164,16 @@ sealed class ScheduleItem {
         override val displayText: String = "$word ($number)"
     ) : ScheduleItem()
 }
+
+/**
+ * The schedule row's label for a website, truncated so a long page title cannot push the row out of
+ * shape.
+ *
+ * Named rather than inlined into [ScheduleItem.WebsiteItem]'s default because `copy()` does **not**
+ * re-apply constructor defaults — it carries the current instance's value for every parameter it is
+ * not given. Anything that changes the title therefore has to pass the new label explicitly, and
+ * both sides have to derive it the same way or the row and the title drift apart.
+ */
+internal fun websiteDisplayText(title: String): String =
+    "${title.take(60)}${if (title.length > 60) "…" else ""}"
 
