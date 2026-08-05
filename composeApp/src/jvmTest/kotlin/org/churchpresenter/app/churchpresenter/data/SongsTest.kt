@@ -281,13 +281,31 @@ class SongsTest {
 
     @Test
     fun `a section with an unrecognised heading is left as written`() {
-        val songs = load(row("1", "Odd", lyrics = lyrics(listOf("Intro", "spoken line"))))
+        val songs = load(row("1", "Odd", lyrics = lyrics(listOf("Tacet", "spoken line"))))
 
         assertEquals(
-            listOf("Intro", "spoken line"),
+            listOf("Tacet", "spoken line"),
             songs.getSongs().single().lyrics,
             "an unknown heading is neither a verse nor a chorus, so it is shown as it stands",
         )
+    }
+
+    @Test
+    fun `a heading written in another language is wrapped like the english one`() {
+        val songs = load(
+            row("1", "Polska", lyrics = lyrics(listOf("Zwrotka 1", "a"), listOf("Refren", "b"))),
+        )
+
+        val text = songs.getSongs().single().lyrics
+        assertTrue("[Zwrotka 1]" in text, text.toString())
+        assertTrue("{Refren}" in text, text.toString())
+    }
+
+    @Test
+    fun `an intro is a section in its own right`() {
+        val songs = load(row("1", "Lead-in", lyrics = lyrics(listOf("Intro", "spoken line"))))
+
+        assertEquals(listOf("[Intro]", "spoken line"), songs.getSongs().single().lyrics)
     }
 
     @Test

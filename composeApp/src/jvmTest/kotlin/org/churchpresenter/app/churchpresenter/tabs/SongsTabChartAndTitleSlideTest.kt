@@ -17,7 +17,8 @@ import kotlin.test.assertTrue
  */
 class SongsTabChartAndTitleSlideTest {
 
-    private val TITLE_SLIDE = "Song Title Slide"
+    /** Upper-cased on screen: the title slide wears the same section chip a verse does. */
+    private val TITLE_SLIDE = "SONG TITLE SLIDE"
 
     private val chordedSong = listOf(
         SongFixture(
