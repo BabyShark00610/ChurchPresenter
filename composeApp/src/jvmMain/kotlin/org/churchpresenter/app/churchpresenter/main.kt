@@ -212,14 +212,28 @@ private var singleInstanceSocket: java.net.ServerSocket? = null
  * Attempt to bind a local port to enforce single-instance.
  * Returns true if this is the first instance, false if another is already running.
  */
-private fun acquireSingleInstanceLock(): Boolean {
+/**
+ * Drops the single-instance lock, letting another instance take it.
+ *
+ * The running app holds it for its whole life, so nothing in the app calls this — but the lock is a
+ * process-wide resource, and anything that takes it without giving it back holds the port until the
+ * JVM ends.
+ */
+internal fun releaseSingleInstanceLock() {
+    runCatching { singleInstanceSocket?.close() }
+    singleInstanceSocket = null
+}
+
+internal fun acquireSingleInstanceLock(): Boolean {
     return try {
         // Bind to a fixed localhost port — if it's already taken, another instance is running.
         // The system property override exists for development/testing (e.g. running an
         // InstanceLink follower side by side with a primary on one machine, combined with
         // -Duser.home to isolate its settings and caches).
-        val lockPort = System.getProperty("churchpresenter.singleInstancePort")?.toIntOrNull()
-            ?: Constants.SINGLE_INSTANCE_PORT
+        val lockPort = singleInstanceLockPort(
+            System.getProperty("churchpresenter.singleInstancePort"),
+            Constants.SINGLE_INSTANCE_PORT,
+        )
         singleInstanceSocket = java.net.ServerSocket(lockPort, 1, java.net.InetAddress.getLoopbackAddress())
         true
     } catch (_: Exception) {
@@ -229,7 +243,7 @@ private fun acquireSingleInstanceLock(): Boolean {
 
 fun main() {
     // Ensure Skiko uses Metal on macOS — prevents OPENGL fallback crash
-    if (System.getProperty("os.name", "").lowercase().contains("mac")) {
+    if (shouldForceMetalRenderer(System.getProperty("os.name", ""))) {
         System.setProperty("skiko.renderApi", "METAL")
     }
     // Enforce single instance — exit immediately if another is already running
@@ -342,7 +356,7 @@ fun main() {
                     x = bounds.x, y = bounds.y, width = bounds.width, height = bounds.height,
                 )
             }
-            val deckLinkCount = if (DeckLinkManager.isAvailable()) DeckLinkManager.listDevices().size else 0
+            val deckLinkCount = deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
 
             val proj = appSettings.projectionSettings
             val assignments = reconcileScreenAssignments(proj.screenAssignments, nonPrimaryDisplays, deckLinkCount)
@@ -370,7 +384,7 @@ fun main() {
 
         var currentLanguage by remember {
             val savedLanguageCode = appSettings.language
-            val language = Language.entries.find { it.code == savedLanguageCode } ?: Language.ENGLISH
+            val language = resolveStartupLanguage(savedLanguageCode)
             Locale.setDefault(Locale.forLanguageTag(language.code))
             mutableStateOf(language)
         }
@@ -401,12 +415,12 @@ fun main() {
                 if (connection.autoConnect && autoConnectedIds.add(connection.id)) {
                     // Companion requires a non-empty DEVICEID — generate + persist one if it was
                     // cleared, same guard as the manual Connect button in settings.
-                    val effective = if (connection.deviceId.isBlank()) {
+                    val effective = if (needsGeneratedDeviceId(connection)) {
                         val generated = java.util.UUID.randomUUID().toString()
                         appSettings = appSettings.copy(
-                            companionSatelliteConnections = appSettings.companionSatelliteConnections.map {
-                                if (it.id == connection.id) it.copy(deviceId = generated) else it
-                            }
+                            companionSatelliteConnections = withGeneratedDeviceId(
+                                appSettings.companionSatelliteConnections, connection.id, generated,
+                            )
                         )
                         settingsManager.saveSettings(appSettings)
                         connection.copy(deviceId = generated)
@@ -433,8 +447,13 @@ fun main() {
                 // live yet. A brand-new/never-before-seen connection still only auto-connects when
                 // autoConnect is set, preserving startup's opt-in-only behavior (handled primarily
                 // by the auto-connect-once effect above).
-                val isLiveEdit = lastReconciled[connection.id]?.let { it != connection } ?: false
-                if (hasLiveSlot || connection.autoConnect || isLiveEdit) {
+                if (shouldConnectCompanion(
+                        hasLiveSlot = hasLiveSlot,
+                        autoConnect = connection.autoConnect,
+                        lastSeen = lastReconciled[connection.id],
+                        current = connection,
+                    )
+                ) {
                     companionSatelliteViewModel.connectAll(connection)
                 }
                 lastReconciled[connection.id] = connection
@@ -456,7 +475,7 @@ fun main() {
         // `enabled` was only ever written as true and Disconnect was silently undone by the next
         // launch's auto-connect, with no way to turn the link off short of editing settings.json.
         fun setInstanceLinkEnabled(enabled: Boolean) {
-            if (appSettings.instanceLink.enabled == enabled) return
+            if (!instanceLinkEnabledChanged(appSettings.instanceLink, enabled)) return
             appSettings = appSettings.copy(instanceLink = appSettings.instanceLink.copy(enabled = enabled))
             settingsManager.saveSettings(appSettings)
         }
@@ -472,12 +491,12 @@ fun main() {
             appSettings.instanceLink.reconnectDelayMs
         ) {
             val link = appSettings.instanceLink
-            if (link.enabled && link.autoConnect && link.primaryHost.isNotBlank() && link.primaryPort > 0) {
+            if (shouldAutoConnectInstanceLink(link)) {
                 instanceLinkViewModel.connect(
                     link.primaryHost, link.primaryPort, link.apiKey, link.deviceId,
                     link.reconnectDelayMs.toLong()
                 )
-            } else if (!link.enabled) {
+            } else if (shouldDisconnectInstanceLink(link)) {
                 // Toggling the link off should actually drop the connection, not leave it
                 // running until the next app restart.
                 instanceLinkViewModel.disconnect()
@@ -513,7 +532,7 @@ fun main() {
                 if (slide == null) return@collectLatest
                 // The connect snapshot always sends this event, with an empty id when the primary
                 // has no presentation loaded — nothing to fetch, and the request would 404.
-                if (slide.id.isBlank()) return@collectLatest
+                if (!hasFetchableSlide(slide.id)) return@collectLatest
                 val bytes = instanceLinkViewModel.fetchPresentationSlideBytes(slide.id, slide.index)
                 if (bytes == null) {
                     InstanceLinkLogger.log(
@@ -597,7 +616,7 @@ fun main() {
                 mirroredBackgroundSettings = null
                 return@LaunchedEffect
             }
-            if (instanceLinkBackgroundsSignal > 0) {
+            if (shouldInvalidateBackgroundCache(instanceLinkBackgroundsSignal)) {
                 withContext(Dispatchers.IO) {
                     instanceLinkBackgroundCacheDir.listFiles()?.forEach { it.delete() }
                 }
@@ -614,39 +633,43 @@ fun main() {
         // persistence, general settings), since those should never show the mirrored backgrounds as
         // if they were this instance's own configuration.
         val effectiveAppSettings = remember(appSettings, mirroredBackgroundSettings) {
-            mirroredBackgroundSettings?.let { appSettings.copy(backgroundSettings = it) } ?: appSettings
+            withMirroredBackgrounds(appSettings, mirroredBackgroundSettings)
         }
         // Broadcasts this instance's live content to any connected InstanceLink follower — the
         // counterpart to the remoteLiveState collector above.
         LaunchedEffect(Unit) {
             presenterManager.onLiveStateChanged = { pm, source ->
-                val verseCode = if (source == Presenting.BIBLE) {
-                    pm.selectedVerse.value.takeIf { it.bookName.isNotEmpty() }?.let { v ->
-                        primaryBibleForInstanceLink?.getBookIdByName(v.bookName)?.let { bookId ->
-                            primaryBibleForInstanceLink?.getCodeReference(bookId, v.chapter, v.verseNumber)
-                        }
-                    }
-                } else null
+                val liveVerse = pm.selectedVerse.value
+                val verseCode = liveVerseCode(
+                    source = source,
+                    bookName = liveVerse.bookName,
+                    chapter = liveVerse.chapter,
+                    verseNumber = liveVerse.verseNumber,
+                    bookIdByName = { name -> primaryBibleForInstanceLink?.getBookIdByName(name) },
+                    codeReference = { bookId, chapter, verse ->
+                        primaryBibleForInstanceLink?.getCodeReference(bookId, chapter, verse)
+                    },
+                )
                 companionServer.updateLiveState(
                     mode = source.name,
                     bibleVerse = pm.selectedVerse.value,
                     lyricSection = pm.lyricSection.value,
                     pictureImagePath = pm.selectedImagePath.value,
-                    mediaUrl = pm.currentMediaUrl.value.ifEmpty { null },
-                    mediaType = pm.currentMediaType.value.ifEmpty { null },
-                    announcementText = pm.announcementText.value.ifEmpty { null },
-                    websiteUrl = pm.websiteUrl.value.ifEmpty { null },
-                    websiteTitle = pm.webPageTitle.value.ifEmpty { null },
+                    mediaUrl = nullIfEmpty(pm.currentMediaUrl.value),
+                    mediaType = nullIfEmpty(pm.currentMediaType.value),
+                    announcementText = nullIfEmpty(pm.announcementText.value),
+                    websiteUrl = nullIfEmpty(pm.websiteUrl.value),
+                    websiteTitle = nullIfEmpty(pm.webPageTitle.value),
                     sceneId = pm.activeScene.value?.id,
                     sceneName = pm.activeScene.value?.name,
                     questionId = pm.displayedQuestion.value?.id,
                     questionText = pm.displayedQuestion.value?.text,
                     dictionaryWord = pm.displayedDictionaryEntry.value?.word,
                     dictionaryEntry = pm.displayedDictionaryEntry.value,
-                    lowerThirdName = pm.currentLowerThirdName.value.ifEmpty { null },
+                    lowerThirdName = nullIfEmpty(pm.currentLowerThirdName.value),
                     verseCode = verseCode,
-                    songSectionIndex = if (source == Presenting.LYRICS) pm.songDisplaySectionIndex.value else null,
-                    songLineIndex = if (source == Presenting.LYRICS) pm.songDisplayLineIndex.value else null
+                    songSectionIndex = livePositionOrNull(source, Presenting.LYRICS, pm.songDisplaySectionIndex.value),
+                    songLineIndex = livePositionOrNull(source, Presenting.LYRICS, pm.songDisplayLineIndex.value)
                 )
             }
         }
@@ -658,7 +681,7 @@ fun main() {
             appSettings.obsSettings.port,
             appSettings.obsSettings.password
         ) {
-            if (appSettings.obsSettings.enabled) {
+            if (shouldConnectObs(appSettings.obsSettings)) {
                 obsManager.connect(
                     appSettings.obsSettings.host,
                     appSettings.obsSettings.port,
@@ -678,7 +701,7 @@ fun main() {
         }
         // Sync QA settings to server — admin auth reuses the server API key, just like the presentation remote
         LaunchedEffect(appSettings.serverSettings.apiKeyEnabled, appSettings.serverSettings.apiKey, appSettings.qaSettings.rateLimitCooldownSeconds, appSettings.qaSettings.votingEnabled) {
-            companionServer.qaAdminPassword = if (appSettings.serverSettings.apiKeyEnabled) appSettings.serverSettings.apiKey else ""
+            companionServer.qaAdminPassword = activeApiKey(appSettings.serverSettings)
             companionServer.qaCooldownSeconds = appSettings.qaSettings.rateLimitCooldownSeconds
             companionServer.qaVotingEnabled = appSettings.qaSettings.votingEnabled
         }
@@ -688,8 +711,8 @@ fun main() {
         var qaDisplayUrl by remember { mutableStateOf("") }
         var presentationDisplayUrl by remember { mutableStateOf("") }
         LaunchedEffect(tunnelStatus) {
-            val isConnected = tunnelStatus is TunnelStatus.Connected
-            if (prevTunnelWasConnected.value && !isConnected) {
+            val isConnected = isTunnelConnected(tunnelStatus)
+            if (tunnelJustDropped(prevTunnelWasConnected.value, isConnected)) {
                 companionServer.clearPresentationState()
                 qaDisplayUrl = ""
                 presentationDisplayUrl = ""
@@ -698,7 +721,7 @@ fun main() {
         }
         var presentationFrozen by remember { mutableStateOf(false) }
         LaunchedEffect(appSettings.presentationRemoteSettings.remoteControlEnabled, appSettings.serverSettings.apiKeyEnabled, appSettings.serverSettings.apiKey) {
-            val activeApiKey = if (appSettings.serverSettings.apiKeyEnabled) appSettings.serverSettings.apiKey else ""
+            val activeApiKey = activeApiKey(appSettings.serverSettings)
             companionServer.updatePresentationRemoteSettings(appSettings.presentationRemoteSettings, activeApiKey)
         }
         LaunchedEffect(appSettings.presentationSettings.autoScrollInterval) {
@@ -722,7 +745,7 @@ fun main() {
                 val loaded = mediaViewModel.isLoaded
                 if (loaded) {
                     companionServer.broadcastMediaState(
-                        isLive = presenterManager.presentingMode.value == Presenting.MEDIA,
+                        isLive = isMediaLive(presenterManager.presentingMode.value),
                         isLoaded = true,
                         isPlaying = mediaViewModel.isPlaying,
                         title = mediaViewModel.mediaTitle,
@@ -757,7 +780,7 @@ fun main() {
         LaunchedEffect(Unit) { companionServer.onMediaMuteToggle.collect { mediaViewModel.toggleMute() } }
         val presentingModeValue = presenterManager.presentingMode.value
         LaunchedEffect(presentingModeValue) {
-            companionServer.updatePresentationLiveStatus(presentingModeValue == Presenting.PRESENTATION)
+            companionServer.updatePresentationLiveStatus(isPresentationLive(presentingModeValue))
         }
         // ── Browser Source outputs (OBS/vMix overlay) ─────────────────────────────
         // Each output gets its own off-screen renderer (BrowserSourceVideoRenderer) that
@@ -787,7 +810,7 @@ fun main() {
                 // State objects (.value), which derivedStateOf tracks correctly.
                 val appSettingsState = rememberUpdatedState(effectiveAppSettings)
                 val screenAssignmentState = rememberUpdatedState(
-                    appSettings.projectionSettings.browserSourceOutputs.getOrNull(i) ?: ScreenAssignment()
+                    browserSourceOutputAt(appSettings.projectionSettings.browserSourceOutputs, i)
                 )
                 val effectiveModeState = remember {
                     derivedStateOf { presenterManager.browserSourceLocks.value[i] ?: presenterManager.presentingMode.value }
@@ -796,7 +819,7 @@ fun main() {
                 // Keyed on geometry/fps so a settings change tears the renderer down and builds a
                 // fresh one; registerBrowserSourceFrames then closes connected clients, which
                 // reconnect and reseed with a full frame at the new size.
-                val bsOutput = appSettings.projectionSettings.browserSourceOutputs.getOrNull(i) ?: ScreenAssignment()
+                val bsOutput = browserSourceOutputAt(appSettings.projectionSettings.browserSourceOutputs, i)
                 val renderer = remember(i, bsOutput.browserSourceWidth, bsOutput.browserSourceHeight, bsOutput.browserSourceFps) {
                     BrowserSourceVideoRenderer(
                         presenterManager, appSettingsState, screenAssignmentState, effectiveModeState,
@@ -891,7 +914,7 @@ fun main() {
             }
             appReady = true
             // Check for updates in background after startup, respecting the configured interval
-            val isFirstEverUpdateCheck = appSettings.lastUpdateCheckTimestamp == 0L
+            val isFirstEverUpdateCheck = isFirstEverUpdateCheck(appSettings.lastUpdateCheckTimestamp)
             if (appSettings.updateCheckInterval.isDueSince(appSettings.lastUpdateCheckTimestamp)) {
                 val result = UpdateChecker.checkForUpdate(includePrereleases = appSettings.participateInPrereleases)
                 appSettings = appSettings.copy(lastUpdateCheckTimestamp = System.currentTimeMillis())
@@ -915,7 +938,7 @@ fun main() {
             .defaultScreenDevice.defaultConfiguration.bounds
         val state = rememberWindowState(
             placement = savedPlacement,
-            position = if (savedPlacement == WindowPlacement.Floating && appSettings.windowX >= 0)
+            position = if (shouldRestoreWindowGeometry(savedPlacement == WindowPlacement.Floating, appSettings.windowX))
                 WindowPosition(appSettings.windowX.dp, appSettings.windowY.dp)
             else WindowPosition(primaryBounds.x.dp, primaryBounds.y.dp),
             size = if (savedPlacement == WindowPlacement.Floating)
