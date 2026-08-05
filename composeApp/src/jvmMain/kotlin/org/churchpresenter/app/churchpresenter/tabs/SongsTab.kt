@@ -1611,11 +1611,11 @@ fun SongsTab(
                                     )
                                     .padding(8.dp)
                             ) {
-                                Text(
-                                    text = stringResource(Res.string.song_title_slide),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.padding(bottom = 2.dp)
+                                // Same chip the lyric sections use, so the title slide reads as
+                                // one more entry in the list rather than a differently-styled one.
+                                SectionLabelRow(
+                                    label = stringResource(Res.string.song_title_slide),
+                                    modifier = Modifier.padding(vertical = 4.dp),
                                 )
                                 Text(
                                     text = titleLine,
@@ -1632,7 +1632,6 @@ fun SongsTab(
                                     )
                                 }
                             }
-                            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
 

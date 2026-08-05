@@ -48,6 +48,19 @@ class SongChartTest {
         assertEquals(SongSectionKind.VERSE, sectionKindOf("Something Else"))
     }
 
+    @Test
+    fun `a section written in its own language is coloured the same as the English one`() {
+        assertEquals(SongSectionKind.CHORUS, sectionKindOf("Припев"))
+        assertEquals(SongSectionKind.CHORUS, sectionKindOf("Приспів 2"))
+        assertEquals(SongSectionKind.BRIDGE, sectionKindOf("Мост"))
+        assertEquals(SongSectionKind.TAG, sectionKindOf("Кода"))
+        // A verse is the fallback, so it lands right whether or not its word is listed.
+        assertEquals(SongSectionKind.VERSE, sectionKindOf("Куплет 1"))
+        // Pre-chorus is not a chorus in either language — both read as a verse.
+        assertEquals(SongSectionKind.VERSE, sectionKindOf("Pre-Chorus"))
+        assertEquals(SongSectionKind.VERSE, sectionKindOf("Предприпев"))
+    }
+
     // ── Counting ────────────────────────────────────────────────────────────────
 
     @Test

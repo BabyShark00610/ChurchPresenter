@@ -2,6 +2,8 @@ package org.churchpresenter.app.churchpresenter.data
 
 import androidx.compose.runtime.mutableStateListOf
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.SongSectionWords
+import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -231,11 +233,15 @@ class Songs {
         return lyrics
     }
 
+    /**
+     * Brackets a bare header line — SQLite and SPS write "Куплет 1" or "Zwrotka 1" plain, while the
+     * rest of the app reads `[]`/`{}`. Recognised in every language at once; see [SongSectionWords].
+     */
     private fun wrapSectionHeader(line: String): String {
         val t = line.trim()
         return when {
-            t.matches(Regex("^(Припев|Chorus|Refrain).*", RegexOption.IGNORE_CASE)) -> "{$t}"
-            t.matches(Regex("^(Куплет|Verse|Bridge).*", RegexOption.IGNORE_CASE)) -> "[$t]"
+            SongSectionWords.isChorus(t) -> "{$t}"
+            SongSectionWords.isKnownSection(t) -> "[$t]"
             else -> line
         }
     }
@@ -383,7 +389,7 @@ class Songs {
      * Format lyrics list back to SPS format
      * Converts List<String> back to the @$ and @% delimited format
      */
-    private fun formatLyricsForSps(lyrics: List<String>): String {
+    internal fun formatLyricsForSps(lyrics: List<String>): String {
         if (lyrics.isEmpty()) return ""
 
         val result = StringBuilder()
@@ -392,8 +398,10 @@ class Songs {
         for (line in lyrics) {
             val trimmedLine = line.trim()
 
-            // Check if this is a section marker ([Куплет], {Припев}, etc.)
-            if (trimmedLine.matches(Regex("^[\\[{](Куплет|Припев|Verse|Chorus|Refrain|Bridge).*[\\]}]$", RegexOption.IGNORE_CASE))) {
+            // A section marker is any bracketed line — [Куплет], {Припев}, [Zwrotka 1], and equally
+            // a name this app has no word for. Matching on a word list here instead would write
+            // every unrecognised header back out as a lyric line, brackets and all.
+            if (isHeaderLine(trimmedLine)) {
                 // If we have accumulated lines, save them as a section
                 if (currentSection.isNotEmpty()) {
                     if (result.isNotEmpty()) result.append("@\$")

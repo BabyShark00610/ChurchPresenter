@@ -226,26 +226,18 @@ class SongsSqliteLoadingTest {
         )
     }
 
-    /**
-     * Documents a KNOWN GAP: a heading is recognised by prefix alone, so a sung line that happens to
-     * begin with one of the heading words is wrapped as though it were a heading.
-     *
-     * `"Chorus of angels sing"` becomes `"{Chorus of angels sing}"`, and the braces are then shown
-     * on screen as part of the lyric. Any English line opening with "Verse", "Chorus", "Refrain" or
-     * "Bridge" is affected, and the same applies to the text format (both share `wrapSectionHeader`).
-     * The fix is to require the rest of the line to be a section number or nothing at all; this
-     * expectation then becomes the line left untouched.
-     */
     @Test
-    fun `a lyric line that opens with a heading word is wrapped as a heading -- known gap`() {
+    fun `a lyric line that opens with a heading word is left alone`() {
+        // A heading names its section and stops; a line that runs on into more words is sung, not a
+        // heading. Without that rule "Chorus of angels sing" was wrapped and the braces reached the
+        // screen as part of the projected line.
         val songs = loadSqlite(
             Row(number = "1", title = "Unlucky", songText = "Verse 1\nChorus of angels sing"),
         )
 
         assertEquals(
-            listOf("[Verse 1]", "{Chorus of angels sing}"),
+            listOf("[Verse 1]", "Chorus of angels sing"),
             songs.getSongs().single().lyrics,
-            "current behaviour: the braces reach the screen as part of the projected line",
         )
     }
 
