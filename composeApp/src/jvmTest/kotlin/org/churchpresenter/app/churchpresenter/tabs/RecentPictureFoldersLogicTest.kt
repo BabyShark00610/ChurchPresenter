@@ -1,7 +1,6 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
-import java.io.File
-import java.nio.file.Files
+import org.churchpresenter.app.churchpresenter.RecentFilesSwap
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -19,36 +18,19 @@ import kotlin.test.assertTrue
  */
 class RecentPictureFoldersLogicTest {
 
-    private lateinit var tempDir: File
-    private lateinit var savedFile: File
-    private lateinit var savedPinnedFile: File
-    private lateinit var savedFolders: List<String>
-    private lateinit var savedPinned: List<String>
+    private val swap = RecentFilesSwap(
+        readPaths = { RecentPictureFolders.file to RecentPictureFolders.pinnedFile },
+        writePaths = { f, p -> RecentPictureFolders.file = f; RecentPictureFolders.pinnedFile = p },
+        entries = RecentPictureFolders.folders,
+        pinned = RecentPictureFolders.pinned,
+        prefix = "cp-recent-picture-folders",
+    )
 
     @BeforeTest
-    fun setUp() {
-        tempDir = Files.createTempDirectory("cp-recent-picture-folders").toFile()
-        savedFile = RecentPictureFolders.file
-        savedPinnedFile = RecentPictureFolders.pinnedFile
-        RecentPictureFolders.file = File(tempDir, "recent_picture_folders.json")
-        RecentPictureFolders.pinnedFile = File(tempDir, "pinned_picture_folders.json")
-
-        savedFolders = RecentPictureFolders.folders.toList()
-        savedPinned = RecentPictureFolders.pinned.toList()
-        RecentPictureFolders.folders.clear()
-        RecentPictureFolders.pinned.clear()
-    }
+    fun setUp() = swap.install()
 
     @AfterTest
-    fun tearDown() {
-        RecentPictureFolders.file = savedFile
-        RecentPictureFolders.pinnedFile = savedPinnedFile
-        RecentPictureFolders.folders.clear()
-        RecentPictureFolders.folders.addAll(savedFolders)
-        RecentPictureFolders.pinned.clear()
-        RecentPictureFolders.pinned.addAll(savedPinned)
-        tempDir.deleteRecursively()
-    }
+    fun tearDown() = swap.restore()
 
     private fun path(name: String) = "/Volumes/Services/photos/$name"
 

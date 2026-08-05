@@ -1,7 +1,6 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
-import java.io.File
-import java.nio.file.Files
+import org.churchpresenter.app.churchpresenter.RecentFilesSwap
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -19,36 +18,19 @@ import kotlin.test.assertTrue
  */
 class RecentMediaFilesLogicTest {
 
-    private lateinit var tempDir: File
-    private lateinit var savedFile: File
-    private lateinit var savedPinnedFile: File
-    private lateinit var savedPaths: List<String>
-    private lateinit var savedPinned: List<String>
+    private val swap = RecentFilesSwap(
+        readPaths = { RecentMediaFiles.file to RecentMediaFiles.pinnedFile },
+        writePaths = { f, p -> RecentMediaFiles.file = f; RecentMediaFiles.pinnedFile = p },
+        entries = RecentMediaFiles.paths,
+        pinned = RecentMediaFiles.pinned,
+        prefix = "cp-recent-media-files",
+    )
 
     @BeforeTest
-    fun setUp() {
-        tempDir = Files.createTempDirectory("cp-recent-media-files").toFile()
-        savedFile = RecentMediaFiles.file
-        savedPinnedFile = RecentMediaFiles.pinnedFile
-        RecentMediaFiles.file = File(tempDir, "recent_media_files.json")
-        RecentMediaFiles.pinnedFile = File(tempDir, "pinned_media_files.json")
-
-        savedPaths = RecentMediaFiles.paths.toList()
-        savedPinned = RecentMediaFiles.pinned.toList()
-        RecentMediaFiles.paths.clear()
-        RecentMediaFiles.pinned.clear()
-    }
+    fun setUp() = swap.install()
 
     @AfterTest
-    fun tearDown() {
-        RecentMediaFiles.file = savedFile
-        RecentMediaFiles.pinnedFile = savedPinnedFile
-        RecentMediaFiles.paths.clear()
-        RecentMediaFiles.paths.addAll(savedPaths)
-        RecentMediaFiles.pinned.clear()
-        RecentMediaFiles.pinned.addAll(savedPinned)
-        tempDir.deleteRecursively()
-    }
+    fun tearDown() = swap.restore()
 
     private fun path(name: String) = "/Volumes/Services/media/$name.mp4"
 

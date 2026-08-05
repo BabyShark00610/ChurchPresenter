@@ -1045,6 +1045,8 @@
     <string name="web_refresh">Refresh</string>
     <string name="web_zoom_in">Zoom In</string>
     <string name="web_zoom_out">Zoom Out</string>
+    <string name="web_snapshot_waiting">Waiting for snapshot...</string>
+    <string name="web_snapshot_screen_recording_hint">If this persists, grant Screen Recording permission\nin System Settings > Privacy &amp; Security > Screen Recording</string>
     <string name="tooltip_add_website">Add Website</string>
     <string name="website_dialog_title">Add Website</string>
     <string name="website_url_label">URL</string>
