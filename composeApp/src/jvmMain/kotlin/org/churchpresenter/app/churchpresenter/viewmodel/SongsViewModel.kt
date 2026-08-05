@@ -491,6 +491,11 @@ class SongsViewModel(
         // Second pass: auto-repeat chorus after each verse
         val chorusSection = sections.firstOrNull { it.type == Constants.SECTION_TYPE_CHORUS }
         if (chorusSection == null) return sections
+        // With no verse there is nothing to repeat the chorus after, and the loop below — which
+        // drops every original chorus and re-adds it only behind a verse — would return an empty
+        // list. A chorus-only song (a short refrain, or a choruses-only songbook) would then put
+        // nothing on screen at all.
+        if (sections.none { it.type == Constants.SECTION_TYPE_VERSE }) return sections
 
         val result = mutableListOf<LyricSection>()
         for (section in sections) {

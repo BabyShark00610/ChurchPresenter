@@ -133,20 +133,33 @@ class LyricSectionsTest {
     }
 
     /**
-     * Documents a CURRENT BUG. The repeat pass drops every original chorus section and re-inserts
-     * it only after a verse — so a song written as nothing but a chorus (common for short worship
-     * refrains and choruses-only songbooks) yields ZERO sections and puts nothing on screen at all.
+     * A song that is nothing but a chorus still has to go on screen.
      *
-     * Not fixed here — this slate is tests only. A fix would keep the chorus when there is no
-     * verse to attach it to.
+     * The auto-repeat pass drops every original chorus and re-inserts it after each verse. With no
+     * verse to attach it to, that used to leave **zero sections** — the operator selected the song
+     * and the congregation saw nothing at all. Short worship refrains and choruses-only songbooks
+     * are exactly the case, so this was not an edge.
+     *
+     * The auto-repeat has nothing to do without a verse, so the sections are returned as written.
      */
     @Test
-    fun `a chorus-only song produces no sections at all -- known bug`() {
+    fun `a chorus-only song still renders its chorus`() {
         val sections = vm.getLyricSections(song(listOf("{Chorus}", "Only a refrain")))
-        assertTrue(
-            sections.isEmpty(),
-            "current behaviour: a chorus-only song renders nothing (got $sections)",
+
+        assertEquals(1, sections.size, "got $sections")
+        assertEquals(listOf("Only a refrain"), sections.single().lines)
+        assertEquals(Constants.SECTION_TYPE_CHORUS, sections.single().type)
+        assertTrue(sections.single().isLastSection, "the only section is also the last")
+    }
+
+    @Test
+    fun `several choruses and no verse keep their written order`() {
+        val sections = vm.getLyricSections(
+            song(listOf("{Chorus 1}", "first refrain", "{Chorus 2}", "second refrain")),
         )
+
+        // Nothing to interleave them with, so neither is dropped nor repeated.
+        assertEquals(listOf(listOf("first refrain"), listOf("second refrain")), sections.map { it.lines })
     }
 
     // ── End-of-song marker ──────────────────────────────────────────────────────
