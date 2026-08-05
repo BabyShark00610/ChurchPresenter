@@ -66,20 +66,31 @@ data class PreviewSection(
 data class SongStats(val sections: Int, val lines: Int, val words: Int)
 
 /**
+ * The words a header may open with, per kind, in the languages song files actually arrive in — the
+ * same set `ChordSheetImporter` canonicalises by, so a song written with Russian markers colours
+ * like the English one it would import to. Verse is the fallback and needs no list.
+ *
+ * Order is the match order: no word here is a prefix of one in a later kind, so it is only a
+ * reading aid today, but a new word has to be checked against it.
+ */
+private val SECTION_WORDS: List<Pair<SongSectionKind, List<String>>> = listOf(
+    SongSectionKind.CHORUS to listOf("chorus", "refrain", "припев", "приспів"),
+    SongSectionKind.BRIDGE to listOf("bridge", "бридж", "мост", "міст"),
+    SongSectionKind.TAG to listOf("tag", "outro", "ending", "кода", "концовка", "закінчення"),
+)
+
+/**
  * Which kind of section a header names.
  *
- * Matched on the English section words the song format itself uses — these are file markers, not
- * interface text, so they are not translated. Anything unrecognised reads as a verse, which is what
- * an unlabelled block is anyway.
+ * Matched on the section words the song format itself uses — these are file markers, not interface
+ * text, so they are not translated, but the same file may write them in its own language. Anything
+ * unrecognised reads as a verse, which is what an unlabelled block is anyway; that also covers
+ * "Pre-Chorus", which is deliberately not a chorus here.
  */
 fun sectionKindOf(label: String): SongSectionKind {
     val l = label.trim().lowercase()
-    return when {
-        l.startsWith("chorus") || l.startsWith("refrain") -> SongSectionKind.CHORUS
-        l.startsWith("bridge") -> SongSectionKind.BRIDGE
-        l.startsWith("tag") || l.startsWith("outro") || l.startsWith("ending") -> SongSectionKind.TAG
-        else -> SongSectionKind.VERSE
-    }
+    return SECTION_WORDS.firstOrNull { (_, words) -> words.any { l.startsWith(it) } }?.first
+        ?: SongSectionKind.VERSE
 }
 
 /**
