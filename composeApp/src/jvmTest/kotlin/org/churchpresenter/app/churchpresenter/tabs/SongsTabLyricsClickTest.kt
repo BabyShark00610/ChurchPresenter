@@ -36,13 +36,16 @@ class SongsTabLyricsClickTest {
 
     private val lyricLine = "a line of Amazing Grace"
 
+    /** Upper-cased on screen: the title slide wears the same section chip a verse does. */
+    private val TITLE_SLIDE = "SONG TITLE SLIDE"
+
     // ── Title slide ─────────────────────────────────────────────────────────────
 
     @Test
     fun `clicking the title slide selects it and previews it, without going live`() =
         songsTab(songSettings = SongSettings(titleSlideEnabled = true)) { _, reports ->
             clickRow("Amazing Grace")
-            onNodeWithText("Song Title Slide").performClick()
+            onNodeWithText(TITLE_SLIDE).performClick()
             waitForIdle()
 
             assertEquals(0, reports.sectionIndex)
@@ -61,9 +64,9 @@ class SongsTabLyricsClickTest {
     fun `double-clicking the title slide sends it live`() =
         songsTab(songSettings = SongSettings(titleSlideEnabled = true)) { _, reports ->
             clickRow("Amazing Grace")
-            onNodeWithText("Song Title Slide").performClick()
+            onNodeWithText(TITLE_SLIDE).performClick()
             waitForIdle()
-            onNodeWithText("Song Title Slide").performClick()
+            onNodeWithText(TITLE_SLIDE).performClick()
             waitForIdle()
 
             assertEquals(listOf(Presenting.LYRICS), reports.presenting)

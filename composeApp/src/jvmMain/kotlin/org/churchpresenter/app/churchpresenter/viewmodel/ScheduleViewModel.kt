@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import org.churchpresenter.app.churchpresenter.models.websiteDisplayText
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.server.ScheduleItemDto
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
@@ -524,7 +525,9 @@ class ScheduleViewModel(
             // Only update if the current title is still the URL (i.e. no real title was set yet)
             if (existing.title == existing.url || existing.title.isBlank()) {
                 pushUndoSnapshot()
-                _scheduleItems[index] = existing.copy(title = title)
+                // displayText must be passed explicitly: copy() does not re-apply constructor
+                // defaults, so without this the row keeps showing the URL the item was added with.
+                _scheduleItems[index] = existing.copy(title = title, displayText = websiteDisplayText(title))
                 notifyChanged()
             }
         }

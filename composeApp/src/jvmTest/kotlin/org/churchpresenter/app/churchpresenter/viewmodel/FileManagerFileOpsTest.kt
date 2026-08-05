@@ -21,16 +21,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Copying songs and Bibles into the library, and deleting them out of it.
+ * Copying songs and Bibles into the library, and choosing the files to copy.
  *
  * [FileManagerTest] covers the directory scans; this covers the operations that actually write to
- * the user's disk, where a mistake costs them a file rather than a listing.
+ * the user's disk, where a mistake costs the operator a file rather than a listing.
  *
- * The sharpest of these is `deleteFile`'s path check: it takes a directory and a *file name* from
- * the UI, and refuses anything whose canonical path escapes that directory — so a crafted name like
- * `../../something.sps` deletes nothing. That guard is the reason a name coming from a list row can
- * be trusted, and it is asserted here from both sides: the escape is refused, and the file it
- * pointed at is still there afterwards.
+ * There used to be a `deleteFile` section here, covering a canonical-path guard that refused a name
+ * escaping the library (`../../something.sps`). Both it and the function were removed once a search
+ * for its callers found none: it had never been wired to anything, so the untrusted name its guard
+ * was written for could not arrive. **If a delete-file feature is ever built, that guard was
+ * deliberately deleted rather than never written** — recover it from this file's history rather than
+ * shipping the feature without one.
  */
 class FileManagerFileOpsTest {
 
@@ -136,105 +137,6 @@ class FileManagerFileOpsTest {
             library.list()?.sorted(),
             "a half-failed import must still deliver what it could",
         )
-    }
-
-    // ── Deleting ────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `deleting removes the file and reports success`() {
-        val file = libraryFile("song.sps")
-
-        val error = fileManager.deleteFile(library.path, "song.sps")
-
-        assertNull(error, "null means it worked")
-        assertFalse(file.exists())
-    }
-
-    @Test
-    fun `deleting something that is not there is reported`() {
-        val error = fileManager.deleteFile(library.path, "never-existed.sps")
-
-        assertEquals("Failed to delete file", error)
-    }
-
-    @Test
-    fun `deleting one file leaves the others alone`() {
-        libraryFile("keep.sps")
-        libraryFile("remove.sps")
-
-        fileManager.deleteFile(library.path, "remove.sps")
-
-        assertEquals(listOf("keep.sps"), library.list()?.sorted())
-    }
-
-    @Test
-    fun `a name that climbs out of the library is refused`() {
-        val outside = File(root, "important.sps").also { it.writeText("not yours to delete") }
-
-        val error = fileManager.deleteFile(library.path, "../important.sps")
-
-        assertEquals("Invalid file path", error)
-        assertTrue(outside.exists(), "a crafted name must not reach a file outside the chosen folder")
-    }
-
-    @Test
-    fun `a deeper climb out is refused too`() {
-        val outside = File(root, "important.sps").also { it.writeText("not yours to delete") }
-
-        val error = fileManager.deleteFile(library.path, "../../${root.name}/important.sps")
-
-        assertEquals("Invalid file path", error)
-        assertTrue(outside.exists())
-    }
-
-    @Test
-    fun `an absolute name pointing elsewhere deletes nothing`() {
-        // Java resolves an absolute child against the parent rather than replacing it, so this
-        // lands on a nonexistent path *inside* the library instead of escaping — a different route
-        // to the same outcome. Either way the file outside must survive, which is what matters.
-        val outside = File(root, "important.sps").also { it.writeText("not yours to delete") }
-
-        val error = fileManager.deleteFile(library.path, outside.absolutePath)
-
-        assertNotNull(error, "an operation that deleted nothing must not report success")
-        assertTrue(outside.exists(), "a crafted name must not reach a file outside the chosen folder")
-    }
-
-    @Test
-    fun `a name inside a subfolder of the library is allowed`() {
-        val nested = File(library, "Hymnal").also { it.mkdirs() }
-        val song = File(nested, "song.sps").also { it.writeText("x") }
-
-        val error = fileManager.deleteFile(library.path, "Hymnal/song.sps")
-
-        assertNull(error, "songbooks are real subfolders of the library — deleting inside one is legitimate")
-        assertFalse(song.exists())
-    }
-
-    /**
-     * Documents CURRENT behaviour rather than desired: a blank name resolves to the library folder
-     * itself, which passes the "does not escape the directory" check, so an empty folder would be
-     * deleted. Not reachable from the UI — the name always comes from a listed file — but the guard
-     * is about untrusted names, so it is worth knowing it stops at the folder rather than inside it.
-     */
-    @Test
-    fun `a blank name targets the folder itself -- known gap`() {
-        val empty = File(root, "empty-library").also { it.mkdirs() }
-
-        val error = fileManager.deleteFile(empty.path, "")
-
-        assertNull(error)
-        assertFalse(empty.exists(), "current behaviour: the folder itself was removed")
-    }
-
-    @Test
-    fun `a non-empty folder cannot be deleted by that route`() {
-        libraryFile("song.sps")
-
-        val error = fileManager.deleteFile(library.path, "")
-
-        assertEquals("Failed to delete file", error, "the filesystem refuses to remove a folder with contents")
-        assertTrue(library.exists())
     }
 
     // ── Choosing files ──────────────────────────────────────────────────────────

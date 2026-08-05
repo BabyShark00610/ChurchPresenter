@@ -175,7 +175,15 @@ class QAManager {
 
     fun toggleQRCodeDisplay(): Unit = synchronized(this) {
         _showQRCodeOnDisplay.value = !_showQRCodeOnDisplay.value
-        if (_showQRCodeOnDisplay.value) _displayedQuestion.value = null
+        // Taking the question down has to be announced, or a connected phone and any follower go on
+        // showing a question the operator has already retired.
+        //
+        // Emitted inline rather than by calling clearDisplay(): that also sets showQRCodeOnDisplay
+        // back to false, which would undo the toggle being performed here.
+        if (_showQRCodeOnDisplay.value && _displayedQuestion.value != null) {
+            _displayedQuestion.value = null
+            emitEvent(QAEvent.DisplayChanged(null))
+        }
     }
 
     fun toggleSession(): Unit = synchronized(this) {

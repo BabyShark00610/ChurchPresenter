@@ -50,6 +50,8 @@ import churchpresenter.composeapp.generated.resources.song_transpose_up
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.utils.ChordSegment
 import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
+import org.churchpresenter.app.churchpresenter.utils.SongSectionWordGroup
+import org.churchpresenter.app.churchpresenter.utils.SongSectionWords
 import org.jetbrains.compose.resources.stringResource
 
 /** How a section reads in the preview — the colour tells verses from choruses at a glance. */
@@ -68,18 +70,19 @@ data class SongStats(val sections: Int, val lines: Int, val words: Int)
 /**
  * Which kind of section a header names.
  *
- * Matched on the English section words the song format itself uses — these are file markers, not
- * interface text, so they are not translated. Anything unrecognised reads as a verse, which is what
- * an unlabelled block is anyway.
+ * Matched on the section words the song format itself uses, in every language at once — see
+ * [SongSectionWords], which the wrapping and importing sides read too, so a song written with
+ * Polish or Russian markers colours like the English one it would import to.
+ *
+ * Only the four kinds that have an ink of their own are distinguished. Everything else — an intro,
+ * an instrumental, a pre-chorus, an unrecognised name — reads as a verse, which is what an
+ * unlabelled block is anyway.
  */
-fun sectionKindOf(label: String): SongSectionKind {
-    val l = label.trim().lowercase()
-    return when {
-        l.startsWith("chorus") || l.startsWith("refrain") -> SongSectionKind.CHORUS
-        l.startsWith("bridge") -> SongSectionKind.BRIDGE
-        l.startsWith("tag") || l.startsWith("outro") || l.startsWith("ending") -> SongSectionKind.TAG
-        else -> SongSectionKind.VERSE
-    }
+fun sectionKindOf(label: String): SongSectionKind = when (SongSectionWords.groupOf(label)) {
+    SongSectionWordGroup.CHORUS -> SongSectionKind.CHORUS
+    SongSectionWordGroup.BRIDGE -> SongSectionKind.BRIDGE
+    SongSectionWordGroup.TAG -> SongSectionKind.TAG
+    else -> SongSectionKind.VERSE
 }
 
 /**

@@ -112,19 +112,34 @@ class ScheduleViewModelEditingTest {
     }
 
     /**
-     * Documents CURRENT behaviour, not desired behaviour: `updateWebsiteTitle` uses `copy(title = …)`,
-     * and `displayText` is a stored constructor property whose default was computed when the item was
-     * created — so the schedule row keeps showing the raw URL even after the real title arrives.
-     * Left unfixed here deliberately; this slate is tests only. If the copy is changed to recompute
-     * `displayText`, this assertion should flip.
+     * The schedule row shows the page's real title once it arrives, not the URL it was added with.
+     *
+     * `displayText` is a constructor parameter with a default, and **`copy()` never re-applies
+     * defaults** — it passes the current instance's value for every parameter not named. So
+     * `copy(title = …)` used to carry the old label forward, and the row went on showing the raw URL
+     * for the rest of the service while `title` said otherwise.
      */
     @Test
-    fun `the schedule row keeps showing the url after a title update -- known bug`() {
+    fun `the schedule row shows the real title once it arrives`() {
         val vm = newViewModel()
         vm.addWebsite("https://example.org", "")
+
         vm.updateWebsiteTitle("https://example.org", "Example Domain")
+
         assertEquals("Example Domain", vm.website.title)
-        assertEquals("https://example.org", vm.website.displayText, "current behaviour: the row label is stale")
+        assertEquals("Example Domain", vm.website.displayText, "the row label follows the title")
+    }
+
+    @Test
+    fun `a very long title is still truncated in the row after an update`() {
+        val vm = newViewModel()
+        vm.addWebsite("https://example.org", "")
+
+        vm.updateWebsiteTitle("https://example.org", "x".repeat(80))
+
+        // Pins that the label is re-derived through the same formatting, not just assigned the
+        // title — otherwise an 80-character page title would push the whole row out of shape.
+        assertEquals("x".repeat(60) + "…", vm.website.displayText)
     }
 
     // ── Labels ──────────────────────────────────────────────────────────────────
