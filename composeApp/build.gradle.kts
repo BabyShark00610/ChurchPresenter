@@ -763,11 +763,15 @@ tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             // Kept in sync with jacocoTestReport above -- a hidden easter egg, out of scope for the
             // coverage floor regardless of how well tested it happens to be.
             exclude("**/CrosswordTabKt*")
-            // App entry / window wiring: `main` itself, the root composable tree and the top bar.
+            // App entry / window wiring: `main` itself and the root composable tree.
             // MainKt's ~200 synthetic lambda classes come along via the `$` globs.
+            //
+            // NavigationTopBar.kt used to be listed here too. It is now covered in full by
+            // NavigationTopBarTest, so excluding it would claim it cannot be tested when it
+            // demonstrably can — and would keep 212 covered lines out of the enforced number for
+            // no reason. This list is only worth reading if every entry on it is still true.
             exclude("org/churchpresenter/app/churchpresenter/MainKt*")
             exclude("org/churchpresenter/app/churchpresenter/MainDesktopKt*")
-            exclude("org/churchpresenter/app/churchpresenter/NavigationTopBarKt*")
             // Declared in MainDesktop.kt but not named after it, so the glob above misses it: a
             // holder for the schedule callbacks the root composable wires up. Named explicitly
             // because leaving it in keeps every one of MainDesktop.kt's 1,521 lines in the
