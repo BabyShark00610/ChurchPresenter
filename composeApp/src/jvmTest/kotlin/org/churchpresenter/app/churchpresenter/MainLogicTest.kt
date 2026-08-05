@@ -4,17 +4,26 @@ import org.churchpresenter.app.churchpresenter.data.Language
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BackgroundSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
+import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
+import org.churchpresenter.app.churchpresenter.dialogs.RemoteEventType
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkSettings
 import org.churchpresenter.app.churchpresenter.data.settings.OBSSettings
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.data.settings.ServerSettings
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.server.InstanceLinkStatus
+import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
 import org.churchpresenter.app.churchpresenter.utils.UpdateCheckResult
 import org.churchpresenter.app.churchpresenter.utils.UpdateInfo
+import java.io.File
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -394,5 +403,875 @@ class MainLogicTest {
         assertTrue(isPresentationLive(Presenting.PRESENTATION))
         assertFalse(isPresentationLive(Presenting.LYRICS))
         assertFalse(isPresentationLive(Presenting.NONE))
+    }
+
+    // ── Acting on a remote request ──────────────────────────────────────────────
+
+    @Test
+    fun `a line chosen remotely is used as given`() {
+        assertEquals(0, remoteSongLineIndex(0))
+        assertEquals(3, remoteSongLineIndex(3))
+    }
+
+    @Test
+    fun `any negative line means the whole section`() {
+        // Callers say -1 for "the section, not a line in it"; other negatives must mean the same
+        // rather than being passed through as a position.
+        assertEquals(-1, remoteSongLineIndex(-1))
+        assertEquals(-1, remoteSongLineIndex(-7))
+    }
+
+    @Test
+    fun `taking a section live switches the output over when something else is on it`() {
+        assertTrue(shouldSwitchToLyrics(Presenting.BIBLE))
+        assertTrue(shouldSwitchToLyrics(Presenting.NONE))
+        assertFalse(shouldSwitchToLyrics(Presenting.LYRICS), "already lyrics, so just change section")
+    }
+
+    @Test
+    fun `a finished lower third clears only while it is still on screen`() {
+        // The sequence runs on its own clock; by the time it ends the operator may have moved on,
+        // and clearing then would blank whatever they moved to.
+        assertTrue(shouldClearAfterLowerThird(Presenting.LOWER_THIRD))
+        assertFalse(shouldClearAfterLowerThird(Presenting.LYRICS))
+        assertFalse(shouldClearAfterLowerThird(Presenting.NONE))
+    }
+
+    @Test
+    fun `a section change is announced only while songs are live`() {
+        assertTrue(shouldBroadcastSongSection(Presenting.LYRICS))
+        assertFalse(shouldBroadcastSongSection(Presenting.BIBLE))
+    }
+
+    @Test
+    fun `an emptied output is announced only when it is actually empty`() {
+        assertTrue(shouldBroadcastDisplayCleared(Presenting.NONE))
+        assertFalse(shouldBroadcastDisplayCleared(Presenting.LYRICS))
+    }
+
+    // ── Driving another instance ────────────────────────────────────────────────
+
+    @Test
+    fun `a connected controller may drive the other instance`() {
+        assertTrue(isControllerConnected(InstanceLinkStatus.CONNECTED, InstanceLinkRole.CONTROLLER))
+    }
+
+    @Test
+    fun `a controller that is not connected has nothing to drive`() {
+        assertFalse(isControllerConnected(InstanceLinkStatus.DISCONNECTED, InstanceLinkRole.CONTROLLER))
+        assertFalse(isControllerConnected(InstanceLinkStatus.CONNECTING, InstanceLinkRole.CONTROLLER))
+        assertFalse(isControllerConnected(InstanceLinkStatus.ERROR, InstanceLinkRole.CONTROLLER))
+    }
+
+    @Test
+    fun `a follower never drives, however well connected`() {
+        // It receives; sending from here would fight the primary for the output.
+        assertFalse(isControllerConnected(InstanceLinkStatus.CONNECTED, InstanceLinkRole.CONTROLLED))
+    }
+
+    // ── What a remote client just did ───────────────────────────────────────────
+
+    @Test
+    fun `each no-approval action is reported as its own kind`() {
+        assertEquals(RemoteEventType.PRESENT, remoteActionType("present"))
+        assertEquals(RemoteEventType.UPLOAD, remoteActionType("upload"))
+        assertEquals(RemoteEventType.CLEAR, remoteActionType("clear"))
+    }
+
+    @Test
+    fun `an action nobody recognises is still reported`() {
+        // The toast is how the operator sees what a remote client did and blocks them if it was
+        // unwanted — an action that produced no toast is the one worth seeing.
+        assertEquals(RemoteEventType.PRESENT, remoteActionType("something-new"))
+        assertEquals(RemoteEventType.PRESENT, remoteActionType(""))
+    }
+
+    // ── Transitions on the output ───────────────────────────────────────────────
+
+    @Test
+    fun `the crossfade takes the longer of the two that are on`() {
+        // One duration serves both, because a crossfade from scripture to a song is a single
+        // transition — the shorter of the two would cut it off part-way.
+        val duration = modeCrossfadeDuration(
+            BibleSettings(crossfade = true, transitionDuration = 400f),
+            SongSettings(crossfade = true, transitionDuration = 900f),
+        )
+        assertEquals(900, duration)
+    }
+
+    @Test
+    fun `a crossfade that is switched off contributes nothing`() {
+        val duration = modeCrossfadeDuration(
+            BibleSettings(crossfade = false, transitionDuration = 5000f),
+            SongSettings(crossfade = true, transitionDuration = 400f),
+        )
+        assertEquals(400, duration, "the disabled one must not set the length")
+    }
+
+    @Test
+    fun `with both off the transition still has a floor`() {
+        // Below this a fade reads as a flicker rather than a transition.
+        val duration = modeCrossfadeDuration(
+            BibleSettings(crossfade = false), SongSettings(crossfade = false),
+        )
+        assertEquals(MIN_TRANSITION_MS, duration)
+    }
+
+    @Test
+    fun `a screen pinned to the mode being cleared is noticed`() {
+        assertTrue(isAnyScreenLockedTo(mapOf(0 to Presenting.LYRICS), Presenting.LYRICS))
+        assertFalse(isAnyScreenLockedTo(mapOf(0 to Presenting.BIBLE), Presenting.LYRICS))
+        assertFalse(isAnyScreenLockedTo(emptyMap(), Presenting.LYRICS))
+    }
+
+    @Test
+    fun `clearing scripture or a song fades it out first`() {
+        assertTrue(
+            shouldFadeOnClear(Presenting.BIBLE, false, BibleSettings(fadeOut = true), SongSettings()),
+        )
+        assertTrue(
+            shouldFadeOnClear(Presenting.LYRICS, false, BibleSettings(), SongSettings(fadeOut = true)),
+        )
+    }
+
+    @Test
+    fun `nothing fades while a screen is still showing it`() {
+        // That display was not asked to clear, and the alpha is shared — fading would dim it there.
+        assertFalse(
+            shouldFadeOnClear(Presenting.LYRICS, true, BibleSettings(), SongSettings(fadeOut = true)),
+        )
+    }
+
+    @Test
+    fun `content with no fade of its own clears instantly`() {
+        assertFalse(
+            shouldFadeOnClear(Presenting.PICTURES, false, BibleSettings(fadeOut = true), SongSettings(fadeOut = true)),
+        )
+        assertFalse(
+            shouldFadeOnClear(Presenting.BIBLE, false, BibleSettings(fadeOut = false), SongSettings()),
+        )
+    }
+
+    @Test
+    fun `each content type fades for its own configured time`() {
+        assertEquals(
+            700,
+            fadeOutDuration(Presenting.BIBLE, BibleSettings(transitionDuration = 700f), SongSettings()),
+        )
+        assertEquals(
+            300,
+            fadeOutDuration(Presenting.LYRICS, BibleSettings(), SongSettings(transitionDuration = 300f)),
+        )
+    }
+
+    @Test
+    fun `anything else falls back, and nothing goes below the floor`() {
+        assertEquals(500, fadeOutDuration(Presenting.MEDIA, BibleSettings(), SongSettings()))
+        assertEquals(
+            MIN_TRANSITION_MS,
+            fadeOutDuration(Presenting.BIBLE, BibleSettings(transitionDuration = 10f), SongSettings()),
+        )
+    }
+
+    // ── Announcements ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `fade is told apart from cutting and sliding`() {
+        assertTrue(isFadeAnnouncement(Constants.ANIMATION_FADE))
+        assertFalse(isFadeAnnouncement(Constants.ANIMATION_NONE))
+        assertFalse(isFadeAnnouncement("SLIDE_LEFT"))
+    }
+
+    @Test
+    fun `a sliding announcement is left to the presenter to animate`() {
+        // Running a fade here as well would fight the animation already in flight.
+        assertTrue(isSlidingAnnouncement("SLIDE_LEFT"))
+        assertTrue(isSlidingAnnouncement("SCROLL_UP"))
+        assertFalse(isSlidingAnnouncement(Constants.ANIMATION_FADE))
+        assertFalse(isSlidingAnnouncement(Constants.ANIMATION_NONE))
+    }
+
+    @Test
+    fun `clearing fades out only when something was on screen`() {
+        assertTrue(shouldFadeOutAnnouncement(isFade = true, wasEmpty = false))
+    }
+
+    @Test
+    fun `fading out from an empty screen is skipped`() {
+        // It would otherwise spend the animation's length showing nothing before the next content.
+        assertFalse(shouldFadeOutAnnouncement(isFade = true, wasEmpty = true))
+        assertFalse(shouldFadeOutAnnouncement(isFade = false, wasEmpty = false))
+    }
+
+    @Test
+    fun `a loop count clears itself, and none stays up`() {
+        assertTrue(isFiniteAnnouncementLoop(1))
+        assertTrue(isFiniteAnnouncementLoop(5))
+        assertFalse(isFiniteAnnouncementLoop(0), "zero means stay up until stopped by hand")
+    }
+
+    @Test
+    fun `the speed slider reads the other way round`() {
+        // A higher configured value means faster, so it is subtracted from the slider's span.
+        assertEquals(20_500L, announcementDisplayMs(sliderSpan = 30_500L, animationDuration = 10_000L, loopCount = 1))
+    }
+
+    @Test
+    fun `each loop adds its own time on screen`() {
+        assertEquals(61_000L, announcementDisplayMs(sliderSpan = 30_500L, animationDuration = 0L, loopCount = 2))
+    }
+
+    @Test
+    fun `an announcement is never on screen for less than the floor`() {
+        assertEquals(
+            MIN_ANNOUNCEMENT_DISPLAY_MS,
+            announcementDisplayMs(sliderSpan = 30_500L, animationDuration = 99_999L, loopCount = 1),
+        )
+    }
+
+    // ── First run ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `an install with no bible at all gets the bundled one`() {
+        assertTrue(shouldBundleDefaultBible(BibleSettings()))
+    }
+
+    @Test
+    fun `a setup already part-way through is left alone`() {
+        // A folder chosen but no translation picked yet is a choice the operator is mid-way through.
+        assertFalse(shouldBundleDefaultBible(BibleSettings(storageDirectory = "/bibles")))
+        assertFalse(shouldBundleDefaultBible(BibleSettings(primaryBible = "kjv1769.spb")))
+    }
+
+    @Test
+    fun `the licence counts as accepted at this version or a later one`() {
+        assertTrue(isEulaAccepted(acceptedVersion = 1, currentVersion = 1))
+        assertTrue(isEulaAccepted(acceptedVersion = 2, currentVersion = 1))
+    }
+
+    @Test
+    fun `a licence never accepted, or accepted at an older version, is asked again`() {
+        assertFalse(isEulaAccepted(acceptedVersion = 0, currentVersion = 1))
+        assertFalse(isEulaAccepted(acceptedVersion = 1, currentVersion = 2))
+    }
+
+    @Test
+    fun `a fresh install is offered the setup wizard`() {
+        assertTrue(shouldShowSetupWizard(AppSettings()))
+    }
+
+    @Test
+    fun `an install that already works is not interrupted by the wizard`() {
+        // Both a bible and a song folder means a working setup, whatever the flag says.
+        val ready = AppSettings(
+            bibleSettings = BibleSettings(primaryBible = "kjv1769.spb"),
+            songSettings = SongSettings(storageDirectory = "/songs"),
+        )
+        assertFalse(shouldShowSetupWizard(ready))
+    }
+
+    @Test
+    fun `a half-configured install is still offered the wizard`() {
+        val bibleOnly = AppSettings(bibleSettings = BibleSettings(primaryBible = "kjv1769.spb"))
+        assertTrue(shouldShowSetupWizard(bibleOnly))
+        val songsOnly = AppSettings(songSettings = SongSettings(storageDirectory = "/songs"))
+        assertTrue(shouldShowSetupWizard(songsOnly))
+    }
+
+    @Test
+    fun `once dismissed the wizard stays dismissed`() {
+        assertFalse(shouldShowSetupWizard(AppSettings(setupWizardShown = true)))
+    }
+
+    // ── The Developer menu ──────────────────────────────────────────────────────
+
+    @Test
+    fun `a dev build always has the developer menu`() {
+        assertTrue(shouldShowDeveloperMenu(isRelease = false, forceDevWindow = false, unlocked = false))
+    }
+
+    @Test
+    fun `a packaged build hides it until it is deliberately asked for`() {
+        assertFalse(shouldShowDeveloperMenu(isRelease = true, forceDevWindow = false, unlocked = false))
+        assertTrue(shouldShowDeveloperMenu(isRelease = true, forceDevWindow = true, unlocked = false))
+        assertTrue(shouldShowDeveloperMenu(isRelease = true, forceDevWindow = false, unlocked = true))
+    }
+
+    // ── Remote approval queue ───────────────────────────────────────────────────
+
+    @Test
+    fun `allowing a client settles every request already queued from it`() {
+        // Allow/block apply to the client, not to the one request the dialog happens to be showing.
+        assertTrue(remoteEventTargetsClient(eventClientId = "phone-1", decidedClientId = "phone-1"))
+        assertFalse(remoteEventTargetsClient(eventClientId = "phone-2", decidedClientId = "phone-1"))
+    }
+
+    @Test
+    fun `an unattributable decision takes the whole queue with it`() {
+        // There is no client to ask about next, so leaving entries queued would strand them.
+        assertTrue(remoteEventTargetsClient(eventClientId = "phone-1", decidedClientId = ""))
+        assertTrue(remoteEventTargetsClient(eventClientId = "", decidedClientId = ""))
+    }
+
+    @Test
+    fun `a following instance is recognised among the clients asking`() {
+        assertTrue(isInstanceLinkFollowerClient("overflow-room", setOf("overflow-room", "phone-1")))
+        assertFalse(isInstanceLinkFollowerClient("phone-1", setOf("overflow-room")))
+    }
+
+    @Test
+    fun `an unidentified client is never taken for a follower`() {
+        assertFalse(isInstanceLinkFollowerClient("", setOf("overflow-room")))
+        assertFalse(isInstanceLinkFollowerClient("", emptySet()))
+    }
+
+    // ── Lower-third output folder ───────────────────────────────────────────────
+
+    @Test
+    fun `a real folder is somewhere generated lower thirds can be written`() {
+        val dir = Files.createTempDirectory("cp-main-logic-output").toFile()
+        try {
+            assertTrue(isUsableOutputDir(dir.absolutePath))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an unset or vanished folder is not`() {
+        // A folder configured once and since moved would otherwise send the generator nowhere.
+        val dir = Files.createTempDirectory("cp-main-logic-output").toFile()
+        try {
+            assertFalse(isUsableOutputDir(""))
+            assertFalse(isUsableOutputDir(File(dir, "gone").absolutePath))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a file where a folder should be is refused`() {
+        val dir = Files.createTempDirectory("cp-main-logic-output").toFile()
+        try {
+            val file = File(dir, "not-a-folder.json").apply { writeText("{}") }
+            assertFalse(isUsableOutputDir(file.absolutePath))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    // ── Mirrored media ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `a follower streams mirrored media from the primary`() {
+        assertEquals(
+            "http://192.168.1.10:8080/api/media/stream/item-7",
+            instanceLinkMediaStreamUrl("192.168.1.10", 8080, apiKey = "", itemId = "item-7"),
+        )
+    }
+
+    @Test
+    fun `the key travels with the request when the primary requires one`() {
+        assertEquals(
+            "http://192.168.1.10:8080/api/media/stream/item-7?apiKey=s3cret",
+            instanceLinkMediaStreamUrl("192.168.1.10", 8080, apiKey = "s3cret", itemId = "item-7"),
+        )
+    }
+
+    // ── Going live ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `going live raises the output windows, clearing does not`() {
+        Presenting.entries.filter { it != Presenting.NONE }
+            .forEach { assertTrue(shouldShowPresenterWindowFor(it), it.name) }
+        assertFalse(shouldShowPresenterWindowFor(Presenting.NONE))
+    }
+
+    @Test
+    fun `a link that is connecting is not treated as down`() {
+        assertTrue(isInstanceLinkActive(InstanceLinkStatus.CONNECTED))
+        assertTrue(isInstanceLinkActive(InstanceLinkStatus.CONNECTING))
+        assertFalse(isInstanceLinkActive(InstanceLinkStatus.DISCONNECTED))
+    }
+
+    // ── Per-output rendering ────────────────────────────────────────────────────
+
+    @Test
+    fun `each layout has its own background switch`() {
+        val lowerThird = ScreenAssignment(
+            displayMode = Constants.DISPLAY_MODE_LOWER_THIRD_HORIZONTAL,
+            showLowerThirdBackground = false,
+            showFullscreenBackground = true,
+        )
+        assertFalse(showsOutputBackground(lowerThird), "the fullscreen switch must not stand in for it")
+
+        val fullscreen = ScreenAssignment(
+            displayMode = Constants.DISPLAY_MODE_FULLSCREEN,
+            showLowerThirdBackground = false,
+            showFullscreenBackground = true,
+        )
+        assertTrue(showsOutputBackground(fullscreen))
+    }
+
+    @Test
+    fun `an output locked to a tab goes on showing it`() {
+        val locks = mapOf(0 to Presenting.LYRICS)
+        assertEquals(Presenting.LYRICS, effectiveOutputMode(locks, 0, Presenting.BIBLE))
+    }
+
+    @Test
+    fun `an unlocked output follows whatever is live`() {
+        assertEquals(Presenting.BIBLE, effectiveOutputMode(mapOf(0 to Presenting.LYRICS), 1, Presenting.BIBLE))
+        assertEquals(Presenting.BIBLE, effectiveOutputMode(emptyMap(), 0, Presenting.BIBLE))
+    }
+
+    @Test
+    fun `switching between two pieces of content crossfades`() {
+        assertTrue(
+            isScreenCrossfadeActive(
+                BibleSettings(crossfade = true), SongSettings(crossfade = false),
+                Presenting.LYRICS, Presenting.BIBLE,
+            )
+        )
+        assertTrue(
+            isScreenCrossfadeActive(
+                BibleSettings(crossfade = false), SongSettings(crossfade = true),
+                Presenting.LYRICS, Presenting.BIBLE,
+            )
+        )
+    }
+
+    @Test
+    fun `coming from or going to an empty screen is a fade, not a crossfade`() {
+        // The per-type fade settings own that moment; running both would fade twice over it.
+        val on = BibleSettings(crossfade = true)
+        assertFalse(isScreenCrossfadeActive(on, SongSettings(), Presenting.BIBLE, Presenting.NONE))
+        assertFalse(isScreenCrossfadeActive(on, SongSettings(), Presenting.NONE, Presenting.BIBLE))
+    }
+
+    @Test
+    fun `crossfade switched off everywhere cuts`() {
+        assertFalse(
+            isScreenCrossfadeActive(BibleSettings(), SongSettings(), Presenting.LYRICS, Presenting.BIBLE)
+        )
+    }
+
+    @Test
+    fun `the QA code points at the tunnel when there is one`() {
+        // Only the tunnel URL is reachable from a phone that is not on the venue's WiFi.
+        assertEquals("https://abc.trycloudflare.com/qa", qaQrCodeUrl("https://abc.trycloudflare.com", "http://10.0.0.5:8080"))
+    }
+
+    @Test
+    fun `it falls back to the LAN address otherwise`() {
+        assertEquals("http://10.0.0.5:8080/qa", qaQrCodeUrl("", "http://10.0.0.5:8080"))
+    }
+
+    // ── The dev fallback windows ────────────────────────────────────────────────
+
+    @Test
+    fun `a dev machine with nowhere to output falls back to a window`() {
+        assertTrue(isDevWindowedFallback(isRelease = false, forceDevWindow = false, realWindowCount = 0))
+        assertTrue(isDevWindowedFallback(isRelease = true, forceDevWindow = true, realWindowCount = 0))
+    }
+
+    @Test
+    fun `a real output is always preferred to the fallback`() {
+        assertFalse(isDevWindowedFallback(isRelease = false, forceDevWindow = false, realWindowCount = 1))
+        assertFalse(isDevWindowedFallback(isRelease = true, forceDevWindow = true, realWindowCount = 2))
+    }
+
+    @Test
+    fun `a packaged build that did not ask for it gets no stray window`() {
+        assertFalse(isDevWindowedFallback(isRelease = true, forceDevWindow = false, realWindowCount = 0))
+    }
+
+    @Test
+    fun `the fallback opens at least one window, however it is configured`() {
+        assertEquals(1, devFallbackWindowCount(devWindowedFallback = true, configured = 0))
+        assertEquals(1, devFallbackWindowCount(devWindowedFallback = true, configured = 1))
+        assertEquals(3, devFallbackWindowCount(devWindowedFallback = true, configured = 3))
+    }
+
+    @Test
+    fun `no fallback means no windows at all`() {
+        assertEquals(0, devFallbackWindowCount(devWindowedFallback = false, configured = 3))
+    }
+
+    @Test
+    fun `several fallback windows are cascaded rather than stacked`() {
+        assertEquals(40, devFallbackWindowOffsetDp(0))
+        assertTrue(devFallbackWindowOffsetDp(1) > devFallbackWindowOffsetDp(0))
+        assertTrue(devFallbackWindowOffsetDp(2) > devFallbackWindowOffsetDp(1))
+    }
+
+    // ── DeckLink and key outputs ────────────────────────────────────────────────
+
+    @Test
+    fun `an output aimed at SDI is told apart from one aimed at a display`() {
+        assertTrue(isDeckLinkPrimaryOutput(ScreenAssignment(targetType = Constants.TARGET_TYPE_DECKLINK)))
+        assertFalse(isDeckLinkPrimaryOutput(ScreenAssignment(targetType = Constants.TARGET_TYPE_SCREEN)))
+    }
+
+    @Test
+    fun `a key output on SDI needs a device actually chosen`() {
+        val chosen = ScreenAssignment(
+            keyTargetType = Constants.TARGET_TYPE_DECKLINK, keyTargetDisplay = 0,
+        )
+        assertTrue(hasDeckLinkKeyOutput(chosen))
+    }
+
+    @Test
+    fun `a key output left unconfigured drives nothing`() {
+        // KEY_TARGET_NONE is what hasKeyOutput reads as off — nothing may be pushed to a device.
+        val off = ScreenAssignment(keyTargetType = Constants.TARGET_TYPE_DECKLINK)
+        assertFalse(off.hasKeyOutput, "the default must be off")
+        assertFalse(hasDeckLinkKeyOutput(off))
+        assertFalse(hasScreenKeyOutput(off))
+    }
+
+    @Test
+    fun `a key output on a display is not taken for an SDI one`() {
+        val onScreen = ScreenAssignment(keyTargetType = Constants.TARGET_TYPE_SCREEN, keyTargetDisplay = 1)
+        assertTrue(hasScreenKeyOutput(onScreen))
+        assertFalse(hasDeckLinkKeyOutput(onScreen))
+        assertFalse(isDeckLinkKeyOutput(onScreen))
+    }
+
+    @Test
+    fun `an SDI key output is not also driven as a display one`() {
+        // Both windows are spawned from the same assignment, so exactly one may claim it.
+        val onDeckLink = ScreenAssignment(keyTargetType = Constants.TARGET_TYPE_DECKLINK, keyTargetDisplay = 0)
+        assertTrue(hasDeckLinkKeyOutput(onDeckLink))
+        assertFalse(hasScreenKeyOutput(onDeckLink))
+    }
+
+    @Test
+    fun `a key output is placed by its saved bounds, not its saved index`() {
+        // Display indices are reordered by the OS when monitors are plugged or unplugged.
+        assertEquals(2, keyOutputScreenIndex(matchedByBounds = 2, savedIndex = 0))
+    }
+
+    @Test
+    fun `the saved index is the fallback when the bounds match nothing`() {
+        assertEquals(0, keyOutputScreenIndex(matchedByBounds = null, savedIndex = 0))
+    }
+
+    // ── The lower-third playback clock ──────────────────────────────────────────
+
+    @Test
+    fun `a composition runs for its own frame count at its own rate`() {
+        assertEquals(2_000L, lottieCompositionDurationMs(durationFrames = 60f, frameRate = 30f))
+    }
+
+    @Test
+    fun `pre-rendered frames run for as long as they were rendered to last`() {
+        assertEquals(2_000L, lottiePrerenderDurationMs(frameCount = 50, fps = 25))
+    }
+
+    @Test
+    fun `no clip is ever zero-length`() {
+        // A zero total would divide by zero on the very first progress reading.
+        assertEquals(1L, lottieCompositionDurationMs(durationFrames = 0f, frameRate = 30f))
+        assertEquals(1L, lottiePrerenderDurationMs(frameCount = 0, fps = 25))
+    }
+
+    @Test
+    fun `a hold is only honoured on a frame the clip actually has`() {
+        assertTrue(lottieHasPause(pauseAtFrame = true, pauseFrame = 0.5f))
+        assertTrue(lottieHasPause(pauseAtFrame = true, pauseFrame = 0f))
+        assertTrue(lottieHasPause(pauseAtFrame = true, pauseFrame = 1f))
+    }
+
+    @Test
+    fun `a hold outside the clip is dropped rather than clamped`() {
+        assertFalse(lottieHasPause(pauseAtFrame = true, pauseFrame = 1.5f))
+        assertFalse(lottieHasPause(pauseAtFrame = true, pauseFrame = -0.1f))
+        assertFalse(lottieHasPause(pauseAtFrame = false, pauseFrame = 0.5f))
+    }
+
+    @Test
+    fun `the hold starts partway through, and never at all without one`() {
+        assertEquals(1_000L, lottiePauseAtMs(totalDurationMs = 2_000L, pauseFrame = 0.5f, hasPause = true))
+        // -1 is an instant no elapsed time ever reaches, so the plateau can never be entered.
+        assertEquals(-1L, lottiePauseAtMs(totalDurationMs = 2_000L, pauseFrame = 0.5f, hasPause = false))
+    }
+
+    @Test
+    fun `the hold adds to the clip's length on the wall clock`() {
+        assertEquals(5_000L, lottieGrandTotalMs(2_000L, hasPause = true, pauseDurationMs = 3_000L))
+        assertEquals(2_000L, lottieGrandTotalMs(2_000L, hasPause = false, pauseDurationMs = 3_000L))
+    }
+
+    @Test
+    fun `without a hold the clip plays straight through`() {
+        val progress = { ms: Long -> lottieProgressAt(ms, 2_000L, false, 0f, -1L, 0L) }
+        assertEquals(0f, progress(0L))
+        assertEquals(0.5f, progress(1_000L))
+        assertEquals(1f, progress(2_000L))
+    }
+
+    @Test
+    fun `running past the end stays at the end`() {
+        assertEquals(1f, lottieProgressAt(9_999L, 2_000L, false, 0f, -1L, 0L))
+    }
+
+    @Test
+    fun `a held clip plays up to the hold, sits on it, then plays out`() {
+        // 2s clip holding at the halfway frame for 3s: 5s of wall clock in three stretches.
+        val progress = { ms: Long -> lottieProgressAt(ms, 2_000L, true, 0.5f, 1_000L, 3_000L) }
+        assertEquals(0.25f, progress(500L), "before the hold, at the clip's own rate")
+        assertEquals(0.5f, progress(1_000L), "the hold begins")
+        assertEquals(0.5f, progress(2_500L), "still on the same frame midway through the hold")
+        assertEquals(0.5f, progress(3_999L), "still held right up to the end of it")
+        assertEquals(1f, progress(5_000L), "and reaches the last frame exactly as the wall clock does")
+    }
+
+    @Test
+    fun `the stretch after a hold is re-scaled, not resumed at the old rate`() {
+        // The hold has consumed wall-clock time the clip's own timeline knows nothing about, so
+        // playing on at the original rate would run past the end well before the clock did.
+        val progress = { ms: Long -> lottieProgressAt(ms, 2_000L, true, 0.5f, 1_000L, 3_000L) }
+        assertEquals(0.75f, progress(4_500L), "halfway through what is left, halfway through the rest")
+    }
+
+    @Test
+    fun `the stretch before a hold never overruns the held frame`() {
+        // The hold's instant is stored separately from its fraction, so a rounded or edited pair
+        // that disagree must still stop on the frame the hold names rather than sail past it.
+        assertEquals(0.1f, lottieProgressAt(500L, 2_000L, true, 0.1f, 1_000L, 3_000L))
+    }
+
+    @Test
+    fun `progress lands on a real frame at both ends`() {
+        assertEquals(0, lottieFrameIndexFor(0f, frameCount = 50))
+        assertEquals(49, lottieFrameIndexFor(1f, frameCount = 50))
+        assertEquals(25, lottieFrameIndexFor(0.5f, frameCount = 51))
+    }
+
+    @Test
+    fun `a frame index is never off the end of the frames that exist`() {
+        assertEquals(49, lottieFrameIndexFor(1.5f, frameCount = 50))
+        assertEquals(0, lottieFrameIndexFor(-0.5f, frameCount = 50))
+        assertEquals(0, lottieFrameIndexFor(0.5f, frameCount = 1))
+    }
+
+    // ── The open ping ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `an opted-in install is identified across launches`() {
+        assertEquals("install-abc", analyticsInstallId(enabled = true) { "install-abc" })
+    }
+
+    @Test
+    fun `an opted-out install is never given an id to mint`() {
+        // Minting one writes it to disk, so the very id opted out of must not be computed at all.
+        var minted = false
+        assertNull(analyticsInstallId(enabled = false) { minted = true; "install-abc" })
+        assertFalse(minted, "the id must not be created only to be thrown away")
+    }
+
+    // ── Counting the outputs ────────────────────────────────────────────────────
+
+    @Test
+    fun `every display but the primary can take an output`() {
+        assertEquals(listOf(0, 2), nonPrimaryIndices(listOf("left", "builtin", "right"), "builtin"))
+    }
+
+    @Test
+    fun `a machine with only the primary display has nowhere to put one`() {
+        assertEquals(emptyList(), nonPrimaryIndices(listOf("builtin"), "builtin"))
+    }
+
+    @Test
+    fun `displays and SDI devices are both outputs to drive`() {
+        assertEquals(3, presenterWindowCount(nonPrimaryScreens = 2, deckLinkDevices = 1))
+        assertEquals(0, presenterWindowCount(nonPrimaryScreens = 0, deckLinkDevices = 0))
+    }
+
+    @Test
+    fun `the slots past the real outputs are the fallback windows`() {
+        assertFalse(isFallbackWindowSlot(devWindowedFallback = true, index = 0, realWindowCount = 1))
+        assertTrue(isFallbackWindowSlot(devWindowedFallback = true, index = 1, realWindowCount = 1))
+        assertEquals(0, fallbackSlotIndex(index = 1, realWindowCount = 1))
+        assertEquals(2, fallbackSlotIndex(index = 3, realWindowCount = 1))
+    }
+
+    @Test
+    fun `without the fallback no slot is ever one of its windows`() {
+        assertFalse(isFallbackWindowSlot(devWindowedFallback = false, index = 5, realWindowCount = 1))
+    }
+
+    // ── Mirrored caches and signals ─────────────────────────────────────────────
+
+    @Test
+    fun `a picture change on the primary empties the mirrored cache`() {
+        assertTrue(shouldInvalidatePictureCache(1))
+        assertTrue(shouldInvalidatePictureCache(7))
+    }
+
+    @Test
+    fun `the value replayed on subscribe announces nothing`() {
+        assertFalse(shouldInvalidatePictureCache(0))
+    }
+
+    @Test
+    fun `only a signal that moved is a fresh clear`() {
+        assertTrue(isFreshClearSignal(signal = 4, lastSeen = 3))
+        assertFalse(isFreshClearSignal(signal = 3, lastSeen = 3), "re-subscribing must not clear")
+    }
+
+    // ── Media broadcasts ────────────────────────────────────────────────────────
+
+    @Test
+    fun `media going away is announced exactly once`() {
+        assertTrue(shouldBroadcastMediaCleared(isLoaded = false, wasLoaded = true))
+    }
+
+    @Test
+    fun `an idle app does not repeat itself every poll`() {
+        assertFalse(shouldBroadcastMediaCleared(isLoaded = false, wasLoaded = false))
+        assertFalse(shouldBroadcastMediaCleared(isLoaded = true, wasLoaded = true))
+    }
+
+    // ── Remote prompts ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `a long question is cut to what the prompt can show`() {
+        val long = "q".repeat(200)
+        assertEquals(MAX_REMOTE_EVENT_TITLE, remoteEventTitle(long).length)
+    }
+
+    @Test
+    fun `a short question is shown whole`() {
+        assertEquals("Where is the coffee?", remoteEventTitle("Where is the coffee?"))
+        assertEquals("", remoteEventTitle(""))
+    }
+
+    @Test
+    fun `pushing to the schedule is off unless allowed`() {
+        assertFalse(canPushToSchedule(InstanceLinkSettings()))
+        assertTrue(canPushToSchedule(InstanceLinkSettings(allowPushToSchedule = true)))
+    }
+
+    @Test
+    fun `a follower is handed a translation's absolute path`() {
+        val dir = Files.createTempDirectory("cp-main-logic-bibles").toFile()
+        try {
+            val expected = File(dir, "kjv1769.spb").absolutePath
+            assertEquals(expected, bibleFilePath(dir.absolutePath, "kjv1769.spb"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    // ── Placing an output on a display ──────────────────────────────────────────
+
+    @Test
+    fun `an index names an attached display, or it does not`() {
+        assertTrue(isScreenIndexValid(0, screenCount = 2))
+        assertTrue(isScreenIndexValid(1, screenCount = 2))
+        assertFalse(isScreenIndexValid(2, screenCount = 2))
+        assertFalse(isScreenIndexValid(-1, screenCount = 2))
+        assertFalse(isScreenIndexValid(0, screenCount = 0))
+    }
+
+    @Test
+    fun `an output explicitly set to none is skipped`() {
+        assertTrue(hasNoPrimaryTarget(ScreenAssignment(targetDisplay = Constants.KEY_TARGET_NONE)))
+    }
+
+    @Test
+    fun `an output left on auto is not taken for one turned off`() {
+        // -1 is "resolve at runtime", which is the default and must still open a window.
+        assertFalse(hasNoPrimaryTarget(ScreenAssignment()), "auto is the default, not none")
+        assertFalse(hasNoPrimaryTarget(ScreenAssignment(targetDisplay = 0)))
+    }
+
+    @Test
+    fun `saved bounds beat a saved index`() {
+        // The OS reorders display indices when monitors are plugged or unplugged; bounds survive it.
+        assertEquals(
+            2,
+            primaryOutputScreenIndex(
+                matchedByBounds = 2, savedDisplay = 0, screenCount = 3, positionalFallback = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `the saved index is used when it still names an attached display`() {
+        assertEquals(
+            1,
+            primaryOutputScreenIndex(
+                matchedByBounds = null, savedDisplay = 1, screenCount = 3, positionalFallback = 2,
+            ),
+        )
+    }
+
+    @Test
+    fun `a saved index for a display no longer attached falls back to position`() {
+        // A configuration written on a different machine still lands somewhere rather than nowhere.
+        assertEquals(
+            2,
+            primaryOutputScreenIndex(
+                matchedByBounds = null, savedDisplay = 9, screenCount = 3, positionalFallback = 2,
+            ),
+        )
+    }
+
+    @Test
+    fun `an output with nothing usable left opens no window`() {
+        assertNull(
+            primaryOutputScreenIndex(
+                matchedByBounds = null, savedDisplay = 9, screenCount = 3, positionalFallback = null,
+            ),
+        )
+    }
+
+    // ── The main window's own geometry ──────────────────────────────────────────
+
+    @Test
+    fun `a floating window reopens at the size it was left`() {
+        assertEquals(
+            1280 to 800,
+            startupWindowSize(
+                isFloating = true, savedWidth = 1280, savedHeight = 800,
+                primaryWidth = 3840, primaryHeight = 2160,
+            ),
+        )
+    }
+
+    @Test
+    fun `a maximized window takes the primary display's size instead`() {
+        // A size saved on a monitor since unplugged must not strand it at a shape nothing can show.
+        assertEquals(
+            3840 to 2160,
+            startupWindowSize(
+                isFloating = false, savedWidth = 1280, savedHeight = 800,
+                primaryWidth = 3840, primaryHeight = 2160,
+            ),
+        )
+    }
+
+    @Test
+    fun `a window with geometry worth restoring reopens where it was`() {
+        assertEquals(
+            120 to 60,
+            startupWindowPosition(
+                restoreGeometry = true, savedX = 120, savedY = 60, primaryX = -1920, primaryY = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `otherwise it opens on the primary display, not at the desktop origin`() {
+        // On a multi-monitor desktop the origin can belong to a different display entirely.
+        assertEquals(
+            -1920 to 0,
+            startupWindowPosition(
+                restoreGeometry = false, savedX = 120, savedY = 60, primaryX = -1920, primaryY = 0,
+            ),
+        )
     }
 }

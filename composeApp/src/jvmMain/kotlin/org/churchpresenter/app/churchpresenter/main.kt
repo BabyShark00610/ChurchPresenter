@@ -71,7 +71,6 @@ import churchpresenter.composeapp.generated.resources.presenter_view_title
 import churchpresenter.composeapp.generated.resources.key_output_title
 import churchpresenter.composeapp.generated.resources.screen_number
 import org.jetbrains.compose.resources.painterResource
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -153,7 +152,6 @@ import org.churchpresenter.app.churchpresenter.server.LottieRenderCache
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import org.churchpresenter.app.churchpresenter.server.LowerThirdSequencer
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
-import org.churchpresenter.app.churchpresenter.server.InstanceLinkStatus
 import org.churchpresenter.app.churchpresenter.server.LiveStateDto
 import org.churchpresenter.app.churchpresenter.dialogs.InstanceLinkDialog
 import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
@@ -163,6 +161,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
 import org.churchpresenter.app.churchpresenter.utils.presenterScreenBounds
 
 import org.churchpresenter.app.churchpresenter.utils.AutoStartManager
@@ -267,7 +266,7 @@ fun main() {
     // First run only: if no Bible has been configured yet, bundle the KJV 1769
     // into a default folder and set it as the primary Bible so the app works
     // out of the box without requiring the user to pick a Bible folder first.
-    if (startupSettings.bibleSettings.storageDirectory.isEmpty() && startupSettings.bibleSettings.primaryBible.isEmpty()) {
+    if (shouldBundleDefaultBible(startupSettings.bibleSettings)) {
         try {
             val defaultBibleDir = File(System.getProperty("user.home"), Constants.DEFAULT_BIBLES_DIR)
             defaultBibleDir.mkdirs()
@@ -286,7 +285,7 @@ fun main() {
     // Pass the install id only when analytics is enabled, so opted-out users
     // still send an anonymous geo ping but no persistent identifier.
     LiveMapReporter.pingOnOpen(
-        installId = if (startupSettings.analyticsReportingEnabled) CrashReporter.installId() else null,
+        installId = analyticsInstallId(startupSettings.analyticsReportingEnabled) { CrashReporter.installId() },
         updateCheckInterval = startupSettings.updateCheckInterval
     )
 
@@ -375,12 +374,10 @@ fun main() {
             presenterManager.setAtemRenderSettings(appSettings.atemSettings)
         }
 
-        var eulaAccepted by remember { mutableStateOf(appSettings.eulaAcceptedVersion >= CURRENT_EULA_VERSION) }
-        var showSetupWizard by remember {
-            val bibleReady = appSettings.bibleSettings.primaryBible.isNotEmpty()
-            val songsReady = appSettings.songSettings.storageDirectory.isNotEmpty()
-            mutableStateOf(!appSettings.setupWizardShown && !(bibleReady && songsReady))
+        var eulaAccepted by remember {
+            mutableStateOf(isEulaAccepted(appSettings.eulaAcceptedVersion, CURRENT_EULA_VERSION))
         }
+        var showSetupWizard by remember { mutableStateOf(shouldShowSetupWizard(appSettings)) }
 
         var currentLanguage by remember {
             val savedLanguageCode = appSettings.language
@@ -570,7 +567,7 @@ fun main() {
             // role changes) — only an actual increment past the count seen here is a fresh clear.
             var lastSeen = instanceLinkViewModel.displayClearedSignal.value
             instanceLinkViewModel.displayClearedSignal.collect { signal ->
-                if (signal == lastSeen) return@collect
+                if (!isFreshClearSignal(signal, lastSeen)) return@collect
                 lastSeen = signal
                 presenterManager.requestClearDisplay()
             }
@@ -587,7 +584,7 @@ fun main() {
         // Clearing the whole cache is cheap: live pictures re-fetch lazily on next display.
         LaunchedEffect(instanceLinkViewModel) {
             instanceLinkViewModel.picturesUpdatedSignal.collect { signal ->
-                if (signal == 0) return@collect
+                if (!shouldInvalidatePictureCache(signal)) return@collect
                 withContext(Dispatchers.IO) {
                     instanceLinkPictureCacheDir.listFiles()?.forEach { it.delete() }
                 }
@@ -757,7 +754,7 @@ fun main() {
                         source = mediaViewModel.mediaUrl,
                     )
                     wasLoaded = true
-                } else if (wasLoaded) {
+                } else if (shouldBroadcastMediaCleared(loaded, wasLoaded)) {
                     // One final "not loaded" so the mobile clears its now-playing view.
                     companionServer.broadcastMediaState(
                         isLive = false, isLoaded = false, isPlaying = false,
@@ -813,7 +810,11 @@ fun main() {
                     browserSourceOutputAt(appSettings.projectionSettings.browserSourceOutputs, i)
                 )
                 val effectiveModeState = remember {
-                    derivedStateOf { presenterManager.browserSourceLocks.value[i] ?: presenterManager.presentingMode.value }
+                    derivedStateOf {
+                        effectiveOutputMode(
+                            presenterManager.browserSourceLocks.value, i, presenterManager.presentingMode.value,
+                        )
+                    }
                 }
                 val qaDisplayUrlState = rememberUpdatedState(qaDisplayUrl)
                 // Keyed on geometry/fps so a settings change tears the renderer down and builds a
@@ -936,14 +937,21 @@ fun main() {
         // Use OS primary monitor bounds so maximized/fullscreen stays on one screen
         val primaryBounds = GraphicsEnvironment.getLocalGraphicsEnvironment()
             .defaultScreenDevice.defaultConfiguration.bounds
+        val isFloating = savedPlacement == WindowPlacement.Floating
+        val (startX, startY) = startupWindowPosition(
+            restoreGeometry = shouldRestoreWindowGeometry(isFloating, appSettings.windowX),
+            savedX = appSettings.windowX, savedY = appSettings.windowY,
+            primaryX = primaryBounds.x, primaryY = primaryBounds.y,
+        )
+        val (startWidth, startHeight) = startupWindowSize(
+            isFloating = isFloating,
+            savedWidth = appSettings.windowWidth, savedHeight = appSettings.windowHeight,
+            primaryWidth = primaryBounds.width, primaryHeight = primaryBounds.height,
+        )
         val state = rememberWindowState(
             placement = savedPlacement,
-            position = if (shouldRestoreWindowGeometry(savedPlacement == WindowPlacement.Floating, appSettings.windowX))
-                WindowPosition(appSettings.windowX.dp, appSettings.windowY.dp)
-            else WindowPosition(primaryBounds.x.dp, primaryBounds.y.dp),
-            size = if (savedPlacement == WindowPlacement.Floating)
-                DpSize(appSettings.windowWidth.dp, appSettings.windowHeight.dp)
-            else DpSize(primaryBounds.width.dp, primaryBounds.height.dp)
+            position = WindowPosition(startX.dp, startY.dp),
+            size = DpSize(startWidth.dp, startHeight.dp),
         )
 
         // Splash screen while app is loading
@@ -1173,9 +1181,9 @@ fun main() {
                                         val section = sections.getOrNull(req.section) ?: return@collect
                                         presenterManager.setLyricSection(section)
                                         presenterManager.setSongDisplaySectionIndex(req.section)
-                                        presenterManager.setSongDisplayLineIndex(if (req.lineIndex >= 0) req.lineIndex else -1)
+                                        presenterManager.setSongDisplayLineIndex(remoteSongLineIndex(req.lineIndex))
                                         // Make sure the presenter is showing lyrics
-                                        if (presenterManager.presentingMode.value != Presenting.LYRICS) {
+                                        if (shouldSwitchToLyrics(presenterManager.presentingMode.value)) {
                                             presenterManager.setPresentingMode(Presenting.LYRICS)
                                             presenterManager.setShowPresenterWindow(true)
                                         }
@@ -1205,7 +1213,7 @@ fun main() {
                                 }
                                 LaunchedEffect(Unit) {
                                     LowerThirdSequencer.onClear.collect {
-                                        if (presenterManager.presentingMode.value == Presenting.LOWER_THIRD) {
+                                        if (shouldClearAfterLowerThird(presenterManager.presentingMode.value)) {
                                             presenterManager.requestClearDisplay()
                                         }
                                     }
@@ -1235,7 +1243,7 @@ fun main() {
                                         when (val outcome = remoteApproval(
                                             access,
                                             type = qaActionType(pending.action),
-                                            title = pending.text.take(80),
+                                            title = remoteEventTitle(pending.text),
                                             clientId = clientId,
                                             clientLabel = remoteClientManager.getLabel(clientId),
                                         )) {
@@ -1324,7 +1332,7 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     snapshotFlow { presenterManager.presentingMode.value }
                                         .collect { mode ->
-                                            if (mode == Presenting.NONE) {
+                                            if (shouldBroadcastDisplayCleared(mode)) {
                                                 companionServer.broadcastDisplayCleared()
                                             }
                                         }
@@ -1334,7 +1342,7 @@ fun main() {
                                 LaunchedEffect(Unit) {
                                     snapshotFlow { presenterManager.songDisplaySectionIndex.value }
                                         .collect { index ->
-                                            if (presenterManager.presentingMode.value == Presenting.LYRICS) {
+                                            if (shouldBroadcastSongSection(presenterManager.presentingMode.value)) {
                                                 companionServer.broadcastSongSectionSelected(index)
                                             }
                                         }
@@ -1345,12 +1353,7 @@ fun main() {
                                 // operator can see what a remote client just did and optionally block them.
                                 LaunchedEffect(Unit) {
                                     companionServer.onInstantAction.collect { action ->
-                                        val type = when (action.actionType) {
-                                            "present" -> RemoteEventType.PRESENT
-                                            "upload"  -> RemoteEventType.UPLOAD
-                                            "clear"   -> RemoteEventType.CLEAR
-                                            else      -> RemoteEventType.PRESENT
-                                        }
+                                        val type = remoteActionType(action.actionType)
                                         remoteActivityNotifications.add(
                                             RemoteActivityNotification(
                                                 type = type,
@@ -1371,7 +1374,9 @@ fun main() {
                                     onStatistics = { showStatisticsDialog = true },
                                     onConnectToInstance = { showInstanceLinkDialog = true },
                                     onDisconnectInstance = { instanceLinkViewModel.disconnect() },
-                                    isInstanceLinkConnected = instanceLinkViewModel.connectionStatus.collectAsState().value != InstanceLinkStatus.DISCONNECTED,
+                                    isInstanceLinkConnected = isInstanceLinkActive(
+                                        instanceLinkViewModel.connectionStatus.collectAsState().value
+                                    ),
                                     onConverter = { showConverterWindow = true },
                                     onHelp = {
                                         Desktop.getDesktop()
@@ -1425,7 +1430,9 @@ fun main() {
                                     // ProjectionSettingsTab.kt — a dev build or the forced flag
                                     // gets this menu, plus the secret D-x7 keypress unlock
                                     // (developerMenuUnlocked, session-only) for packaged builds.
-                                    showDeveloperMenu = !BuildConfig.IS_RELEASE || DevFlags.forceDevWindow || developerMenuUnlocked,
+                                    showDeveloperMenu = shouldShowDeveloperMenu(
+                                        BuildConfig.IS_RELEASE, DevFlags.forceDevWindow, developerMenuUnlocked,
+                                    ),
                                     isPresenterWindowVisible = presenterManager.showPresenterWindow.value,
                                     onSetPresenterWindowVisible = { presenterManager.setShowPresenterWindow(it) },
                                     isDevWindowAlwaysOnTop = presenterManager.devWindowAlwaysOnTop.value,
@@ -1460,8 +1467,7 @@ fun main() {
 
                                 val instanceLinkStatus = instanceLinkViewModel.connectionStatus.collectAsState().value
                                 val instanceLinkIsControllerConnected =
-                                    instanceLinkStatus == InstanceLinkStatus.CONNECTED &&
-                                        appSettings.instanceLink.role == InstanceLinkRole.CONTROLLER
+                                    isControllerConnected(instanceLinkStatus, appSettings.instanceLink.role)
                                 // See shouldUseRemoteContent — the remote-asset fallbacks belong to a
                                 // mirrored schedule, so they are Controlled-only.
                                 val instanceLinkUsesRemoteContent =
@@ -1495,10 +1501,10 @@ fun main() {
                                     instanceLinkFetchBibleTranslations = { instanceLinkViewModel.fetchBibleTranslations() },
                                     instanceLinkOnSecondaryBibleFilePathChanged = { path -> companionServer.updateSecondaryBibleFilePath(path) },
                                     instanceLinkOnBibleFilePathsChanged = { paths -> companionServer.updateBibleFilePaths(paths) },
-                                    instanceLinkSendAddToSchedule = if (appSettings.instanceLink.allowPushToSchedule) {
+                                    instanceLinkSendAddToSchedule = if (canPushToSchedule(appSettings.instanceLink)) {
                                         { item -> instanceLinkViewModel.sendAddToSchedule(item) }
                                     } else null,
-                                    instanceLinkSendRemoveFromSchedule = if (appSettings.instanceLink.allowPushToSchedule) {
+                                    instanceLinkSendRemoveFromSchedule = if (canPushToSchedule(appSettings.instanceLink)) {
                                         { id -> instanceLinkViewModel.sendRemoveFromSchedule(id) }
                                     } else null,
                                     instanceLinkRole = appSettings.instanceLink.role,
@@ -1547,8 +1553,9 @@ fun main() {
                                         val link = appSettings.instanceLink
                                         if (instanceLinkUsesRemoteContent) {
                                             ({ itemId: String ->
-                                                val keyParam = if (link.apiKey.isNotEmpty()) "?${Constants.QUERY_PARAM_API_KEY}=${link.apiKey}" else ""
-                                                "http://${link.primaryHost}:${link.primaryPort}${Constants.ENDPOINT_MEDIA_STREAM}/$itemId$keyParam"
+                                                instanceLinkMediaStreamUrl(
+                                                    link.primaryHost, link.primaryPort, link.apiKey, itemId,
+                                                )
                                             })
                                         } else null
                                     },
@@ -1560,12 +1567,7 @@ fun main() {
                                         // there is an intermediate recomposition where songDisplayLineIndex=0
                                         // but displayedLyricSection still points to the old verse, causing the
                                         // first line of the old verse to flash briefly on verse boundaries.
-                                        val ss = appSettings.songSettings
-                                        val inLineMode = ss.fullscreenDisplayMode == Constants.SONG_DISPLAY_MODE_LINE ||
-                                            ss.lowerThirdDisplayMode == Constants.SONG_DISPLAY_MODE_LINE ||
-                                            ss.lookAheadDisplayMode == Constants.SONG_DISPLAY_MODE_LINE ||
-                                            ss.lowerThirdLookAheadDisplayMode == Constants.SONG_DISPLAY_MODE_LINE
-                                        if (inLineMode) {
+                                        if (isSongLineMode(appSettings.songSettings)) {
                                             presenterManager.setDisplayedLyricSection(section)
                                         }
                                     },
@@ -1579,7 +1581,9 @@ fun main() {
                                     onScheduleActionsReady = { scheduleActions = it },
                                     presenting = { mode ->
                                         presenterManager.setPresentingMode(mode)
-                                        if (mode != Presenting.NONE) presenterManager.setShowPresenterWindow(true)
+                                        if (shouldShowPresenterWindowFor(mode)) {
+                                            presenterManager.setShowPresenterWindow(true)
+                                        }
                                     },
                                     onScheduleItemSelected = { itemId -> selectedScheduleItemId = itemId },
                                     onShowSettings = { openOptionsDialog(0) },
@@ -1596,7 +1600,7 @@ fun main() {
                                         companionServer.updateBible(
                                             bible,
                                             translation,
-                                            filePath = File(appSettings.bibleSettings.storageDirectory, translation).absolutePath
+                                            filePath = bibleFilePath(appSettings.bibleSettings.storageDirectory, translation)
                                         )
                                     },
                                     onScheduleChanged = { items -> companionServer.updateSchedule(items) },
@@ -1671,7 +1675,7 @@ fun main() {
                                         presenterManager.requestClearDisplay()
                                     },
                                     onOpenLottieGen = { outputDir, onSaved ->
-                                        if (outputDir.isNotEmpty() && File(outputDir).isDirectory) {
+                                        if (isUsableOutputDir(outputDir)) {
                                             lottieGenOutputDir = File(outputDir)
                                             lottieGenOnFileSaved = onSaved
                                             showLottieGenWindow = true
@@ -1736,7 +1740,7 @@ fun main() {
                                         presenterManager.identifyBrowserSourceOutput(index)
                                     },
                                     onOpenLottieGen = { outputDir, onSaved ->
-                                        if (outputDir.isNotEmpty() && File(outputDir).isDirectory) {
+                                        if (isUsableOutputDir(outputDir)) {
                                             lottieGenOutputDir = File(outputDir)
                                             lottieGenOnFileSaved = onSaved
                                             showLottieGenWindow = true
@@ -1856,8 +1860,10 @@ fun main() {
                                     queueSize = remoteEventQueue.size,
                                     isClientKnownAllowed = remoteClientManager.isAllowed(currentClientId),
                                     isClientKnownBlocked = remoteClientManager.isBlocked(currentClientId),
-                                    isInstanceLinkFollower = currentClientId.isNotBlank() &&
-                                        currentClientId in companionServer.connectedInstanceLinkFollowers.collectAsState().value,
+                                    isInstanceLinkFollower = isInstanceLinkFollowerClient(
+                                        currentClientId,
+                                        companionServer.connectedInstanceLinkFollowers.collectAsState().value,
+                                    ),
                                     onAllow = {
                                         currentRemote?.second?.invoke()
                                         if (remoteEventQueue.isNotEmpty()) remoteEventQueue.removeAt(0)
@@ -1872,8 +1878,9 @@ fun main() {
                                             sessionAllowedClients.add(currentClientId)
                                         }
                                         val clientToAllow = currentClientId
-                                        val toApprove =
-                                            remoteEventQueue.filter { it.first.clientId == clientToAllow || clientToAllow.isBlank() }
+                                        val toApprove = remoteEventQueue.filter {
+                                            remoteEventTargetsClient(it.first.clientId, clientToAllow)
+                                        }
                                         toApprove.forEach { it.second.invoke() }
                                         remoteEventQueue.removeAll(toApprove)
                                     },
@@ -1881,8 +1888,9 @@ fun main() {
                                         // Permanently allow and silently approve all queued items from this client
                                         remoteClientManager.allowPermanently(currentClientId)
                                         val clientToAllow = currentClientId
-                                        val toApprove =
-                                            remoteEventQueue.filter { it.first.clientId == clientToAllow || clientToAllow.isBlank() }
+                                        val toApprove = remoteEventQueue.filter {
+                                            remoteEventTargetsClient(it.first.clientId, clientToAllow)
+                                        }
                                         toApprove.forEach { it.second.invoke() }
                                         remoteEventQueue.removeAll(toApprove)
                                     },
@@ -1895,8 +1903,9 @@ fun main() {
                                             sessionBlockedClients.add(currentClientId)
                                         }
                                         val clientToBlock = currentClientId
-                                        val toRemove =
-                                            remoteEventQueue.filter { it.first.clientId == clientToBlock || clientToBlock.isBlank() }
+                                        val toRemove = remoteEventQueue.filter {
+                                            remoteEventTargetsClient(it.first.clientId, clientToBlock)
+                                        }
                                         toRemove.forEach { it.third.invoke() }
                                         remoteEventQueue.removeAll(toRemove)
                                     },
@@ -1904,8 +1913,9 @@ fun main() {
                                         remoteClientManager.blockPermanently(currentClientId)
                                         // Deny all queued items from this client
                                         val clientToBlock = currentClientId
-                                        val toRemove =
-                                            remoteEventQueue.filter { it.first.clientId == clientToBlock || clientToBlock.isBlank() }
+                                        val toRemove = remoteEventQueue.filter {
+                                            remoteEventTargetsClient(it.first.clientId, clientToBlock)
+                                        }
                                         toRemove.forEach { it.third.invoke() }
                                         remoteEventQueue.removeAll(toRemove)
                                     },
@@ -2123,10 +2133,7 @@ private fun PresenterWindows(
     val proj = appSettings.projectionSettings
 
     // Mode-level crossfade duration (shared, per-screen active flag computed inside each window)
-    val modeCrossfadeDuration = maxOf(
-        if (appSettings.bibleSettings.crossfade) appSettings.bibleSettings.transitionDuration.toInt() else 0,
-        if (appSettings.songSettings.crossfade) appSettings.songSettings.transitionDuration.toInt() else 0
-    ).coerceAtLeast(100)
+    val modeCrossfadeDuration = modeCrossfadeDuration(appSettings.bibleSettings, appSettings.songSettings)
 
     // Fade-out before clearing display
     val clearRequested by presenterManager.clearDisplayRequested
@@ -2135,18 +2142,12 @@ private fun PresenterWindows(
         val mode = presenterManager.presentingMode.value
         // Don't fade the content alpha if any screen is locked to this mode —
         // that screen is still showing the content and the alpha must stay at 1.
-        val modeIsLocked = presenterManager.screenLocks.value.values.any { it == mode }
-        val shouldFade = !modeIsLocked && when (mode) {
-            Presenting.BIBLE -> appSettings.bibleSettings.fadeOut
-            Presenting.LYRICS -> appSettings.songSettings.fadeOut
-            else -> false
-        }
+        val modeIsLocked = isAnyScreenLockedTo(presenterManager.screenLocks.value, mode)
+        val shouldFade = shouldFadeOnClear(
+            mode, modeIsLocked, appSettings.bibleSettings, appSettings.songSettings,
+        )
         if (shouldFade) {
-            val duration = when (mode) {
-                Presenting.BIBLE -> appSettings.bibleSettings.transitionDuration.toInt()
-                Presenting.LYRICS -> appSettings.songSettings.transitionDuration.toInt()
-                else -> 500
-            }.coerceAtLeast(100)
+            val duration = fadeOutDuration(mode, appSettings.bibleSettings, appSettings.songSettings)
             val anim = Animatable(1f)
             anim.animateTo(0f, tween(durationMillis = duration)) {
                 when (mode) {
@@ -2180,10 +2181,7 @@ private fun PresenterWindows(
             return@LaunchedEffect
         }
         // Skip fade in line mode — only one line visible, instant swap is cleaner
-        val isLineMode = ss.fullscreenDisplayMode == Constants.SONG_DISPLAY_MODE_LINE ||
-                ss.lowerThirdDisplayMode == Constants.SONG_DISPLAY_MODE_LINE ||
-                ss.lookAheadDisplayMode == Constants.SONG_DISPLAY_MODE_LINE ||
-                ss.lowerThirdLookAheadDisplayMode == Constants.SONG_DISPLAY_MODE_LINE
+        val isLineMode = isSongLineMode(ss)
         if (isLineMode) {
             presenterManager.setDisplayedLyricSection(lyricSection)
             presenterManager.setSongTransitionAlpha(1f)
@@ -2293,21 +2291,19 @@ private fun PresenterWindows(
     // Centralized Announcements transition
     LaunchedEffect(announcementText) {
         val annSettings = appSettings.announcementsSettings
-        val isFade = annSettings.animationType == Constants.ANIMATION_FADE
-        val isNone = annSettings.animationType == Constants.ANIMATION_NONE
+        val isFade = isFadeAnnouncement(annSettings.animationType)
         val wasEmpty = presenterManager.displayedAnnouncementText.value.isEmpty()
         val fadeDuration = 500
         val sliderSum = 30500L // 500 + 30000, matches AnnouncementsTab speed slider
-        val displayDuration = (sliderSum - annSettings.animationDuration).coerceAtLeast(500)
         val loopCount = annSettings.loopCount
 
-        if (!isFade && !isNone) {
+        if (isSlidingAnnouncement(annSettings.animationType)) {
             // Directional slides — just swap text, animation handled in AnnouncementsPresenter
             presenterManager.setDisplayedAnnouncementText(announcementText)
             presenterManager.setAnnouncementTransitionAlpha(1f)
         } else if (announcementText.isEmpty()) {
             // Cleared by user or loop finished — fade out if fade, instant if none
-            if (isFade && !wasEmpty) {
+            if (shouldFadeOutAnnouncement(isFade, wasEmpty)) {
                 val anim = Animatable(1f)
                 anim.animateTo(0f, tween(fadeDuration)) {
                     presenterManager.setAnnouncementTransitionAlpha(value)
@@ -2330,9 +2326,9 @@ private fun PresenterWindows(
                 presenterManager.setAnnouncementTransitionAlpha(1f)
             }
 
-            if (loopCount > 0) {
+            if (isFiniteAnnouncementLoop(loopCount)) {
                 // Finite loops: display for duration × loopCount, then clear
-                delay(displayDuration * loopCount)
+                delay(announcementDisplayMs(sliderSum, annSettings.animationDuration.toLong(), loopCount))
 
                 // Fade out (only for fade animation)
                 if (isFade) {
@@ -2367,26 +2363,18 @@ private fun PresenterWindows(
             val comp = lottieComposition
             val initialFrameCount = presenterManager.lottieFrameCount.value
             val totalDurMs = when {
-                comp != null -> ((comp.durationFrames / comp.frameRate) * 1000f).toLong().coerceAtLeast(1L)
-                initialFrameCount != null -> (initialFrameCount * 1000L / presenterManager.lottiePrerenderFps.value).coerceAtLeast(1L)
+                comp != null -> lottieCompositionDurationMs(comp.durationFrames, comp.frameRate)
+                initialFrameCount != null ->
+                    lottiePrerenderDurationMs(initialFrameCount, presenterManager.lottiePrerenderFps.value)
                 else -> return@LaunchedEffect
             }
-            val hasPause = lottiePauseAtFrame && lottiePauseFrame in 0f..1f
-            val pauseAtMs = if (hasPause) (totalDurMs * lottiePauseFrame).toLong() else -1L
-            val grandTotalMs = totalDurMs + (if (hasPause) lottiePauseDurationMs else 0L)
+            val hasPause = lottieHasPause(lottiePauseAtFrame, lottiePauseFrame)
+            val pauseAtMs = lottiePauseAtMs(totalDurMs, lottiePauseFrame, hasPause)
+            val grandTotalMs = lottieGrandTotalMs(totalDurMs, hasPause, lottiePauseDurationMs)
 
-            fun progressAt(elapsedMs: Long): Float {
-                if (!hasPause) return (elapsedMs.toFloat() / totalDurMs).coerceIn(0f, 1f)
-                return when {
-                    elapsedMs < pauseAtMs -> (elapsedMs.toFloat() / totalDurMs).coerceIn(0f, lottiePauseFrame)
-                    elapsedMs < pauseAtMs + lottiePauseDurationMs -> lottiePauseFrame
-                    else -> {
-                        val postElapsed = elapsedMs - pauseAtMs - lottiePauseDurationMs
-                        val postTotalMs = (totalDurMs - pauseAtMs).coerceAtLeast(1L)
-                        (lottiePauseFrame + (postElapsed.toFloat() / postTotalMs) * (1f - lottiePauseFrame)).coerceIn(0f, 1f)
-                    }
-                }
-            }
+            fun progressAt(elapsedMs: Long): Float = lottieProgressAt(
+                elapsedMs, totalDurMs, hasPause, lottiePauseFrame, pauseAtMs, lottiePauseDurationMs,
+            )
 
             // Vsync-driven clock: elapsed time comes from real frame timestamps, so a missed
             // display frame self-corrects on the next one instead of accumulating drift the way
@@ -2397,8 +2385,7 @@ private fun PresenterWindows(
                 val frameCount = presenterManager.lottieFrameCount.value
                 val progress = progressAt(elapsedMs)
                 if (frameCount != null) {
-                    val idx = (progress * (frameCount - 1)).roundToInt().coerceIn(0, frameCount - 1)
-                    presenterManager.setLottieCurrentFrameIndex(idx)
+                    presenterManager.setLottieCurrentFrameIndex(lottieFrameIndexFor(progress, frameCount))
                 } else {
                     presenterManager.setLottieProgress(progress)
                 }
@@ -2428,7 +2415,7 @@ private fun PresenterWindows(
     // screenNumber is null when there's no physical screen to label (e.g. the test window).
     val presenterOutputContent: @Composable (screenAssignment: ScreenAssignment, effectiveMode: Presenting, screenNumber: Int?) -> Unit = { screenAssignment, effectiveMode, screenNumber ->
         val primaryRole = screenAssignment.primaryOutputRole
-        val showBg = if (screenAssignment.isLowerThird) screenAssignment.showLowerThirdBackground else screenAssignment.showFullscreenBackground
+        val showBg = showsOutputBackground(screenAssignment)
         CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
             if (screenAssignment.displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR) {
                 // Stage monitor: dedicated presenter-confidence layout
@@ -2472,7 +2459,9 @@ private fun PresenterWindows(
                             }
                     ) {
                         var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                        val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) && effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                        val screenCrossfadeActive = isScreenCrossfadeActive(
+                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                    )
                         if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                         Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
                             when (mode) {
@@ -2583,7 +2572,7 @@ private fun PresenterWindows(
                                     if (screenAssignment.showQA) {
                                         if (showQRCodeOnDisplay) {
                                             QAQRCodePresenter(
-                                                url = "${qaDisplayUrl.ifEmpty { serverUrl }}/qa",
+                                                url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
                                                 qaSettings = appSettings.qaSettings,
                                                 transitionAlpha = qaTransitionAlpha,
                                             )
@@ -2651,31 +2640,33 @@ private fun PresenterWindows(
 
     // Identify the OS primary monitor and build list of non-primary screens
     val defaultDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
-    val availableScreens = screens.indices.filter { screens[it] != defaultDevice }
+    val availableScreens = nonPrimaryIndices(screens.toList(), defaultDevice)
 
-    val deckLinkDeviceCount = if (DeckLinkManager.isAvailable()) DeckLinkManager.listDevices().size else 0
-    val windowCount = availableScreens.size + deckLinkDeviceCount
+    val deckLinkDeviceCount = deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
+    val windowCount = presenterWindowCount(availableScreens.size, deckLinkDeviceCount)
     // Dev convenience: on a single-monitor dev machine there's no non-primary monitor or DeckLink
     // device to open a real output window on. Show Output 1 as an ordinary window instead of not
     // rendering at all, driven by the same "Toggle Presenter Displays" button/state.
-    val devWindowedFallback = (!BuildConfig.IS_RELEASE || DevFlags.forceDevWindow) && windowCount == 0
+    val devWindowedFallback = isDevWindowedFallback(
+        BuildConfig.IS_RELEASE, DevFlags.forceDevWindow, windowCount,
+    )
     // On a machine with no real output, open DevFlags.devWindowCount fallback windows (default 1).
     // A count > 1 simulates several independent outputs on one monitor for developing/testing
     // per-output features — each window is its own output slot (index, assignment, screen lock).
-    val devFallbackCount = if (devWindowedFallback) proj.devWindowCount.coerceAtLeast(1) else 0
+    val devFallbackCount = devFallbackWindowCount(devWindowedFallback, proj.devWindowCount)
     for (i in 0 until (windowCount + devFallbackCount)) {
-        if (devWindowedFallback && i >= windowCount) {
-            val fallbackIndex = i - windowCount
+        if (isFallbackWindowSlot(devWindowedFallback, i, windowCount)) {
+            val fallbackIndex = fallbackSlotIndex(i, windowCount)
             val screenAssignment = proj.getAssignment(fallbackIndex)
-            val effectiveMode = screenLocks[fallbackIndex] ?: presentingMode
+            val effectiveMode = effectiveOutputMode(screenLocks, fallbackIndex, presentingMode)
             // Cascade the windows so multiple dev outputs don't stack exactly on top of each other.
             val fallbackWindowState = remember(fallbackIndex) {
                 WindowState(
                     width = 960.dp,
                     height = 540.dp,
                     position = WindowPosition(
-                        x = (40 + fallbackIndex * 48).dp,
-                        y = (40 + fallbackIndex * 48).dp,
+                        x = devFallbackWindowOffsetDp(fallbackIndex).dp,
+                        y = devFallbackWindowOffsetDp(fallbackIndex).dp,
                     ),
                 )
             }
@@ -2694,10 +2685,10 @@ private fun PresenterWindows(
             continue
         }
         val screenAssignment = proj.getAssignment(i)
-        val effectiveMode = screenLocks[i] ?: presentingMode
+        val effectiveMode = effectiveOutputMode(screenLocks, i, presentingMode)
 
         // DeckLink outputs: render via offscreen Window + pixel capture
-        if (screenAssignment.targetType == "decklink") {
+        if (isDeckLinkPrimaryOutput(screenAssignment)) {
             if (showPresenterWindow && screenAssignment.targetDisplay >= 0) {
                 val deckLinkRole = screenAssignment.primaryOutputRole
                 DeckLinkComposeOutput(
@@ -2708,7 +2699,9 @@ private fun PresenterWindows(
                     isLowerThird = screenAssignment.isLowerThird,
                 ) {
                     var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) && effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                    val screenCrossfadeActive = isScreenCrossfadeActive(
+                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                    )
                     if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                     Crossfade(
                         targetState = effectiveMode,
@@ -2818,7 +2811,7 @@ private fun PresenterWindows(
                             if (screenAssignment.showQA) {
                                 if (showQRCodeOnDisplay) {
                                     QAQRCodePresenter(
-                                        url = "${qaDisplayUrl.ifEmpty { serverUrl }}/qa",
+                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
                                         qaSettings = appSettings.qaSettings,
                                         transitionAlpha = qaTransitionAlpha,
                                     )
@@ -2858,7 +2851,7 @@ private fun PresenterWindows(
             }
 
             // DeckLink key output
-            if (showPresenterWindow && screenAssignment.hasKeyOutput && screenAssignment.keyTargetType == "decklink" && screenAssignment.keyTargetDisplay >= 0) {
+            if (showPresenterWindow && hasDeckLinkKeyOutput(screenAssignment)) {
                 DeckLinkComposeOutput(
                     deviceIndex = screenAssignment.keyTargetDisplay,
                     outputRole = Constants.OUTPUT_ROLE_KEY,
@@ -2867,7 +2860,9 @@ private fun PresenterWindows(
                     isLowerThird = screenAssignment.isLowerThird,
                 ) {
                     var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) && effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                    val screenCrossfadeActive = isScreenCrossfadeActive(
+                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                    )
                     if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                     Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
                     when (mode) {
@@ -2981,7 +2976,7 @@ private fun PresenterWindows(
                             if (screenAssignment.showQA) {
                                 if (showQRCodeOnDisplay) {
                                     QAQRCodePresenter(
-                                        url = "${qaDisplayUrl.ifEmpty { serverUrl }}/qa",
+                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
                                         qaSettings = appSettings.qaSettings,
                                         outputRole = Constants.OUTPUT_ROLE_KEY,
                                         transitionAlpha = qaTransitionAlpha,
@@ -3023,15 +3018,18 @@ private fun PresenterWindows(
             }
 
             // Key output on a regular screen when primary is DeckLink
-            if (showPresenterWindow && screenAssignment.hasKeyOutput && screenAssignment.keyTargetType == "screen") {
-                val keyScreenIndex = findScreenIndexByBounds(
-                    screens,
-                    screenAssignment.keyTargetBoundsX,
-                    screenAssignment.keyTargetBoundsY,
-                    screenAssignment.keyTargetBoundsW,
-                    screenAssignment.keyTargetBoundsH
-                ) ?: screenAssignment.keyTargetDisplay
-                if (keyScreenIndex in screens.indices) {
+            if (showPresenterWindow && hasScreenKeyOutput(screenAssignment)) {
+                val keyScreenIndex = keyOutputScreenIndex(
+                    findScreenIndexByBounds(
+                        screens,
+                        screenAssignment.keyTargetBoundsX,
+                        screenAssignment.keyTargetBoundsY,
+                        screenAssignment.keyTargetBoundsW,
+                        screenAssignment.keyTargetBoundsH
+                    ),
+                    screenAssignment.keyTargetDisplay,
+                )
+                if (isScreenIndexValid(keyScreenIndex, screens.size)) {
                     val keyWindowState = remember(i, keyScreenIndex) {
                         val b = screens[keyScreenIndex].defaultConfiguration.bounds
                         WindowState(
@@ -3060,7 +3058,10 @@ private fun PresenterWindows(
                             ) {
                                 Box(modifier = Modifier.fillMaxSize()) {
                                     var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                                    val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) && effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                                    val screenCrossfadeActive = isScreenCrossfadeActive(
+                                        appSettings.bibleSettings, appSettings.songSettings,
+                                        effectiveMode, prevEffectiveMode,
+                                    )
                                     if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                                     Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
                     when (mode) {
@@ -3174,7 +3175,7 @@ private fun PresenterWindows(
                                             if (screenAssignment.showQA) {
                                                 if (showQRCodeOnDisplay) {
                                                     QAQRCodePresenter(
-                                                        url = "${qaDisplayUrl.ifEmpty { serverUrl }}/qa",
+                                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
                                                         qaSettings = appSettings.qaSettings,
                                                         outputRole = Constants.OUTPUT_ROLE_KEY,
                                                         transitionAlpha = qaTransitionAlpha,
@@ -3222,26 +3223,27 @@ private fun PresenterWindows(
             continue
         }
 
-        if (screenAssignment.targetDisplay == Constants.KEY_TARGET_NONE) continue
+        if (hasNoPrimaryTarget(screenAssignment)) continue
 
         // Resolve target display
-        val targetScreenIndex = findScreenIndexByBounds(
-            screens,
-            screenAssignment.targetBoundsX,
-            screenAssignment.targetBoundsY,
-            screenAssignment.targetBoundsW,
-            screenAssignment.targetBoundsH
-        ) ?: if (screenAssignment.targetDisplay >= 0 && screenAssignment.targetDisplay < screens.size) {
-            screenAssignment.targetDisplay
-        } else {
-            availableScreens.getOrNull(i) ?: continue
-        }
+        val targetScreenIndex = primaryOutputScreenIndex(
+            matchedByBounds = findScreenIndexByBounds(
+                screens,
+                screenAssignment.targetBoundsX,
+                screenAssignment.targetBoundsY,
+                screenAssignment.targetBoundsW,
+                screenAssignment.targetBoundsH
+            ),
+            savedDisplay = screenAssignment.targetDisplay,
+            screenCount = screens.size,
+            positionalFallback = availableScreens.getOrNull(i),
+        ) ?: continue
 
         // Skip if the target screen doesn't exist
-        if (targetScreenIndex < 0 || targetScreenIndex >= screens.size) continue
+        if (!isScreenIndexValid(targetScreenIndex, screens.size)) continue
 
         // Per-output background toggle
-        val showBg = if (screenAssignment.isLowerThird) screenAssignment.showLowerThirdBackground else screenAssignment.showFullscreenBackground
+        val showBg = showsOutputBackground(screenAssignment)
 
         // Derive output role from key target configuration
         val primaryRole = screenAssignment.primaryOutputRole
@@ -3278,15 +3280,18 @@ private fun PresenterWindows(
         }
 
         // Key output window — spawned when a key target is configured
-        if (screenAssignment.hasKeyOutput && screenAssignment.keyTargetType != "decklink") {
-            val keyScreenIndex = findScreenIndexByBounds(
-                screens,
-                screenAssignment.keyTargetBoundsX,
-                screenAssignment.keyTargetBoundsY,
-                screenAssignment.keyTargetBoundsW,
-                screenAssignment.keyTargetBoundsH
-            ) ?: screenAssignment.keyTargetDisplay
-            if (keyScreenIndex in screens.indices) {
+        if (screenAssignment.hasKeyOutput && !isDeckLinkKeyOutput(screenAssignment)) {
+            val keyScreenIndex = keyOutputScreenIndex(
+                findScreenIndexByBounds(
+                    screens,
+                    screenAssignment.keyTargetBoundsX,
+                    screenAssignment.keyTargetBoundsY,
+                    screenAssignment.keyTargetBoundsW,
+                    screenAssignment.keyTargetBoundsH
+                ),
+                screenAssignment.keyTargetDisplay,
+            )
+            if (isScreenIndexValid(keyScreenIndex, screens.size)) {
                 val keyWindowState = remember(i, keyScreenIndex) {
                     val b = screens[keyScreenIndex].defaultConfiguration.bounds
                     WindowState(
@@ -3326,7 +3331,10 @@ private fun PresenterWindows(
                                     }
                             ) {
                                 var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                                val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) && effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                                val screenCrossfadeActive = isScreenCrossfadeActive(
+                                    appSettings.bibleSettings, appSettings.songSettings,
+                                    effectiveMode, prevEffectiveMode,
+                                )
                                 if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                                 Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
                     when (mode) {
@@ -3439,7 +3447,7 @@ private fun PresenterWindows(
                                         if (screenAssignment.showQA) {
                                             if (showQRCodeOnDisplay) {
                                                 QAQRCodePresenter(
-                                                    url = "${qaDisplayUrl.ifEmpty { serverUrl }}/qa",
+                                                    url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
                                                     qaSettings = appSettings.qaSettings,
                                                     transitionAlpha = qaTransitionAlpha,
                                                 )
@@ -3484,7 +3492,7 @@ private fun PresenterWindows(
         }
 
         // Key output on DeckLink when primary is a regular screen
-        if (screenAssignment.targetType != "decklink" && screenAssignment.hasKeyOutput && screenAssignment.keyTargetType == "decklink" && screenAssignment.keyTargetDisplay >= 0) {
+        if (!isDeckLinkPrimaryOutput(screenAssignment) && hasDeckLinkKeyOutput(screenAssignment)) {
             if (showPresenterWindow) {
                 DeckLinkComposeOutput(
                     deviceIndex = screenAssignment.keyTargetDisplay,
@@ -3494,7 +3502,9 @@ private fun PresenterWindows(
                     isLowerThird = screenAssignment.isLowerThird,
                 ) {
                     var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = (appSettings.bibleSettings.crossfade || appSettings.songSettings.crossfade) && effectiveMode != Presenting.NONE && prevEffectiveMode != Presenting.NONE
+                    val screenCrossfadeActive = isScreenCrossfadeActive(
+                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                    )
                     if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                     Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
                     when (mode) {
@@ -3608,7 +3618,7 @@ private fun PresenterWindows(
                             if (screenAssignment.showQA) {
                                 if (showQRCodeOnDisplay) {
                                     QAQRCodePresenter(
-                                        url = "${qaDisplayUrl.ifEmpty { serverUrl }}/qa",
+                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
                                         qaSettings = appSettings.qaSettings,
                                         transitionAlpha = qaTransitionAlpha,
                                     )
