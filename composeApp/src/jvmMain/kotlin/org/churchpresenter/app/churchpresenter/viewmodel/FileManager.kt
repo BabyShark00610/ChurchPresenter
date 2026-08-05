@@ -169,28 +169,6 @@ class FileManager {
     }
 
     /**
-     * Delete a file from directory
-     * Returns error message if failed, null if successful
-     */
-    fun deleteFile(directory: String, fileName: String): String? {
-        val fileToDelete = File(directory, fileName)
-        val dirCanonical = File(directory).canonicalPath
-        if (!fileToDelete.canonicalPath.startsWith(dirCanonical + File.separator) &&
-            fileToDelete.canonicalPath != dirCanonical) {
-            return "Invalid file path"
-        }
-        return try {
-            if (fileToDelete.delete()) {
-                null // Success
-            } else {
-                "Failed to delete file"
-            }
-        } catch (e: Exception) {
-            "Error deleting file: ${e.message}"
-        }
-    }
-
-    /**
      * Show confirmation dialog
      * Returns true if user confirmed
      */
