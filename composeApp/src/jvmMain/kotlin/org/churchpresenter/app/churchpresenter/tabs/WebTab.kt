@@ -90,6 +90,8 @@ import churchpresenter.composeapp.generated.resources.web_refresh
 import churchpresenter.composeapp.generated.resources.web_url_hint
 import churchpresenter.composeapp.generated.resources.web_zoom_in
 import churchpresenter.composeapp.generated.resources.web_zoom_out
+import churchpresenter.composeapp.generated.resources.web_snapshot_screen_recording_hint
+import churchpresenter.composeapp.generated.resources.web_snapshot_waiting
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.WebBookmark
 import org.churchpresenter.app.churchpresenter.presenter.CefManager
@@ -805,14 +807,14 @@ fun WebTab(
                                 Spacer(Modifier.height(12.dp))
                                 if (System.getProperty("os.name", "").lowercase().contains("mac")) {
                                     Text(
-                                        "If this persists, grant Screen Recording permission\nin System Settings > Privacy & Security > Screen Recording",
+                                        stringResource(Res.string.web_snapshot_screen_recording_hint),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                         textAlign = TextAlign.Center
                                     )
                                 } else {
                                     Text(
-                                        "Waiting for snapshot...",
+                                        stringResource(Res.string.web_snapshot_waiting),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                     )

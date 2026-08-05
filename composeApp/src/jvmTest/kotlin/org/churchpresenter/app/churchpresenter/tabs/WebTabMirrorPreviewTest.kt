@@ -49,10 +49,9 @@ class WebTabMirrorPreviewTest {
     /** The wait hint the running platform shows — the other platform's is unreachable from here. */
     private val expectedHint: String =
         if (System.getProperty("os.name", "").lowercase().contains("mac")) {
-            "If this persists, grant Screen Recording permission\n" +
-                "in System Settings > Privacy & Security > Screen Recording"
+            WebLabel.SNAPSHOT_SCREEN_RECORDING_HINT
         } else {
-            "Waiting for snapshot..."
+            WebLabel.SNAPSHOT_WAITING
         }
 
     private fun ComposeUiTest.goLive(presenterMode: () -> Unit) {

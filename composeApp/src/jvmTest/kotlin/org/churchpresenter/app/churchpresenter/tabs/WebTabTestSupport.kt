@@ -97,6 +97,10 @@ internal object WebLabel {
     const val ENGINE_UNAVAILABLE_MACOS_TITLE = "Web browser requires a newer macOS"
     const val ENGINE_UNAVAILABLE_MACOS_BODY =
         "ChurchPresenter's browser engine no longer supports this version of macOS. Update to macOS 12 (Monterey) or later to use the Web tab and browser sources."
+    const val SNAPSHOT_WAITING = "Waiting for snapshot..."
+    const val SNAPSHOT_SCREEN_RECORDING_HINT =
+        "If this persists, grant Screen Recording permission\n" +
+            "in System Settings > Privacy & Security > Screen Recording"
 }
 
 internal fun zoomPercentText(level: Double): String = "${(Math.pow(1.2, level) * 100).toInt()}%"
