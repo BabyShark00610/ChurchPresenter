@@ -16,6 +16,7 @@
     <string name="bible_search_mode_reference">Reference</string>
     <string name="bible_search_mode_text">Text</string>
     <string name="bible_search_mode_tooltip">Tap to switch — Auto: jump to references, search everything else. Reference: navigate only. Text: always search verse text.</string>
+    <string name="bible_verse_selection_hint">Ctrl+Click to toggle, Shift+Click for range</string>
     <string name="replace">Replace with</string>
     <string name="search_songs">Search songs...</string>
     <string name="song_book">Song Book</string>
