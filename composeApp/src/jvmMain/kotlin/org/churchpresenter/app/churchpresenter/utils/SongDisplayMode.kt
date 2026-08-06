@@ -13,3 +13,4 @@ internal fun isSongLineMode(settings: SongSettings): Boolean =
         settings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
         settings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
         settings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+

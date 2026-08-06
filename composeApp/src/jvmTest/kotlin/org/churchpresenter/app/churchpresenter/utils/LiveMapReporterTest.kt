@@ -2,6 +2,12 @@ package org.churchpresenter.app.churchpresenter.utils
 
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
+import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
+import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
+import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import java.net.InetSocketAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,9 +18,10 @@ import kotlin.time.Duration
 
 /**
  * [LiveMapReporter] fires an anonymous city-level ping on launch. The launch/retry is network and
- * timing bound, but the two decisions that shape the request are pure: which os tag the platform
- * maps to, and how the ping url is assembled — including the dev-build split that keeps IDE/`run`
- * launches out of the real-user stats, and the opt-in updateCheck parameter.
+ * timing bound, but the decisions that shape the request are pure: which os tag the platform maps
+ * to, which setup facts are derived from the settings, and how the ping url is assembled —
+ * including the dev-build split that keeps IDE/`run` launches out of the real-user stats, and the
+ * opt-in updateCheck parameter.
  */
 class LiveMapReporterTest {
 
@@ -92,6 +99,186 @@ class LiveMapReporterTest {
         assertFalse("updateCheck" in without, without)
     }
 
+    private fun settings(
+        bibles: List<String> = emptyList(),
+        outputs: List<ScreenAssignment> = emptyList(),
+    ) = AppSettings(
+        bibleSettings = BibleSettings(translations = bibles.map { BibleTranslationSettings(fileName = it) }),
+        projectionSettings = ProjectionSettings(screenAssignments = outputs),
+    )
+
+    private fun output(displayMode: String, targetDisplay: Int = 0) =
+        ScreenAssignment(targetDisplay = targetDisplay, displayMode = displayMode)
+
+    @Test
+    fun `setup facts count the attached screens and the configured translation stack`() {
+        val facts = LiveMapReporter.setupFacts(
+            settings(bibles = listOf("kjv1769.spb", "rst.spb", "ukr.spb")),
+            screenCount = 3,
+        )
+        assertEquals(3, facts.screens)
+        assertEquals(3, facts.bibles)
+    }
+
+    @Test
+    fun `an install with no translations configured reports none rather than failing`() {
+        assertEquals(0, LiveMapReporter.setupFacts(settings(), screenCount = 1).bibles)
+    }
+
+    @Test
+    fun `the legacy primary-secondary pair still counts as two translations`() {
+        // A settings file written before the translation list existed — translationList() falls
+        // back to the pair, so the count must too.
+        val legacy = AppSettings(
+            bibleSettings = BibleSettings(primaryBible = "kjv1769.spb", secondaryBible = "rst.spb")
+        )
+        assertEquals(2, LiveMapReporter.setupFacts(legacy, screenCount = 1).bibles)
+    }
+
+    @Test
+    fun `stage monitor and lower third are reported from the output display modes`() {
+        val facts = LiveMapReporter.setupFacts(
+            settings(
+                outputs = listOf(
+                    output(Constants.DISPLAY_MODE_FULLSCREEN),
+                    output(Constants.DISPLAY_MODE_STAGE_MONITOR),
+                    output(Constants.DISPLAY_MODE_LOWER_THIRD_VERTICAL),
+                )
+            ),
+            screenCount = 3,
+        )
+        assertTrue(facts.stageMonitor)
+        assertTrue(facts.lowerThird)
+    }
+
+    @Test
+    fun `a fullscreen-only setup reports neither`() {
+        val facts = LiveMapReporter.setupFacts(
+            settings(outputs = listOf(output(Constants.DISPLAY_MODE_FULLSCREEN))),
+            screenCount = 1,
+        )
+        assertFalse(facts.stageMonitor)
+        assertFalse(facts.lowerThird)
+    }
+
+    @Test
+    fun `an output with no display chosen is not counted as in use`() {
+        val facts = LiveMapReporter.setupFacts(
+            settings(
+                outputs = listOf(
+                    output(Constants.DISPLAY_MODE_STAGE_MONITOR, targetDisplay = Constants.KEY_TARGET_NONE),
+                    output(Constants.DISPLAY_MODE_LOWER_THIRD_HORIZONTAL, targetDisplay = Constants.KEY_TARGET_NONE),
+                )
+            ),
+            screenCount = 1,
+        )
+        assertFalse(facts.stageMonitor, "a stage monitor switched off is not a stage monitor in use")
+        assertFalse(facts.lowerThird, "a lower third switched off is not a lower third in use")
+    }
+
+    @Test
+    fun `the ping url carries the setup facts that are set`() {
+        val url = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            setup = LiveMapReporter.SetupFacts(
+                screens = 2, bibles = 3, stageMonitor = true, lowerThird = true,
+            ),
+        )
+        assertTrue("screens=2" in url, url)
+        assertTrue("bibles=3" in url, url)
+        assertTrue("stageMonitor=true" in url, url)
+        assertTrue("lowerThird=true" in url, url)
+    }
+
+    @Test
+    fun `unknown or unused setup facts are omitted rather than sent as zero`() {
+        val url = LiveMapReporter.buildPingUrl("linux", "26.1.0", null, isDevBuild = false)
+        assertFalse("screens" in url, url)
+        assertFalse("bibles" in url, url)
+        assertFalse("stageMonitor" in url, url)
+        assertFalse("lowerThird" in url, url)
+    }
+
+    @Test
+    fun `usage events are appended under their own wire names`() {
+        val url = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            events = mapOf(UsageEvent.SONG_DUAL_LANGUAGE to 7),
+        )
+        assertTrue("${UsageEvent.SONG_DUAL_LANGUAGE.param}=7" in url, url)
+    }
+
+    @Test
+    fun `an event with nothing new is not sent at all`() {
+        val none = LiveMapReporter.buildPingUrl("linux", "26.1.0", null, isDevBuild = false)
+        assertFalse(UsageEvent.SONG_DUAL_LANGUAGE.param in none, none)
+
+        val zero = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            events = mapOf(UsageEvent.SONG_DUAL_LANGUAGE to 0),
+        )
+        assertFalse(UsageEvent.SONG_DUAL_LANGUAGE.param in zero, zero)
+    }
+
+    @Test
+    fun `the interface language is reported, and omitted when unset`() {
+        val ru = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            setup = LiveMapReporter.SetupFacts(language = "ru"),
+        )
+        assertTrue("lang=ru" in ru, ru)
+        assertFalse("lang=" in LiveMapReporter.buildPingUrl("linux", "26.1.0", null, isDevBuild = false))
+    }
+
+    @Test
+    fun `setup facts carry the configured interface language`() {
+        val facts = LiveMapReporter.setupFacts(AppSettings(language = "uk"), screenCount = 1)
+        assertEquals("uk", facts.language)
+    }
+
+    @Test
+    fun `a standalone instance reports its events`() {
+        val pending = mapOf(UsageEvent.SONG_DUAL_LANGUAGE to 3)
+        assertEquals(pending, LiveMapReporter.eventsToReport(AppSettings(), pending))
+    }
+
+    @Test
+    fun `a linked instance reports none of them, so one service is counted once`() {
+        val pending = mapOf(UsageEvent.SONG_DUAL_LANGUAGE to 3)
+        val linked = AppSettings(instanceLink = InstanceLinkSettings(enabled = true))
+        assertTrue(LiveMapReporter.eventsToReport(linked, pending).isEmpty())
+    }
+
+    @Test
+    fun `library size and the previous session length are reported when known`() {
+        val url = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            setup = LiveMapReporter.SetupFacts(songbooks = 3, songs = 812, sessionMinutes = 95),
+        )
+        assertTrue("songbooks=3" in url, url)
+        assertTrue("songs=812" in url, url)
+        assertTrue("sessionMinutes=95" in url, url)
+
+        val empty = LiveMapReporter.buildPingUrl("linux", "26.1.0", null, isDevBuild = false)
+        assertFalse("songs" in empty, empty)
+        assertFalse("sessionMinutes" in empty, empty)
+    }
+
+    @Test
+    fun `setup facts carry the song counts and session length they are given`() {
+        val facts = LiveMapReporter.setupFacts(
+            AppSettings(), screenCount = 2, songCounts = 4 to 900, sessionMinutes = 12,
+        )
+        assertEquals(4, facts.songbooks)
+        assertEquals(900, facts.songs)
+        assertEquals(12, facts.sessionMinutes)
+    }
+
+    @Test
+    fun `song counts from an unset song folder are zero rather than an error`() {
+        assertEquals(0 to 0, LiveMapReporter.gatherSongCounts(AppSettings()))
+    }
+
     private fun pingThatFails(times: Int): Pair<suspend () -> Boolean, () -> Int> {
         var calls = 0
         val ping: suspend () -> Boolean = {
@@ -112,7 +299,7 @@ class LiveMapReporterTest {
     @Test
     fun `a first-try success pings exactly once`() {
         val (ping, calls) = pingThatFails(0)
-        retry(ping)
+        assertTrue(retry(ping), "a delivered ping reports success, which is what releases the events")
         assertEquals(1, calls(), "a success on the first attempt must not retry")
     }
 
@@ -133,7 +320,7 @@ class LiveMapReporterTest {
     @Test
     fun `it gives up after quick plus slow attempts are exhausted`() {
         val (ping, calls) = pingThatFails(Int.MAX_VALUE) // never succeeds
-        retry(ping, quick = 3, slow = 15)
+        assertFalse(retry(ping, quick = 3, slow = 15), "an undelivered ping must not release the events")
         assertEquals(18, calls(), "every attempt tried, then it stops rather than looping forever")
     }
 
@@ -159,7 +346,7 @@ class LiveMapReporterTest {
     @Test
     fun `ping sends the request and forwards the install id header`() {
         withServer { url, captured ->
-            runBlocking { LiveMapReporter.ping(url, installId = "install-abc") }
+            assertTrue(runBlocking { LiveMapReporter.ping(url, installId = "install-abc") })
             assertEquals(1, captured.hits, "a reachable server is pinged exactly once, with no retry")
             assertEquals("install-abc", captured.installId)
         }
