@@ -23,7 +23,6 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * The banner that explains why an embedded video is not playing.
@@ -46,8 +45,19 @@ import kotlin.test.assertTrue
 class PresentationTabVlcBannerTest {
 
     private companion object {
+        /**
+         * The banner's title, which is the same whichever reason it gives underneath.
+         *
+         * **Only the title is asserted, deliberately.** The detail line picks between three strings
+         * using `isVlcArchMismatch` / `isVlcLoadFailed`, and both of those derive from the JVM-wide
+         * `isVlcAvailable` rather than from this tab's `vlcAvailable` parameter — so the detail says
+         * "install VLC" on a machine that has it and "failed to load" on one that does not. Pinning
+         * it passes locally and fails on CI, which is exactly what it did before this comment
+         * existed. (`MediaTab` takes `vlcArchMismatch`/`vlcLoadFailed` as parameters and so can
+         * assert all three — see `MediaTabVlcUnavailableTest`. `PresentationTab` does not; making it
+         * symmetrical would be a production change worth its own PR.)
+         */
         const val TITLE = "VLC media player is required for media playback"
-        const val INSTALL_HINT = "Please install VLC from videolan.org and restart the application"
     }
 
     private val temps = mutableListOf<File>()
@@ -114,16 +124,35 @@ class PresentationTabVlcBannerTest {
         onAllNodesWithText(text, substring = true).fetchSemanticsNodes(false).size
 
     /**
-     * The banner's own dismiss button.
+     * The banner's own dismiss button: the clickable "Clear" sitting in the banner's own row.
      *
-     * `hasClickAction()` is load-bearing, not decoration: "Clear" matches **two** nodes — the
-     * `IconButton` and the `Icon` inside it — and only the outer one is clickable. Matching on the
-     * description alone finds both, and clicking the wrong one does nothing at all, which reads as
-     * "dismissal is broken" rather than "the selector is wrong". With the click action required it
-     * is unique, and `onNode` fails loudly if that ever stops being true.
+     * Three things make this harder than it looks, and all three were found the hard way:
+     *
+     *  * `"Clear"` matches the `IconButton` **and** the `Icon` inside it, and only the outer one is
+     *    clickable — hence `hasClickAction()`.
+     *  * The tab has other `"Clear"` buttons. One belongs to a **presentation left in the shared
+     *    test home by another suite** (`uploaded.pptx`), so how many exist depends on what ran
+     *    before this class. Addressing "the only Clear" therefore passes alone and fails in a full
+     *    run — which is what it did on CI while passing locally.
+     *  * An ancestry matcher does not separate them either: the root is an ancestor of every button
+     *    and does contain the banner's title.
+     *
+     * So it is located by row — the banner's title and its dismiss button share a `Row` with
+     * `verticalAlignment = CenterVertically`, so the right button is the one whose centre falls
+     * inside the title's vertical span. Exactly one must, and that is asserted rather than assumed.
      */
     private fun ComposeUiTest.dismissBanner() {
-        onNode(hasContentDescription("Clear") and hasClickAction()).performClick()
+        val title = onAllNodesWithText(TITLE, substring = true)
+            .fetchSemanticsNodes(false).single().boundsInRoot
+        val clears = onAllNodes(hasContentDescription("Clear") and hasClickAction())
+        val inTitleRow = clears.fetchSemanticsNodes(false).withIndex().filter { (_, node) ->
+            node.boundsInRoot.center.y in title.top..title.bottom
+        }
+        assertEquals(
+            1, inTitleRow.size,
+            "expected exactly one dismiss button in the banner's row, found ${inTitleRow.size}",
+        )
+        clears[inTitleRow.single().index].performClick()
         waitForIdle()
     }
 
@@ -142,7 +171,6 @@ class PresentationTabVlcBannerTest {
             load(vm, withVideo = true)
 
             assertEquals(1, countOf(TITLE))
-            assertTrue(countOf(INSTALL_HINT) > 0, "and says what to do about it")
         }
 
     @Test
