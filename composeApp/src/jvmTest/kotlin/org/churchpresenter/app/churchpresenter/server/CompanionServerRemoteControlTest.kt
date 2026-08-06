@@ -730,6 +730,76 @@ class CompanionServerRemoteControlTest {
     }
 
     @Test
+    fun `a batch reaches the operator as one prompt carrying every item`() {
+        // "Add the whole set" from a phone. It is one approval for the lot, not one per item — the
+        // operator would otherwise face six dialogs while the service is running.
+        val asked = playOperator()
+
+        val ack = sendOverWebSocket(
+            command(
+                Constants.WS_CMD_ADD_BATCH_TO_SCHEDULE,
+                """{"items":[{"songNumber":42,"title":"Amazing Grace"},""" +
+                    """{"bookName":"John","chapter":3,"verseNumber":16},""" +
+                    """{"url":"https://example.org"}]}""",
+                commandId = "cmd-batch",
+            ),
+        ).ackFor("cmd-batch")
+
+        assertEquals(3, asked.size, "every item in the batch has to reach the prompt: $asked")
+        assertIs<ScheduleItem.SongItem>(asked[0])
+        assertIs<ScheduleItem.BibleVerseItem>(asked[1])
+        assertEquals(true, assertNotNull(ack).ok)
+        assertEquals(
+            "pending_approval",
+            ack.reason,
+            "the ack goes back before the operator has answered, so it cannot claim the items landed",
+        )
+    }
+
+    @Test
+    fun `an approved batch tells the phone it went through`() {
+        playOperator(allow = true)
+
+        val replies = sendOverWebSocket(
+            command(Constants.WS_CMD_ADD_BATCH_TO_SCHEDULE, """{"items":[{"songNumber":42}]}"""),
+        )
+
+        assertTrue(replies.any { """"ok":true""" in it }, "the mobile app watches for this reply: $replies")
+    }
+
+    @Test
+    fun `a refused batch tells the phone it was refused`() {
+        // Without this the phone cannot tell refusal from a lost connection, and the volunteer
+        // presses Add again.
+        collecting(server.onAddBatchToSchedule) { it.decision.complete(false) }
+
+        val replies = sendOverWebSocket(
+            command(Constants.WS_CMD_ADD_BATCH_TO_SCHEDULE, """{"items":[{"songNumber":42}]}"""),
+        )
+
+        assertTrue(replies.any { """"reason":"denied"""" in it }, "$replies")
+    }
+
+    @Test
+    fun `entries the desktop cannot place are dropped and the rest of the batch still goes`() {
+        // A newer phone can send an item type this desktop has no mapping for. Dropping the batch
+        // wholesale would lose five good items to one unknown one; dropping only what cannot be
+        // placed is the behaviour, and the operator sees what survived rather than a silent refusal.
+        val asked = playOperator()
+
+        sendOverWebSocket(
+            command(
+                Constants.WS_CMD_ADD_BATCH_TO_SCHEDULE,
+                """{"items":[{"displayText":"something this build has never heard of"},""" +
+                    """{"songNumber":7,"title":"Be Thou My Vision"}]}""",
+            ),
+        )
+
+        assertEquals(1, asked.size, "the unplaceable entry should be dropped, not the batch: $asked")
+        assertEquals(7, assertIs<ScheduleItem.SongItem>(asked.single()).songNumber)
+    }
+
+    @Test
     fun `removing a schedule item asks the operator, naming the row`() {
         server.updateSchedule(
             listOf(ScheduleItem.SongItem(id = "row-1", songNumber = 42, title = "Amazing Grace", songbook = "Hymnal")),
