@@ -768,6 +768,12 @@ fun CanvasTab(
                                         else MaterialTheme.colorScheme.onSurface
                                     )
                                 ) {
+                                    // Geometric glyphs, not `painterResource` icons, and kept that
+                                    // way deliberately: AGENT.md's "no text as icons" rule is about
+                                    // letters and emoji standing in for artwork, and these are the
+                                    // shapes the tools draw. Their names live in the TooltipArea
+                                    // above — see CanvasTabToolTooltipTest, which addresses the
+                                    // buttons by these glyphs.
                                     Text(
                                         when (tool.id) {
                                             "select" -> "\u25C6"
