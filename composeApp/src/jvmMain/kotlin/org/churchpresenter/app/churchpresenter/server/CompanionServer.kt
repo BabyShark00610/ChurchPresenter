@@ -109,8 +109,19 @@ import java.util.concurrent.atomic.AtomicReference
 
 // ── API DTOs ─────────────────────────────────────────────────────────────────
 
+/**
+ * A song as the companion API serves it.
+ *
+ * **Built inline by `CompanionServer.buildCatalog`, deliberately, and there is no
+ * `SongItem.toDto()`.** One existed and was deleted as dead code, having never had a caller. It set
+ * every field *except* [id], which defaults to 0 — so anything that adopted it would have given
+ * every song the same id, and [id] is how a phone asks for one. The catalogue assigns it from the
+ * song's position in the list, which a mapper over a single [SongItem] cannot know. Add a mapper
+ * only if it takes that position as a parameter.
+ */
 @Serializable
 data class SongDto(
+    /** Position in the server's song list; how a client addresses a song. Not stable across reloads. */
     val id: Int = 0,
     val number: String,
     val title: String,
@@ -4948,9 +4959,3 @@ connect();
 
 // ── Extension mappers ─────────────────────────────────────────────────────────
 
-fun SongItem.toDto() = SongDto(
-    number = number,
-    title = title,
-    tune = tune,
-    author = author
-)
