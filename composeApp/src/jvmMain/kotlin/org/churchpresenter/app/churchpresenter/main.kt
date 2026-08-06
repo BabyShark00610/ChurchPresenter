@@ -172,6 +172,9 @@ import org.churchpresenter.app.churchpresenter.utils.LiveMapReporter
 import org.churchpresenter.app.churchpresenter.utils.MacMenuBarActivationFix
 import org.churchpresenter.app.churchpresenter.utils.UpdateCheckResult
 import org.churchpresenter.app.churchpresenter.utils.UpdateChecker
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEvents
+import org.churchpresenter.app.churchpresenter.utils.hasAudienceOutput
 import org.churchpresenter.app.churchpresenter.dialogs.StatisticsDialog
 import org.churchpresenter.app.churchpresenter.dialogs.UpdateAvailableDialog
 import org.jetbrains.compose.resources.stringResource
@@ -284,10 +287,35 @@ fun main() {
 
     // Pass the install id only when analytics is enabled, so opted-out users
     // still send an anonymous geo ping but no persistent identifier.
+    // Usage events are reported as a delta and only marked delivered once the ping lands, so a
+    // launch with no network reports them again next time instead of losing or double counting them.
+    val pendingUsageEvents = LiveMapReporter.eventsToReport(startupSettings, UsageEvents.unreported())
+    val previousSessionMinutes = UsageEvents.lastSessionMinutes()
     LiveMapReporter.pingOnOpen(
         installId = analyticsInstallId(startupSettings.analyticsReportingEnabled) { CrashReporter.installId() },
-        updateCheckInterval = startupSettings.updateCheckInterval
+        updateCheckInterval = startupSettings.updateCheckInterval,
+        setup = {
+            LiveMapReporter.setupFacts(
+                startupSettings,
+                screenCount = LiveMapReporter.detectScreenCount(),
+                songCounts = LiveMapReporter.gatherSongCounts(startupSettings),
+                sessionMinutes = previousSessionMinutes,
+            )
+        },
+        events = pendingUsageEvents,
+        onDelivered = {
+            UsageEvents.markReported(pendingUsageEvents)
+            if (previousSessionMinutes > 0) UsageEvents.clearSessionMinutes()
+        }
     )
+
+    // How long this run lasts, recorded as it ends and reported by the next launch. A shutdown hook
+    // covers a normal quit and a SIGTERM; a crash or a hard kill records nothing, which is correct —
+    // that run's length is not something to report as if it were a session someone sat through.
+    val sessionStartedAt = System.currentTimeMillis()
+    Runtime.getRuntime().addShutdownHook(Thread {
+        UsageEvents.recordSessionMinutes(((System.currentTimeMillis() - sessionStartedAt) / 60_000L).toInt())
+    })
 
     // Catch exceptions thrown inside coroutines / Compose lambdas —
     // these never reach Thread.setDefaultUncaughtExceptionHandler on their own.
@@ -632,10 +660,28 @@ fun main() {
         val effectiveAppSettings = remember(appSettings, mirroredBackgroundSettings) {
             withMirroredBackgrounds(appSettings, mirroredBackgroundSettings)
         }
+        // Hardware counts for the audience-output check below. Remembered rather than re-enumerated
+        // on every live change: GraphicsEnvironment and the DeckLink driver are both native calls.
+        val screenCountForUsage = remember { LiveMapReporter.detectScreenCount() }
+        val deckLinkCountForUsage = remember {
+            deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
+        }
+
         // Broadcasts this instance's live content to any connected InstanceLink follower — the
         // counterpart to the remoteLiveState collector above.
         LaunchedEffect(Unit) {
             presenterManager.onLiveStateChanged = { pm, source ->
+                // The one-off "this install has actually shown something to a congregation" mark.
+                // Costs a file read per live change only until it fires, then never writes again.
+                if (pm.presentingMode.value != Presenting.NONE &&
+                    hasAudienceOutput(
+                        appSettings.projectionSettings.screenAssignments,
+                        screenCountForUsage,
+                        deckLinkCountForUsage,
+                    )
+                ) {
+                    UsageEvents.recordOncePerInstall(UsageEvent.FIRST_LIVE_ON_SCREEN)
+                }
                 val liveVerse = pm.selectedVerse.value
                 val verseCode = liveVerseCode(
                     source = source,
@@ -1817,7 +1863,12 @@ fun main() {
                                         theme = theme,
                                         outputDir = lottieGenOutputDir,
                                         onClose = { showLottieGenWindow = false },
-                                        onFileSaved = lottieGenOnFileSaved,
+                                        // Recorded here rather than inside the generator: it is its
+                                        // own Gradle build and must not depend on the app's classes.
+                                        onFileSaved = {
+                                            UsageEvents.record(UsageEvent.LOWER_THIRD_GENERATED)
+                                            lottieGenOnFileSaved?.invoke()
+                                        },
                                         canvasWidth = screenBounds.width,
                                         canvasHeight = screenBounds.height
                                     )

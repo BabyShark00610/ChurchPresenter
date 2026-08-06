@@ -9,22 +9,20 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.engine.EmbeddedServer
-import io.ktor.server.engine.embeddedServer
 import io.ktor.server.engine.connector
+import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.plugins.statuspages.StatusPages
-import io.ktor.server.response.respondFile
 import io.ktor.server.request.receiveStream
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondBytesWriter
-import io.ktor.utils.io.writeFully
-import io.ktor.utils.io.writeStringUtf8
+import io.ktor.server.response.respondFile
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
@@ -34,20 +32,29 @@ import io.ktor.server.routing.routing
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.utils.io.writeFully
+import io.ktor.utils.io.writeStringUtf8
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import java.io.File
+import java.io.IOException
+import java.net.NetworkInterface
+import java.net.ServerSocket
+import java.security.MessageDigest
+import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import java.security.MessageDigest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -67,45 +74,40 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import org.churchpresenter.app.churchpresenter.BuildConfig
+import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.SongItem
+import org.churchpresenter.app.churchpresenter.data.Songs
 import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BackgroundSettings
 import org.churchpresenter.app.churchpresenter.data.settings.PresentationRemoteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.Question
 import org.churchpresenter.app.churchpresenter.models.QuestionDto
+import org.churchpresenter.app.churchpresenter.models.QuestionStatus
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
-import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
+import org.churchpresenter.app.churchpresenter.models.SubmitQuestionRequest
+import org.churchpresenter.app.churchpresenter.models.VoteRequest
+import org.churchpresenter.app.churchpresenter.models.toDto
 import org.churchpresenter.app.churchpresenter.presenter.BrowserSourceFrame
-import org.churchpresenter.app.churchpresenter.viewmodel.isLottieFile
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogSide
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 import org.churchpresenter.app.churchpresenter.utils.isChorusHeader
 import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
-import org.churchpresenter.app.churchpresenter.data.Bible
-import org.churchpresenter.app.churchpresenter.data.Songs
-import org.churchpresenter.app.churchpresenter.models.QuestionStatus
-import org.churchpresenter.app.churchpresenter.models.SubmitQuestionRequest
-import org.churchpresenter.app.churchpresenter.models.VoteRequest
-import org.churchpresenter.app.churchpresenter.models.toDto
 import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
-import org.churchpresenter.app.churchpresenter.BuildConfig
+import org.churchpresenter.app.churchpresenter.viewmodel.isLottieFile
 import presentation.engine.DeckRasterizer
 import presentation.engine.LoadResult
 import presentation.engine.PresentationLoader
 import presentation.engine.cache.SlideDiskCache
-import java.io.File
-import java.io.IOException
-import java.net.NetworkInterface
-import java.net.ServerSocket
-import java.util.Base64
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
 
 // ── API DTOs ─────────────────────────────────────────────────────────────────
 
@@ -3441,6 +3443,9 @@ class CompanionServer {
                     }
                     val isInstanceLinkFollower = call.request.headers[Constants.HEADER_CLIENT_ROLE] ==
                         Constants.CLIENT_ROLE_INSTANCE_LINK
+                    // A follower instance is another desktop, not a phone, so only the remaining
+                    // sessions count as the mobile app being used.
+                    if (!isInstanceLinkFollower) UsageEvents.recordOncePerRun(UsageEvent.MOBILE_APP_CONNECTED)
                     if (isInstanceLinkFollower && wsClientId.isNotEmpty()) {
                         _connectedInstanceLinkFollowers.value = _connectedInstanceLinkFollowers.value + wsClientId
                         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "follower_connected", mapOf("deviceId" to wsClientId))
