@@ -79,6 +79,8 @@ import org.churchpresenter.app.churchpresenter.utils.UpdateChecker
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.io.File
+import java.io.OutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.system.exitProcess
@@ -106,6 +108,34 @@ internal fun installerSuffixFor(downloadUrl: String): String = when {
  * Fraction of the download complete, or -1f (indeterminate) when the server didn't report a
  * content length to measure against.
  */
+/**
+ * Copies [input] to [output], reporting progress as each chunk lands, and returns the bytes copied.
+ *
+ * Split out of the update download so it can be tested without a server: what it has to get right is
+ * that **every byte arrives** — a short copy produces an installer that fails to run, minutes after
+ * the operator started the update — and that progress is reported often enough for the bar to move
+ * rather than only at the end.
+ *
+ * [onProgress] is suspending so the caller can hop to the UI dispatcher per chunk; this function
+ * itself touches no dispatcher, which is what keeps it drivable from a plain test.
+ */
+internal suspend fun copyReportingProgress(
+    input: InputStream,
+    output: OutputStream,
+    contentLength: Long,
+    onProgress: suspend (Float) -> Unit,
+): Long {
+    val buffer = ByteArray(8 * 1024)
+    var bytesRead = 0L
+    var read: Int
+    while (input.read(buffer).also { read = it } != -1) {
+        output.write(buffer, 0, read)
+        bytesRead += read
+        onProgress(downloadProgressFraction(bytesRead, contentLength))
+    }
+    return bytesRead
+}
+
 internal fun downloadProgressFraction(bytesRead: Long, contentLength: Long): Float =
     if (contentLength > 0) (bytesRead.toFloat() / contentLength.toFloat()).coerceIn(0f, 1f) else -1f
 
@@ -246,13 +276,7 @@ fun UpdateAvailableDialog(
 
                 connection.inputStream.use { input ->
                     tempFile.outputStream().use { output ->
-                        val buffer = ByteArray(8 * 1024)
-                        var bytesRead = 0L
-                        var read: Int
-                        while (input.read(buffer).also { read = it } != -1) {
-                            output.write(buffer, 0, read)
-                            bytesRead += read
-                            val progress = downloadProgressFraction(bytesRead, contentLength)
+                        copyReportingProgress(input, output, contentLength) { progress ->
                             withContext(Dispatchers.Main) {
                                 downloadState = DownloadState.Downloading(progress)
                             }
