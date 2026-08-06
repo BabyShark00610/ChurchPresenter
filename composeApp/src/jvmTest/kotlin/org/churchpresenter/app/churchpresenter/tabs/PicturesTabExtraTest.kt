@@ -27,9 +27,13 @@ import kotlin.test.assertTrue
  *
  * Left uncovered: the shift+drag reorder gesture (a test cannot set `keyboardModifiers` on an
  * injected pointer event — see `ScheduleTabReorderDragTest`'s doc comment, which records this same
- * tab as one of the two places that blocks); the loop toggle button, whose icon carries neither text
- * nor a content description to address it by; and anything that reaches `RecentPictureFolders` — see
+ * tab as one of the two places that blocks); and anything that reaches `RecentPictureFolders` — see
  * `PicturesTabTestSupport.kt`'s doc comment for why.
+ *
+ * The loop toggle used to be listed here too — "neither text nor a content description to address it
+ * by" — which was true of the usual selectors and not of the tree: it is the *only* clickable node
+ * carrying neither, and that is a selector. See `PicturesTabLoopTooltipTest`, which addresses it that
+ * way and asserts the uniqueness rather than assuming it.
  *
  * See `PicturesTabTestSupport.kt` for the harness.
  */
