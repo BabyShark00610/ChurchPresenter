@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -103,7 +105,11 @@ fun MemoryMonitorWindow(isVisible: Boolean, theme: ThemeMode, onClose: () -> Uni
         onCloseRequest = onClose,
         title = stringResource(Res.string.memory_monitor_window_title),
         icon = painterResource(Res.drawable.ic_app_icon),
-        state = rememberWindowState(width = 460.dp, height = 440.dp)
+        // 500dp, not 440dp: the content measures 414dp at normal text size and 466dp at the 1.3x
+        // this suite treats as the growth a fixed window must absorb (`TEXT_GROWTH_SCALE`), so 440
+        // opened already clipped for anyone with OS font scaling on. `DialogViewportTest` holds
+        // this to the measurement.
+        state = rememberWindowState(width = 460.dp, height = 500.dp)
     ) {
         AppThemeWrapper(theme = theme) {
             MemoryMonitorContent()
@@ -170,7 +176,13 @@ internal fun MemoryMonitorDialogContent(
     val usedFraction = if (heapMax > 0) (heapUsed.toFloat() / heapMax.toFloat()).coerceIn(0f, 1f) else 0f
 
     Surface(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        // Scrolls as a floor, not as the plan: at 440dp this window opened with the bottom 26dp of
+        // its own content cut off as soon as text grew — 414dp of readings in a 440dp window is 6%
+        // of slack, and OS font scaling past ~1.06x spent it. The height below is set so nothing
+        // scrolls at ordinary sizes; this is what stops the Force GC row disappearing silently if
+        // that budget is ever exceeded again, whether by scaling, translation, or the window being
+        // dragged short.
+        Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(
                 text = stringResource(Res.string.memory_monitor_heap),
                 style = MaterialTheme.typography.titleMedium,
