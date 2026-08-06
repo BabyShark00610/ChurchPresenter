@@ -667,12 +667,27 @@ internal fun primaryOutputScreenIndex(
     ?: savedDisplay.takeIf { isScreenIndexValid(it, screenCount) }
     ?: positionalFallback
 
+/** The smallest the main window may open at, whatever was saved. */
+internal const val MIN_MAIN_WINDOW_WIDTH = 800
+internal const val MIN_MAIN_WINDOW_HEIGHT = 600
+
 /**
  * The size the main window opens at.
  *
  * Only a floating window has its own size worth restoring; maximized and fullscreen take the
  * primary display's, so a saved size from a monitor since unplugged cannot strand the window at a
  * shape the current display cannot show.
+ *
+ * A restored floating size is clamped at both ends, because it is written back verbatim on exit and
+ * nothing else checks it. Too large is the monitor case the paragraph above only covers for
+ * maximized windows: a window sized on a 4K display and reopened on a laptop panel would otherwise
+ * open with its own edges past the screen, and a window has to be draggable by an edge to be
+ * recoverable. Too small is the same trap from the other side — the window can be dragged down to
+ * nothing, and that nothing is what it reopens as.
+ *
+ * The lower bound wins ties: on a display smaller than [MIN_MAIN_WINDOW_WIDTH] the window is opened
+ * too big for the screen rather than too small to use, since an oversized window can still be moved
+ * and resized while a collapsed one cannot.
  */
 internal fun startupWindowSize(
     isFloating: Boolean,
@@ -680,8 +695,12 @@ internal fun startupWindowSize(
     savedHeight: Int,
     primaryWidth: Int,
     primaryHeight: Int,
-): Pair<Int, Int> =
-    if (isFloating) savedWidth to savedHeight else primaryWidth to primaryHeight
+): Pair<Int, Int> {
+    if (!isFloating) return primaryWidth to primaryHeight
+    val width = savedWidth.coerceIn(MIN_MAIN_WINDOW_WIDTH, maxOf(primaryWidth, MIN_MAIN_WINDOW_WIDTH))
+    val height = savedHeight.coerceIn(MIN_MAIN_WINDOW_HEIGHT, maxOf(primaryHeight, MIN_MAIN_WINDOW_HEIGHT))
+    return width to height
+}
 
 /**
  * The position the main window opens at.

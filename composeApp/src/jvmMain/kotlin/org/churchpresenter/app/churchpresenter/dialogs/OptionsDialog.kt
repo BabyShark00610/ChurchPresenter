@@ -31,6 +31,8 @@ import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import org.churchpresenter.app.churchpresenter.centeredOnMainWindow
+import org.churchpresenter.app.churchpresenter.dialogSizeWithin
+import org.churchpresenter.app.churchpresenter.primaryScreenSizeDp
 import org.churchpresenter.app.churchpresenter.models.Scene
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.appearance
@@ -99,12 +101,20 @@ fun OptionsDialog(
     if (!isVisible) return
 
     val mainWindowState = LocalMainWindowState.current
+    // 1400x900 is bigger than a 1366x768 laptop panel in both directions, so on one this dialog
+    // opened with its own edges — and the Save/Cancel row along the bottom — off the screen, with no
+    // window edge left to drag it back by. It is resizable and every tab scrolls, so giving it less
+    // room costs a scroll; giving it more than the display has costs the controls.
+    val size = remember {
+        val screen = primaryScreenSizeDp()
+        dialogSizeWithin(1400.dp, 900.dp, screen.width, screen.height)
+    }
     DialogWindow(
         onCloseRequest = onDismiss,
         state = rememberDialogState(
-            position = centeredOnMainWindow(mainWindowState, 1400.dp, 900.dp),
-            width = 1400.dp,
-            height = 900.dp
+            position = centeredOnMainWindow(mainWindowState, size.width, size.height),
+            width = size.width,
+            height = size.height
         ),
         title = stringResource(Res.string.options),
         resizable = true
