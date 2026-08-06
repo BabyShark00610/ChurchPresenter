@@ -1231,9 +1231,6 @@ internal fun cameraFormatsFor(
     else -> emptyList()
 }
 
-private fun listDshowFormats(deviceName: String): List<CameraFormat> =
-    dshowFormatsFrom(deviceName, ::readCommandOutput)
-
 /**
  * The DirectShow formats ffmpeg reports for [deviceName].
  *
@@ -1272,9 +1269,6 @@ internal fun parseDshowFormats(output: String): List<CameraFormat> {
     }
     return formats.toSortedFormats()
 }
-
-private fun listV4l2Formats(device: String): List<CameraFormat> =
-    v4l2FormatsFrom(device, ::readCommandOutput)
 
 /**
  * The V4L2 formats [device] supports, asked of ffmpeg first and `v4l2-ctl` only if that came back
@@ -1339,9 +1333,6 @@ internal fun parseV4l2CtlFormats(output: String): List<CameraFormat> {
     }
     return formats.toSortedFormats()
 }
-
-private fun listAvfoundationFormats(deviceIndex: String): List<CameraFormat> =
-    avfoundationFormatsFrom(deviceIndex, ::readCommandOutput)
 
 /**
  * The AVFoundation formats for the device at [deviceIndex]. avfoundation lists what it supports when
@@ -1429,8 +1420,6 @@ internal fun listLinuxCameras(
     } catch (_: Exception) { emptyList() }
 }
 
-private fun listWindowsCameras(): List<CameraDevice> = windowsCamerasFrom(::readCommandOutput)
-
 /** The PowerShell query naming every camera and imaging device Windows itself knows about. */
 private const val PNP_CAMERA_QUERY =
     "Get-CimInstance Win32_PnPEntity | Where-Object { \$_.PNPClass -eq 'Camera' -or " +
@@ -1495,8 +1484,6 @@ internal fun parseWindowsCameras(dshowOutput: String, pnpOutput: String): List<C
 
     return devices
 }
-
-private fun listMacCameras(): List<CameraDevice> = macCamerasFrom(::readCommandOutput)
 
 /**
  * Both macOS camera listings, merged: `system_profiler` finds the physical cameras, and ffmpeg's
@@ -1721,8 +1708,6 @@ private fun listWindowsWindows(): List<WindowInfo> {
         WindowsWindowCapture.listWindows().map { WindowInfo(it.title, it.hwnd) }
     } catch (_: Exception) { emptyList() }
 }
-
-private fun listMacWindows(): List<WindowInfo> = macWindowsFrom(::readCommandOutput)
 
 /** The AppleScript that walks every visible process and collects the name of each of its windows. */
 private val MAC_WINDOW_TITLES_SCRIPT = """
