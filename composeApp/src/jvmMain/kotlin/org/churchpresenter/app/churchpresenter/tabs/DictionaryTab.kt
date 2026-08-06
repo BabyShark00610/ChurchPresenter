@@ -1039,7 +1039,9 @@ private fun DetailRow(label: String, value: String) {
 
 private val strongsPattern = Regex("[HGhg]\\d+")
 
-private fun buildStrongsAnnotatedString(text: String, onClick: (String) -> Unit) = buildAnnotatedString {
+// `internal` so the link-splitting can be tested directly: it is a pure function over the text, and
+// driving it through the composable would assert on a rendered tree instead of on the ranges.
+internal fun buildStrongsAnnotatedString(text: String, onClick: (String) -> Unit) = buildAnnotatedString {
     var lastEnd = 0
     for (match in strongsPattern.findAll(text)) {
         append(text.substring(lastEnd, match.range.first))
