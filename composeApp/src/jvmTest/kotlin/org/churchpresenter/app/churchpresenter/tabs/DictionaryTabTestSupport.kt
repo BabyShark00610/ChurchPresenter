@@ -87,9 +87,11 @@ internal fun dictionaryTab(
     strongsForBookChapter: Map<Int, Set<String>> = emptyMap(),
     withOnAddToSchedule: Boolean = true,
     withOnGoLive: Boolean = true,
+    /** Extra Greek entries, for a test needing a shape the standing corpus does not have. */
+    extraEntries: List<StrongsEntry> = emptyList(),
     block: ComposeUiTest.(vm: DictionaryViewModel, reports: DictionaryReports) -> Unit,
 ) {
-    DictionaryFixture.stubResources()
+    DictionaryFixture.stubResources(extraEntries)
     mockkConstructor(InterlinearRepository::class)
     coEvery { anyConstructed<InterlinearRepository>().ensureGreekLoaded() } returns Unit
     coEvery { anyConstructed<InterlinearRepository>().ensureHebrewLoaded() } returns Unit
