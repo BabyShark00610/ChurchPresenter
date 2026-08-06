@@ -79,11 +79,16 @@ object DictionaryFixture {
     /**
      * Points `Res.readBytes` at the fixture for all four dictionary files. Callers are responsible
      * for `unmockkObject(Res)` in teardown.
+     *
+     * [extraGreek] appends entries to the Greek side for a test that needs a shape the standing
+     * corpus does not have — a definition long enough to be truncated, for instance. The corpus is
+     * deliberately tiny and every other suite asserts against it by name, so this adds rather than
+     * replaces, and defaults to empty.
      */
-    fun stubResources() {
+    fun stubResources(extraGreek: List<StrongsEntry> = emptyList()) {
         mockkObject(Res)
         coEvery { Res.readBytes(HEBREW_EN) } returns bytes(hebrewEntries)
-        coEvery { Res.readBytes(GREEK_EN) } returns bytes(greekEntries)
+        coEvery { Res.readBytes(GREEK_EN) } returns bytes(greekEntries + extraGreek)
         coEvery { Res.readBytes(HEBREW_RU) } returns bytes(hebrewEntriesRu)
         coEvery { Res.readBytes(GREEK_RU) } returns bytes(greekEntriesRu)
     }

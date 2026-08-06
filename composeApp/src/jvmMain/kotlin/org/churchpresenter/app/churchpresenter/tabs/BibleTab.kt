@@ -210,6 +210,7 @@ import churchpresenter.composeapp.generated.resources.bible_translation_order_mo
 import churchpresenter.composeapp.generated.resources.bible_translation_order_panel_subtitle
 import churchpresenter.composeapp.generated.resources.bible_translation_order_panel_title
 import churchpresenter.composeapp.generated.resources.drag_to_reorder_translation
+import churchpresenter.composeapp.generated.resources.bible_verse_selection_hint
 import churchpresenter.composeapp.generated.resources.hold_live
 import churchpresenter.composeapp.generated.resources.ic_drag_dots
 import churchpresenter.composeapp.generated.resources.move_translation_down
@@ -1422,6 +1423,7 @@ fun BibleTab(
             }
         } else {
             val holdLiveStr = stringResource(Res.string.hold_live)
+            val verseSelectionHint = stringResource(Res.string.bible_verse_selection_hint)
             val swapBiblesStr = stringResource(Res.string.swap_bibles)
             val translationOrderStr = stringResource(Res.string.bible_translation_order)
             val goLiveStr = stringResource(Res.string.go_live)
@@ -1475,7 +1477,7 @@ fun BibleTab(
                         tooltip = {
                             Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall) {
                                 Text(
-                                    if (holdPillActive) holdLiveStr else "Ctrl+Click to toggle, Shift+Click for range",
+                                    if (holdPillActive) holdLiveStr else verseSelectionHint,
                                     color = MaterialTheme.colorScheme.inverseOnSurface,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.bodySmall

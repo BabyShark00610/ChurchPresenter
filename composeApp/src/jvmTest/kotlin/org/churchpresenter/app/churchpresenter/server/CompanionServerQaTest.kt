@@ -27,6 +27,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
 import java.io.File
 import org.junit.AfterClass
 import org.junit.BeforeClass
+import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -168,11 +169,39 @@ class CompanionServerQaTest {
         client.get(url(path)) { password?.let { p -> header("X-QA-Password", p) } }
     }
 
-    private fun post(path: String, body: String = "", password: String? = null): HttpResponse = runBlocking {
+    private fun post(
+        path: String,
+        body: String = "",
+        password: String? = null,
+        deviceId: String? = null,
+    ): HttpResponse = runBlocking {
         client.post(url(path)) {
             password?.let { p -> header("X-QA-Password", p) }
+            deviceId?.let { d -> header(Constants.HEADER_DEVICE_ID, d) }
             setBody(body)
         }
+    }
+
+    /**
+     * Answers the *connection* prompt raised by `/api/qa/auth`, with [allow].
+     *
+     * A different flow from [playOperator]: that one answers a moderation action, this one answers
+     * the one-off handshake a device performs before it can moderate at all. Shares the same scope
+     * so a test can play both, and waits on the subscription for the same reason.
+     */
+    private fun playConnectOperator(allow: Boolean = true): MutableList<PendingConnectionRequest> {
+        val seen = mutableListOf<PendingConnectionRequest>()
+        val scope = operatorScope ?: CoroutineScope(Dispatchers.IO).also { operatorScope = it }
+        scope.launch {
+            server.onQaAdminConnect.collect { pending ->
+                seen.add(pending)
+                pending.decision.complete(allow)
+            }
+        }
+        runBlocking {
+            withTimeout(5_000) { server.onQaAdminConnect.subscriptionCount.first { it > 0 } }
+        }
+        return seen
     }
 
     private fun HttpResponse.text(): String = runBlocking { bodyAsText() }
@@ -515,5 +544,84 @@ class CompanionServerQaTest {
 
         assertEquals(HttpStatusCode.Unauthorized, response.status)
         assertEquals("PENDING", qa.findQuestion(id)?.status?.name, "and the question must be left as it was")
+    }
+
+    // ── The admin connection handshake ──────────────────────────────────────────
+
+    @Test
+    fun `an approved device is let into the admin panel`() {
+        server.qaAdminPassword = "let-me-in"
+        playConnectOperator(allow = true)
+
+        val response = post("/api/qa/auth", password = "let-me-in", deviceId = "moderator-phone")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("true", response.obj().str("ok"))
+    }
+
+    @Test
+    fun `a denied device is told so, not left waiting`() {
+        server.qaAdminPassword = "let-me-in"
+        playConnectOperator(allow = false)
+
+        val response = post("/api/qa/auth", password = "let-me-in", deviceId = "someones-phone")
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals("connection denied", response.obj().str("error"))
+    }
+
+    @Test
+    fun `the prompt names the device asking to moderate`() {
+        // The operator is approving a device, not a request — the id is the only thing on the
+        // prompt that distinguishes "the moderator's phone" from anyone else on the wifi.
+        server.qaAdminPassword = "let-me-in"
+        val prompts = playConnectOperator()
+
+        post("/api/qa/auth", password = "let-me-in", deviceId = "moderator-phone")
+
+        assertEquals("moderator-phone", prompts.single().clientId)
+    }
+
+    @Test
+    fun `a wrong password never raises a prompt on the desktop`() {
+        // The password gate runs first for a reason. If a bad password still asked the operator,
+        // anyone on the church wifi could put a dialog on the desktop during a service, repeatedly,
+        // without ever knowing the password.
+        server.qaAdminPassword = "let-me-in"
+        val prompts = playConnectOperator()
+
+        val response = post("/api/qa/auth", password = "guess", deviceId = "someones-phone")
+
+        // The 401 is the positive signal that the route ran to completion: the prompt would have
+        // had to be raised before the response, and was not. Nothing here waits on a duration.
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertTrue(prompts.isEmpty(), "the operator must not be shown a device that failed the gate")
+    }
+
+    @Test
+    fun `with no password set the operator is still asked`() {
+        // An unset password is the default, and it makes `checkQaAdmin` a no-op — so on this path
+        // the operator's approval is the *only* thing standing between a stranger's phone and the
+        // moderation queue.
+        server.qaAdminPassword = ""
+        val prompts = playConnectOperator()
+
+        val response = post("/api/qa/auth", deviceId = "a-stranger")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("a-stranger", prompts.single().clientId, "approval is the whole gate here")
+    }
+
+    @Test
+    fun `a device that sends no id is still put to the operator`() {
+        // Older clients send no device header. Refusing outright would lock them out; the prompt
+        // just cannot name them, and the operator decides on that basis.
+        server.qaAdminPassword = ""
+        val prompts = playConnectOperator()
+
+        val response = post("/api/qa/auth")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("", prompts.single().clientId)
     }
 }
