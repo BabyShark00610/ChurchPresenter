@@ -211,6 +211,170 @@ class LabeledControlsTest {
         assertEquals(0, clicks)
     }
 
+    // ── Layout: the control pushed to the right edge ────────────────────────────
+
+    @Test
+    fun `a checkbox laid out at the end is still one click target on its label`() = runComposeUiTest {
+        // `controlAtEnd` reverses the row so the label sits left and the box is pushed right, which
+        // is the settings-row look. The label must stay part of the control through that swap.
+        var checked = false
+        setContent {
+            MaterialTheme {
+                LabeledCheckbox(
+                    checked = checked,
+                    onCheckedChange = { checked = it },
+                    label = "Enabled",
+                    controlAtEnd = true,
+                )
+            }
+        }
+
+        onNodeWithText("Enabled").assertIsOff()
+        onNodeWithText("Enabled").performClick()
+
+        assertTrue(checked)
+    }
+
+    @Test
+    fun `a radio button laid out at the end still reports the click on its label`() = runComposeUiTest {
+        var clicks = 0
+        setContent {
+            MaterialTheme {
+                LabeledRadioButton(
+                    selected = false,
+                    onClick = { clicks++ },
+                    label = "Still",
+                    controlAtEnd = true,
+                )
+            }
+        }
+
+        onNodeWithText("Still").performClick()
+
+        assertEquals(1, clicks)
+    }
+
+    @Test
+    fun `a switch laid out at the end behaves the same as the other two`() = runComposeUiTest {
+        var on = false
+        setContent {
+            MaterialTheme {
+                LabeledSwitch(
+                    checked = on,
+                    onCheckedChange = { on = it },
+                    label = "Auto-start",
+                    controlAtEnd = true,
+                )
+            }
+        }
+
+        onNodeWithText("Auto-start").performClick()
+
+        assertTrue(on)
+    }
+
+    // ── The supporting second line ──────────────────────────────────────────────
+
+    @Test
+    fun `a checkbox's supporting line is shown under its label`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                LabeledCheckbox(
+                    checked = false,
+                    onCheckedChange = { },
+                    label = "Enabled",
+                    supporting = "Applies the next time the app starts",
+                )
+            }
+        }
+
+        onNodeWithText("Enabled").assertExists()
+        onNodeWithText("Applies the next time the app starts").assertExists()
+    }
+
+    @Test
+    fun `the supporting line is description, not a second click target`() = runComposeUiTest {
+        // The row owns the single click. If the description published its own target, a press on it
+        // would toggle nothing while looking like part of the control.
+        var clicks = 0
+        setContent {
+            MaterialTheme {
+                LabeledCheckbox(
+                    checked = false,
+                    onCheckedChange = { clicks++ },
+                    label = "Enabled",
+                    supporting = "Applies at next start",
+                )
+            }
+        }
+
+        onNodeWithText("Enabled").performClick()
+
+        assertEquals(1, clicks, "one press on the row must produce exactly one call")
+    }
+
+    @Test
+    fun `a radio button carries a supporting line too`() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                LabeledRadioButton(
+                    selected = true,
+                    onClick = { },
+                    label = "Still",
+                    supporting = "One image, held until you change it",
+                )
+            }
+        }
+
+        onNodeWithText("Still").assertIsSelected()
+        onNodeWithText("One image, held until you change it").assertExists()
+    }
+
+    @Test
+    fun `a supporting line survives being pushed to the end together with the control`() =
+        runComposeUiTest {
+            // Both optional shapes at once — the layout settings rows actually use.
+            var checked = false
+            setContent {
+                MaterialTheme {
+                    LabeledCheckbox(
+                        checked = checked,
+                        onCheckedChange = { checked = it },
+                        label = "Enabled",
+                        supporting = "Applies at next start",
+                        controlAtEnd = true,
+                    )
+                }
+            }
+
+            onNodeWithText("Applies at next start").assertExists()
+            onNodeWithText("Enabled").performClick()
+
+            assertTrue(checked)
+        }
+
+    @Test
+    fun `a disabled row with a supporting line is inert and says so`() = runComposeUiTest {
+        var clicks = 0
+        setContent {
+            MaterialTheme {
+                LabeledSwitch(
+                    checked = false,
+                    onCheckedChange = { clicks++ },
+                    label = "Auto-start",
+                    supporting = "Requires permission",
+                    controlAtEnd = true,
+                    enabled = false,
+                )
+            }
+        }
+
+        onNodeWithText("Auto-start").assertIsNotEnabled()
+        onNodeWithText("Auto-start").performClick()
+
+        assertEquals(0, clicks)
+    }
+
     // ── The shape being replaced ────────────────────────────────────────────────
 
     @Test

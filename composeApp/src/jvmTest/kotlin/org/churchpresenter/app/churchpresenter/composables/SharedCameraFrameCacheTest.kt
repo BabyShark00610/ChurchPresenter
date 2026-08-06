@@ -4,6 +4,7 @@ import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.models.SourceTransform
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
@@ -84,6 +85,98 @@ class SharedCameraFrameCacheTest {
             SharedCameraFrameCache.release(source)
             SharedCameraFrameCache.release(source)
         }
+    }
+
+    @Test
+    fun `the first release of two subscribers keeps the capture alive for the second`() {
+        val source = camera(devicePath = "bogus://refcount")
+        val first = SharedCameraFrameCache.acquire(source)
+        SharedCameraFrameCache.acquire(source)
+        try {
+            SharedCameraFrameCache.release(source)
+
+            // Still the same entry: a second acquire must hand back the flows the survivor is
+            // already watching, not a fresh set from a re-created entry.
+            val rejoined = SharedCameraFrameCache.acquire(source)
+            assertSame(first.frame, rejoined.frame)
+            SharedCameraFrameCache.release(source)
+        } finally {
+            SharedCameraFrameCache.release(source)
+        }
+    }
+
+    @Test
+    fun `the last release drops the entry so the next acquire starts clean`() {
+        val source = camera(devicePath = "bogus://dropped")
+        val first = SharedCameraFrameCache.acquire(source)
+        SharedCameraFrameCache.release(source)
+
+        val second = SharedCameraFrameCache.acquire(source)
+        try {
+            assertNotSame(
+                first.frame, second.frame,
+                "releasing the last subscriber has to discard the entry, not park it",
+            )
+        } finally {
+            SharedCameraFrameCache.release(source)
+        }
+    }
+
+    @Test
+    fun `releasing more times than acquired does not throw or corrupt the next acquire`() {
+        val source = camera(devicePath = "bogus://overreleased")
+        SharedCameraFrameCache.acquire(source)
+        SharedCameraFrameCache.release(source)
+        SharedCameraFrameCache.release(source)
+        SharedCameraFrameCache.release(source)
+
+        val flows = SharedCameraFrameCache.acquire(source)
+        try {
+            assertNull(flows.frame.value)
+        } finally {
+            SharedCameraFrameCache.release(source)
+        }
+    }
+
+    @Test
+    fun `two different devices are kept as separate entries`() {
+        val a = camera(devicePath = "bogus://a")
+        val b = camera(devicePath = "bogus://b")
+        val flowsA = SharedCameraFrameCache.acquire(a)
+        val flowsB = SharedCameraFrameCache.acquire(b)
+        try {
+            assertNotSame(flowsA.frame, flowsB.frame)
+        } finally {
+            SharedCameraFrameCache.release(a)
+            SharedCameraFrameCache.release(b)
+        }
+    }
+
+    @Test
+    fun `releasing one device leaves another device's capture untouched`() {
+        val a = camera(devicePath = "bogus://keep-a")
+        val b = camera(devicePath = "bogus://drop-b")
+        val flowsA = SharedCameraFrameCache.acquire(a)
+        SharedCameraFrameCache.acquire(b)
+
+        SharedCameraFrameCache.release(b)
+
+        try {
+            assertSame(flowsA.frame, SharedCameraFrameCache.acquire(a).frame)
+            SharedCameraFrameCache.release(a)
+        } finally {
+            SharedCameraFrameCache.release(a)
+        }
+    }
+
+    @Test
+    fun `a decklink source that reports no index is released down the ffmpeg path`() {
+        // A negative index means keyFor built an ffmpeg key, so release must not try to close a
+        // DeckLink input that was never opened.
+        val source = camera(devicePath = "bogus://dl", isDeckLink = true, deckLinkIndex = -1)
+        SharedCameraFrameCache.acquire(source)
+
+        SharedCameraFrameCache.release(source)
     }
 
     // ── buildFfmpegCommand ─────────────────────────────────────────────────────────────────────

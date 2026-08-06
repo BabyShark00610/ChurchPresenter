@@ -1199,33 +1199,52 @@ private val cameraFormatCache = mutableMapOf<String, List<CameraFormat>>()
 
 internal fun listCameraFormats(devicePath: String, deviceName: String): List<CameraFormat> {
     cameraFormatCache[devicePath]?.let { return it }
-    val osName = System.getProperty("os.name", "").lowercase()
-    val formats = when {
-        osName.contains("win") && devicePath.startsWith("dshow://") -> listDshowFormats(deviceName)
-        osName.contains("linux") && devicePath.startsWith("v4l2://") -> listV4l2Formats(devicePath.removePrefix("v4l2://"))
-        osName.contains("mac") && devicePath.startsWith("avfoundation://") -> listAvfoundationFormats(devicePath.removePrefix("avfoundation://"))
-        else -> emptyList()
-    }
+    val formats = cameraFormatsFor(
+        System.getProperty("os.name", "").lowercase(), devicePath, deviceName, ::readCommandOutput
+    )
     System.err.println("[Camera] Found ${formats.size} format(s) for $deviceName")
     formats.forEach { System.err.println("[Camera]   ${it.displayName}") }
     if (formats.isNotEmpty()) cameraFormatCache[devicePath] = formats
     return formats
 }
 
-private fun listDshowFormats(deviceName: String): List<CameraFormat> {
-    return try {
-        val name = deviceName.removePrefix(":dshow-vdev=")
-        val process = ProcessBuilder("ffmpeg", "-f", "dshow", "-list_options", "true", "-i", "video=$name")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-        }
-        parseDshowFormats(output)
-    } catch (e: Exception) {
-        System.err.println("[Camera] Error listing dshow formats: ${e.message}")
-        emptyList()
-    }
+/**
+ * Which format enumeration a device qualifies for: each is tied to both an OS *and* the device-path
+ * scheme that OS's capture backend uses, so a path saved on one machine and opened on another asks
+ * nothing of a backend that isn't there. Anything else has no format list, and the dropdown stays
+ * on whatever the source already stores.
+ *
+ * [osName] is a parameter for the same reason as in [cameraDevicesFor] — see the note there.
+ */
+internal fun cameraFormatsFor(
+    osName: String,
+    devicePath: String,
+    deviceName: String,
+    run: CommandRunner,
+): List<CameraFormat> = when {
+    osName.contains("win") && devicePath.startsWith("dshow://") ->
+        dshowFormatsFrom(deviceName, run)
+    osName.contains("linux") && devicePath.startsWith("v4l2://") ->
+        v4l2FormatsFrom(devicePath.removePrefix("v4l2://"), run)
+    osName.contains("mac") && devicePath.startsWith("avfoundation://") ->
+        avfoundationFormatsFrom(devicePath.removePrefix("avfoundation://"), run)
+    else -> emptyList()
+}
+
+private fun listDshowFormats(deviceName: String): List<CameraFormat> =
+    dshowFormatsFrom(deviceName, ::readCommandOutput)
+
+/**
+ * The DirectShow formats ffmpeg reports for [deviceName].
+ *
+ * The name arrives as the device path stored it, so the `:dshow-vdev=` prefix has to come back off
+ * before ffmpeg will recognise it. ffmpeg is given five seconds here and nowhere else: `-list_options`
+ * opens the device to interrogate it, and a camera already held by another application never answers.
+ */
+internal fun dshowFormatsFrom(deviceName: String, run: CommandRunner): List<CameraFormat> {
+    val name = deviceName.removePrefix(":dshow-vdev=")
+    val result = run(listOf("ffmpeg", "-f", "dshow", "-list_options", "true", "-i", "video=$name"), 5L)
+    return parseDshowFormats(result.output)
 }
 
 /**
@@ -1254,29 +1273,25 @@ internal fun parseDshowFormats(output: String): List<CameraFormat> {
     return formats.toSortedFormats()
 }
 
-private fun listV4l2Formats(device: String): List<CameraFormat> {
-    val fromFfmpeg = try {
-        val process = ProcessBuilder("ffmpeg", "-f", "v4l2", "-list_formats", "all", "-i", device)
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        parseV4l2Formats(output)
-    } catch (e: Exception) {
-        System.err.println("[Camera] Error listing v4l2 formats: ${e.message}")
-        emptyList()
-    }
-    if (fromFfmpeg.isNotEmpty()) return fromFfmpeg
+private fun listV4l2Formats(device: String): List<CameraFormat> =
+    v4l2FormatsFrom(device, ::readCommandOutput)
 
-    // Also try v4l2-ctl for more detailed info
-    return try {
-        val process = ProcessBuilder("v4l2-ctl", "--list-formats-ext", "-d", device)
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        parseV4l2CtlFormats(output)
-    } catch (_: Exception) {
-        emptyList()
-    }
+/**
+ * The V4L2 formats [device] supports, asked of ffmpeg first and `v4l2-ctl` only if that came back
+ * with nothing.
+ *
+ * ffmpeg is preferred because it is already a dependency and reports what ffmpeg itself will accept.
+ * `v4l2-ctl` is the richer source — it enumerates frame rates per size rather than one line per
+ * size — but ships separately, so it is the fallback rather than the first call.
+ */
+internal fun v4l2FormatsFrom(device: String, run: CommandRunner): List<CameraFormat> {
+    val fromFfmpeg = parseV4l2Formats(
+        run(listOf("ffmpeg", "-f", "v4l2", "-list_formats", "all", "-i", device), 0L).output
+    )
+    if (fromFfmpeg.isNotEmpty()) return fromFfmpeg
+    return parseV4l2CtlFormats(
+        run(listOf("v4l2-ctl", "--list-formats-ext", "-d", device), 0L).output
+    )
 }
 
 /**
@@ -1325,19 +1340,20 @@ internal fun parseV4l2CtlFormats(output: String): List<CameraFormat> {
     return formats.toSortedFormats()
 }
 
-private fun listAvfoundationFormats(deviceIndex: String): List<CameraFormat> {
-    return try {
-        // avfoundation lists supported formats when opening with -list_formats
-        val process = ProcessBuilder("ffmpeg", "-f", "avfoundation", "-list_formats", "all", "-i", "$deviceIndex:none")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        parseAvfoundationFormats(output)
-    } catch (e: Exception) {
-        System.err.println("[Camera] Error listing avfoundation formats: ${e.message}")
-        emptyList()
-    }
-}
+private fun listAvfoundationFormats(deviceIndex: String): List<CameraFormat> =
+    avfoundationFormatsFrom(deviceIndex, ::readCommandOutput)
+
+/**
+ * The AVFoundation formats for the device at [deviceIndex]. avfoundation lists what it supports when
+ * asked to open with `-list_formats`, and the `:none` suffix picks the video device with no audio.
+ */
+internal fun avfoundationFormatsFrom(deviceIndex: String, run: CommandRunner): List<CameraFormat> =
+    parseAvfoundationFormats(
+        run(
+            listOf("ffmpeg", "-f", "avfoundation", "-list_formats", "all", "-i", "$deviceIndex:none"),
+            0L,
+        ).output
+    )
 
 /**
  * Reads the resolutions out of `ffmpeg -f avfoundation -list_formats`, whose lines carry a size and
@@ -1366,16 +1382,24 @@ private fun isFfmpegAvailable(): Boolean {
 }
 
 private fun listCameraDevices(): List<CameraDevice> {
-    val osName = System.getProperty("os.name", "").lowercase()
-    val devices = when {
-        osName.contains("linux") -> listLinuxCameras()
-        osName.contains("win") -> listWindowsCameras()
-        osName.contains("mac") -> listMacCameras()
-        else -> emptyList()
-    }
+    val devices = cameraDevicesFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
     System.err.println("[Camera] Found ${devices.size} camera device(s):")
     devices.forEach { System.err.println("[Camera]   ${it.displayName} -> ${it.path}") }
     return devices
+}
+
+/**
+ * Which of the three per-OS camera enumerations applies to [osName], and its answer.
+ *
+ * [osName] is a parameter rather than read from `os.name` here so a test can ask for each platform's
+ * listing without swapping the system property — which skiko latches JVM-wide, and which would take
+ * every later Compose test in the same JVM down with it.
+ */
+internal fun cameraDevicesFor(osName: String, run: CommandRunner): List<CameraDevice> = when {
+    osName.contains("linux") -> listLinuxCameras()
+    osName.contains("win") -> windowsCamerasFrom(run)
+    osName.contains("mac") -> macCamerasFrom(run)
+    else -> emptyList()
 }
 
 /**
@@ -1405,25 +1429,21 @@ internal fun listLinuxCameras(
     } catch (_: Exception) { emptyList() }
 }
 
-private fun listWindowsCameras(): List<CameraDevice> {
-    val dshowOutput = try {
-        val process = ProcessBuilder("ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        output
-    } catch (_: Exception) { "" }
+private fun listWindowsCameras(): List<CameraDevice> = windowsCamerasFrom(::readCommandOutput)
 
-    // Get-CimInstance as fallback for devices not found by ffmpeg
-    val pnpOutput = try {
-        val process = ProcessBuilder("powershell", "-NoProfile", "-Command",
-            "Get-CimInstance Win32_PnPEntity | Where-Object { \$_.PNPClass -eq 'Camera' -or \$_.PNPClass -eq 'Image' } | Select-Object -ExpandProperty Name")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        output
-    } catch (_: Exception) { "" }
+/** The PowerShell query naming every camera and imaging device Windows itself knows about. */
+private const val PNP_CAMERA_QUERY =
+    "Get-CimInstance Win32_PnPEntity | Where-Object { \$_.PNPClass -eq 'Camera' -or " +
+        "\$_.PNPClass -eq 'Image' } | Select-Object -ExpandProperty Name"
 
+/**
+ * Both Windows camera listings, merged: ffmpeg's DirectShow enumeration for the names ffmpeg needs
+ * back to open a device, and PowerShell's PnP query to fill in whatever ffmpeg missed. Either
+ * command failing leaves its half empty rather than losing the other.
+ */
+internal fun windowsCamerasFrom(run: CommandRunner): List<CameraDevice> {
+    val dshowOutput = run(listOf("ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"), 0L).output
+    val pnpOutput = run(listOf("powershell", "-NoProfile", "-Command", PNP_CAMERA_QUERY), 0L).output
     return parseWindowsCameras(dshowOutput, pnpOutput)
 }
 
@@ -1476,25 +1496,16 @@ internal fun parseWindowsCameras(dshowOutput: String, pnpOutput: String): List<C
     return devices
 }
 
-private fun listMacCameras(): List<CameraDevice> {
-    // system_profiler finds physical cameras
-    val profilerOutput = try {
-        val process = ProcessBuilder("system_profiler", "SPCameraDataType", "-detailLevel", "mini")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        output
-    } catch (_: Exception) { "" }
+private fun listMacCameras(): List<CameraDevice> = macCamerasFrom(::readCommandOutput)
 
-    // ffmpeg AVFoundation listing finds virtual cameras (OBS, NDI, etc.)
-    val ffmpegOutput = try {
-        val process = ProcessBuilder("ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", "")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        output
-    } catch (_: Exception) { "" }
-
+/**
+ * Both macOS camera listings, merged: `system_profiler` finds the physical cameras, and ffmpeg's
+ * AVFoundation enumeration finds the virtual ones (OBS, NDI and friends) that `system_profiler`
+ * never reports. Either command failing leaves its half empty rather than losing the other.
+ */
+internal fun macCamerasFrom(run: CommandRunner): List<CameraDevice> {
+    val profilerOutput = run(listOf("system_profiler", "SPCameraDataType", "-detailLevel", "mini"), 0L).output
+    val ffmpegOutput = run(listOf("ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""), 0L).output
     return parseMacCameras(profilerOutput, ffmpegOutput)
 }
 
@@ -1621,49 +1632,49 @@ private fun ScreenCaptureProperties(source: SceneSource.ScreenCaptureSource, onU
 
 internal data class WindowInfo(val title: String, val id: Long)
 
-private fun listOpenWindows(): List<WindowInfo> {
-    val osName = System.getProperty("os.name", "").lowercase()
-    return when {
-        osName.contains("linux") -> listLinuxWindows()
-        osName.contains("win") -> listWindowsWindows()
-        osName.contains("mac") -> listMacWindows()
-        else -> emptyList()
-    }
+private fun listOpenWindows(): List<WindowInfo> =
+    openWindowsFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
+
+/**
+ * Which per-OS window enumeration applies to [osName], and its answer.
+ *
+ * [osName] is a parameter for the same reason as in [cameraDevicesFor] — see the note there.
+ */
+internal fun openWindowsFor(osName: String, run: CommandRunner): List<WindowInfo> = when {
+    osName.contains("linux") -> linuxWindowsFrom(run)
+    osName.contains("win") -> listWindowsWindows()
+    osName.contains("mac") -> macWindowsFrom(run)
+    else -> emptyList()
 }
 
-private fun listLinuxWindows(): List<WindowInfo> {
-    // Primary: xprop (available on all X11 systems)
-    try {
-        val listProcess = ProcessBuilder("xprop", "-root", "_NET_CLIENT_LIST_STACKING")
-            .redirectErrorStream(true).start()
-        val listOutput = listProcess.inputStream.bufferedReader().readText()
-        listProcess.waitFor()
-        val windowIds = parseXpropWindowIds(listOutput)
-        if (windowIds.isNotEmpty()) {
-            val windows = windowIds.mapNotNull { wid ->
-                try {
-                    val nameProcess = ProcessBuilder("xprop", "-id", wid, "_NET_WM_NAME")
-                        .redirectErrorStream(true).start()
-                    val nameOutput = nameProcess.inputStream.bufferedReader().readText()
-                    nameProcess.waitFor()
-                    xpropWindow(wid, nameOutput)
-                } catch (_: Exception) { null }
-            }.filter { it.title.isNotBlank() }
-            if (windows.isNotEmpty()) return windows
-        }
-    } catch (_: Exception) {}
+/**
+ * The open windows on X11, via `xprop` and falling back to `wmctrl`.
+ *
+ * `xprop` is the primary because it is part of every X11 install, and it takes two calls: one to the
+ * root window for the stacking list, then one per window for its title. Windows with no `_NET_WM_NAME`
+ * are dropped — an unnamed window is of no use to an operator picking one from a list.
+ *
+ * `wmctrl` is tried only when that produced nothing at all, which happens under a window manager that
+ * doesn't maintain `_NET_CLIENT_LIST_STACKING`. Its exit code is checked because it is the one command
+ * here that is frequently *not installed*, and a shell reporting "not found" must not be parsed as a
+ * window list.
+ */
+internal fun linuxWindowsFrom(run: CommandRunner): List<WindowInfo> {
+    val windowIds = parseXpropWindowIds(
+        run(listOf("xprop", "-root", "_NET_CLIENT_LIST_STACKING"), 0L).output
+    )
+    if (windowIds.isNotEmpty()) {
+        val windows = windowIds
+            .mapNotNull { wid -> xpropWindow(wid, run(listOf("xprop", "-id", wid, "_NET_WM_NAME"), 0L).output) }
+            .filter { it.title.isNotBlank() }
+        if (windows.isNotEmpty()) return windows
+    }
 
-    // Fallback: wmctrl
-    try {
-        val process = ProcessBuilder("wmctrl", "-l")
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        if (process.exitValue() == 0) {
-            val windows = parseWmctrlWindows(output)
-            if (windows.isNotEmpty()) return windows
-        }
-    } catch (_: Exception) {}
+    val wmctrl = run(listOf("wmctrl", "-l"), 0L)
+    if (wmctrl.exitCode == 0) {
+        val windows = parseWmctrlWindows(wmctrl.output)
+        if (windows.isNotEmpty()) return windows
+    }
 
     return emptyList()
 }
@@ -1711,26 +1722,27 @@ private fun listWindowsWindows(): List<WindowInfo> {
     } catch (_: Exception) { emptyList() }
 }
 
-private fun listMacWindows(): List<WindowInfo> {
-    return try {
-        val script = """
-            tell application "System Events"
-                set windowList to {}
-                repeat with proc in (every process whose visible is true)
-                    repeat with win in (every window of proc)
-                        set end of windowList to (name of win)
-                    end repeat
-                end repeat
-                return windowList
-            end tell
-        """.trimIndent()
-        val process = ProcessBuilder("osascript", "-e", script)
-            .redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        parseMacWindowTitles(output)
-    } catch (_: Exception) { emptyList() }
-}
+private fun listMacWindows(): List<WindowInfo> = macWindowsFrom(::readCommandOutput)
+
+/** The AppleScript that walks every visible process and collects the name of each of its windows. */
+private val MAC_WINDOW_TITLES_SCRIPT = """
+    tell application "System Events"
+        set windowList to {}
+        repeat with proc in (every process whose visible is true)
+            repeat with win in (every window of proc)
+                set end of windowList to (name of win)
+            end repeat
+        end repeat
+        return windowList
+    end tell
+""".trimIndent()
+
+/**
+ * The open windows on macOS, which only System Events can enumerate. Note this is the call that can
+ * raise the accessibility-permission prompt, which is why no test drives the real runner through it.
+ */
+internal fun macWindowsFrom(run: CommandRunner): List<WindowInfo> =
+    parseMacWindowTitles(run(listOf("osascript", "-e", MAC_WINDOW_TITLES_SCRIPT), 0L).output)
 
 /**
  * The window titles AppleScript returns, which arrive as one comma-separated line.

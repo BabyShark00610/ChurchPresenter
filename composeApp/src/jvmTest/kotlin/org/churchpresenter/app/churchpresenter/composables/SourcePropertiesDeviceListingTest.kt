@@ -22,8 +22,9 @@ import kotlin.test.assertTrue
  * Each parser is fed real output shapes captured from the tools, including the older and newer
  * formats the code deliberately handles side by side, and the malformed lines it has to survive.
  *
- * The functions that *run* those tools are not covered here — they are one `ProcessBuilder` call
- * each, wrapping the parser under test.
+ * This class covers the parsing only. The sequences that *drive* the tools — which command is built,
+ * which platform's listing applies, when a fallback tool is consulted — are in `DeviceEnumerationTest`,
+ * which supplies a stand-in [CommandRunner] in place of the machine.
  */
 class SourcePropertiesDeviceListingTest {
 
