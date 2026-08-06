@@ -729,6 +729,15 @@ tasks.register<JacocoReport>("jacocoTestReport") {
         csv.required.set(false)
     }
 
+    // Wipe the HTML tree before writing it. JaCoCo only ever writes the files it is reporting on and
+    // never removes the ones it isn't, so a page for a class that has since been excluded above --
+    // or renamed, or deleted -- stays on disk indefinitely, unreachable from index.html but sitting
+    // there at 0% for anyone who opens it directly or lands on it from a stale link or a search.
+    // CrosswordTabKt was doing exactly that: excluded from the data, still browsable as a file.
+    // The XML is a single file and is overwritten in place, so only the HTML tree needs this.
+    val htmlReportDir = layout.buildDirectory.dir("reports/jacoco/jacocoTestReport/html")
+    doFirst { delete(htmlReportDir) }
+
     finalizedBy("printCoverageLink")
 }
 
