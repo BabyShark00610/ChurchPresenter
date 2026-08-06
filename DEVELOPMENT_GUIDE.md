@@ -216,7 +216,7 @@ object Constants {
 | Wildcard imports | 0 | — | All expanded to explicit imports ✅ |
 | Debug prints | ~8 | VideoPlayer.kt, LowerThirdSettingsTab.kt, WebsitePresenter.kt | All `System.err.println` for error diagnostics — kept intentionally |
 | Non-null assertions (`!!`) | 0 | — | Replaced with smart casts and `getValue()` ✅ |
-| Hardcoded UI strings | 0 | — | "OK" moved to strings.xml; emojis kept (not translatable) ✅ |
+| Hardcoded UI strings | 1, and it is fine | `ProjectionSettingsTab.kt:1246` | `Text("$w×$h")` renders `1920×1080` — digits and a multiplication sign, identical in every locale. **Re-audited 2026-08-06 with the corrected grep below; three real violations found and fixed since this row last said "0"** — `WebTab.kt` ×2 (`0375f909`) and `BibleTab.kt`'s Ctrl/Shift selection hint. All three were **instructions**, the only sentence explaining how something works, rather than labels. |
 | Fully qualified `androidx.compose.*` | 0 | — | 20 sites removed 2026-07-28; the verification grep below returns nothing ✅ |
 | Fully qualified `java.*` where the import exists | 0 | — | 27 redundant sites removed 2026-07-28 ✅ |
 | Fully qualified `java.*` with no import | ~164 | Widespread | **Kept deliberately** — see the decision log |
@@ -236,7 +236,26 @@ object Constants {
 - `System.err.println` in VideoPlayer/WebsitePresenter/LowerThirdSettingsTab — error diagnostics for VLC/JCEF/WebView issues
 - Emoji strings — not translatable, no benefit to moving to resources
 - `println` in the PresentationEngine submodule's `DumpKeynote.kt`/`DumpTiming.kt`/`MakeSampleDeck.kt` — these are CLI diagnostic tools (`dumpKeynote`/`dumpTiming`/`makeSampleDeck` gradle tasks) whose entire purpose is printing to stdout, not stray debug output
-- Hardcoded `"%"` suffix on dynamic values (`SourcePropertiesPanel.kt`, `QARemoteDialog.kt`, `STTSettingsDialog.kt`, `MediaTab.kt`) — attempted extracting to a `unit_percent` string resource (matching `unit_s`/`unit_ms`) on 2026-07-13, but `./gradlew compileKotlinJvm` reproducibly failed with `Unresolved reference` on the new symbol in this dev environment, even for a throwaway dummy string unrelated to `%` — ruled out every caching layer (full `composeApp/build`/root `build/`/`.kotlin` wipe, Gradle + Kotlin daemon restarts, `--no-build-cache --rerun-tasks`, two fully separate invocations) without finding the cause, so the resource extraction was reverted and the literal `"%"` left in place. Worth retrying once the underlying tooling issue is understood — the percent sign is identical across all 14 supported locales regardless, so this was never a translation-correctness bug, just a minor consistency gap with `unit_s`/`unit_ms`.
+- Hardcoded `"%"` suffix on dynamic values (~14 sites across `SourcePropertiesPanel.kt`,
+  `BackgroundSettingsTab.kt`, `QARemoteDialog.kt`, `STTSettingsDialog.kt`, `DictionarySettingsTab.kt`,
+  `MediaTab.kt`, `UpdateAvailableDialog.kt`) — **kept because the percent sign is identical across all
+  14 supported locales**, so extracting it buys no translation correctness, only consistency with
+  `unit_s`/`unit_ms`, at the cost of threading a resource through fourteen call sites in seven files.
+
+  > **The tooling reason previously recorded here was wrong and has been removed.** This entry used to
+  > say a `unit_percent` extraction had been *attempted* on 2026-07-13 and abandoned because
+  > `./gradlew compileKotlinJvm` reproducibly failed with `Unresolved reference` on any new string
+  > resource in this dev environment, cause never found. **That is not true of this environment.** Two
+  > separate changes have since added new strings to `values/strings.xml` and compiled green first
+  > try — `web_snapshot_waiting` and `web_snapshot_screen_recording_hint` (commit `0375f909`), and
+  > `bible_verse_selection_hint` — and `strings.xml` has been edited by dozens of commits besides.
+  > Whatever happened that day was local and transient.
+  >
+  > It is left recorded rather than silently deleted because the false version was actively harmful: a
+  > documented "adding a string resource does not compile here" is a reason not to extract *any*
+  > hardcoded string, and #184 and #212 both found user-facing English literals — each one the only
+  > explanation of its kind in the UI — that should have been extracted long before. **A decision-log
+  > entry that blames the tooling deters far more work than the one item it is filed against.**
 - `CompanionSatelliteViewModel` passed as a parameter into `CompanionSurfaceTab`/`CompanionSurfacePanel` (added 2026-07-06, commit `ff9e1ef5`) — a new instance of the same already-documented `MainDesktop.kt` top-down ViewModel wiring, not a fresh isolated violation
 
 ---
@@ -262,8 +281,23 @@ grep -rE "(println|print\()" --include="*.kt" composeApp/src/jvmMain/kotlin/ | w
 ### Detailed Checks
 
 ```bash
-# Find potential hardcoded strings
-grep -r "Text(\"" --include="*.kt" composeApp/src/jvmMain/kotlin/ | grep -v stringResource
+# Find potential hardcoded strings.
+#
+# The old form of this command was `grep -r 'Text("'`, which is wrong in both directions: it matches
+# `call.respondText(` and `Frame.Text(` (server payloads, not UI — 50 of its 51 hits), and it misses
+# any literal that is not the FIRST argument to `Text(`. The BibleTab selection hint that PR #213
+# extracted lived inside a conditional — `Text(if (active) resStr else "Ctrl+Click…")` — so no
+# variation of that grep would ever have reported it. Grep the *literals*, then read them.
+grep -rnE '(^|[^a-zA-Z.])Text\("[^"]' --include="*.kt" composeApp/src/jvmMain/kotlin/ \
+  | grep -v stringResource | grep -vE 'respondText|Frame\.Text' | grep -vE 'Text\("[^a-zA-Z]*"'
+
+# Literals anywhere in a composable call, which is what the above misses. Noisier; skim it.
+# Sentence-shaped literals are the ones that matter: every violation found so far has been an
+# instruction ("Ctrl+Click to toggle…", "If this persists, grant Screen Recording permission…"),
+# never a one-word label.
+grep -rnE '"[A-Z][a-z]+ [a-z]+ [^"]*"' --include="*.kt" \
+  composeApp/src/jvmMain/kotlin/org/churchpresenter/app/churchpresenter/tabs/ \
+  | grep -v stringResource
 
 # Find unnecessary non-null assertions
 grep -r "!!" --include="*.kt" composeApp/src/jvmMain/kotlin/
