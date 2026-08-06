@@ -235,6 +235,17 @@ fun PresentationTab(
      * real check, so callers see no change.
      */
     vlcAvailable: Boolean = isVlcAvailable,
+    /**
+     * Which *reason* the banner gives, for the same reason [vlcAvailable] is a parameter.
+     *
+     * These were left reading the process-wide fields when [vlcAvailable] was hoisted, so the
+     * banner's presence was deterministic while its wording was not: `isVlcArchMismatch` and
+     * `isVlcLoadFailed` both derive from the global `isVlcAvailable`, so the detail line said
+     * "install VLC" on a machine that has it and "failed to load" on one that does not. A test
+     * pinning the text passed locally and failed on CI. `MediaTab` already took all three.
+     */
+    vlcArchMismatch: Boolean = isVlcArchMismatch,
+    vlcLoadFailed: Boolean = isVlcLoadFailed,
 ) {
     val scope = rememberCoroutineScope()
     var showRemoteDialog by remember { mutableStateOf(false) }
@@ -878,8 +889,8 @@ fun PresentationTab(
                     if (deckHasVideo && !vlcAvailable && !vlcBannerDismissed) {
                         VlcMissingBanner(
                             detail = when {
-                                isVlcArchMismatch -> stringResource(Res.string.media_vlc_arch_mismatch)
-                                isVlcLoadFailed -> stringResource(Res.string.media_vlc_load_failed)
+                                vlcArchMismatch -> stringResource(Res.string.media_vlc_arch_mismatch)
+                                vlcLoadFailed -> stringResource(Res.string.media_vlc_load_failed)
                                 else -> stringResource(Res.string.media_vlc_install)
                             },
                             onDismiss = { vlcBannerDismissed = true }

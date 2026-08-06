@@ -82,6 +82,9 @@ internal fun presentationTab(
     presentationDisplayUrl: String = "",
     /** Whether VLC is usable — only decides the missing-VLC banner for a deck containing video. */
     vlcAvailable: Boolean = true,
+    /** Which reason that banner gives; both are ignored while [vlcAvailable] is true. */
+    vlcArchMismatch: Boolean = false,
+    vlcLoadFailed: Boolean = false,
     selectedPresentationItem: ScheduleItem.PresentationItem? = null,
     instanceLinkFetchPresentationSlideBytes: (suspend (id: String, index: Int) -> ByteArray?)? = null,
     onInstanceLinkSendNextSlide: (() -> Unit)? = null,
@@ -117,6 +120,8 @@ internal fun presentationTab(
                     onFreezeToggle = { reports.freezeToggles++ },
                     onClearPresentation = { reports.clears++ },
                     vlcAvailable = vlcAvailable,
+                    vlcArchMismatch = vlcArchMismatch,
+                    vlcLoadFailed = vlcLoadFailed,
                     selectedPresentationItem = selectedPresentationItem,
                     instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
                     onInstanceLinkSendNextSlide = onInstanceLinkSendNextSlide,
