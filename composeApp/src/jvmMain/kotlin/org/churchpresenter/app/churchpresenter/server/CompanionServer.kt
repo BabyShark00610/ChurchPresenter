@@ -1306,7 +1306,9 @@ class CompanionServer {
     // Outgoing WebSocket broadcast channel. Buffer sized generously: it is shared by every
     // connected client's collector, and DROP_OLDEST means an overflow silently loses a message
     // for slow consumers with no redelivery until their next reconnect snapshot.
-    private val broadcastChannel = MutableSharedFlow<String>(
+    // `internal` so a test can subscribe to exactly what a connected phone would receive, without
+    // standing up a WebSocket client to read it back.
+    internal val broadcastChannel = MutableSharedFlow<String>(
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
