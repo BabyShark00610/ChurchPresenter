@@ -47,6 +47,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.luminance
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
@@ -935,28 +936,7 @@ private fun ConnectionQrDialog(serverUrl: String, apiKey: String?, onDismiss: ()
     val (parsedHost, parsedPort) = remember(serverUrl) { parseServerUrlHostPort(serverUrl) }
 
     val qrContent = connectionQrContent(parsedHost, parsedPort, apiKey)
-    val qrBitmap = remember(qrContent) {
-        try {
-            val hints = mapOf(
-                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
-                EncodeHintType.MARGIN to 1
-            )
-            val matrix = QRCodeWriter().encode(qrContent, BarcodeFormat.QR_CODE, 512, 512, hints)
-            val w = matrix.width
-            val h = matrix.height
-            val img = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
-            val black = 0xFF000000.toInt()
-            val white = 0xFFFFFFFF.toInt()
-            for (y in 0 until h) {
-                for (x in 0 until w) {
-                    img.setRGB(x, y, if (matrix.get(x, y)) black else white)
-                }
-            }
-            SkiaImage.makeFromEncoded(
-                ByteArrayOutputStream().also { ImageIO.write(img, "PNG", it) }.toByteArray()
-            ).toComposeImageBitmap()
-        } catch (_: Exception) { null }
-    }
+    val qrBitmap = remember(qrContent) { connectionQrBitmap(qrContent) }
 
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val mainWindowState = LocalMainWindowState.current
@@ -1080,6 +1060,38 @@ internal fun atemKeyTarget(atem: AtemSettings): String =
     } else {
         "keytype=usk&me=${atem.keyMixEffect + 1}&key=${atem.keyIndex + 1}"
     }
+
+/**
+ * Encodes [content] as a QR bitmap, or null when it cannot be encoded.
+ *
+ * Null rather than an exception is the point: this is called from inside the connection dialog's
+ * composition, so a throw would take the dialog down instead of merely leaving it without a code —
+ * and ZXing does throw on content it cannot represent, an empty string included.
+ *
+ * Error correction is left at M and the quiet-zone margin at 1: a phone camera a metre from a laptop
+ * screen has a clean, well-lit target, and a wider margin would shrink the modules inside a fixed
+ * 512px square for no gain.
+ */
+internal fun connectionQrBitmap(content: String, sizePx: Int = 512): ImageBitmap? = try {
+    val hints = mapOf(
+        EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+        EncodeHintType.MARGIN to 1
+    )
+    val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, hints)
+    val img = BufferedImage(matrix.width, matrix.height, BufferedImage.TYPE_INT_ARGB)
+    val black = 0xFF000000.toInt()
+    val white = 0xFFFFFFFF.toInt()
+    for (y in 0 until matrix.height) {
+        for (x in 0 until matrix.width) {
+            img.setRGB(x, y, if (matrix.get(x, y)) black else white)
+        }
+    }
+    SkiaImage.makeFromEncoded(
+        ByteArrayOutputStream().also { ImageIO.write(img, "PNG", it) }.toByteArray()
+    ).toComposeImageBitmap()
+} catch (_: Exception) {
+    null
+}
 
 /** The `churchpresenter://connect` deep link the connection QR encodes. */
 internal fun connectionQrContent(host: String, port: String, apiKey: String?): String = buildString {
