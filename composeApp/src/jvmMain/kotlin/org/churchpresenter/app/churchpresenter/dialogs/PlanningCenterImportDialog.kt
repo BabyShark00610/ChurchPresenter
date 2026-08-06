@@ -8,12 +8,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -64,10 +64,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import org.jetbrains.skia.Image as SkiaImage
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.cancel
 import churchpresenter.composeapp.generated.resources.planning_center_connect
 import churchpresenter.composeapp.generated.resources.planning_center_description
 import churchpresenter.composeapp.generated.resources.planning_center_disconnect
@@ -77,20 +77,21 @@ import churchpresenter.composeapp.generated.resources.planning_center_import_des
 import churchpresenter.composeapp.generated.resources.planning_center_import_file_count
 import churchpresenter.composeapp.generated.resources.planning_center_import_items
 import churchpresenter.composeapp.generated.resources.planning_center_import_matched
-import churchpresenter.composeapp.generated.resources.planning_center_import_select_all
 import churchpresenter.composeapp.generated.resources.planning_center_import_no_plans
+import churchpresenter.composeapp.generated.resources.planning_center_import_select_all
 import churchpresenter.composeapp.generated.resources.planning_center_import_select_plan
 import churchpresenter.composeapp.generated.resources.planning_center_import_service_type
 import churchpresenter.composeapp.generated.resources.planning_center_import_title
 import churchpresenter.composeapp.generated.resources.planning_center_status_connected
 import churchpresenter.composeapp.generated.resources.planning_center_status_connecting
 import churchpresenter.composeapp.generated.resources.planning_center_status_error
-import churchpresenter.composeapp.generated.resources.cancel
+import java.awt.Desktop
 import kotlinx.coroutines.launch
 import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import org.churchpresenter.app.churchpresenter.centeredOnMainWindow
 import org.churchpresenter.app.churchpresenter.composables.DropdownSelector
+import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 import org.churchpresenter.app.churchpresenter.composables.cpColorToHex
 import org.churchpresenter.app.churchpresenter.data.PlanningCenterClient
 import org.churchpresenter.app.churchpresenter.data.SongItem
@@ -98,10 +99,11 @@ import org.churchpresenter.app.churchpresenter.data.settings.PlanningCenterSetti
 import org.churchpresenter.app.churchpresenter.server.PlanningCenterAuthServer
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 import org.churchpresenter.app.churchpresenter.viewmodel.PlanningCenterImportViewModel
 import org.jetbrains.compose.resources.stringResource
-import java.awt.Desktop
-import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
+import org.jetbrains.skia.Image as SkiaImage
 
 /**
  * Lets the operator pick a Planning Center Services plan and import its songs (matched against
@@ -687,6 +689,7 @@ internal fun PlanningCenterImportDialogContent(
                     },
                     onClick = {
                         if (planId == null) return@Button
+                        UsageEvents.record(UsageEvent.PLANNING_CENTER_IMPORT)
                         isImporting = true
                         scope.launch {
                             for (entry in viewModel.planItems) {
