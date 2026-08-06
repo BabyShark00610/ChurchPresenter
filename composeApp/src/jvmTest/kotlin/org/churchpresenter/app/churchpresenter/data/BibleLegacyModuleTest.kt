@@ -6,6 +6,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -367,6 +369,65 @@ class BibleLegacyModuleTest {
     }
 
     @Test
+    fun `a module whose header is unreadable leaves the book list empty`() {
+        // A directory where a module should be: it exists, so the miss above does not catch it, and
+        // opening it throws. The startup path that scans a Bible folder must survive one of these.
+        val notAFile = File(dir, "folder.spb").also { it.mkdirs() }
+
+        val b = Bible().also { it.loadBooksOnly(notAFile.absolutePath) }
+
+        assertTrue(b.getBooks().isEmpty())
+    }
+
+    @Test
+    fun `a module with no book header lines lists no books`() {
+        val file = File(dir, "headerless.spb").also {
+            it.writeText(
+                """
+                ##Title: Headerless
+                -----
+                B001C001V001 1 1 1 In the beginning.
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+
+        val b = Bible().also { it.loadBooksOnly(file.absolutePath) }
+
+        assertTrue(b.getBooks().isEmpty(), "there is no header to read the book list from")
+    }
+
+    @Test
+    fun `a book found only in the verse data is named from the list the caller supplied`() {
+        val file = File(dir, "partial-header.spb").also {
+            it.writeText(
+                """
+                ##Title: Partial header
+                1 Genesis 50
+                -----
+                B001C001V001 1 1 1 In the beginning.
+                B002C001V001 2 1 1 Now these are the names.
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+
+        val named = Bible().also { it.loadFromSpb(file.absolutePath, listOf("Genesis", "Exodus")) }
+        assertEquals(
+            listOf("Genesis", "Exodus"),
+            named.getBooks(),
+            "a module whose header omits a book it carries verses for still lists it",
+        )
+
+        val unnamed = Bible().also { it.loadFromSpb(file.absolutePath) }
+        assertEquals(
+            listOf("Genesis", "Book 2"),
+            unnamed.getBooks(),
+            "with no names to fall back on it is numbered rather than dropped",
+        )
+    }
+
+    @Test
     fun `loading the verses afterwards replaces the header-only book list`() {
         val file = File(dir, "both.spb").also {
             it.writeText(
@@ -452,5 +513,64 @@ class BibleLegacyModuleTest {
 
         assertEquals("ru_RST77", b.getBibleTitle(), "the picker has to show something to tell two modules apart")
         assertEquals("ru_RST77", b.getBibleAbbreviation())
+    }
+
+    // ── Reading a module's summary without parsing it ───────────────────────────
+
+    @Test
+    fun `a summary reads the title and testament coverage from the header alone`() {
+        val file = File(dir, "summary.spb").also {
+            it.writeText(
+                """
+                ##Title: Both Testaments
+                1 Genesis 50
+                43 John 21
+                -----
+                B001C001V001 1 1 1 In the beginning.
+                """.trimIndent(),
+                Charsets.UTF_8,
+            )
+        }
+
+        val summary = assertNotNull(Bible.readTranslationSummary(file.absolutePath))
+
+        assertEquals("Both Testaments", summary.title)
+        assertTrue(summary.hasOldTestament)
+        assertTrue(summary.hasNewTestament)
+    }
+
+    @Test
+    fun `a summary can be read from a module on the classpath`() {
+        val summary = assertNotNull(
+            Bible.readTranslationSummary("bible-fixtures/classpath-sample.spb"),
+            "a bundled module is a resource, not a file, and must read the same way",
+        )
+
+        assertEquals("Classpath Fixture", summary.title)
+    }
+
+    @Test
+    fun `a summary of a module that is missing or unreadable is null, not a crash`() {
+        assertNull(Bible.readTranslationSummary(File(dir, "absent.spb").absolutePath))
+        assertNull(
+            Bible.readTranslationSummary(File(dir, "adirectory.spb").also { it.mkdirs() }.absolutePath),
+            "a folder named like a module exists but cannot be opened",
+        )
+    }
+
+    @Test
+    fun `a summary stops at the line limit rather than reading a whole module`() {
+        val file = File(dir, "deep-title.spb").also {
+            it.writeText(
+                (1..12).joinToString("\n") { n -> "##Comment $n" } + "\n##Title: Buried\n1 Genesis 50\n",
+                Charsets.UTF_8,
+            )
+        }
+
+        assertNull(
+            Bible.readTranslationSummary(file.absolutePath, maxLines = Bible.TITLE_SCAN_LINE_LIMIT)?.title,
+            "a title further in than the limit is deliberately not looked for",
+        )
+        assertEquals("Buried", Bible.readTranslationSummary(file.absolutePath)?.title)
     }
 }

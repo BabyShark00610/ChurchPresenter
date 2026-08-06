@@ -268,6 +268,20 @@ class SettingsManagerTest {
     }
 
     @Test
+    fun `a settings path that cannot be read at all still starts the app`() {
+        // Not a truncated document but a path that throws on being read — a folder where the file
+        // should be, which is what a botched sync or a restored backup can leave behind. The
+        // startup path has to survive it, since there is no UI yet to report it to.
+        appDir.mkdirs()
+        settingsFile.mkdirs()
+
+        val settings = SettingsManager().loadSettings()
+
+        assertEquals(AppSettings.CURRENT_SETTINGS_VERSION, settings.settingsVersion)
+        assertEquals(AppSettings().theme, settings.theme, "defaults rather than a failure to launch")
+    }
+
+    @Test
     fun `the corrupt original is copied, not moved`() {
         writeSettings("""{ not valid json""")
         SettingsManager().loadSettings()
