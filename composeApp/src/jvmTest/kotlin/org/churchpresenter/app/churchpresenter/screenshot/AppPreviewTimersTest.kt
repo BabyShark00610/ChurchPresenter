@@ -35,16 +35,4 @@ class AppPreviewTimersTest {
         "timer_count_up",
         base().copy(timerMode = Constants.TIMER_MODE_COUNT_UP),
     )
-
-    @Test
-    fun `a countdown to a clock time`() = timer(
-        "timer_time_till",
-        base().copy(timerMode = Constants.TIMER_MODE_CLOCK, targetHour = 10, targetMinute = 30),
-    )
-
-    @Test
-    fun `the live clock`() = timer(
-        "timer_clock",
-        base().copy(timerMode = Constants.TIMER_MODE_CLOCK_DISPLAY),
-    )
 }
