@@ -16,7 +16,7 @@ class AppPreviewPicturesScreenshotTest {
             Snapshot.sendApplyNotifications()
             onAllNodes(hasText("Loading...")).fetchSemanticsNodes(false).isEmpty()
         }
-        onAllNodes(hasText("04 Baptism Pool"))[0].performClick()
+        onAllNodes(hasText("04 Church"))[0].performClick()
         waitForIdle()
         goLive()
     }
