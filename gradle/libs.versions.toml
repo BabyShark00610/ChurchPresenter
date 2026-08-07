@@ -4,6 +4,7 @@ sentry = "7.14.0"
 sentryPlugin = "6.14.0"
 logback = "1.5.12"
 composeHotReload = "1.0.0"
+roborazzi = "1.70.0"
 composeMultiplatform = "1.10.2"
 junit = "4.13.2"
 mockk = "1.14.2"
@@ -60,6 +61,7 @@ bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = 
 apache-poi = { module = "org.apache.poi:poi", version.ref = "apache-poi" }
 socket-io-client = { module = "io.socket:socket.io-client", version = "2.1.1" }
 filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekit" }
+roborazzi-composeDesktop = { module = "io.github.takahirom.roborazzi:roborazzi-compose-desktop", version.ref = "roborazzi" }
 
 [plugins]
 composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
@@ -68,3 +70,4 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 sentry = { id = "io.sentry.jvm.gradle", version.ref = "sentryPlugin" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }

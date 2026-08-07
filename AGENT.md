@@ -91,7 +91,21 @@ Presentation deps in `composeApp/build.gradle.kts` are mirrored in
 ./gradlew :composeApp:check            # compile + all unit tests
 ./gradlew :composeApp:jacocoTestReport # coverage → build/reports/jacoco/jacocoTestReport/html/
 bash cleanup_check.sh                  # repo code-quality report
+
+# Screenshots of the presenter surfaces → composeApp/screenshots/ (committed)
+./gradlew :composeApp:recordRoborazziJvm --tests '*PresenterScreenshotTest*'
 ```
+
+Screenshots are committed so a change on screen is reviewable in the diff. **Re-record them on the
+same OS CI uses (Linux), not on macOS or Windows** — Skia rasterises text per platform, so images
+recorded elsewhere differ everywhere by font rendering rather than by the change under review:
+```bash
+docker run --rm -v "$PWD":/w -w /w eclipse-temurin:21 \
+  ./gradlew :composeApp:recordRoborazziJvm --tests '*PresenterScreenshotTest*'
+```
+The PR comment does not read these files: `.github/workflows/screenshots.yml` renders both the base
+branch and the branch on one runner and diffs those, so it is immune to the platform split. A
+difference there is advisory, not a failure — a deliberate design change looks like a regression.
 
 A failure that makes no sense — unresolved references to symbols that exist, unrelated suites
 failing, a `NoClassDefFoundError` at runtime — is a stale build. `clean` does not clear it;

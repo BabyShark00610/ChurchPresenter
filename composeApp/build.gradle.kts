@@ -184,6 +184,7 @@ plugins {
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.sentry)
+    alias(libs.plugins.roborazzi)
     jacoco
 }
 
@@ -264,6 +265,7 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         jvmTest.dependencies {
+            implementation(libs.roborazzi.composeDesktop)
             implementation(libs.mockk)
             implementation(libs.ktor.client.mock)
             @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
@@ -673,6 +675,20 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
+}
+
+// ── Screenshots (Roborazzi) ───────────────────────────────────────────────────
+// Record: ./gradlew :composeApp:recordRoborazziJvm --tests '*PresenterScreenshotTest*'
+// Verify: ./gradlew :composeApp:verifyRoborazziJvm  --tests '*PresenterScreenshotTest*'
+//
+// Committed, not generated into build/, so the images are reviewable in a diff and a PR can show
+// what changed on screen. The catch is that Skia rasterises text differently per platform, so an
+// image recorded on macOS is not the one Linux produces: re-record on the same OS CI uses before
+// trusting a `verify`, or the difference will be the font engine rather than the change under
+// review. `.github/workflows/screenshots.yml` sidesteps this for the PR comment by rendering BOTH
+// sides on the same runner, so it never reads these files.
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("screenshots"))
 }
 
 // ── Test coverage (JaCoCo) ────────────────────────────────────────────────────
