@@ -651,32 +651,15 @@ object SharedBrowserFrameCache {
         }
 
         private fun handleMessage(text: String) {
-            try {
-                val json = Json.parseToJsonElement(text).jsonObject
-                val id = json["id"]?.jsonPrimitive?.intOrNull
-                if (id != null) {
-                    // Response to a command
-                    val result = json["result"]?.jsonObject
-                    val error = json["error"]?.jsonObject
-                    if (error != null) {
-                        System.err.println("[BrowserSource] CDP error for id=$id: $error")
+            when (val message = parseCdpMessage(text)) {
+                is CdpMessage.Response -> {
+                    if (message.error != null) {
+                        System.err.println("[BrowserSource] CDP error for id=${message.id}: ${message.error}")
                     }
-                    pending.remove(id)?.complete(result)
-                } else {
-                    // CDP event — check for navigation URL changes
-                    val method = json["method"]?.jsonPrimitive?.contentOrNull
-                    if (method == "Page.frameNavigated") {
-                        val frame = json["params"]?.jsonObject?.get("frame")?.jsonObject
-                        val url = frame?.get("url")?.jsonPrimitive?.contentOrNull
-                        val parentId = frame?.get("parentId")?.jsonPrimitive?.contentOrNull
-                        // Only track main frame navigations (no parentId = main frame)
-                        if (url != null && parentId == null) {
-                            onUrlChanged?.invoke(url)
-                        }
-                    }
+                    pending.remove(message.id)?.complete(message.result)
                 }
-            } catch (e: Exception) {
-                System.err.println("[BrowserSource] handleMessage error: ${e.message}")
+                is CdpMessage.MainFrameNavigated -> onUrlChanged?.invoke(message.url)
+                CdpMessage.Ignored -> Unit
             }
         }
 
@@ -688,6 +671,52 @@ object SharedBrowserFrameCache {
             pending.clear()
             ws = null
         }
+    }
+}
+
+/** The three things a frame arriving on the CDP socket can turn out to be. */
+internal sealed interface CdpMessage {
+    /** An answer to a command this end sent, identified by the id it was sent with. */
+    data class Response(val id: Int, val result: JsonObject?, val error: JsonObject?) : CdpMessage
+
+    /** The page navigated itself — a redirect, a link, a script — to [url]. */
+    data class MainFrameNavigated(val url: String) : CdpMessage
+
+    /** Anything else on the socket: other events, sub-frame navigations, unparseable text. */
+    data object Ignored : CdpMessage
+}
+
+/**
+ * Sorts one raw CDP frame into what the connection should do about it.
+ *
+ * Chrome multiplexes command responses and unsolicited events down the same socket, told apart only
+ * by whether the frame carries an `id`. Getting that backwards strands a waiting `sendAsync` on its
+ * 30-second timeout, so the distinction is made once, here.
+ *
+ * **Only main-frame navigations count.** A page with an ad iframe emits `Page.frameNavigated` for the
+ * iframe too, and reporting that as the source's URL would show the operator an advert's address
+ * instead of the page they loaded. The main frame is the one with no `parentId`.
+ *
+ * Anything unparseable is [CdpMessage.Ignored] rather than thrown: this runs on the WebSocket's own
+ * callback thread, where an exception would take the connection down and freeze the source on its
+ * last frame.
+ */
+internal fun parseCdpMessage(text: String): CdpMessage {
+    return try {
+        val json = Json.parseToJsonElement(text).jsonObject
+        val id = json["id"]?.jsonPrimitive?.intOrNull
+        if (id != null) {
+            return CdpMessage.Response(id, json["result"]?.jsonObject, json["error"]?.jsonObject)
+        }
+        if (json["method"]?.jsonPrimitive?.contentOrNull != "Page.frameNavigated") return CdpMessage.Ignored
+
+        val frame = json["params"]?.jsonObject?.get("frame")?.jsonObject
+        val url = frame?.get("url")?.jsonPrimitive?.contentOrNull
+        val parentId = frame?.get("parentId")?.jsonPrimitive?.contentOrNull
+        if (url != null && parentId == null) CdpMessage.MainFrameNavigated(url) else CdpMessage.Ignored
+    } catch (e: Exception) {
+        System.err.println("[BrowserSource] handleMessage error: ${e.message}")
+        CdpMessage.Ignored
     }
 }
 

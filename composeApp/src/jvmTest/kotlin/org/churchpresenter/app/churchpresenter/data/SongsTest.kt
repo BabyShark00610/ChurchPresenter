@@ -458,4 +458,75 @@ class SongsTest {
 
         assertEquals(3, handed.size, "a caller holding the list must not see it change underneath them")
     }
+
+    // ── Edges of the file format ────────────────────────────────────────────────
+
+    @Test
+    fun `a songbook bundled as a resource loads the same as one on disk`() {
+        // The sample library ships inside the jar, so the classpath branch is a real startup path
+        // and not just a fallback -- it has to produce the same songs a file does.
+        val songs = Songs().also { it.loadFromSps("song-fixtures/classpath-sample.sps") }
+
+        assertEquals(1, songs.getSongCount())
+        val song = songs.getSongs().single()
+        assertEquals("Amazing Grace", song.title)
+        assertEquals("Classpath Hymnal", song.songbook)
+        assertEquals(listOf("Amazing grace how sweet the sound", "That saved a wretch like me"), song.lyrics)
+    }
+
+    @Test
+    fun `blank lines between songs are skipped rather than read as songs`() {
+        val songs = load(row("1", "First"), "", "   ", row("2", "Second"))
+
+        assertEquals(2, songs.getSongCount(), "an empty line is spacing, not a song row")
+        assertEquals(listOf("First", "Second"), songs.getSongs().map { it.title })
+    }
+
+    @Test
+    fun `a row that stops before the lyrics field loads as a song with no lyrics`() {
+        val sixFields = listOf("7", "Titleless", "1", "G", "Newton", "Excell").joinToString("#\$#")
+        val songs = load(sixFields)
+
+        assertEquals(1, songs.getSongCount())
+        assertEquals("Titleless", songs.getSongs().single().title)
+        assertEquals(emptyList(), songs.getSongs().single().lyrics)
+    }
+
+    @Test
+    fun `a trailing blank line in the stored lyrics is not carried into the song`() {
+        val songs = load(row("1", "Trailing", lyrics = lyrics(listOf("Only line", ""))))
+
+        assertEquals(
+            listOf("Only line"),
+            songs.getSongs().single().lyrics,
+            "a stray separator at the end must not become an empty slide",
+        )
+    }
+
+    // ── Searching and editing in memory ─────────────────────────────────────────
+
+    @Test
+    fun `an unrecognised filter falls back to matching the title`() {
+        val songs = load(row("1", "Amazing Grace"), row("2", "How Great Thou Art"))
+
+        val matched = songs.findSongs("great", filterType = "Fuzzy")
+
+        assertEquals(listOf("How Great Thou Art"), matched.map { it.title })
+        assertEquals(
+            emptyList(),
+            songs.findSongs("2", filterType = "Fuzzy").map { it.title },
+            "the fallback searches titles only -- a number must not match through it",
+        )
+    }
+
+    @Test
+    fun `updating a song that is not in the library changes nothing`() {
+        val songs = load(row("1", "Amazing Grace"))
+        val absent = SongItem(number = "9", title = "Never Loaded", songbook = "Hymnal")
+
+        songs.updateSong(absent, absent.copy(title = "Renamed"))
+
+        assertEquals(listOf("Amazing Grace"), songs.getSongs().map { it.title })
+        assertEquals(1, songs.getSongCount())
+    }
 }
