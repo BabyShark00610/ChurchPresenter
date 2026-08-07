@@ -2,16 +2,23 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import org.churchpresenter.app.churchpresenter.TestSingletons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import java.awt.image.BufferedImage
@@ -90,6 +97,8 @@ internal fun presentationTab(
     onInstanceLinkSendNextSlide: (() -> Unit)? = null,
     onInstanceLinkSendPreviousSlide: (() -> Unit)? = null,
     onInstanceLinkSendProject: ((ScheduleItem) -> Unit)? = null,
+    width: Dp? = null,
+    themeMode: ThemeMode? = null,
     block: ComposeUiTest.(vm: PresentationViewModel, reports: PresentationReports) -> Unit,
 ) {
     // PresentationViewModel's slide disk cache resolves under user.home.
@@ -99,39 +108,47 @@ internal fun presentationTab(
     val vm = PresentationViewModel(appSettings)
     runComposeUiTest {
         setContent {
-            MaterialTheme {
-                PresentationTab(
-                    appSettings = appSettings,
-                    viewModel = vm,
-                    presenterManager = presenterManager,
-                    onAddToSchedule = { path, name, count, type -> reports.scheduled += "$path:$name:$count:$type" },
-                    onSettingsChange = { transform ->
-                        reports.settingsChanges++
-                        reports.settingsAfterChange = transform(reports.settingsAfterChange ?: appSettings)
-                    },
-                    tunnelStatus = tunnelStatus,
-                    tunnelUrl = tunnelUrl,
-                    serverUrl = serverUrl,
-                    presentationDisplayUrl = presentationDisplayUrl,
-                    onPresentationDisplayUrlChanged = { reports.displayUrlChanges += it },
-                    onStartTunnel = { reports.tunnelStarts++ },
-                    onStopTunnel = { reports.tunnelStops++ },
-                    presentationFrozen = presentationFrozen,
-                    onFreezeToggle = { reports.freezeToggles++ },
-                    onClearPresentation = { reports.clears++ },
-                    vlcAvailable = vlcAvailable,
-                    vlcArchMismatch = vlcArchMismatch,
-                    vlcLoadFailed = vlcLoadFailed,
-                    selectedPresentationItem = selectedPresentationItem,
-                    instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
-                    onInstanceLinkSendNextSlide = onInstanceLinkSendNextSlide,
-                    onInstanceLinkSendPreviousSlide = onInstanceLinkSendPreviousSlide,
-                    onInstanceLinkSendProject = onInstanceLinkSendProject,
-                )
+            ThemedForTest(themeMode) {
+                Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
+                    PresentationTab(
+                        appSettings = appSettings,
+                        viewModel = vm,
+                        presenterManager = presenterManager,
+                        onAddToSchedule = { path, name, count, type -> reports.scheduled += "$path:$name:$count:$type" },
+                        onSettingsChange = { transform ->
+                            reports.settingsChanges++
+                            reports.settingsAfterChange = transform(reports.settingsAfterChange ?: appSettings)
+                        },
+                        tunnelStatus = tunnelStatus,
+                        tunnelUrl = tunnelUrl,
+                        serverUrl = serverUrl,
+                        presentationDisplayUrl = presentationDisplayUrl,
+                        onPresentationDisplayUrlChanged = { reports.displayUrlChanges += it },
+                        onStartTunnel = { reports.tunnelStarts++ },
+                        onStopTunnel = { reports.tunnelStops++ },
+                        presentationFrozen = presentationFrozen,
+                        onFreezeToggle = { reports.freezeToggles++ },
+                        onClearPresentation = { reports.clears++ },
+                        vlcAvailable = vlcAvailable,
+                        vlcArchMismatch = vlcArchMismatch,
+                        vlcLoadFailed = vlcLoadFailed,
+                        selectedPresentationItem = selectedPresentationItem,
+                        instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
+                        onInstanceLinkSendNextSlide = onInstanceLinkSendNextSlide,
+                        onInstanceLinkSendPreviousSlide = onInstanceLinkSendPreviousSlide,
+                        onInstanceLinkSendProject = onInstanceLinkSendProject,
+                    )
+                }
             }
         }
         block(vm, reports)
     }
+}
+
+@Composable
+private fun ThemedForTest(themeMode: ThemeMode?, content: @Composable () -> Unit) {
+    if (themeMode == null) MaterialTheme(content = content)
+    else ChurchPresenterTheme(themeMode = themeMode, content = content)
 }
 
 // ── Labels, as the tab renders them ─────────────────────────────────────────────────────────────
