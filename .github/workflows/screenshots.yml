@@ -8,14 +8,19 @@ name: Screenshots
 #   * `test` is the required status check on main. A visual difference is not a failure — a
 #     deliberate design change looks exactly like a regression — so it must never be able to block
 #     a merge. This workflow is advisory and its check is not required.
-#   * reg-actions needs write access to pull requests and artifacts, which `test` deliberately does
-#     not have (`contents: read`).
+#   * reg-actions needs write access to pull requests and to the repository, which `test`
+#     deliberately does not have (`contents: read`).
 #
-# No golden images are committed. Skia renders text differently on macOS, Windows and Linux (the
-# same reason AGENT.md tells tests to assert invariants rather than pixels), so a committed golden
+# No images are committed. Skia renders text differently on macOS, Windows and Linux (the same
+# reason AGENT.md tells tests to assert invariants rather than pixels), so a committed baseline
 # would be right for whoever generated it and wrong for everyone else. Instead both sides of the
-# comparison are rendered by this job on the same runner: reg-actions keeps the base branch's images
-# as an artifact and diffs this branch's against them.
+# comparison are rendered by this job on the same runner: the step below records this branch's
+# images into `composeApp/build/screenshots`, and reg-actions diffs them against the base branch's,
+# which it keeps on a `reg_actions` branch of its own.
+#
+# Images are matched between the two sides by their path **relative to `image-directory-path`**, so
+# a capture written outside that root is not reported as changed — it silently stops being compared.
+# `ScreenshotSupport.SCREENSHOT_ROOT` is the single place that root is defined.
 on:
   push:
     branches: [main]
@@ -26,9 +31,12 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
-  contents: read
+  # reg-actions stores its baseline on a `reg_actions` branch it creates and pushes to — NOT as a
+  # workflow artifact, which is what this said before. With `contents: read` it failed every run
+  # with "couldn't find remote ref reg_actions" followed by a 403, so the baseline never existed
+  # and the check was permanently red.
+  contents: write
   pull-requests: write
-  # reg-actions stores the baseline images as workflow artifacts and reads the base branch's.
   actions: write
 
 concurrency:
@@ -69,7 +77,9 @@ jobs:
         uses: reg-viz/reg-actions@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-directory-path: ./composeApp/screenshots
+          # Where the record step above writes — `roborazzi.outputDir` in composeApp/build.gradle.kts
+          # and `ScreenshotSupport.SCREENSHOT_ROOT` both point here. Under build/, so nothing in git.
+          image-directory-path: ./composeApp/build/screenshots
           # Every changed image is shown in the comment; with a handful of surfaces there is no
           # reason to make a reviewer expand a details block to see what moved.
           comment-report-format: raw

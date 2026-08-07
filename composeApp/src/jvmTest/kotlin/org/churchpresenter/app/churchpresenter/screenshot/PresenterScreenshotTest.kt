@@ -33,14 +33,13 @@ import kotlin.test.Test
  * sidesteps the platform problem entirely: no committed image is ever used as the baseline, so a
  * stale one cannot fail a build on the machine reading it.
  *
- * The PNGs under `composeApp/screenshots/` are committed all the same, but only so that a change on
- * screen shows up in the diff of a pull request. CI overwrites them with its own renders before
- * comparing, so nothing depends on which platform recorded the copy in git.
+ * Nothing is committed: the PNGs live under `build/` and only ever exist on the machine that
+ * recorded them. See `SCREENSHOT_ROOT` for why.
  *
  * Consequences worth knowing:
- * - Recording locally writes PNGs to `composeApp/screenshots/` — the `roborazzi.outputDir` set in
- *   `composeApp/build.gradle.kts` — and asserts nothing. It is still a smoke test: a presenter that
- *   throws while composing fails here.
+ * - Recording locally writes PNGs to `composeApp/build/screenshots/` and asserts nothing. It is
+ *   still a smoke test: a presenter that throws while composing fails here. What you record is for
+ *   your own eyes — CI records its own, so there is no need to re-record before pushing.
  * - `captureRoboImage` is inert unless a Roborazzi task turned recording on, so an ordinary
  *   `./gradlew :composeApp:jvmTest` pays only the composition, not the file write.
  * - What a diff means is a judgement call, not a failure: a deliberate design change shows up here
@@ -55,13 +54,14 @@ class PresenterScreenshotTest {
     private val screen = Modifier.size(1920.dp, 1080.dp)
 
     /**
-     * Writes `composeApp/screenshots/<name>.png`.
+     * Writes `<name>.png` at the root of [SCREENSHOT_ROOT].
      *
-     * The path is relative to the module directory, which is what a Gradle test task runs in, and
-     * matches the `roborazzi.outputDir` the compare/verify tasks read.
+     * Through the shared constant rather than its own literal: the workflow compares images by their
+     * path *relative to* that root, so a capture written somewhere else is not a differing image —
+     * it is an image with no counterpart on the other side, and it silently stops being compared.
      */
     private fun ComposeUiTest.capture(name: String) {
-        onRoot().captureRoboImage("screenshots/$name.png")
+        onRoot().captureRoboImage("$SCREENSHOT_ROOT/$name.png")
     }
 
     private fun song(

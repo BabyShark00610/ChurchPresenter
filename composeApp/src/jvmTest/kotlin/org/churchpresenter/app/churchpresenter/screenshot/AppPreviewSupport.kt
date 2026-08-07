@@ -47,18 +47,27 @@ import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.common.PDRectangle
 import org.apache.pdfbox.pdmodel.font.PDType1Font
-import java.awt.Color
-import java.awt.GradientPaint
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 
-private const val ROOT = "screenshots/previewApp"
-// Neutral root, so no path on screen carries the developer's own home directory. Falls back to the
-// build dir on a platform without /tmp.
-private val LIBRARY = File("/tmp/ChurchPresenter").let { neutral ->
-    if (neutral.exists() || neutral.mkdirs()) neutral else File("build/app-preview-library").absoluteFile
-}
+private const val ROOT = "$SCREENSHOT_ROOT/previewApp"
+/**
+ * Where the fixture's media library lives — and, because the schedule row prints the path of every
+ * file-backed item at detailed density, **a string that appears in the screenshots themselves**.
+ *
+ * So it has to be three things at once: real (the path shown is the path used), writable without a
+ * permission prompt, and free of the developer's own username. `/Users/Shared` is the macOS
+ * directory that satisfies all three — it exists on every install, is world-writable, and names
+ * nobody. Elsewhere, `/tmp` is the equivalent and is what CI uses.
+ *
+ * The two roots produce different text on screen, which is deliberate and harmless: CI only ever
+ * compares its own renders against its own, and images are not committed, so a local recording never
+ * enters the comparison.
+ */
+private val LIBRARY = listOf(File("/Users/Shared/ChurchPresenter"), File("/tmp/ChurchPresenter"))
+    .firstOrNull { it.parentFile?.isDirectory == true && (it.isDirectory || it.mkdirs()) }
+    ?: File("build/app-preview-library").absoluteFile
 
 // The real King James the app ships as a sample: 66 books with every chapter and verse, so the
 // chapter grid and the verse pane are the real thing rather than a fixture's handful.
@@ -89,12 +98,12 @@ internal fun appPreview(
     RecentPresentationFiles.files.clear()
     RecentPresentationFiles.pinned.clear()
     RecentPresentationFiles.files.addAll(
-        listOf(File(LIBRARY, "Decks/Sermon.pdf").absolutePath, "/tmp/ChurchPresenter/Decks/Advent Series.pptx"),
+        listOf(File(LIBRARY, "Decks/Sermon.pdf").absolutePath, File(LIBRARY, "Decks/Advent Series.pptx").absolutePath),
     )
     RecentMediaFiles.paths.clear()
     RecentMediaFiles.pinned.clear()
     RecentMediaFiles.paths.addAll(
-        listOf(File(LIBRARY, "Media/Welcome Loop.mp4").absolutePath, "/tmp/ChurchPresenter/Media/Baptism Testimony.mp4"),
+        listOf(File(LIBRARY, "Media/Welcome Loop.mp4").absolutePath, File(LIBRARY, "Media/Baptism Testimony.mp4").absolutePath),
     )
     writeScenes()
     writeQuestions()
@@ -232,7 +241,7 @@ private fun serviceSchedule(actions: ScheduleActions) {
     actions.addBibleVerse("Psalms", 23, 1, "The LORD is my shepherd; I shall not want.", "1-3", 19)
     actions.addPresentation(File(LIBRARY, "Decks/Sermon.pdf").absolutePath, "Sermon", SERMON_SLIDES.size, "pdf")
     actions.addSong(455, "It Is Well With My Soul", "Hymnal", "song-455")
-    actions.addPicture(File(LIBRARY, "Baptism").absolutePath, "Baptism", PHOTOS.size)
+    actions.addPicture(File(LIBRARY, "Gallery").absolutePath, "Gallery", PHOTOS.size)
     actions.addAnnouncement(
         ScheduleItem.AnnouncementItem(
             id = "ann-1",
@@ -274,7 +283,7 @@ private fun serviceSchedule(actions: ScheduleActions) {
             timerMode = Constants.TIMER_MODE_CLOCK_DISPLAY,
         )
     )
-    actions.addWebsite("https://example.org/give", "Giving page")
+    actions.addWebsite("https://churchpresenter.org/give", "Giving page")
 }
 
 /**
@@ -344,7 +353,7 @@ internal fun previewScenes(): List<Scene> = listOf(
             SceneSource.QRCodeSource(
                 id = "qr", name = "Giving QR",
                 transform = SourceTransform(x = 0.04f, y = 0.05f, width = 0.1f, height = 0.18f),
-                content = "https://example.org/give",
+                content = "https://churchpresenter.org/give",
             ),
         ),
     ),
@@ -358,7 +367,7 @@ internal fun previewScenes(): List<Scene> = listOf(
 internal fun library(): AppSettings {
     val songs = File(LIBRARY, "Songs")
     val bibles = File(LIBRARY, "Bibles")
-    val pictures = File(LIBRARY, "Baptism")
+    val pictures = File(LIBRARY, "Gallery")
     val decks = File(LIBRARY, "Decks")
     listOf(songs, bibles, pictures, decks).forEach { it.mkdirs() }
     writeSongs(songs)
@@ -399,9 +408,9 @@ internal fun library(): AppSettings {
         // rather than still travelling up from the bottom.
         announcementsSettings = AnnouncementsSettings(animationType = Constants.ANIMATION_NONE),
         webBookmarks = listOf(
-            WebBookmark(url = "https://example.org/give", title = "Giving"),
-            WebBookmark(url = "https://example.org/notices", title = "Weekly Notices"),
-            WebBookmark(url = "https://example.org/prayer", title = "Prayer Requests"),
+            WebBookmark(url = "https://churchpresenter.org/give", title = "Giving"),
+            WebBookmark(url = "https://churchpresenter.org/notices", title = "Weekly Notices"),
+            WebBookmark(url = "https://churchpresenter.org/prayer", title = "Prayer Requests"),
             WebBookmark(url = "https://www.biblegateway.com", title = "Bible Gateway"),
         ),
         hiddenTabs = emptySet(),
@@ -425,25 +434,65 @@ private fun writeSongs(dir: File) {
     }
 }
 
+private val BACKGROUNDS_SOURCE = File("src/jvmMain/composeResources/files/backgrounds")
+
+/**
+ * The picture gallery, as display name to background category.
+ *
+ * These were twelve generated colour gradients, which made the Pictures tab the one panel that
+ * obviously came from a fixture. They are now real photographs — the app already ships ~290 of them,
+ * so this costs the repository nothing and exercises the real JPEG decode path rather than a
+ * synthetic PNG.
+ *
+ * **The names say only what the category guarantees.** The specific file behind "Worship" is
+ * whichever sorts first in that category, and nobody here has looked at it, so a caption like
+ * "Hands Raised" would be a guess that the image is free to contradict. A gallery that names what it
+ * actually knows is both honest and stable when the shipped set changes.
+ */
 private val PHOTOS = listOf(
-    "01 Welcome", "02 Gathering", "03 Worship", "04 Baptism Pool", "05 Testimony", "06 The Font",
-    "07 Congregation", "08 Prayer", "09 Youth Team", "10 Fellowship", "11 Candles", "12 Sending",
+    "01 Worship" to "worship",
+    "02 Worship" to "worship",
+    "03 Church" to "church",
+    "04 Church" to "church",
+    "05 Cross" to "cross",
+    "06 Cross" to "cross",
+    "07 Candles" to "candles",
+    "08 Candles" to "candles",
+    "09 Mountains" to "mountains",
+    "10 Sky" to "sky_clouds",
+    "11 Ocean" to "ocean_waves",
+    "12 Landscape" to "nature_landscape",
 )
 
+/**
+ * Copies the gallery out of the shipped backgrounds, **downscaled**.
+ *
+ * The sources are ~1880x1253. Twelve of those decoded at full size is real work on a two-core
+ * runner, and the Pictures tab waits for every thumbnail before it can be photographed — that wait
+ * has already timed out once when the record job grew. 960px keeps the photographs unmistakably
+ * photographic while costing a quarter of the pixels.
+ */
 private fun writePictures(dir: File) {
-    PHOTOS
-        .forEachIndexed { index, name ->
-            val image = BufferedImage(480, 300, BufferedImage.TYPE_INT_RGB)
-            val canvas = image.createGraphics()
-            val hue = (index * 0.14f) % 1f
-            canvas.paint = GradientPaint(
-                0f, 0f, Color.getHSBColor(hue, 0.5f, 0.9f),
-                480f, 300f, Color.getHSBColor((hue + 0.09f) % 1f, 0.85f, 0.4f),
-            )
-            canvas.fillRect(0, 0, 480, 300)
-            canvas.dispose()
-            ImageIO.write(image, "png", File(dir, "$name.png"))
-        }
+    val taken = mutableMapOf<String, Int>()
+    PHOTOS.forEach { (name, category) ->
+        val nth = taken.merge(category, 1, Int::plus)!! - 1
+        val source = BACKGROUNDS_SOURCE
+            .listFiles { file -> file.name.startsWith("${category}_") }
+            ?.sortedBy { it.name }
+            ?.getOrNull(nth)
+            ?: error("no shipped background left in '$category' for '$name'")
+        ImageIO.write(scaledToWidth(ImageIO.read(source), 960), "png", File(dir, "$name.png"))
+    }
+}
+
+private fun scaledToWidth(source: BufferedImage, width: Int): BufferedImage {
+    if (source.width <= width) return source
+    val height = (source.height.toLong() * width / source.width).toInt().coerceAtLeast(1)
+    val scaled = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+    val canvas = scaled.createGraphics()
+    canvas.drawImage(source.getScaledInstance(width, height, java.awt.Image.SCALE_SMOOTH), 0, 0, null)
+    canvas.dispose()
+    return scaled
 }
 
 private val SERMON_SLIDES = listOf(
