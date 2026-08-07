@@ -53,7 +53,7 @@ import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 
-private const val ROOT = "screenshots/app"
+private const val ROOT = "screenshots/previewApp"
 // Neutral root, so no path on screen carries the developer's own home directory. Falls back to the
 // build dir on a platform without /tmp.
 private val LIBRARY = File("/tmp/ChurchPresenter").let { neutral ->
@@ -313,47 +313,49 @@ private fun writeQuestions() {
  * `user.home` and MainDesktop builds it internally, so there is no instance to seed directly.
  */
 private fun writeScenes() {
-    val scenes = listOf(
-        Scene(
-            id = "scene-welcome",
-            name = "Welcome",
-            sources = listOf(
-                SceneSource.ImageSource(
-                    id = "bg", name = "Cross At Sunset",
-                    transform = SourceTransform(x = 0f, y = 0f, width = 1f, height = 1f),
-                    filePath = File(LIBRARY, "Backgrounds/Cross At Sunset.jpg").absolutePath,
-                    contentScale = "CROP",
-                ),
-                SceneSource.TextSource(
-                    id = "title", name = "Title",
-                    transform = SourceTransform(x = 0.06f, y = 0.66f, width = 0.6f, height = 0.14f),
-                    text = "He Is Risen", fontSize = 104, bold = true, horizontalAlignment = "left",
-                ),
-                SceneSource.TextSource(
-                    id = "verse", name = "Verse",
-                    transform = SourceTransform(x = 0.06f, y = 0.81f, width = 0.62f, height = 0.09f),
-                    text = "\"He is not here: for he is risen\"  ·  Matthew 28:6",
-                    fontSize = 38, fontColor = "#F3DCA8", horizontalAlignment = "left",
-                ),
-                SceneSource.QRCodeSource(
-                    id = "qr", name = "Giving QR",
-                    transform = SourceTransform(x = 0.04f, y = 0.05f, width = 0.1f, height = 0.18f),
-                    content = "https://example.org/give",
-                ),
-            ),
-        ),
-        Scene(id = "scene-countdown", name = "Countdown"),
-        Scene(id = "scene-sermon", name = "Sermon Title"),
-        Scene(id = "scene-notices", name = "Notices"),
-    )
     val file = File(System.getProperty("user.home"), ".churchpresenter/scenes.json")
     file.parentFile?.mkdirs()
-    file.writeText(Json { prettyPrint = false }.encodeToString(scenes))
+    file.writeText(Json { prettyPrint = false }.encodeToString(previewScenes()))
 }
+
+/** The Canvas scenes, shared by the tab preview and the output snapshot of the same scene. */
+internal fun previewScenes(): List<Scene> = listOf(
+    Scene(
+        id = "scene-welcome",
+        name = "Welcome",
+        sources = listOf(
+            SceneSource.ImageSource(
+                id = "bg", name = "Cross At Sunset",
+                transform = SourceTransform(x = 0f, y = 0f, width = 1f, height = 1f),
+                filePath = File(LIBRARY, "Backgrounds/Cross At Sunset.jpg").absolutePath,
+                contentScale = "CROP",
+            ),
+            SceneSource.TextSource(
+                id = "title", name = "Title",
+                transform = SourceTransform(x = 0.06f, y = 0.66f, width = 0.6f, height = 0.14f),
+                text = "He Is Risen", fontSize = 104, bold = true, horizontalAlignment = "left",
+            ),
+            SceneSource.TextSource(
+                id = "verse", name = "Verse",
+                transform = SourceTransform(x = 0.06f, y = 0.81f, width = 0.62f, height = 0.09f),
+                text = "\"He is not here: for he is risen\"  ·  Matthew 28:6",
+                fontSize = 38, fontColor = "#F3DCA8", horizontalAlignment = "left",
+            ),
+            SceneSource.QRCodeSource(
+                id = "qr", name = "Giving QR",
+                transform = SourceTransform(x = 0.04f, y = 0.05f, width = 0.1f, height = 0.18f),
+                content = "https://example.org/give",
+            ),
+        ),
+    ),
+    Scene(id = "scene-countdown", name = "Countdown"),
+    Scene(id = "scene-sermon", name = "Sermon Title"),
+    Scene(id = "scene-notices", name = "Notices"),
+)
 
 // ── The library on disk ─────────────────────────────────────────────────────
 
-private fun library(): AppSettings {
+internal fun library(): AppSettings {
     val songs = File(LIBRARY, "Songs")
     val bibles = File(LIBRARY, "Bibles")
     val pictures = File(LIBRARY, "Baptism")
@@ -383,7 +385,13 @@ private fun library(): AppSettings {
         maximizedLayout = layout,
         windowedLayout = layout,
         songSettings = SongSettings(storageDirectory = songs.absolutePath),
-        bibleSettings = BibleSettings(storageDirectory = bibles.absolutePath, primaryBible = "kjv1769.spb"),
+        bibleSettings = BibleSettings(
+            storageDirectory = bibles.absolutePath,
+            primaryBible = "kjv1769.spb",
+            verticalAlignment = Constants.CENTER,
+            primaryBibleHorizontalAlignment = Constants.CENTER,
+            primaryReferenceHorizontalAlignment = Constants.CENTER,
+        ),
         pictureSettings = PictureSettings(storageDirectory = pictures.absolutePath),
         presentationStorageDirectory = decks.absolutePath,
         streamingSettings = StreamingSettings(lowerThirdFolder = File(LIBRARY, "Lower Thirds").absolutePath),
