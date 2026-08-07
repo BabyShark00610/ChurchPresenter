@@ -105,11 +105,9 @@ fun MemoryMonitorWindow(isVisible: Boolean, theme: ThemeMode, onClose: () -> Uni
         onCloseRequest = onClose,
         title = stringResource(Res.string.memory_monitor_window_title),
         icon = painterResource(Res.drawable.ic_app_icon),
-        // 500dp, not 440dp: the content measures 414dp at normal text size and 466dp at the 1.3x
-        // this suite treats as the growth a fixed window must absorb (`TEXT_GROWTH_SCALE`), so 440
-        // opened already clipped for anyone with OS font scaling on. `DialogViewportTest` holds
-        // this to the measurement.
-        state = rememberWindowState(width = 460.dp, height = 500.dp)
+        // Named rather than inline so `DialogViewportTest` measures against this exact value — see
+        // `DialogSizes.kt`, which records why it is 500dp and not the 440dp that shipped clipped.
+        state = rememberWindowState(width = MEMORY_MONITOR_WINDOW_WIDTH, height = MEMORY_MONITOR_WINDOW_HEIGHT)
     ) {
         AppThemeWrapper(theme = theme) {
             MemoryMonitorContent()

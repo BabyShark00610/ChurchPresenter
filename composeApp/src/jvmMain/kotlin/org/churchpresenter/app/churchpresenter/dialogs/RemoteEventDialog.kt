@@ -208,7 +208,7 @@ internal fun resolveRemoteEventPresentation(
     else
         stringResource(Res.string.remote_api_request_title)
 
-    val dialogHeight = if (remaining > 0) 330.dp else 290.dp
+    val dialogHeight = if (remaining > 0) REMOTE_EVENT_DIALOG_HEIGHT_QUEUED else REMOTE_EVENT_DIALOG_HEIGHT
 
     return RemoteEventPresentation(
         actionLabel = actionLabel,
@@ -245,7 +245,7 @@ fun RemoteEventDialog(
     if (event == null) return
 
     val presentation = resolveRemoteEventPresentation(event, queueSize, isClientKnownAllowed, isClientKnownBlocked)
-    val dialogWidth = 500.dp
+    val dialogWidth = REMOTE_EVENT_DIALOG_WIDTH
     val mainWindowState = LocalMainWindowState.current
 
     DialogWindow(

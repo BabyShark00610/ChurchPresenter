@@ -28,16 +28,18 @@ import kotlin.test.Test
  * indicates anything is missing. Everything else in `dialogs/` either scrolls or is resizable, and
  * can recover.
  *
- * The width and height in each case are copied from that dialog's own `rememberDialogState`. Copied,
- * not read: the declared sizes are inline literals in the composables, so these numbers are a
- * duplicate of them, and what this suite actually catches is **content outgrowing a window** — a new
- * row, a longer string, a bigger font. It does not catch someone editing the dp literal downward,
- * because the test would go on measuring against the old figure. That is the deliberate trade: the
- * growth is what happens by accident, and shrinking a window is not. `AddLabelDialog` is the case that already happened once: its height comment
- * records 400dp cutting off the nested colour picker "with no visible scrollbar to hint more was
- * there", found by hand and fixed by hand-measuring to 640dp. This is that measurement, kept — and
- * `AddLabelDialogHeightTest` pins the 400dp version as still failing, so these assertions cannot
- * quietly stop testing anything.
+ * The width and height in each case are **read from the same constant the dialog opens at** — see
+ * `DialogSizes.kt`. They were originally copied as literals, which left the suite measuring content
+ * against a number that no longer had to be the window's: editing the dp literal downward broke
+ * nothing, because the test went on asserting against the old figure. `MemoryMonitorWindow` proved
+ * it — it could be returned to the 440dp that clipped its Force GC row with every test still green.
+ * Sharing the constant closes that: shrinking a window now fails the same assertion that content
+ * outgrowing it does.
+ *
+ * `AddLabelDialog` is the case that already happened once: its height comment records 400dp cutting
+ * off the nested colour picker "with no visible scrollbar to hint more was there", found by hand and
+ * fixed by hand-measuring to 640dp. This is that measurement, kept — and `AddLabelDialogHeightTest`
+ * pins the 400dp version as still failing, so these assertions cannot quietly stop testing anything.
  *
  * See `ViewportAssertions` for why the content is measured unbounded rather than checked for
  * containment.
@@ -82,14 +84,14 @@ class DialogViewportTest {
 
     @Test
     fun `AddWebsite content fits its 500x440 window`() =
-        fits(500.dp, 440.dp) { AddWebsiteDialogContent(onDismiss = {}, onConfirm = { _, _ -> }) }
+        fits(ADD_WEBSITE_DIALOG_WIDTH, ADD_WEBSITE_DIALOG_HEIGHT) { AddWebsiteDialogContent(onDismiss = {}, onConfirm = { _, _ -> }) }
 
     @Test
     fun `AddLabel content fits its 500x640 window`() =
-        fits(500.dp, 640.dp) { AddLabelDialogContent(onDismiss = {}, onConfirm = { _, _, _ -> }) }
+        fits(ADD_LABEL_DIALOG_WIDTH, ADD_LABEL_DIALOG_HEIGHT) { AddLabelDialogContent(onDismiss = {}, onConfirm = { _, _, _ -> }) }
 
     @Test
-    fun `AddLabel content fits its window with a long label typed in`() = fits(500.dp, 640.dp) {
+    fun `AddLabel content fits its window with a long label typed in`() = fits(ADD_LABEL_DIALOG_WIDTH, ADD_LABEL_DIALOG_HEIGHT) {
         AddLabelDialogContent(
             onDismiss = {},
             onConfirm = { _, _, _ -> },
@@ -99,20 +101,20 @@ class DialogViewportTest {
     }
 
     @Test
-    fun `About content fits its 420x490 window`() = fits(420.dp, 490.dp) {
+    fun `About content fits its 420x490 window`() = fits(ABOUT_DIALOG_WIDTH, ABOUT_DIALOG_HEIGHT) {
         AboutDialogContent(onDismiss = {}, appSettings = AppSettings(), theme = ThemeMode.LIGHT)
     }
 
     @Test
     fun `Konami content fits its 420x340 window`() =
-        fits(420.dp, 340.dp) { KonamiEasterEggDialogContent(onDismiss = {}) }
+        fits(KONAMI_DIALOG_WIDTH, KONAMI_DIALOG_HEIGHT) { KonamiEasterEggDialogContent(onDismiss = {}) }
 
     @Test
     fun `MemoryMonitor content fits its 460x500 window at its widest readings`() {
         // Terabyte-scale values, so every "%,d MB" row is as wide as the format can make it and the
         // rows are as likely as they ever get to wrap onto a second line.
         val huge = 9_999_999L * 1024L * 1024L
-        fits(460.dp, 500.dp) {
+        fits(MEMORY_MONITOR_WINDOW_WIDTH, MEMORY_MONITOR_WINDOW_HEIGHT) {
             MemoryMonitorDialogContent(
                 heapUsed = huge,
                 heapCommitted = huge,
@@ -134,15 +136,15 @@ class DialogViewportTest {
      */
     @Test
     fun `RemoteEvent content fits its 500x290 window`() =
-        fits(500.dp, 290.dp) { remoteEventContent(remaining = 0, title = "Amazing Grace") }
+        fits(REMOTE_EVENT_DIALOG_WIDTH, REMOTE_EVENT_DIALOG_HEIGHT) { remoteEventContent(remaining = 0, title = "Amazing Grace") }
 
     @Test
     fun `RemoteEvent content fits its 500x330 window when requests are queued`() =
-        fits(500.dp, 330.dp) { remoteEventContent(remaining = 4, title = "Amazing Grace") }
+        fits(REMOTE_EVENT_DIALOG_WIDTH, REMOTE_EVENT_DIALOG_HEIGHT_QUEUED) { remoteEventContent(remaining = 4, title = "Amazing Grace") }
 
     @Test
     fun `RemoteEvent content fits its window with a long item title`() =
-        fits(500.dp, 290.dp) { remoteEventContent(remaining = 0, title = longText) }
+        fits(REMOTE_EVENT_DIALOG_WIDTH, REMOTE_EVENT_DIALOG_HEIGHT) { remoteEventContent(remaining = 0, title = longText) }
 
     // Every dialog again with its text 30% taller, which is the only handle on growth the three
     // resource-only bodies have. Kept as separate tests so a failure names both the dialog and the
@@ -150,29 +152,29 @@ class DialogViewportTest {
 
     @Test
     fun `AddWebsite content still fits when its text grows`() =
-        fitsWhenTextGrows(500.dp, 440.dp) {
+        fitsWhenTextGrows(ADD_WEBSITE_DIALOG_WIDTH, ADD_WEBSITE_DIALOG_HEIGHT) {
             AddWebsiteDialogContent(onDismiss = {}, onConfirm = { _, _ -> })
         }
 
     @Test
     fun `AddLabel content still fits when its text grows`() =
-        fitsWhenTextGrows(500.dp, 640.dp) {
+        fitsWhenTextGrows(ADD_LABEL_DIALOG_WIDTH, ADD_LABEL_DIALOG_HEIGHT) {
             AddLabelDialogContent(onDismiss = {}, onConfirm = { _, _, _ -> })
         }
 
     @Test
-    fun `About content still fits when its text grows`() = fitsWhenTextGrows(420.dp, 490.dp) {
+    fun `About content still fits when its text grows`() = fitsWhenTextGrows(ABOUT_DIALOG_WIDTH, ABOUT_DIALOG_HEIGHT) {
         AboutDialogContent(onDismiss = {}, appSettings = AppSettings(), theme = ThemeMode.LIGHT)
     }
 
     @Test
     fun `Konami content still fits when its text grows`() =
-        fitsWhenTextGrows(420.dp, 340.dp) { KonamiEasterEggDialogContent(onDismiss = {}) }
+        fitsWhenTextGrows(KONAMI_DIALOG_WIDTH, KONAMI_DIALOG_HEIGHT) { KonamiEasterEggDialogContent(onDismiss = {}) }
 
     @Test
     fun `MemoryMonitor content still fits when its text grows`() {
         val huge = 9_999_999L * 1024L * 1024L
-        fitsWhenTextGrows(460.dp, 500.dp) {
+        fitsWhenTextGrows(MEMORY_MONITOR_WINDOW_WIDTH, MEMORY_MONITOR_WINDOW_HEIGHT) {
             MemoryMonitorDialogContent(
                 heapUsed = huge,
                 heapCommitted = huge,
@@ -189,7 +191,7 @@ class DialogViewportTest {
 
     @Test
     fun `RemoteEvent content still fits when its text grows`() =
-        fitsWhenTextGrows(500.dp, 330.dp) {
+        fitsWhenTextGrows(REMOTE_EVENT_DIALOG_WIDTH, REMOTE_EVENT_DIALOG_HEIGHT_QUEUED) {
             remoteEventContent(remaining = 4, title = "Amazing Grace")
         }
 }
