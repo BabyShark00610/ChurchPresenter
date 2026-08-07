@@ -11,11 +11,15 @@ name: Screenshots
 #   * reg-actions needs write access to pull requests and artifacts, which `test` deliberately does
 #     not have (`contents: read`).
 #
-# No golden images are committed. Skia renders text differently on macOS, Windows and Linux (the
-# same reason AGENT.md tells tests to assert invariants rather than pixels), so a committed golden
-# would be right for whoever generated it and wrong for everyone else. Instead both sides of the
-# comparison are rendered by this job on the same runner: reg-actions keeps the base branch's images
-# as an artifact and diffs this branch's against them.
+# This job never trusts the committed PNGs. Skia renders text differently on macOS, Windows and
+# Linux (the same reason AGENT.md tells tests to assert invariants rather than pixels), so a golden
+# recorded on one machine differs everywhere else by font rendering rather than by the change under
+# review. Both sides of the comparison are therefore rendered by this job on the same runner: the
+# record step overwrites `composeApp/screenshots/` with this runner's output, and reg-actions diffs
+# it against the base branch's images, which it keeps as a workflow artifact.
+#
+# The committed copies exist only so a change on screen is visible in the diff of a PR. Nothing in
+# CI reads them as a baseline.
 on:
   push:
     branches: [main]
@@ -69,7 +73,12 @@ jobs:
         uses: reg-viz/reg-actions@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-directory-path: ./composeApp/build/outputs/roborazzi
+          # Where `roborazzi { outputDir }` in composeApp/build.gradle.kts actually writes. The
+          # default `build/outputs/roborazzi` is overridden there, so pointing at it fails the step
+          # with "'image-directory-path' is not directory" — that directory is never created.
+          # The record step above overwrites the committed PNGs with this runner's renders, which is
+          # what makes the comparison a like-for-like one rather than a cross-platform one.
+          image-directory-path: ./composeApp/screenshots
           # Every changed image is shown in the comment; with a handful of surfaces there is no
           # reason to make a reviewer expand a details block to see what moved.
           comment-report-format: raw
