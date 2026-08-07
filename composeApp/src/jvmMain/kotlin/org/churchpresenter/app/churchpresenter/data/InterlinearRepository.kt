@@ -89,9 +89,21 @@ class InterlinearRepository {
         }
     }
 
+    /**
+     * The verses for one Strong's number, **as a copy**.
+     *
+     * The index holds `MutableList`s that loading appends to, so returning one directly handed the
+     * caller a live view of a list this class goes on mutating. `DictionaryViewModel` keeps it in
+     * `interlinearVerses`, and `cardAvailableBooks` iterates it during composition — so a load
+     * finishing while the Dictionary tab recomposed threw `ConcurrentModificationException` out of
+     * the composition and took the tab down. Seen on CI 2026-08-07.
+     *
+     * A copy is cheap next to the load that produced it, and it is what every caller already
+     * assumed it was getting from a `List` return type.
+     */
     fun getVersesForEntry(number: String): List<InterlinearVerse> {
         val index = if (number.startsWith("G")) greekIndex else hebrewIndex
-        return index[number] ?: emptyList()
+        return index[number]?.toList() ?: emptyList()
     }
 
     fun getBooksWithGreekData(): List<Int>  = greekBookIndex.keys.sorted()
