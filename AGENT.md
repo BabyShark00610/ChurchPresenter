@@ -212,9 +212,12 @@ When writing tests here:
     against it. Example: `BibleViewModel.navigateToReference` bumps `verseSelectionToken` and then
     — same coroutine, no suspension between — bumps `autoFollowLiveToken` only if the match
     qualified, so waiting on the first and then asserting the second is race-free and instant.
-  - When the production code's own delay is the cost and is not injectable (e.g.
-    `BibleEngineClient`'s 2s reconnect backoff floor), **do not write the test**; note the gap in
-    the test class's doc comment instead.
+  - When the production code's own delay is the cost and is not injectable, **do not write the
+    test**; note the gap in the test class's doc comment instead. But first ask whether it has to
+    stay non-injectable: `BibleEngineClient`'s reconnect backoff was the standing example here, and
+    a defaulted `retryFloorMs` constructor parameter both unlocked the reconnect test and removed a
+    flake — a *defaulted constructor parameter* is not the ad-hoc mutable singleton seam banned
+    above. The schedule's shape stays pinned by a pure test of `retryDelayMs`.
   - Where an idle window genuinely is the only terminator (a snapshot with no final frame), keep
     it in the low hundreds of ms — it only has to outlast a loopback gap, not a network.
   - Check the cost of what you added: `./gradlew :composeApp:jvmTest` then read the `time=`

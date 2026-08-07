@@ -63,6 +63,23 @@ data class EngineScripture(
     val detectedVersion: String? = null,
 )
 
+/** The app's wait between reconnect attempts: long enough not to hammer a restarting engine. */
+internal const val DEFAULT_RETRY_FLOOR_MS = 2_000L
+
+/** No reconnect wait grows past this, however many attempts have failed. */
+internal const val MAX_RETRY_DELAY_MS = 30_000L
+
+/**
+ * How long to wait before reconnect attempt number [attempt] (0-based, so 0 is the wait after the
+ * *first* failure): [floorMs] doubled once per prior failure, capped at [MAX_RETRY_DELAY_MS], with
+ * ±20% jitter so a roomful of clients that lost the same engine do not come back in lockstep.
+ * Jitter never takes it below [floorMs].
+ */
+internal fun retryDelayMs(attempt: Int, floorMs: Long = DEFAULT_RETRY_FLOOR_MS): Long {
+    val base = (floorMs shl attempt.coerceAtMost(4)).coerceAtMost(MAX_RETRY_DELAY_MS)
+    return (base * Random.nextDouble(0.8, 1.2)).toLong().coerceAtLeast(floorMs)
+}
+
 /**
  * Client for the Bible Lookup Engine (BLE) microservice. Replaces in-app detection: it (optionally)
  * starts the engine in-process when STT connects, opens a WebSocket to `/bible-engine`, and forwards
@@ -76,10 +93,16 @@ data class EngineScripture(
  * Both callbacks are required and neither is the trailing one by convention — pass them by name.
  * A defaulted trailing lambda here would silently bind `BibleEngineClient { … }` to the wrong
  * callback.
+ *
+ * @param retryFloorMs the shortest wait between reconnect attempts, and the base the backoff doubles
+ *   from. Two seconds in the app — long enough not to hammer an engine that is restarting. Tests pass
+ *   a few milliseconds so a reconnect is observable inside the per-test time budget; that is the only
+ *   reason it is a parameter.
  */
 class BibleEngineClient(
     private val onScripture: (EngineScripture) -> Unit,
     private val onVersion: (String?) -> Unit,
+    private val retryFloorMs: Long = DEFAULT_RETRY_FLOOR_MS,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val httpClient = HttpClient(CIO) {
@@ -159,8 +182,8 @@ class BibleEngineClient(
     }
 
     private suspend fun connectLoop(host: String, port: Int) {
-        // Exponential backoff (floor 2s, cap 30s, ±20% jitter — same shape as InstanceLinkClient)
-        // instead of a fixed 2s hammer; reset on every successful connection.
+        // Exponential backoff (floor [retryFloorMs], cap 30s, ±20% jitter — same shape as
+        // InstanceLinkClient) instead of a fixed hammer; reset on every successful connection.
         var attempt = 0
         while (scope.isActive) {
             try {
@@ -183,9 +206,8 @@ class BibleEngineClient(
             _connected.value = false
             _engineSttConnected.value = null
             if (!scope.isActive) break
-            val base = (2_000L shl attempt.coerceAtMost(4)).coerceAtMost(30_000L)
+            delay(retryDelayMs(attempt, retryFloorMs))
             attempt++
-            delay((base * Random.nextDouble(0.8, 1.2)).toLong().coerceAtLeast(2_000L))
         }
     }
 

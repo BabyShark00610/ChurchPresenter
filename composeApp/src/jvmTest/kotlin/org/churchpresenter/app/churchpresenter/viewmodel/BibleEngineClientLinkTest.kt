@@ -102,10 +102,18 @@ class BibleEngineClientLinkTest {
         detections.clear()
     }
 
-    private fun client(): BibleEngineClient =
+    /**
+     * The production reconnect floor is 2s, so a client that has to retry even once cannot come up
+     * inside this class's time budget — and a single failed connect under load was enough to make
+     * `connect()` below time out, which is what made this class flaky. A few milliseconds keeps the
+     * retry *shape* (doubling, jitter, cap) while costing nothing. The 2s default and the shape
+     * itself are pinned by [BibleEngineRetryDelayTest], which needs no server at all.
+     */
+    private fun client(retryFloorMs: Long = 25L): BibleEngineClient =
         BibleEngineClient(
             onScripture = { e -> detections.add(Detection(e.bookId, e.chapter, e.verseStart, e.verseText)) },
             onVersion = {},
+            retryFloorMs = retryFloorMs,
         ).also { created.add(it) }
 
     /**
@@ -264,11 +272,24 @@ class BibleEngineClientLinkTest {
     }
 
     // ── Dropping ────────────────────────────────────────────────────────────────
-    //
-    // NOT covered here: that the client climbs back on its own after a drop. The retry loop's
-    // backoff floor is 2s and is not injectable, so every such test costs at least that in wall
-    // clock — see the unit-test speed rule in AGENT.md. The drop itself (below) is observable
-    // immediately and is covered.
+
+    @Test
+    fun `the client climbs back on its own after the engine drops it`() {
+        val c = client()
+        c.connect()
+        nextFrame()
+
+        engine.dropConnections()
+
+        // Not waiting on the link going *down* first: the reconnect floor here is milliseconds, so
+        // the down state can come and go between two polls. The connection count only ever climbs.
+        awaitUntil("the client to reconnect unaided") { engine.connectionCount.get() == 2 && c.connected.value }
+        assertEquals(
+            """{"type":"set_tuning","level":"balanced","continuationSpeed":"balanced"}""",
+            nextFrame(),
+            "a reconnected client re-announces its tuning; an engine told nothing runs at its own default"
+        )
+    }
 
     @Test
     fun `the engine's stt health goes back to unknown while the link is down`() {

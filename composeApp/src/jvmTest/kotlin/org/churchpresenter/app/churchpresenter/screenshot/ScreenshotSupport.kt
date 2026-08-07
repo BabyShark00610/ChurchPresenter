@@ -57,8 +57,15 @@ internal const val SCREENSHOT_ROOT = "build/screenshots"
  * for correctness rather than just for passing: a thumbnail still showing its placeholder is a
  * *different image*, so cutting the wait short would produce a screenshot that differs from one run
  * to the next.
+ *
+ * **It must stay comfortably under a minute.** `runTest` — which `runComposeUiTest` builds on —
+ * gives the whole test body 60s, and that is the outer bound no wait in here can exceed. Set to
+ * 60s this constant could never spend its budget: a slow render hit the harness timeout first and
+ * failed with `UncompletedCoroutinesError: After waiting for 1m, the test body did not run to
+ * completion`, which names neither the wait nor the condition. 30s leaves room for the rest of the
+ * test and still fails with the message that says what was being waited for.
  */
-internal const val RENDER_TIMEOUT_MS = 60_000L
+internal const val RENDER_TIMEOUT_MS = 30_000L
 private val PARTS = File("$SCREENSHOT_ROOT/.parts")
 
 /** [rootIndex] 1 shoots an open popup — a dropdown or menu is a compose root of its own. */
