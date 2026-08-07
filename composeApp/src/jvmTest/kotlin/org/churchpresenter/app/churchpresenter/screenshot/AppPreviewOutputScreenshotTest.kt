@@ -48,7 +48,7 @@ class AppPreviewOutputScreenshotTest {
     }
 
     private fun output(name: String, settings: AppSettings = settings(), content: @Composable () -> Unit) =
-        runSkikoComposeUiTest(size = Size(1920f, 1080f), density = Density(1f)) {
+        runSkikoComposeUiTest(size = Size(1920f, 1080f) * PREVIEW_DENSITY, density = Density(PREVIEW_DENSITY)) {
             setContent {
                 Box(screen) {
                     PresenterScreen(appSettings = settings) { content() }

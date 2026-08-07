@@ -644,6 +644,16 @@ kotlin {
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     systemProperty("java.awt.headless", "true")
 
+    // Pixel density for the app-preview screenshots, for exporting retina-sized captures:
+    //   ./gradlew :composeApp:recordRoborazziJvm --tests '*AppPreview*' -PpreviewDensity=2
+    // Left at 1 by default and NOT raised for CI: this harness is the visual-regression baseline on
+    // every pull request, and doubling density quadruples the pixel work. See PREVIEW_DENSITY in
+    // AppPreviewSupport.kt.
+    systemProperty(
+        "churchpresenter.previewDensity",
+        providers.gradleProperty("previewDensity").getOrElse("1"),
+    )
+
     // Point the whole test JVM at a throwaway home directory. Several singletons resolve
     // ~/.churchpresenter paths in a `by lazy` or a constructor -- captured ONCE per JVM -- so
     // without this a test could permanently latch onto (and write into, or delete from) the
