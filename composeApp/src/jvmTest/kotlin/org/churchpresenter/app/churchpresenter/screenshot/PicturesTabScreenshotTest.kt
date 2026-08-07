@@ -78,7 +78,7 @@ class PicturesTabScreenshotTest {
 
     private fun ComposeUiTest.awaitAll(vm: PicturesViewModel) {
         if (vm.images.isEmpty()) return
-        waitUntil("no thumbnail still loading", 5_000) {
+        waitUntil("no thumbnail still loading", RENDER_TIMEOUT_MS) {
             // Thumbnails are decoded on Dispatchers.IO and written into a SnapshotStateMap from
             // there. Without this the write can sit in the global snapshot unapplied while this
             // loop spins, and the placeholder never goes away.

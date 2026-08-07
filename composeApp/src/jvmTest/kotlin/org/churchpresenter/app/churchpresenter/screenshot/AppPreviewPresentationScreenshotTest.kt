@@ -15,7 +15,7 @@ class AppPreviewPresentationScreenshotTest {
     @Test
     fun `the presentation tab`() = appPreview("presentation", Tabs.PRESENTATION) {
         onAllNodes(hasText("Sermon", substring = true))[0].performTouchInput { doubleClick() }
-        waitUntil("the deck rasterised", 20_000) {
+        waitUntil("the deck rasterised", RENDER_TIMEOUT_MS) {
             Snapshot.sendApplyNotifications()
             onAllNodes(hasText("Slide 6")).fetchSemanticsNodes(false).isNotEmpty()
         }

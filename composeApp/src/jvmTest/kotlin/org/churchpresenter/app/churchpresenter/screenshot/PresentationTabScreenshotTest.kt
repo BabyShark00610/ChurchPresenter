@@ -132,13 +132,13 @@ class PresentationTabScreenshotTest {
         val before = vm.loadGeneration
         deck?.let { d -> vm.loadDeck = { LoadResult.Success(d) } }
         vm.addPresentation(file)
-        waitUntil("deck ${file.name} rasterised", 10_000) {
+        waitUntil("deck ${file.name} rasterised", RENDER_TIMEOUT_MS) {
             vm.loadGeneration != before && !vm.isLoading
         }
         // Thumbnails decode on Dispatchers.IO inside produceState. Until each one lands its tile
         // draws as plain black, so wait for every composed slide to have its image, flushing the
         // off-thread snapshot writes that carry them.
-        waitUntil("every composed slide drawn", 5_000) {
+        waitUntil("every composed slide drawn", RENDER_TIMEOUT_MS) {
             Snapshot.sendApplyNotifications()
             val labelled = semantics(SemanticsProperties.Text) { it.joinToString("") { t -> t.text } }
                 .filter { SLIDE_LABEL.matches(it) }.toSet()

@@ -12,7 +12,7 @@ class AppPreviewPicturesScreenshotTest {
 
     @Test
     fun `the pictures tab`() = appPreview("pictures", Tabs.PICTURES) {
-        waitUntil("thumbnails decoded", 10_000) {
+        waitUntil("thumbnails decoded", RENDER_TIMEOUT_MS) {
             Snapshot.sendApplyNotifications()
             onAllNodes(hasText("Loading...")).fetchSemanticsNodes(false).isEmpty()
         }
