@@ -2,7 +2,11 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
@@ -14,9 +18,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.PictureSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import java.awt.image.BufferedImage
@@ -93,6 +100,17 @@ internal fun picturesTab(
     selectedPictureItem: ScheduleItem.PictureItem? = null,
     onInstanceLinkSendNextPicture: (() -> Unit)? = null,
     onInstanceLinkSendPreviousPicture: (() -> Unit)? = null,
+    /**
+     * Constrains the tab's width.
+     *
+     * The controls bar is a `FlowRow` and the grid is `GridCells.Adaptive(200.dp)`, so width is the
+     * only thing that decides how many columns the grid draws and whether the transport controls,
+     * the settings tiles and the keyboard hints sit on one row or wrap onto several. Left null
+     * everywhere else, which gives the tab the whole test window.
+     */
+    width: Dp? = null,
+    /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
+    themeMode: ThemeMode? = null,
     block: ComposeUiTest.(vm: PicturesViewModel, reports: PictureReports) -> Unit,
 ) {
     val appSettings = settings(
@@ -106,22 +124,24 @@ internal fun picturesTab(
         val reports = PictureReports()
         runComposeUiTest {
             setContent {
-                MaterialTheme {
-                    PicturesTab(
-                        viewModel = vm,
-                        appSettings = appSettings,
-                        presenterManager = presenterManager,
-                        selectedPictureItem = selectedPictureItem,
-                        onInstanceLinkSendNextPicture = onInstanceLinkSendNextPicture,
-                        onInstanceLinkSendPreviousPicture = onInstanceLinkSendPreviousPicture,
-                        onAddToSchedule = { path, name, count ->
-                            reports.scheduled += Triple(path, name, count)
-                        },
-                        onSettingsChange = { transform ->
-                            reports.settingsChanges++
-                            reports.settingsAfterChange = transform(appSettings)
-                        },
-                    )
+                ThemedForTest(themeMode) {
+                    Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
+                        PicturesTab(
+                            viewModel = vm,
+                            appSettings = appSettings,
+                            presenterManager = presenterManager,
+                            selectedPictureItem = selectedPictureItem,
+                            onInstanceLinkSendNextPicture = onInstanceLinkSendNextPicture,
+                            onInstanceLinkSendPreviousPicture = onInstanceLinkSendPreviousPicture,
+                            onAddToSchedule = { path, name, count ->
+                                reports.scheduled += Triple(path, name, count)
+                            },
+                            onSettingsChange = { transform ->
+                                reports.settingsChanges++
+                                reports.settingsAfterChange = transform(appSettings)
+                            },
+                        )
+                    }
                 }
             }
             block(vm, reports)
@@ -199,3 +219,9 @@ internal fun ComposeUiTest.awaitThumbnails(vararg names: String) =
     waitUntil("thumbnails for ${names.toList()}") {
         drawnThumbnails().containsAll(names.toList())
     }
+
+@Composable
+private fun ThemedForTest(themeMode: ThemeMode?, content: @Composable () -> Unit) {
+    if (themeMode == null) MaterialTheme(content = content)
+    else ChurchPresenterTheme(themeMode = themeMode, content = content)
+}
