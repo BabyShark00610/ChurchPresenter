@@ -8,6 +8,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import org.churchpresenter.app.churchpresenter.MainDesktop
@@ -22,7 +23,12 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.PictureSettings
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
+import org.churchpresenter.app.churchpresenter.data.settings.WebBookmark
 import org.churchpresenter.app.churchpresenter.data.settings.WindowLayoutSettings
+import kotlinx.serialization.json.Json
+import org.churchpresenter.app.churchpresenter.models.Scene
+import org.churchpresenter.app.churchpresenter.models.SceneSource
+import org.churchpresenter.app.churchpresenter.models.SourceTransform
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.tabs.RecentMediaFiles
 import org.churchpresenter.app.churchpresenter.tabs.Tabs
@@ -56,6 +62,11 @@ private val LIBRARY = File("/tmp/ChurchPresenter").let { neutral ->
 // A real, decodable clip, so the media preview shows video rather than an empty surface.
 private val WELCOME_LOOP_SOURCE = File("src/jvmTest/resources/app-preview/welcome-loop.mp4")
 
+// One of the ~290 stock backgrounds the app ships with, so the scene is built from what a user
+// actually has on hand. Its lower half is near-black, which is why the text needs no scrim.
+private val SUNRISE_SOURCE =
+    File("src/jvmMain/composeResources/files/backgrounds/cross_10037772.jpg")
+
 private val LOWER_THIRD_SOURCE = File("src/jvmTest/resources/app-preview/lower-thirds")
 
 private val KJV_SOURCE = File("src/jvmMain/composeResources/files/bible_samples/kjv1769.spb")
@@ -82,6 +93,7 @@ internal fun appPreview(
     RecentMediaFiles.paths.addAll(
         listOf(File(LIBRARY, "Media/Welcome Loop.mp4").absolutePath, "/tmp/ChurchPresenter/Media/Baptism Testimony.mp4"),
     )
+    writeScenes()
     THEMES.forEach { (suffix, mode) ->
         runSkikoComposeUiTest(size = WINDOW, density = Density(1f)) {
             var actions = ScheduleActions()
@@ -163,7 +175,9 @@ internal fun ComposeUiTest.clickInPanel(description: String) {
 }
 
 private fun ComposeUiTest.selectTab(tab: Tabs) {
-    onNodeWithText(tabLabel(tab)).performClick()
+    // The tab strip scrolls: a tab past the right edge is composed but not clickable until it is
+    // brought into view, and the click silently lands on nothing.
+    onNodeWithText(tabLabel(tab)).performScrollTo().performClick()
     waitForIdle()
 }
 
@@ -236,6 +250,49 @@ private fun serviceSchedule(actions: ScheduleActions) {
     actions.addWebsite("https://example.org/give", "Giving page")
 }
 
+/**
+ * Writes the Canvas scenes where `SceneViewModel` reads them — it owns its own file under
+ * `user.home` and MainDesktop builds it internally, so there is no instance to seed directly.
+ */
+private fun writeScenes() {
+    val scenes = listOf(
+        Scene(
+            id = "scene-welcome",
+            name = "Welcome",
+            sources = listOf(
+                SceneSource.ImageSource(
+                    id = "bg", name = "Cross At Sunset",
+                    transform = SourceTransform(x = 0f, y = 0f, width = 1f, height = 1f),
+                    filePath = File(LIBRARY, "Backgrounds/Cross At Sunset.jpg").absolutePath,
+                    contentScale = "CROP",
+                ),
+                SceneSource.TextSource(
+                    id = "title", name = "Title",
+                    transform = SourceTransform(x = 0.06f, y = 0.66f, width = 0.6f, height = 0.14f),
+                    text = "He Is Risen", fontSize = 104, bold = true, horizontalAlignment = "left",
+                ),
+                SceneSource.TextSource(
+                    id = "verse", name = "Verse",
+                    transform = SourceTransform(x = 0.06f, y = 0.81f, width = 0.62f, height = 0.09f),
+                    text = "\"He is not here: for he is risen\"  ·  Matthew 28:6",
+                    fontSize = 38, fontColor = "#F3DCA8", horizontalAlignment = "left",
+                ),
+                SceneSource.QRCodeSource(
+                    id = "qr", name = "Giving QR",
+                    transform = SourceTransform(x = 0.04f, y = 0.05f, width = 0.1f, height = 0.18f),
+                    content = "https://example.org/give",
+                ),
+            ),
+        ),
+        Scene(id = "scene-countdown", name = "Countdown"),
+        Scene(id = "scene-sermon", name = "Sermon Title"),
+        Scene(id = "scene-notices", name = "Notices"),
+    )
+    val file = File(System.getProperty("user.home"), ".churchpresenter/scenes.json")
+    file.parentFile?.mkdirs()
+    file.writeText(Json { prettyPrint = false }.encodeToString(scenes))
+}
+
 // ── The library on disk ─────────────────────────────────────────────────────
 
 private fun library(): AppSettings {
@@ -252,6 +309,8 @@ private fun library(): AppSettings {
     WELCOME_LOOP_SOURCE.copyTo(File(LIBRARY, "Media/Welcome Loop.mp4"), overwrite = true)
     val lowerThirds = File(LIBRARY, "Lower Thirds").apply { mkdirs() }
     LOWER_THIRD_SOURCE.listFiles()?.forEach { it.copyTo(File(lowerThirds, it.name), overwrite = true) }
+    File(LIBRARY, "Backgrounds").mkdirs()
+    SUNRISE_SOURCE.copyTo(File(LIBRARY, "Backgrounds/Cross At Sunset.jpg"), overwrite = true)
     // Panel sizes an operator would settle on: a schedule panel wide enough to keep its header on
     // one row, and a lyric pane that leaves the song list room to breathe.
     val layout = WindowLayoutSettings(
@@ -273,6 +332,12 @@ private fun library(): AppSettings {
         // No slide-in, so the announcement is settled in the middle of the output at capture time
         // rather than still travelling up from the bottom.
         announcementsSettings = AnnouncementsSettings(animationType = Constants.ANIMATION_NONE),
+        webBookmarks = listOf(
+            WebBookmark(url = "https://example.org/give", title = "Giving"),
+            WebBookmark(url = "https://example.org/notices", title = "Weekly Notices"),
+            WebBookmark(url = "https://example.org/prayer", title = "Prayer Requests"),
+            WebBookmark(url = "https://www.biblegateway.com", title = "Bible Gateway"),
+        ),
         hiddenTabs = emptySet(),
     )
 }
