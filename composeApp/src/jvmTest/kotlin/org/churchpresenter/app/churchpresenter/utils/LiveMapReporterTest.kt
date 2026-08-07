@@ -80,6 +80,19 @@ class LiveMapReporterTest {
     }
 
     @Test
+    fun `provenance fields that are blank are omitted, like the unknown ones`() {
+        // A build made outside git leaves these empty rather than "unknown", and an empty
+        // repo=/commit= on the wire would be counted as a value by the server.
+        val blank = LiveMapReporter.buildPingUrl(
+            "linux", "26.1.0", null, isDevBuild = false,
+            repoSlug = "", commit = "", buildType = "",
+        )
+        assertFalse("repo=" in blank, blank)
+        assertFalse("commit=" in blank, blank)
+        assertFalse("build=" in blank, blank)
+    }
+
+    @Test
     fun `a fork build reports its own repo slug`() {
         val fork = LiveMapReporter.buildPingUrl(
             "windows", "26.1.0", null, isDevBuild = false,
