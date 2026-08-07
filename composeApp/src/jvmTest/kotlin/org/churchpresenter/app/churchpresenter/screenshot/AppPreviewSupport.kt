@@ -1,0 +1,490 @@
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
+package org.churchpresenter.app.churchpresenter.screenshot
+
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.unit.Density
+import org.churchpresenter.app.churchpresenter.MainDesktop
+import org.churchpresenter.app.churchpresenter.ScheduleActions
+import org.churchpresenter.app.churchpresenter.TestSingletons
+import org.churchpresenter.app.churchpresenter.data.RecentPresentationFiles
+import org.churchpresenter.app.churchpresenter.data.SongFileParser
+import org.churchpresenter.app.churchpresenter.data.SongItem
+import org.churchpresenter.app.churchpresenter.data.settings.AnnouncementsSettings
+import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.PictureSettings
+import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
+import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
+import org.churchpresenter.app.churchpresenter.data.settings.WindowLayoutSettings
+import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import org.churchpresenter.app.churchpresenter.tabs.RecentMediaFiles
+import org.churchpresenter.app.churchpresenter.tabs.Tabs
+import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.viewmodel.CompanionSatelliteViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
+import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.PDPage
+import org.apache.pdfbox.pdmodel.PDPageContentStream
+import org.apache.pdfbox.pdmodel.common.PDRectangle
+import org.apache.pdfbox.pdmodel.font.PDType1Font
+import java.awt.Color
+import java.awt.GradientPaint
+import java.awt.image.BufferedImage
+import java.io.File
+import javax.imageio.ImageIO
+
+private const val ROOT = "screenshots/app"
+// Neutral root, so no path on screen carries the developer's own home directory. Falls back to the
+// build dir on a platform without /tmp.
+private val LIBRARY = File("/tmp/ChurchPresenter").let { neutral ->
+    if (neutral.exists() || neutral.mkdirs()) neutral else File("build/app-preview-library").absoluteFile
+}
+
+// The real King James the app ships as a sample: 66 books with every chapter and verse, so the
+// chapter grid and the verse pane are the real thing rather than a fixture's handful.
+// A real, decodable clip, so the media preview shows video rather than an empty surface.
+private val WELCOME_LOOP_SOURCE = File("src/jvmTest/resources/app-preview/welcome-loop.mp4")
+
+private val LOWER_THIRD_SOURCE = File("src/jvmTest/resources/app-preview/lower-thirds")
+
+private val KJV_SOURCE = File("src/jvmMain/composeResources/files/bible_samples/kjv1769.spb")
+
+internal val WINDOW = Size(1600f, 1000f)
+
+internal fun appPreview(
+    name: String,
+    tab: Tabs,
+    seedSchedule: Boolean = true,
+    settings: (AppSettings) -> AppSettings = { it },
+    drive: ComposeUiTest.() -> Unit = {},
+) {
+    TestSingletons.latchSkikoHostOs()
+    TestSingletons.latchToTestHome()
+    val appSettings = settings(library())
+    RecentPresentationFiles.files.clear()
+    RecentPresentationFiles.pinned.clear()
+    RecentPresentationFiles.files.addAll(
+        listOf(File(LIBRARY, "Decks/Sermon.pdf").absolutePath, "/tmp/ChurchPresenter/Decks/Advent Series.pptx"),
+    )
+    RecentMediaFiles.paths.clear()
+    RecentMediaFiles.pinned.clear()
+    RecentMediaFiles.paths.addAll(
+        listOf(File(LIBRARY, "Media/Welcome Loop.mp4").absolutePath, "/tmp/ChurchPresenter/Media/Baptism Testimony.mp4"),
+    )
+    THEMES.forEach { (suffix, mode) ->
+        runSkikoComposeUiTest(size = WINDOW, density = Density(1f)) {
+            var actions = ScheduleActions()
+            val presenterManager = PresenterManager()
+            setContent {
+                ChurchPresenterTheme(themeMode = mode) {
+                    // main.kt provides this around the whole window; MediaTab returns early
+                    // without it and the tab draws as an empty pane.
+                    CompositionLocalProvider(LocalMediaViewModel provides MediaViewModel()) {
+                    MainDesktop(
+                        appSettings = appSettings,
+                        presenterManager = presenterManager,
+                        companionSatelliteViewModel = CompanionSatelliteViewModel(),
+                        onScheduleActionsReady = { actions = it },
+                        // What main.kt does: without it nothing ever goes live and the preview
+                        // panel stays on the background.
+                        presenting = { presenterManager.setPresentingMode(it) },
+                        onVerseSelected = { presenterManager.setSelectedVerses(it) },
+                        onSongItemSelected = {
+                            presenterManager.setLyricSection(it)
+                            presenterManager.setDisplayedLyricSection(it)
+                        },
+                        onAllSectionsChanged = { presenterManager.setAllLyricSections(it) },
+                        onSectionIndexChanged = { presenterManager.setSongDisplaySectionIndex(it) },
+                        onLineIndexChanged = { presenterManager.setSongDisplayLineIndex(it) },
+                        theme = mode,
+                    )
+                    }
+                }
+            }
+            waitForIdle()
+            if (seedSchedule) {
+                serviceSchedule(actions)
+                waitForIdle()
+            }
+            selectTab(tab)
+            drive()
+            // main.kt owns the transition effects that move selected -> displayed and raise the
+            // fade alphas; MainDesktop does not, so nothing would ever reach the live preview.
+            presenterManager.setDisplayedVerses(presenterManager.selectedVerses.value)
+            presenterManager.setDisplayedImagePath(presenterManager.selectedImagePath.value)
+            presenterManager.setPictureTransitionAlpha(1f)
+            presenterManager.setDisplayedSlide(presenterManager.selectedSlide.value)
+            presenterManager.setSlideTransitionAlpha(1f)
+            presenterManager.setDisplayedAnnouncementText(presenterManager.announcementText.value)
+            presenterManager.setAnnouncementTransitionAlpha(1f)
+            presenterManager.setBibleTransitionAlpha(1f)
+            presenterManager.setSongTransitionAlpha(1f)
+            waitForIdle()
+            captureTo(File("$ROOT/${name}_$suffix.png"))
+        }
+    }
+}
+
+/**
+ * The tab's own Go Live button, not the schedule row's — both carry the same description, and the
+ * schedule's sits far to the left of the tab area.
+ */
+internal fun ComposeUiTest.goLive() {
+    val nodes = onAllNodesWithContentDescription("Go Live")
+    val rightmost = nodes.fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .withIndex().maxByOrNull { it.value.boundsInRoot.left } ?: error("no Go Live button on screen")
+    nodes[rightmost.index].performClick()
+    waitForIdle()
+}
+
+/**
+ * A button by description inside the tab's own left panel — the timer panel carries its own Play
+ * and Go Live, and the whole-screen selectors would find the announcement's instead.
+ */
+internal fun ComposeUiTest.clickInPanel(description: String) {
+    val nodes = onAllNodesWithContentDescription(description)
+    val inPanel = nodes.fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .withIndex()
+        .filter { it.value.boundsInRoot.left in 380f..820f }
+    require(inPanel.isNotEmpty()) { "no \"$description\" button in the tab panel" }
+    nodes[inPanel.first().index].performClick()
+    waitForIdle()
+}
+
+private fun ComposeUiTest.selectTab(tab: Tabs) {
+    onNodeWithText(tabLabel(tab)).performClick()
+    waitForIdle()
+}
+
+private fun tabLabel(tab: Tabs) = when (tab) {
+    Tabs.BIBLE -> "Bible"
+    Tabs.SONGS -> "Songs"
+    Tabs.PICTURES -> "Pictures"
+    Tabs.PRESENTATION -> "Presentation"
+    Tabs.MEDIA -> "Media"
+    Tabs.LOWER_THIRD -> "Lower Third"
+    Tabs.ANNOUNCEMENTS -> "Announcements"
+    Tabs.WEB -> "Web"
+    Tabs.CANVAS -> "Canvas"
+    Tabs.QA -> "Q&A"
+    Tabs.STT -> "Captions"
+    Tabs.DICTIONARY -> "Dictionary"
+    Tabs.CROSSWORD -> "Crossword"
+    Tabs.COMPANION_SURFACE -> "Companion"
+}
+
+private fun serviceSchedule(actions: ScheduleActions) {
+    actions.addMedia(File(LIBRARY, "Media/Welcome Loop.mp4").absolutePath, "Welcome Loop", "video")
+    actions.addSong(320, "Come Thou Fount Of Every Blessing", "Hymnal", "song-320")
+    actions.addSong(12, "Amazing Grace", "Hymnal", "song-12")
+    actions.addBibleVerse("Psalms", 23, 1, "The LORD is my shepherd; I shall not want.", "1-3", 19)
+    actions.addPresentation(File(LIBRARY, "Decks/Sermon.pdf").absolutePath, "Sermon", SERMON_SLIDES.size, "pdf")
+    actions.addSong(455, "It Is Well With My Soul", "Hymnal", "song-455")
+    actions.addPicture(File(LIBRARY, "Baptism").absolutePath, "Baptism", PHOTOS.size)
+    actions.addAnnouncement(
+        ScheduleItem.AnnouncementItem(
+            id = "ann-1",
+            text = "Fellowship lunch in the hall after the service",
+        )
+    )
+    actions.addAnnouncement(
+        ScheduleItem.AnnouncementItem(
+            id = "ann-countdown",
+            text = "",
+            isTimer = true,
+            timerMinutes = 5,
+            timerExpiredText = "The service is beginning",
+        )
+    )
+    actions.addAnnouncement(
+        ScheduleItem.AnnouncementItem(
+            id = "ann-until",
+            text = "",
+            isTimer = true,
+            timerMode = Constants.TIMER_MODE_CLOCK,
+            targetHour = 10,
+            targetMinute = 30,
+        )
+    )
+    actions.addAnnouncement(
+        ScheduleItem.AnnouncementItem(
+            id = "ann-countup",
+            text = "",
+            isTimer = true,
+            timerMode = Constants.TIMER_MODE_COUNT_UP,
+        )
+    )
+    actions.addAnnouncement(
+        ScheduleItem.AnnouncementItem(
+            id = "ann-clock",
+            text = "",
+            isTimer = true,
+            timerMode = Constants.TIMER_MODE_CLOCK_DISPLAY,
+        )
+    )
+    actions.addWebsite("https://example.org/give", "Giving page")
+}
+
+// ── The library on disk ─────────────────────────────────────────────────────
+
+private fun library(): AppSettings {
+    val songs = File(LIBRARY, "Songs")
+    val bibles = File(LIBRARY, "Bibles")
+    val pictures = File(LIBRARY, "Baptism")
+    val decks = File(LIBRARY, "Decks")
+    listOf(songs, bibles, pictures, decks).forEach { it.mkdirs() }
+    writeSongs(songs)
+    KJV_SOURCE.copyTo(File(bibles, "kjv1769.spb"), overwrite = true)
+    writePictures(pictures)
+    writeDeck(File(decks, "Sermon.pdf"))
+    File(LIBRARY, "Media").mkdirs()
+    WELCOME_LOOP_SOURCE.copyTo(File(LIBRARY, "Media/Welcome Loop.mp4"), overwrite = true)
+    val lowerThirds = File(LIBRARY, "Lower Thirds").apply { mkdirs() }
+    LOWER_THIRD_SOURCE.listFiles()?.forEach { it.copyTo(File(lowerThirds, it.name), overwrite = true) }
+    // Panel sizes an operator would settle on: a schedule panel wide enough to keep its header on
+    // one row, and a lyric pane that leaves the song list room to breathe.
+    val layout = WindowLayoutSettings(
+        schedulePanelWidthDp = 360,
+        lyricsPanelWidthDp = 380,
+        // The announcements position grid is capped at 400dp and splits that three ways, so the
+        // panel has to clear 400 before "Bottom Center" stops wrapping.
+        announcementsLeftPanelWidthDp = 440,
+    )
+    return AppSettings(
+        schedulePanelWidthDp = 360,
+        maximizedLayout = layout,
+        windowedLayout = layout,
+        songSettings = SongSettings(storageDirectory = songs.absolutePath),
+        bibleSettings = BibleSettings(storageDirectory = bibles.absolutePath, primaryBible = "kjv1769.spb"),
+        pictureSettings = PictureSettings(storageDirectory = pictures.absolutePath),
+        presentationStorageDirectory = decks.absolutePath,
+        streamingSettings = StreamingSettings(lowerThirdFolder = File(LIBRARY, "Lower Thirds").absolutePath),
+        // No slide-in, so the announcement is settled in the middle of the output at capture time
+        // rather than still travelling up from the bottom.
+        announcementsSettings = AnnouncementsSettings(animationType = Constants.ANIMATION_NONE),
+        hiddenTabs = emptySet(),
+    )
+}
+
+private fun writeSongs(dir: File) {
+    val parser = SongFileParser()
+    HYMNS.forEach { hymn ->
+        val book = File(dir, hymn.songbook).apply { mkdirs() }
+        parser.writeSongFile(
+            SongItem(
+                number = hymn.number,
+                title = hymn.title,
+                songbook = hymn.songbook,
+                author = hymn.author,
+                lyrics = hymn.lyrics,
+            ),
+            File(book, "${hymn.number} - ${hymn.title}.song").absolutePath,
+        )
+    }
+}
+
+private val PHOTOS = listOf(
+    "01 Welcome", "02 Gathering", "03 Worship", "04 Baptism Pool", "05 Testimony", "06 The Font",
+    "07 Congregation", "08 Prayer", "09 Youth Team", "10 Fellowship", "11 Candles", "12 Sending",
+)
+
+private fun writePictures(dir: File) {
+    PHOTOS
+        .forEachIndexed { index, name ->
+            val image = BufferedImage(480, 300, BufferedImage.TYPE_INT_RGB)
+            val canvas = image.createGraphics()
+            val hue = (index * 0.14f) % 1f
+            canvas.paint = GradientPaint(
+                0f, 0f, Color.getHSBColor(hue, 0.5f, 0.9f),
+                480f, 300f, Color.getHSBColor((hue + 0.09f) % 1f, 0.85f, 0.4f),
+            )
+            canvas.fillRect(0, 0, 480, 300)
+            canvas.dispose()
+            ImageIO.write(image, "png", File(dir, "$name.png"))
+        }
+}
+
+private val SERMON_SLIDES = listOf(
+    "The God Who Keeps",
+    "Psalm 23:1-6",
+    "1. He Provides",
+    "2. He Restores",
+    "3. He Walks With Us",
+    "Response",
+)
+
+private fun writeDeck(file: File) {
+    PDDocument().use { doc ->
+        SERMON_SLIDES.forEach { title ->
+            val page = PDPage(PDRectangle(720f, 405f))
+            doc.addPage(page)
+            PDPageContentStream(doc, page).use { stream ->
+                stream.beginText()
+                stream.setFont(PDType1Font.HELVETICA_BOLD, 40f)
+                stream.newLineAtOffset(56f, 220f)
+                stream.showText(title)
+                stream.endText()
+                stream.beginText()
+                stream.setFont(PDType1Font.HELVETICA, 20f)
+                stream.newLineAtOffset(56f, 170f)
+                stream.showText("Sunday morning service")
+                stream.endText()
+            }
+        }
+        doc.save(file)
+    }
+}
+
+private class Hymn(
+    val number: String,
+    val title: String,
+    val author: String,
+    val songbook: String = "Hymnal",
+    val lyrics: List<String>,
+)
+
+private val HYMNS = listOf(
+    Hymn("12", "Amazing Grace", "John Newton", lyrics = listOf(
+        "[Verse 1]",
+        "Amazing grace! how sweet the sound",
+        "That saved a wretch like me!",
+        "I once was lost, but now am found,",
+        "Was blind, but now I see.",
+        "[Verse 2]",
+        "'Twas grace that taught my heart to fear,",
+        "And grace my fears relieved;",
+        "How precious did that grace appear",
+        "The hour I first believed!",
+        "[Verse 3]",
+        "Through many dangers, toils and snares,",
+        "I have already come;",
+        "'Tis grace hath brought me safe thus far,",
+        "And grace will lead me home.",
+        "[Verse 4]",
+        "The Lord has promised good to me,",
+        "His word my hope secures;",
+        "He will my shield and portion be,",
+        "As long as life endures.",
+        "[Verse 5]",
+        "Yea, when this flesh and heart shall fail,",
+        "And mortal life shall cease,",
+        "I shall possess, within the veil,",
+        "A life of joy and peace.",
+        "[Verse 6]",
+        "When we've been there ten thousand years,",
+        "Bright shining as the sun,",
+        "We've no less days to sing God's praise",
+        "Than when we'd first begun.",
+    )),
+    Hymn("45", "Be Thou My Vision", "Dallan Forgaill", lyrics = listOf(
+        "[Verse 1]", "Be Thou my vision, O Lord of my heart;", "Naught be all else to me, save that Thou art.",
+        "Thou my best thought, by day or by night,", "Waking or sleeping, Thy presence my light.",
+        "[Verse 2]", "Be Thou my wisdom, and Thou my true word;", "I ever with Thee and Thou with me, Lord.",
+    )),
+    Hymn("78", "Holy, Holy, Holy", "Reginald Heber", lyrics = listOf(
+        "[Verse 1]", "Holy, holy, holy! Lord God Almighty!", "Early in the morning our song shall rise to Thee.",
+        "[Verse 2]", "Holy, holy, holy! all the saints adore Thee,", "Casting down their golden crowns around the glassy sea.",
+    )),
+    Hymn("103", "How Great Thou Art", "Carl Boberg", lyrics = listOf(
+        "[Verse 1]", "O Lord my God, when I in awesome wonder", "Consider all the worlds Thy hands have made.",
+        "[Chorus]", "Then sings my soul, my Saviour God, to Thee,", "How great Thou art, how great Thou art!",
+    )),
+    Hymn("115", "A Mighty Fortress Is Our God", "Martin Luther", lyrics = listOf(
+        "[Verse 1]", "A mighty fortress is our God,", "A bulwark never failing.",
+    )),
+    Hymn("131", "All Hail The Power Of Jesus' Name", "Edward Perronet", lyrics = listOf(
+        "[Verse 1]", "All hail the power of Jesus' name!", "Let angels prostrate fall.",
+    )),
+    Hymn("157", "Crown Him With Many Crowns", "Matthew Bridges", lyrics = listOf(
+        "[Verse 1]", "Crown Him with many crowns,", "The Lamb upon His throne.",
+    )),
+    Hymn("178", "O Worship The King", "Robert Grant", lyrics = listOf(
+        "[Verse 1]", "O worship the King, all glorious above,", "And gratefully sing His power and His love.",
+    )),
+    Hymn("204", "O For A Thousand Tongues To Sing", "Charles Wesley", lyrics = listOf(
+        "[Verse 1]", "O for a thousand tongues to sing", "My great Redeemer's praise.",
+    )),
+    Hymn("221", "Praise To The Lord, The Almighty", "Joachim Neander", lyrics = listOf(
+        "[Verse 1]", "Praise to the Lord, the Almighty, the King of creation!", "O my soul, praise Him, for He is thy health and salvation!",
+    )),
+    Hymn("244", "Rock Of Ages", "Augustus Toplady", lyrics = listOf(
+        "[Verse 1]", "Rock of Ages, cleft for me,", "Let me hide myself in Thee.",
+    )),
+    Hymn("267", "Just As I Am", "Charlotte Elliott", lyrics = listOf(
+        "[Verse 1]", "Just as I am, without one plea,", "But that Thy blood was shed for me.",
+    )),
+    Hymn("289", "Nearer, My God, To Thee", "Sarah F. Adams", lyrics = listOf(
+        "[Verse 1]", "Nearer, my God, to Thee, nearer to Thee!", "E'en though it be a cross that raiseth me.",
+    )),
+    Hymn("320", "Come Thou Fount Of Every Blessing", "Robert Robinson", lyrics = listOf(
+        "[Verse 1]", "Come, Thou Fount of every blessing,", "Tune my heart to sing Thy grace.",
+        "[Verse 2]", "Here I raise mine Ebenezer;", "Hither by Thy help I'm come.",
+    )),
+    Hymn("341", "Abide With Me", "Henry F. Lyte", lyrics = listOf(
+        "[Verse 1]", "Abide with me; fast falls the eventide;", "The darkness deepens; Lord, with me abide.",
+    )),
+    Hymn("367", "Great Is Thy Faithfulness", "Thomas Chisholm", lyrics = listOf(
+        "[Verse 1]", "Great is Thy faithfulness, O God my Father,", "There is no shadow of turning with Thee.",
+    )),
+    Hymn("388", "What A Friend We Have In Jesus", "Joseph Scriven", lyrics = listOf(
+        "[Verse 1]", "What a friend we have in Jesus,", "All our sins and griefs to bear!",
+    )),
+    Hymn("402", "Blessed Assurance", "Fanny Crosby", lyrics = listOf(
+        "[Verse 1]", "Blessed assurance, Jesus is mine!", "O what a foretaste of glory divine!",
+    )),
+    Hymn("419", "To God Be The Glory", "Fanny Crosby", lyrics = listOf(
+        "[Verse 1]", "To God be the glory, great things He hath done,", "So loved He the world that He gave us His Son.",
+    )),
+    Hymn("437", "Come, Thou Long-Expected Jesus", "Charles Wesley", lyrics = listOf(
+        "[Verse 1]", "Come, Thou long-expected Jesus,", "Born to set Thy people free.",
+    )),
+    Hymn("455", "It Is Well With My Soul", "Horatio Spafford", lyrics = listOf(
+        "[Verse 1]", "When peace like a river attendeth my way,", "When sorrows like sea billows roll.",
+        "[Chorus]", "It is well with my soul,", "It is well, it is well with my soul.",
+    )),
+    Hymn("472", "When I Survey The Wondrous Cross", "Isaac Watts", lyrics = listOf(
+        "[Verse 1]", "When I survey the wondrous cross", "On which the Prince of glory died.",
+    )),
+    Hymn("488", "Joyful, Joyful, We Adore Thee", "Henry van Dyke", lyrics = listOf(
+        "[Verse 1]", "Joyful, joyful, we adore Thee,", "God of glory, Lord of love.",
+    )),
+    Hymn("501", "The Old Rugged Cross", "George Bennard", lyrics = listOf(
+        "[Verse 1]", "On a hill far away stood an old rugged cross,", "The emblem of suffering and shame.",
+    )),
+    Hymn("519", "Love Divine, All Loves Excelling", "Charles Wesley", lyrics = listOf(
+        "[Verse 1]", "Love divine, all loves excelling,", "Joy of heaven, to earth come down.",
+    )),
+    Hymn("534", "Guide Me, O Thou Great Jehovah", "William Williams", lyrics = listOf(
+        "[Verse 1]", "Guide me, O Thou great Jehovah,", "Pilgrim through this barren land.",
+    )),
+    Hymn("7", "Blessed Be The Name", "Ralph E. Hudson", songbook = "Gospel Songs", lyrics = listOf(
+        "[Verse 1]", "O for a thousand tongues to sing", "The praises of my God and King!",
+        "[Chorus]", "Blessed be the name, blessed be the name,", "Blessed be the name of the Lord.",
+    )),
+    Hymn("14", "I Need Thee Every Hour", "Annie S. Hawks", songbook = "Gospel Songs", lyrics = listOf(
+        "[Verse 1]", "I need Thee every hour, most gracious Lord;", "No tender voice like Thine can peace afford.",
+    )),
+    Hymn("22", "Sweet Hour Of Prayer", "William W. Walford", songbook = "Gospel Songs", lyrics = listOf(
+        "[Verse 1]", "Sweet hour of prayer! sweet hour of prayer!", "That calls me from a world of care.",
+    )),
+    Hymn("31", "Standing On The Promises", "R. Kelso Carter", songbook = "Gospel Songs", lyrics = listOf(
+        "[Verse 1]", "Standing on the promises of Christ my King,", "Through eternal ages let His praises ring.",
+    )),
+    Hymn("44", "Leaning On The Everlasting Arms", "Elisha A. Hoffman", songbook = "Gospel Songs", lyrics = listOf(
+        "[Verse 1]", "What a fellowship, what a joy divine,", "Leaning on the everlasting arms.",
+    )),
+    Hymn("58", "Softly And Tenderly", "Will L. Thompson", songbook = "Gospel Songs", lyrics = listOf(
+        "[Verse 1]", "Softly and tenderly Jesus is calling,", "Calling for you and for me.",
+    )),
+)
