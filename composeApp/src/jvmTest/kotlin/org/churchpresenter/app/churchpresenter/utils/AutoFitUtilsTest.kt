@@ -242,24 +242,37 @@ class AutoFitUtilsTest {
         assertTrue(eight <= two, "adding lines grew the chart: $two -> $eight")
     }
 
+    /**
+     * Zone heights swept rather than one height picked, for the two tests below.
+     *
+     * Both assert that something *costs* height, which only shows up as a strictly smaller font at a
+     * height where that cost straddles a size step. A single height cannot be relied on to be such a
+     * height on every platform, because how much a row costs depends on the font metrics — which is
+     * why these were originally written as `<=`/`>=` at one height. But an inequality that permits
+     * equality everywhere is satisfied by the cost not existing at all: removing the info row from
+     * the height model, or collapsing the chord-only branch into the stacked one, left both tests
+     * green. Sweeping keeps the assertion platform-independent while still requiring the cost to be
+     * real somewhere.
+     */
+    private val zoneHeights = 100..600 step 20
+
     @Test
     fun `the info line costs height, so it cannot make the chart bigger`() {
-        val without = chartSize(height = 260, hasInfoLine = false)
-        val with = chartSize(height = 260, hasInfoLine = true)
+        val pairs = zoneHeights.map { chartSize(height = it, hasInfoLine = true) to chartSize(height = it, hasInfoLine = false) }
 
-        assertTrue(with <= without, "the info row must take space: $without -> $with")
+        assertTrue(pairs.all { (with, without) -> with <= without }, "the info row gained space somewhere: $pairs")
+        assertTrue(pairs.any { (with, without) -> with < without }, "the info row never cost anything: $pairs")
     }
 
     @Test
     fun `a chord-only intro line is one row, not a stacked pair`() {
-        // No words under the chords, so the chart writes them along the line. In the same zone that
-        // must never be tighter than the equivalent line that also carries words.
-        val introOnly = chartSize(lines = listOf("[G] [C] [D] [Em] [G] [C] [D]"), height = 120)
-        val withWords = chartSize(lines = listOf("[G]Amazing [C]grace how [D]sweet the [Em]sound"), height = 120)
+        // No words under the chords, so the chart writes them along the line — one row at 1.5x rather
+        // than a stacked pair at 2.6x, so it must fit at a larger size in the same zone.
+        val introOnly = listOf("[G] [C] [D] [Em] [G] [C] [D]")
+        val withWords = listOf("[G]Amazing [C]grace how [D]sweet the [Em]sound")
+        val pairs = zoneHeights.map { chartSize(lines = introOnly, height = it) to chartSize(lines = withWords, height = it) }
 
-        assertTrue(
-            introOnly >= withWords,
-            "a chord-only line costs one row and a stacked line costs two: $introOnly vs $withWords",
-        )
+        assertTrue(pairs.all { (intro, words) -> intro >= words }, "a chord-only line was tighter than a stacked one: $pairs")
+        assertTrue(pairs.any { (intro, words) -> intro > words }, "the two line shapes never differed: $pairs")
     }
 }
