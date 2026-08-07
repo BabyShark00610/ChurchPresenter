@@ -2,6 +2,8 @@ package org.churchpresenter.app.churchpresenter.composables
 
 import org.churchpresenter.app.churchpresenter.models.Scene
 import org.churchpresenter.app.churchpresenter.models.SceneSource
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 
 /**
  * Kotlin wrapper for BlackMagic DeckLink JNI native library.
@@ -121,6 +123,7 @@ object DeckLinkManager {
             if (result) {
                 outputDevices.add(deviceIndex)
                 registerShutdownHook()
+                UsageEvents.recordOncePerRun(UsageEvent.DECKLINK_OUTPUT)
             }
             result
         } catch (_: Throwable) {

@@ -33,6 +33,31 @@ class ProjectionSettingsTest {
     }
 
     @Test
+    fun `an output index outside the list reads as the default rather than throwing`() {
+        val settings = ProjectionSettings().withAssignment(0, assignment(2))
+
+        assertEquals(
+            ScreenAssignment(),
+            settings.getAssignment(9),
+            "a stale settings file can name an output this machine no longer has",
+        )
+        assertEquals(ScreenAssignment(), settings.getAssignment(-1))
+    }
+
+    @Test
+    fun `a browser source index outside the list reads as the default too`() {
+        val settings = ProjectionSettings().addBrowserSourceOutput()
+
+        assertEquals(ScreenAssignment(), settings.getBrowserSourceOutput(4))
+        assertEquals(ScreenAssignment(), settings.getBrowserSourceOutput(-1))
+        assertEquals(
+            ScreenAssignment(),
+            ProjectionSettings().getBrowserSourceOutput(0),
+            "browser sources start empty, so reading one before any is added is the ordinary case",
+        )
+    }
+
+    @Test
     fun `a configured output reads back`() {
         val settings = ProjectionSettings().withAssignment(0, assignment(2))
 
@@ -321,6 +346,50 @@ class BibleTranslationListTest {
         assertEquals(listOf("first.spb", "third.spb", "second.spb"), settings.translationList().map { it.fileName })
         assertEquals("#333333", settings.translationList()[1].textColor)
         assertEquals("Georgia", settings.translationList()[1].textFontType)
+    }
+
+    @Test
+    fun `an edit aimed at a translation that is not there changes nothing`() {
+        val settings = BibleSettings().addTranslation("first.spb").addTranslation("second.spb")
+
+        // The Bible settings tab edits by row index, and a row can go while an edit is in flight.
+        assertEquals(settings, settings.updateTranslation(5) { it.copy(textColor = "#FF0000") })
+        assertEquals(settings, settings.updateTranslation(-1) { it.copy(textColor = "#FF0000") })
+        assertEquals(
+            listOf("first.spb", "second.spb"),
+            settings.updateTranslation(2) { it.copy(fileName = "ghost.spb") }
+                .translationList().map { it.fileName },
+            "an out-of-range edit must not append a translation the operator never chose",
+        )
+    }
+
+    @Test
+    fun `a blank file name is not a translation`() {
+        val settings = BibleSettings().addTranslation("first.spb")
+
+        assertEquals(
+            listOf("first.spb"),
+            settings.addTranslation("").translationList().map { it.fileName },
+            "an empty pick would occupy a stack slot and present nothing",
+        )
+        assertEquals(emptyList(), BibleSettings().addTranslation("").translationList())
+    }
+
+    @Test
+    fun `a move that would leave the stack is refused from either end`() {
+        val settings = BibleSettings()
+            .addTranslation("first.spb")
+            .addTranslation("second.spb")
+            .addTranslation("third.spb")
+        val order = settings.translationList().map { it.fileName }
+
+        assertEquals(order, settings.moveTranslation(0, -1).translationList().map { it.fileName },
+            "the first cannot move up")
+        assertEquals(order, settings.moveTranslation(2, 1).translationList().map { it.fileName },
+            "nor the last move down")
+        assertEquals(order, settings.moveTranslation(7, -1).translationList().map { it.fileName },
+            "and a row that is not there moves nothing")
+        assertEquals(order, settings.moveTranslation(-1, 1).translationList().map { it.fileName })
     }
 
     @Test

@@ -71,6 +71,45 @@ internal fun webTab(
     }
 }
 
+/**
+ * Renders the tab with **no** [PresenterManager] at all — the parameter's own default.
+ *
+ * `WebTab` reaches the presenter through about forty `presenterManager?.` calls, and [webTab] always
+ * supplies one, so every null side of those went untaken. This is not a synthetic case: the tab is
+ * declared with `presenterManager: PresenterManager? = null` and previews and the setup wizard
+ * compose it that way, so the whole toolbar has to stay usable with nothing behind it.
+ */
+@OptIn(ExperimentalTestApi::class)
+internal fun webTabWithoutPresenter(
+    settings: (AppSettings) -> AppSettings = { it },
+    selectedWebsiteItem: ScheduleItem.WebsiteItem? = null,
+    block: ComposeUiTest.(reports: WebReports) -> Unit,
+) {
+    TestSingletons.latchToTestHome()
+    val appSettings = settings(AppSettings())
+    val reports = WebReports()
+    runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                WebTab(
+                    presenterManager = null,
+                    selectedWebsiteItem = selectedWebsiteItem,
+                    appSettings = appSettings,
+                    onSettingsChange = { transform ->
+                        reports.settingsChanges++
+                        reports.settingsAfterChange = transform(reports.settingsAfterChange ?: appSettings)
+                    },
+                    onAddToSchedule = { url, title -> reports.scheduled += url to title },
+                    onUpdateScheduleTitle = { url, title -> reports.titleUpdates += url to title },
+                    cefInitialized = true,
+                    cefMacOsUnsupported = false,
+                )
+            }
+        }
+        block(reports)
+    }
+}
+
 internal object WebLabel {
     const val BOOKMARK_ADD = "Add Bookmark"
     const val BOOKMARK_REMOVE = "Remove Bookmark"

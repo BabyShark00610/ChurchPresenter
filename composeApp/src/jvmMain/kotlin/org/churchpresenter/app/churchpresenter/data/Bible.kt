@@ -5,14 +5,9 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.charset.StandardCharsets
 
-// Note: This conversion assumes you're using a Kotlin database library
-// You may need to adapt the SQL queries based on your specific database framework
-// (e.g., Room, Exposed, JDBC, etc.)
-
 data class ChapterResult(val previewIds: List<String>, val verses: List<String>)
 
 class Bible {
-    private var bibleId: String = ""
     private var bibleAbbreviation: String = ""
     private var bibleTitle: String = ""
     private val books = mutableListOf<BibleBook>()
@@ -23,19 +18,6 @@ class Bible {
     private val codeToDisplayMap = HashMap<Long, Long>()
     // Index: full internal code id (BXXXCXXXVXXX) -> the verse, for exact cross-Bible lookups
     private val codeIndex = HashMap<String, BibleVerse>()
-
-    private var conn: java.sql.Connection? = null
-
-
-    private fun executeQuery(sql: String): DatabaseResult {
-        val c = conn ?: throw IllegalStateException("Database connection not set")
-        return JdbcDatabase.executeQuery(c, sql)
-    }
-
-    private fun executeQueryParameterized(sql: String, params: List<Any?>): DatabaseResult {
-        val c = conn ?: throw IllegalStateException("Database connection not set")
-        return JdbcDatabase.executeQueryParameterized(c, sql, params)
-    }
 
     /**
      * Generate abbreviation for a book name
@@ -355,35 +337,8 @@ class Bible {
         chapterIndex.putAll(grouped)
     }
 
-    private fun retrieveBooks() {
-        books.clear()
-        val result = executeQueryParameterized("SELECT book_name, id, chapter_count FROM BibleBooks WHERE bible_id = ?", listOf(bibleId))
-
-        result.forEach { row ->
-            val bookName = row.getString(0).trim()
-            val book = BibleBook(
-                book = bookName,
-                bookId = row.getString(1),
-                chapterCount = row.getInt(2),
-                abbreviation = generateAbbreviation(bookName)
-            )
-            books.add(book)
-        }
-    }
-
-    fun getBooks(): List<String> {
-        // If we already have books parsed from an SPB load, return them.
-        if (books.isNotEmpty()) return books.map { it.book }
-
-        // If no books parsed and a JDBC connection is available, load from DB.
-        if (conn != null) {
-            retrieveBooks()
-            return books.map { it.book }
-        }
-
-        // No data available: return empty list (caller should handle it)
-        return emptyList()
-    }
+    /** The module's books in header order, or empty when nothing has been loaded yet. */
+    fun getBooks(): List<String> = books.map { it.book }
 
     fun getChapter(book: Int, chapter: Int): ChapterResult {
         val previewIds = mutableListOf<String>()

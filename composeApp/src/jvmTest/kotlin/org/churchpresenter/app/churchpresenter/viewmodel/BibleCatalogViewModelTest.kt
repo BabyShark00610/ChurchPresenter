@@ -3,6 +3,8 @@ package org.churchpresenter.app.churchpresenter.viewmodel
 import kotlinx.coroutines.CompletableDeferred
 import org.churchpresenter.app.churchpresenter.data.BibleCatalogOutcome
 import org.churchpresenter.app.churchpresenter.data.BibleInstallOutcome
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEventStore
 import org.churchpresenter.app.churchpresenter.data.BibleModule
 import org.churchpresenter.app.churchpresenter.data.BibleSource
 import org.churchpresenter.app.churchpresenter.data.BibleSourceId
@@ -89,8 +91,29 @@ class BibleCatalogViewModelTest {
         }
     }
 
-    private fun vm(source: BibleSource, storageDirectory: String = dir.absolutePath) =
-        BibleCatalogViewModel(source, storageDirectory, dispatcher = Dispatchers.Unconfined).also { created.add(it) }
+    private fun vm(
+        source: BibleSource,
+        storageDirectory: String = dir.absolutePath,
+        usage: UsageEventStore = UsageEventStore { File(dir, "usage-events.json") },
+    ) = BibleCatalogViewModel(source, storageDirectory, Dispatchers.Unconfined, usage).also { created.add(it) }
+
+    @Test
+    fun `a completed install is counted, a failed one is not`() {
+        val usage = UsageEventStore { File(dir, "usage-events.json") }
+
+        val failing = vm(FakeSource(installOutcome = BibleInstallOutcome.NetworkError), usage = usage)
+        failing.install(module("ENG_ACV")) {}
+        assertTrue(usage.unreported().isEmpty(), "a download that never arrived is not the catalogue being used")
+
+        val working = vm(
+            FakeSource(
+                installOutcome = BibleInstallOutcome.Success(File(dir, "kjv.spb"), "KJV", 66, "Public domain")
+            ),
+            usage = usage,
+        )
+        working.install(module("ENG_ACV")) {}
+        assertEquals(mapOf(UsageEvent.BIBLE_INSTALLED to 1), usage.unreported())
+    }
 
     /** Drains the Swing event queue, which is where the view model's coroutines run. */
     private fun settle() = repeat(2) { SwingUtilities.invokeAndWait { } }

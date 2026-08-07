@@ -135,7 +135,17 @@ val isVlcAvailable: Boolean get() = _vlcAvailable ?: checkVlcAvailable().also { 
  * (e.g. x86_64 VLC on an Apple-Silicon Mac running an arm64 JVM).
  */
 val isVlcArchMismatch: Boolean
-    get() = !isVlcAvailable && "incompatible architecture" in vlcUnavailableReason.lowercase()
+    get() = vlcArchMismatchFrom(isVlcAvailable, vlcUnavailableReason)
+
+/**
+ * The arch-mismatch decision itself, over the two values [isVlcArchMismatch] reads from globals.
+ *
+ * Split out because those globals cannot be driven from a test: `isVlcAvailable` caches the result of
+ * actually loading libvlc on the machine running the suite, so on a developer's box with VLC
+ * installed the getter can only ever answer `false` and the branch that matters is unreachable.
+ */
+internal fun vlcArchMismatchFrom(available: Boolean, reason: String): Boolean =
+    !available && "incompatible architecture" in reason.lowercase()
 
 /**
  * True when a VLC installation was detected on disk but the native library still
@@ -146,8 +156,19 @@ val isVlcArchMismatch: Boolean
  * that is already there.
  */
 val isVlcLoadFailed: Boolean
-    get() = !isVlcAvailable && vlcUnavailableReason.isNotBlank() &&
-        vlcUnavailableReason != "not_found" && !isVlcArchMismatch
+    get() = vlcLoadFailedFrom(isVlcAvailable, vlcUnavailableReason)
+
+/**
+ * The load-failed decision itself, over the two values [isVlcLoadFailed] reads from globals — split
+ * out for the same reason as [vlcArchMismatchFrom].
+ *
+ * The three exclusions are what separate "installed but broken" from the two conditions with their
+ * own messaging: a blank reason or the literal `not_found` means VLC simply isn't there, and an arch
+ * mismatch is reported as itself rather than as a generic load failure.
+ */
+internal fun vlcLoadFailedFrom(available: Boolean, reason: String): Boolean =
+    !available && reason.isNotBlank() && reason != "not_found" &&
+        !vlcArchMismatchFrom(available, reason)
 
 /** Clears the cached result and re-checks VLC availability. */
 fun recheckVlcAvailability(): Boolean {
@@ -207,8 +228,20 @@ internal fun dirContainsVlcLib(dir: Path): Boolean {
 }
 
 /** Returns the auto-detected VLC installation directory, or empty string if not found. */
-fun detectVlcInstallPath(): String {
-    val osName = System.getProperty("os.name", "").lowercase()
+fun detectVlcInstallPath(): String = detectVlcInstallPathFor(System.getProperty("os.name", "").lowercase())
+
+/**
+ * The auto-detected VLC directory for [osName], or empty when VLC isn't in any of the usual places.
+ *
+ * [osName] is a parameter rather than read from `os.name` here so a test can walk all three platforms'
+ * candidate lists without swapping the system property — skiko latches that JVM-wide and would take
+ * every later Compose test in the same JVM down with it.
+ *
+ * The macOS branch is the one that does not simply return the first hit: when `VLC.app` is present but
+ * its `MacOS/lib` holds no libvlc, the bundle root is returned anyway, because that is still where the
+ * user installed VLC and JNA may yet find the library through it.
+ */
+internal fun detectVlcInstallPathFor(osName: String): String {
     return when {
         "win" in osName -> {
             val paths = listOfNotNull(
@@ -238,19 +271,26 @@ fun detectVlcInstallPath(): String {
 }
 
 /** Checks common installation paths for the VLC native library on each OS. */
-private fun isVlcInstalledOnSystem(): Boolean {
-    // Check custom path first
-    if (vlcCustomPath.isNotBlank()) {
-        if (dirContainsVlcLib(Paths.get(vlcCustomPath))) return true
+private fun isVlcInstalledOnSystem(): Boolean =
+    vlcInstalledOn(System.getProperty("os.name", "").lowercase(), vlcCustomPath, ::readCommandOutput)
+
+/**
+ * Whether VLC is installed, given the OS, the user's configured [customPath] and a way to run
+ * `which`.
+ *
+ * The custom path is consulted before the well-known ones so a deliberately chosen install always
+ * wins over whatever else happens to be on the machine. `which vlc` is a Linux-only last resort:
+ * it proves the *player* is on PATH, not that libvlc is anywhere JNA will look, so it is worth
+ * trying only where distributions reliably ship the two together.
+ */
+internal fun vlcInstalledOn(osName: String, customPath: String, run: CommandRunner): Boolean {
+    if (customPath.isNotBlank()) {
+        val custom = try { Paths.get(customPath) } catch (_: Exception) { null }
+        if (custom != null && dirContainsVlcLib(custom)) return true
     }
-    if (detectVlcInstallPath().isNotBlank()) return true
-    // Fallback for Linux: check if vlc is on PATH
-    val osName = System.getProperty("os.name", "").lowercase()
+    if (detectVlcInstallPathFor(osName).isNotBlank()) return true
     if ("win" !in osName && "mac" !in osName && "darwin" !in osName) {
-        return try {
-            val proc = ProcessBuilder("which", "vlc").start()
-            proc.waitFor() == 0
-        } catch (_: Exception) { false }
+        return run(listOf("which", "vlc"), 0L).exitCode == 0
     }
     return false
 }

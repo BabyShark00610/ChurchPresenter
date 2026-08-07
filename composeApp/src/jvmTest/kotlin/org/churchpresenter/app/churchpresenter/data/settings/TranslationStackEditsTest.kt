@@ -88,6 +88,7 @@ class TranslationStackEditsTest {
         val before = settings(screenSelection = listOf(1))
 
         assertEquals(before, before.removeBibleTranslation(7))
+        assertEquals(before, before.removeBibleTranslation(-1), "nor does a negative index")
     }
 
     // ── Reordering ──────────────────────────────────────────────────────────────────────────────
@@ -129,6 +130,23 @@ class TranslationStackEditsTest {
 
         assertEquals(before, before.moveBibleTranslation(0, -1))
         assertEquals(before, before.moveBibleTranslation(2, 1))
+    }
+
+    @Test
+    fun `moving a translation that is not in the stack changes nothing`() {
+        val before = settings(screenSelection = listOf(1))
+
+        assertEquals(before, before.moveBibleTranslation(9, -1), "no such row to move")
+        assertEquals(before, before.moveBibleTranslation(-1, 1))
+    }
+
+    @Test
+    fun `moving one up leaves a selection below the move where it was`() {
+        // rst moves above kjv; niv sat below both and is untouched by it.
+        val after = settings(screenSelection = listOf(2)).moveBibleTranslation(1, -1)
+
+        assertEquals(listOf("rst.spb", "kjv.spb", "niv.spb"), after.stack())
+        assertEquals(listOf(2), after.screen().bibleTranslations)
     }
 
     // ── Swapping ────────────────────────────────────────────────────────────────────────────────
