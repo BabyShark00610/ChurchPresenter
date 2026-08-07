@@ -37,6 +37,28 @@ internal val THEMES = listOf("light" to ThemeMode.LIGHT, "dark" to ThemeMode.DAR
  * which is what a reviewer actually wants — two opaque PNG blobs in a diff are not comparable by eye.
  */
 internal const val SCREENSHOT_ROOT = "build/screenshots"
+
+/**
+ * How long to let real work — decoding thumbnails, rasterising a deck — finish before failing.
+ *
+ * This is the *failure* path, not the success path: every one of these waits ends the moment its
+ * condition holds, so a generous value costs a fast machine nothing. It exists only so a hang fails
+ * the test instead of hanging the job.
+ *
+ * It is deliberately far larger than the work takes on a developer's machine. The record job runs
+ * every `*ScreenshotTest*` class in one go on a two-core runner, so the same decode that finishes in
+ * milliseconds locally competes with everything else for CPU. `PicturesTabScreenshotTest` had 5s and
+ * failed on CI with *"Condition (no thumbnail still loading) still not satisfied after 5000 ms"* the
+ * first time the job got big enough — while the identical wait elsewhere had been given 10s, which
+ * is exactly the drift a shared constant prevents.
+ *
+ * **This is not the forbidden "widen the timeout to fix a flake".** These waits terminate on a
+ * positive signal and the timeout never ends them on the happy path. The wait is also load-bearing
+ * for correctness rather than just for passing: a thumbnail still showing its placeholder is a
+ * *different image*, so cutting the wait short would produce a screenshot that differs from one run
+ * to the next.
+ */
+internal const val RENDER_TIMEOUT_MS = 60_000L
 private val PARTS = File("$SCREENSHOT_ROOT/.parts")
 
 /** [rootIndex] 1 shoots an open popup — a dropdown or menu is a compose root of its own. */
