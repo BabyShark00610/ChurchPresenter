@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +17,9 @@ import org.churchpresenter.app.churchpresenter.data.BibleModule
 import org.churchpresenter.app.churchpresenter.data.BibleSource
 import org.churchpresenter.app.churchpresenter.data.InstallPhase
 import org.churchpresenter.app.churchpresenter.utils.Constants
-import java.io.File
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEventStore
+import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 
 enum class BibleCatalogError { NETWORK_ERROR, RATE_LIMITED, FAILURE }
 
@@ -44,6 +47,8 @@ class BibleCatalogViewModel(
      * deadline, and the test fails by timeout expiry — which `AGENT.md` rules out explicitly.
      */
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
+    /** Where a completed install is counted. Injected so a test reads its own file, not the install's. */
+    private val usage: UsageEventStore = UsageEvents,
 ) {
 
     private val viewModelScope = CoroutineScope(dispatcher + SupervisorJob())
@@ -223,6 +228,9 @@ class BibleCatalogViewModel(
             }
             when (outcome) {
                 is BibleInstallOutcome.Success -> {
+                    // Only a completed install counts — a download that failed or was refused is
+                    // the catalogue not working, which is the opposite of the catalogue being used.
+                    usage.record(UsageEvent.BIBLE_INSTALLED)
                     markInstalled(module.fileName)
                     lastInstalled = InstalledBible(module.fileName, outcome.title, outcome.books, outcome.rights)
                     onInstalled(module.fileName)

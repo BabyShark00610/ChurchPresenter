@@ -183,6 +183,11 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.availableSongColumns
 import org.churchpresenter.app.churchpresenter.utils.draggedColumnIndex
+import org.churchpresenter.app.churchpresenter.utils.UsageEvent
+import org.churchpresenter.app.churchpresenter.utils.UsageEvents
+import org.churchpresenter.app.churchpresenter.utils.isDualLanguagePresentation
+import org.churchpresenter.app.churchpresenter.utils.isSplitScreenSong
+import org.churchpresenter.app.churchpresenter.utils.isChordChartPresentation
 import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
 import org.churchpresenter.app.churchpresenter.utils.mergeColumnOrder
 import org.churchpresenter.app.churchpresenter.utils.moveColumn
@@ -303,6 +308,17 @@ fun SongsTab(
                     songbook = song.songbook,
                     author = song.author
                 )
+                // Bilingual worship actually happening, rather than merely being configured. Sits
+                // under the same "different song went live" guard so a service counts songs, not
+                // section changes.
+                val outputs = appSettings.projectionSettings.screenAssignments
+                if (isDualLanguagePresentation(song, outputs)) {
+                    UsageEvents.record(UsageEvent.SONG_DUAL_LANGUAGE)
+                }
+                if (isSplitScreenSong(outputs)) UsageEvents.record(UsageEvent.SONG_SPLIT_SCREEN)
+                if (isChordChartPresentation(song, appSettings.stageMonitorSettings.showChords, outputs)) {
+                    UsageEvents.record(UsageEvent.SONG_CHORD_CHART)
+                }
             }
         }
         // Instance Link Controller mode: a genuine go-live with a *different* song needs the primary
