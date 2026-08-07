@@ -1255,6 +1255,56 @@ class MainLogicTest {
     }
 
     @Test
+    fun `a floating size saved on a bigger monitor is brought back onto this one`() {
+        // Sized on a 4K display, reopened on a laptop panel. Unclamped, the window opens with its
+        // own edges past the screen, and an edge you cannot reach is an edge you cannot drag.
+        assertEquals(
+            1920 to 1080,
+            startupWindowSize(
+                isFloating = true, savedWidth = 3840, savedHeight = 2160,
+                primaryWidth = 1920, primaryHeight = 1080,
+            ),
+        )
+    }
+
+    @Test
+    fun `a floating window dragged down to nothing does not reopen at nothing`() {
+        // The saved size is written back verbatim on exit, so without a floor the collapse persists
+        // across restarts and there is no window left to fix it with.
+        assertEquals(
+            MIN_MAIN_WINDOW_WIDTH to MIN_MAIN_WINDOW_HEIGHT,
+            startupWindowSize(
+                isFloating = true, savedWidth = 20, savedHeight = 10,
+                primaryWidth = 1920, primaryHeight = 1080,
+            ),
+        )
+    }
+
+    @Test
+    fun `on a display smaller than the floor the window opens too big rather than too small`() {
+        // An oversized window can still be moved and resized; a collapsed one cannot, so the lower
+        // bound wins the tie.
+        assertEquals(
+            MIN_MAIN_WINDOW_WIDTH to MIN_MAIN_WINDOW_HEIGHT,
+            startupWindowSize(
+                isFloating = true, savedWidth = 100, savedHeight = 100,
+                primaryWidth = 640, primaryHeight = 480,
+            ),
+        )
+    }
+
+    @Test
+    fun `a floating size that already fits is left exactly as it was`() {
+        assertEquals(
+            1600 to 900,
+            startupWindowSize(
+                isFloating = true, savedWidth = 1600, savedHeight = 900,
+                primaryWidth = 1920, primaryHeight = 1080,
+            ),
+        )
+    }
+
+    @Test
     fun `a window with geometry worth restoring reopens where it was`() {
         assertEquals(
             120 to 60,

@@ -30,12 +30,17 @@ import kotlin.test.Test
  * assertions would flake (see `AGENT.md`). These tests assert nothing at all. They render a surface
  * and hand the image to Roborazzi; the comparison happens in CI, between the images this branch
  * produces and the ones the base branch produces, both rendered on the same Linux runner. That
- * sidesteps the platform problem entirely: no golden is ever committed, so none can be stale or
- * wrong for the machine reading it.
+ * sidesteps the platform problem entirely: no committed image is ever used as the baseline, so a
+ * stale one cannot fail a build on the machine reading it.
+ *
+ * The PNGs under `composeApp/screenshots/` are committed all the same, but only so that a change on
+ * screen shows up in the diff of a pull request. CI overwrites them with its own renders before
+ * comparing, so nothing depends on which platform recorded the copy in git.
  *
  * Consequences worth knowing:
- * - Running this suite locally writes PNGs under `build/outputs/roborazzi` and asserts nothing. It
- *   is still a smoke test — a presenter that throws while composing fails here.
+ * - Recording locally writes PNGs to `composeApp/screenshots/` — the `roborazzi.outputDir` set in
+ *   `composeApp/build.gradle.kts` — and asserts nothing. It is still a smoke test: a presenter that
+ *   throws while composing fails here.
  * - `captureRoboImage` is inert unless a Roborazzi task turned recording on, so an ordinary
  *   `./gradlew :composeApp:jvmTest` pays only the composition, not the file write.
  * - What a diff means is a judgement call, not a failure: a deliberate design change shows up here
