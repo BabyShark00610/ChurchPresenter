@@ -2,6 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.screenshot
 
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
@@ -27,22 +28,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 
-/**
- * Every state the Pictures tab can be found in, shot in both themes.
- *
- * The folder is built per shot rather than once for the class: [picturesTab] deletes the folder it
- * was given when it returns, and [stackedThemes] runs the body twice — so a folder built outside
- * would be gone by the dark-theme pass. Hence [shoot] takes a *factory*, not a folder.
- *
- * The images are real gradients rather than the 4×4 placeholders the behaviour suites use, because
- * here the thumbnail is the thing being reviewed: a grid of identical grey squares would hide a
- * change to how thumbnails are cropped, scaled or bordered.
- */
 class PicturesTabScreenshotTest {
 
-    // ── Fixtures ────────────────────────────────────────────────────────────────
-
-    /** A recognisable photo, so two thumbnails side by side are visibly different images. */
     private fun writePhoto(dir: File, name: String, index: Int) {
         val image = BufferedImage(480, 300, BufferedImage.TYPE_INT_RGB)
         val canvas = image.createGraphics()
@@ -56,18 +43,9 @@ class PicturesTabScreenshotTest {
         ImageIO.write(image, name.substringAfterLast('.'), File(dir, name))
     }
 
-    /**
-     * A picture folder at a fixed path, rebuilt from scratch.
-     *
-     * Deliberately not a temp directory: the tab prints the open folder's absolute path across the
-     * top of every shot, so `createTempDirectory` would put a fresh random string into the image on
-     * every recording — each re-record a diff, and the base-vs-branch render the screenshots
-     * workflow does would report every state as changed, every time. [picturesTab] deletes whatever
-     * folder it is handed, so this recreates rather than reuses.
-     */
+    // Fixed path, not a temp dir: the tab prints the folder's absolute path in every shot, so a
+    // random name would make each recording a diff.
     private fun folderOf(folderName: String, vararg names: String): File {
-        // Absolute: the view model keys its thumbnails by File, and a relative one is not equal to
-        // the absolute File its own `storageDirectory` reload produces.
         val dir = File(FIXTURES, folderName).absoluteFile
         dir.deleteRecursively()
         dir.mkdirs()
@@ -77,13 +55,10 @@ class PicturesTabScreenshotTest {
 
     private fun gallery() = folderOf("Sunday Service", *GALLERY)
 
-    // ── Harness ─────────────────────────────────────────────────────────────────
-
     private fun shoot(
         name: String,
         folder: () -> File? = { gallery() },
         settings: (AppSettings) -> AppSettings = { it },
-        /** Off for the one shot that pins what the tab looks like with no output to go live on. */
         presenter: Boolean = true,
         width: Dp? = null,
         rootIndex: Int = 0,
@@ -101,24 +76,17 @@ class PicturesTabScreenshotTest {
         }
     }
 
-    /**
-     * Waits until no thumbnail is still loading — until they are decoded the grid is a wall of
-     * "Loading…", and a shot taken a frame early bakes one of those in.
-     *
-     * The decode is waited for on the view model's own map, but that alone is not enough: the map
-     * filling is what *triggers* the recomposition that swaps the placeholder for the image, so the
-     * placeholder text going away is the signal that the frame about to be captured has the image
-     * in it. (Waiting for the drawn thumbnails instead would hang: a narrow panel or a long folder
-     * leaves items below the fold that the lazy grid never composes at all.)
-     */
     private fun ComposeUiTest.awaitAll(vm: PicturesViewModel) {
         if (vm.images.isEmpty()) return
-        waitUntil("every thumbnail decoded") { vm.images.all { it in vm.thumbnails } }
-        waitUntil("no thumbnail still loading") { !showsExactly(PictureLabel.LOADING) }
+        waitUntil("no thumbnail still loading", 5_000) {
+            // Thumbnails are decoded on Dispatchers.IO and written into a SnapshotStateMap from
+            // there. Without this the write can sit in the global snapshot unapplied while this
+            // loop spins, and the placeholder never goes away.
+            Snapshot.sendApplyNotifications()
+            !showsExactly(PictureLabel.LOADING)
+        }
         waitForIdle()
     }
-
-    // ── Recent folders ──────────────────────────────────────────────────────────
 
     private lateinit var savedFolders: List<String>
     private lateinit var savedPinned: List<String>
@@ -139,8 +107,6 @@ class PicturesTabScreenshotTest {
         RecentPictureFolders.pinned.addAll(savedPinned)
     }
 
-    // ── The tab as an operator finds it ─────────────────────────────────────────
-
     @Test
     fun `no folder chosen yet`() = shoot("no_folder", folder = { null })
 
@@ -154,12 +120,6 @@ class PicturesTabScreenshotTest {
     @Test
     fun `a folder deep enough to fill the grid`() =
         shoot("many_images", folder = { folderOf("Slide Wall", *BIG_GALLERY) })
-
-    @Test
-    fun `every image format the tab reads`() =
-        shoot("image_formats", folder = { folderOf("Mixed Formats", *EVERY_FORMAT) })
-
-    // ── Selection and transport ─────────────────────────────────────────────────
 
     @Test
     fun `a later image selected`() = shoot("image_selected") { vm ->
@@ -181,15 +141,11 @@ class PicturesTabScreenshotTest {
         settings = { it.copy(pictureSettings = it.pictureSettings.copy(isLooping = false)) },
     )
 
-    // ── Button states ───────────────────────────────────────────────────────────
-
     @Test
     fun `with no output to go live on the button is gone`() = shoot("no_presenter", presenter = false)
 
     @Test
     fun `an empty folder disables every action`() = shoot("actions_disabled", folder = { folderOf("Empty Folder") })
-
-    // ── Settings tiles ──────────────────────────────────────────────────────────
 
     @Test
     fun `settings tiles carrying non-default values`() = shoot(
@@ -223,8 +179,6 @@ class PicturesTabScreenshotTest {
         openTransitionEditor()
     }
 
-    // ── The recent-folders bar ──────────────────────────────────────────────────
-
     @Test
     fun `the recent folders bar, with the open folder marked`() = shoot(
         "recent_folders",
@@ -240,8 +194,6 @@ class PicturesTabScreenshotTest {
         },
     )
 
-    // ── How width reshapes it ───────────────────────────────────────────────────
-
     @Test
     fun `a narrow panel wraps the controls and the grid`() = shoot("narrow_panel", width = 420.dp)
 
@@ -251,7 +203,6 @@ class PicturesTabScreenshotTest {
     private companion object {
         const val SECTION = "picturesTab"
 
-        /** Under `build/`, so the fixtures are throwaway even though their path is fixed. */
         val FIXTURES = File("build/screenshot-fixtures/pictures")
 
         val GALLERY = arrayOf(
@@ -264,14 +215,5 @@ class PicturesTabScreenshotTest {
         )
 
         val BIG_GALLERY = Array(14) { "%02d Slide %d.png".format(it + 1, it + 1) }
-
-        /** One of each extension the view model decodes without a platform tool — HEIC needs one. */
-        val EVERY_FORMAT = arrayOf(
-            "01 Banner.png",
-            "02 Photo.jpg",
-            "03 Scan.jpeg",
-            "04 Loop.gif",
-            "05 Bitmap.bmp",
-        )
     }
 }

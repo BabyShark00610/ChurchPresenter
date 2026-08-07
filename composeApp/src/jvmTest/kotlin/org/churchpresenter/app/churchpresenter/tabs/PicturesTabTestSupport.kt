@@ -100,16 +100,7 @@ internal fun picturesTab(
     selectedPictureItem: ScheduleItem.PictureItem? = null,
     onInstanceLinkSendNextPicture: (() -> Unit)? = null,
     onInstanceLinkSendPreviousPicture: (() -> Unit)? = null,
-    /**
-     * Constrains the tab's width.
-     *
-     * The controls bar is a `FlowRow` and the grid is `GridCells.Adaptive(200.dp)`, so width is the
-     * only thing that decides how many columns the grid draws and whether the transport controls,
-     * the settings tiles and the keyboard hints sit on one row or wrap onto several. Left null
-     * everywhere else, which gives the tab the whole test window.
-     */
     width: Dp? = null,
-    /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
     themeMode: ThemeMode? = null,
     block: ComposeUiTest.(vm: PicturesViewModel, reports: PictureReports) -> Unit,
 ) {
