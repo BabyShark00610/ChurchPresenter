@@ -25,7 +25,9 @@ import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
 import org.churchpresenter.app.churchpresenter.data.settings.WebBookmark
 import org.churchpresenter.app.churchpresenter.data.settings.WindowLayoutSettings
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import org.churchpresenter.app.churchpresenter.models.QuestionDto
 import org.churchpresenter.app.churchpresenter.models.Scene
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.models.SourceTransform
@@ -39,6 +41,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.CompanionSatelliteViewM
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
+import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
@@ -94,6 +97,7 @@ internal fun appPreview(
         listOf(File(LIBRARY, "Media/Welcome Loop.mp4").absolutePath, "/tmp/ChurchPresenter/Media/Baptism Testimony.mp4"),
     )
     writeScenes()
+    writeQuestions()
     THEMES.forEach { (suffix, mode) ->
         runSkikoComposeUiTest(size = WINDOW, density = Density(1f)) {
             var actions = ScheduleActions()
@@ -107,6 +111,11 @@ internal fun appPreview(
                         appSettings = appSettings,
                         presenterManager = presenterManager,
                         companionSatelliteViewModel = CompanionSatelliteViewModel(),
+                        qaManager = QAManager(),
+                        // The app treats a non-empty server URL as "the companion server is up" —
+                        // it is what clears the Q&A tab's "server not running" banner and gives the
+                        // remote panels something to show.
+                        serverUrl = "http://192.168.1.42:8080",
                         onScheduleActionsReady = { actions = it },
                         // What main.kt does: without it nothing ever goes live and the preview
                         // panel stays on the background.
@@ -171,6 +180,24 @@ internal fun ComposeUiTest.clickInPanel(description: String) {
         .filter { it.value.boundsInRoot.left in 380f..820f }
     require(inPanel.isNotEmpty()) { "no \"$description\" button in the tab panel" }
     nodes[inPanel.first().index].performClick()
+    waitForIdle()
+}
+
+/**
+ * The Go Live button belonging to the row that shows [rowText] — a list where every row carries one
+ * cannot be driven by position alone.
+ */
+internal fun ComposeUiTest.goLiveOnRow(rowText: String) {
+    val row = onAllNodes(androidx.compose.ui.test.hasText(rowText, substring = true))
+        .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .first().boundsInRoot
+    val nodes = onAllNodesWithContentDescription("Go Live")
+    val onRow = nodes.fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .withIndex()
+        // x guard as well as y: a schedule row at the same height carries its own Go Live, and
+        // without this the click lands on the schedule instead of the question.
+        .first { it.value.boundsInRoot.center.y in row.top..row.bottom && it.value.boundsInRoot.left > 380f }
+    nodes[onRow.index].performClick()
     waitForIdle()
 }
 
@@ -248,6 +275,37 @@ private fun serviceSchedule(actions: ScheduleActions) {
         )
     )
     actions.addWebsite("https://example.org/give", "Giving page")
+}
+
+/**
+ * Writes the Q&A questions into `~/.churchpresenter/qa_state.json`, the same file `QAManager`
+ * reads at construction and writes back on every change — so they survive a settings dump rather
+ * than living only in the preview run.
+ *
+ * The wrapper object is private to `QAManager`, so the two DTO lists are serialised and the
+ * envelope written around them.
+ */
+private fun writeQuestions() {
+    val asked = listOf(
+        QuestionDto("q1", "How do we know the resurrection actually happened?", "Sarah", "", 1_770_000_000_000, "APPROVED", 12, 12, 0),
+        QuestionDto("q2", "What does it mean to be baptised in the Spirit?", "Michael", "", 1_770_000_060_000, "APPROVED", 9, 9, 0),
+        QuestionDto("q3", "How can I share my faith with family who aren't interested?", "Grace", "", 1_770_000_120_000, "PENDING", 7, 7, 0),
+        QuestionDto("q4", "Why does God allow suffering?", "Daniel", "", 1_770_000_180_000, "PENDING", 6, 6, 0),
+        QuestionDto("q5", "Is it wrong to doubt sometimes?", "Ruth", "", 1_770_000_240_000, "PENDING", 4, 4, 0),
+        QuestionDto("q6", "How should we pray when we don't know what to ask for?", "Peter", "", 1_770_000_300_000, "PENDING", 3, 3, 0),
+        QuestionDto("q7", "What's the difference between grace and mercy?", "Hannah", "", 1_770_000_360_000, "DENIED", 0, 0, 0),
+    )
+    val answered = listOf(
+        QuestionDto("q0", "Where in the Bible does it talk about the good shepherd?", "Anna", "", 1_769_999_400_000, "DONE", 15, 15, 0),
+    )
+    val list = ListSerializer(QuestionDto.serializer())
+    val json = Json { encodeDefaults = true }
+    val file = File(System.getProperty("user.home"), ".churchpresenter/qa_state.json")
+    file.parentFile?.mkdirs()
+    file.writeText(
+        """{"questions":${json.encodeToString(list, asked)},""" +
+            """"history":${json.encodeToString(list, answered)},"votedIps":{}}"""
+    )
 }
 
 /**
