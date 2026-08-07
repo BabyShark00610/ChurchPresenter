@@ -53,7 +53,7 @@ import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 
-private const val ROOT = "screenshots/previewApp"
+private const val ROOT = "$SCREENSHOT_ROOT/previewApp"
 // Neutral root, so no path on screen carries the developer's own home directory. Falls back to the
 // build dir on a platform without /tmp.
 private val LIBRARY = File("/tmp/ChurchPresenter").let { neutral ->
