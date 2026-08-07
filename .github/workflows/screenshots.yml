@@ -1,0 +1,78 @@
+name: Screenshots
+
+# Renders the presenter surfaces the congregation actually sees and posts the visual difference
+# against the base branch as a PR comment.
+#
+# Deliberately NOT part of the `test` workflow, for two reasons:
+#
+#   * `test` is the required status check on main. A visual difference is not a failure — a
+#     deliberate design change looks exactly like a regression — so it must never be able to block
+#     a merge. This workflow is advisory and its check is not required.
+#   * reg-actions needs write access to pull requests and artifacts, which `test` deliberately does
+#     not have (`contents: read`).
+#
+# No golden images are committed. Skia renders text differently on macOS, Windows and Linux (the
+# same reason AGENT.md tells tests to assert invariants rather than pixels), so a committed golden
+# would be right for whoever generated it and wrong for everyone else. Instead both sides of the
+# comparison are rendered by this job on the same runner: reg-actions keeps the base branch's images
+# as an artifact and diffs this branch's against them.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  # reg-actions stores the baseline images as workflow artifacts and reads the base branch's.
+  actions: write
+
+concurrency:
+  group: screenshots-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # composeApp mounts the submodules' sources via kotlin.srcDir, so it does not compile
+          # without them — the same requirement the test workflow has.
+          submodules: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Only the screenshot class: the rest of the suite is the `test` workflow's job and would
+      # add ~14 minutes here for nothing.
+      - name: Render screenshots
+        timeout-minutes: 20
+        run: ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
+
+      - name: Compare with the base branch
+        uses: reg-viz/reg-actions@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          image-directory-path: ./composeApp/screenshots
+          # Every changed image is shown in the comment; with a handful of surfaces there is no
+          # reason to make a reviewer expand a details block to see what moved.
+          comment-report-format: raw
+          # Edits the existing comment in place instead of stacking one per push, and marks it
+          # resolved once a difference is fixed.
+          outdated-comment-action: update

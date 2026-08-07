@@ -5,6 +5,9 @@ package org.churchpresenter.app.churchpresenter.tabs
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
@@ -75,6 +78,8 @@ internal fun scheduleTab(
     /** Constrains the panel, for the layout tests that need it narrow enough to wrap. */
     width: Dp? = null,
     seed: ScheduleViewModel.() -> Unit = {},
+    /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
+    themeMode: ThemeMode? = null,
     block: ComposeUiTest.(vm: ScheduleViewModel, reports: ScheduleReports) -> Unit,
 ) {
     TestSingletons.latchToTestHome()
@@ -87,7 +92,7 @@ internal fun scheduleTab(
         val reports = ScheduleReports()
         runComposeUiTest {
             setContent {
-                MaterialTheme {
+                ThemedForTest(themeMode) {
                     Box(modifier = if (width != null) Modifier.width(width) else Modifier) {
                     ScheduleTab(
                         scheduleViewModel = vm,
@@ -246,4 +251,10 @@ internal fun ComposeUiTest.orderOf(vararg labels: String): List<String> {
         .sortedBy { it.first }
         .map { it.second }
         .distinct()
+}
+
+@Composable
+private fun ThemedForTest(themeMode: ThemeMode?, content: @Composable () -> Unit) {
+    if (themeMode == null) MaterialTheme(content = content)
+    else ChurchPresenterTheme(themeMode = themeMode, content = content)
 }

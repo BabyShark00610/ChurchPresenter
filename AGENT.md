@@ -91,7 +91,39 @@ Presentation deps in `composeApp/build.gradle.kts` are mirrored in
 ./gradlew :composeApp:check            # compile + all unit tests
 ./gradlew :composeApp:jacocoTestReport # coverage → build/reports/jacoco/jacocoTestReport/html/
 bash cleanup_check.sh                  # repo code-quality report
+
+# Screenshots → composeApp/screenshots/<section>/ (committed; one folder per test class)
+./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
 ```
+
+Every state is shot in **both themes and stacked into one image**, light above dark — go through
+`stackedThemes` (or `captureComponent`, which wraps it) and a state is written once, not twice. One
+folder per test class (`screenshots/<section>/`). An
+open popup (dropdown, menu, tooltip) is its own compose root: pass `rootIndex = 1` or `onRoot()`
+fails with "expected exactly 1 node". Two captures that come out byte-identical mean the state was
+never reached — check with `md5 -q screenshots/<section>/*.png | sort | uniq -d`.
+
+**Shoot a shared composable in its own suite rather than only through the tab that uses it** —
+`DropdownSelector`, `GoLiveButton`, `ActionIconButton` and friends are used by many tabs, so one
+image per state beats the same button appearing inside a dozen tab screenshots. `captureComponent`
+takes a `drive` block for the interaction (opening a menu) and `rootIndex` for the popup it opens,
+and crops what it shoots to the drawn content — a popup root is the whole window, so without that an
+open menu arrives as a menu on a screenful of empty background. Tab and presenter shots are **not**
+cropped: there the empty space is the layout.
+A tab's *own* extracted composables are `private` and stay that way: widening them to `internal` to
+photograph them is refactoring production code for testability. Their states are covered through
+the tab.
+
+Screenshots are committed so a change on screen is reviewable in the diff. **Re-record them on the
+same OS CI uses (Linux), not on macOS or Windows** — Skia rasterises text per platform, so images
+recorded elsewhere differ everywhere by font rendering rather than by the change under review:
+```bash
+docker run --rm -v "$PWD":/w -w /w eclipse-temurin:21 \
+  ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
+```
+The PR comment does not read these files: `.github/workflows/screenshots.yml` renders both the base
+branch and the branch on one runner and diffs those, so it is immune to the platform split. A
+difference there is advisory, not a failure — a deliberate design change looks like a regression.
 
 A failure that makes no sense — unresolved references to symbols that exist, unrelated suites
 failing, a `NoClassDefFoundError` at runtime — is a stale build. `clean` does not clear it;
