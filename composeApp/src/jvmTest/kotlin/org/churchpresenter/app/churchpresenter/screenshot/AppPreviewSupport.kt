@@ -83,6 +83,34 @@ private val LOWER_THIRD_SOURCE = File("src/jvmTest/resources/app-preview/lower-t
 
 private val KJV_SOURCE = File("src/jvmMain/composeResources/files/bible_samples/kjv1769.spb")
 
+/**
+ * The pixel density every app-preview render is captured at. `1f` unless overridden.
+ *
+ * The preview shots are the ones used for the website, where they want to be crisp on a retina
+ * display — but this same harness is the CI visual-regression baseline that runs on **every** pull
+ * request, and doubling the density quadruples the pixel work. `the announcements tab` already costs
+ * ~3.9s against AGENT.md's ~1s bar, so making 2x the default would tax every push for a benefit only
+ * a marketing export ever collects.
+ *
+ * So it is a knob rather than a new default. Recording high-DPI captures:
+ *
+ * ```
+ * ./gradlew :composeApp:recordRoborazziJvm --tests '*AppPreview*' -PpreviewDensity=2
+ * ```
+ *
+ * **The canvas has to grow with it.** `runSkikoComposeUiTest`'s `size` is in *pixels*, not dp, so
+ * raising density alone does not render the same layout more finely — it scales the UI up inside an
+ * unchanged canvas and crops it. Done that way the fourth thumbnail simply falls off the window and
+ * the test fails looking for it. Multiplying the size by the density keeps the layout identical in
+ * dp and renders it at more pixels, which is what "retina" means here.
+ *
+ * At 2 the whole-app shots come out 3200x2000 and the output shots 3840x2160. **Do not commit a
+ * baseline recorded this way** — every image would differ from CI's and the next comparison would
+ * report the lot as changed.
+ */
+internal val PREVIEW_DENSITY: Float =
+    System.getProperty("churchpresenter.previewDensity")?.toFloatOrNull()?.takeIf { it > 0f } ?: 1f
+
 internal val WINDOW = Size(1600f, 1000f)
 
 internal fun appPreview(
@@ -108,7 +136,7 @@ internal fun appPreview(
     writeScenes()
     writeQuestions()
     THEMES.forEach { (suffix, mode) ->
-        runSkikoComposeUiTest(size = WINDOW, density = Density(1f)) {
+        runSkikoComposeUiTest(size = WINDOW * PREVIEW_DENSITY, density = Density(PREVIEW_DENSITY)) {
             var actions = ScheduleActions()
             val presenterManager = PresenterManager()
             setContent {
