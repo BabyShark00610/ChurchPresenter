@@ -678,15 +678,7 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
 }
 
 // ── Screenshots (Roborazzi) ───────────────────────────────────────────────────
-// Record: ./gradlew :composeApp:recordRoborazziJvm --tests '*PresenterScreenshotTest*'
-// Verify: ./gradlew :composeApp:verifyRoborazziJvm  --tests '*PresenterScreenshotTest*'
-//
-// Committed, not generated into build/, so the images are reviewable in a diff and a PR can show
-// what changed on screen. The catch is that Skia rasterises text differently per platform, so an
-// image recorded on macOS is not the one Linux produces: re-record on the same OS CI uses before
-// trusting a `verify`, or the difference will be the font engine rather than the change under
-// review. `.github/workflows/screenshots.yml` sidesteps this for the PR comment by rendering BOTH
-// sides on the same runner, so it never reads these files.
+// Committed, so a change on screen shows up in the diff. Record on Linux — see AGENT.md.
 roborazzi {
     outputDir.set(layout.projectDirectory.dir("screenshots"))
 }

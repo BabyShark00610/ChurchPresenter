@@ -61,15 +61,15 @@ jobs:
 
       # Only the screenshot class: the rest of the suite is the `test` workflow's job and would
       # add ~14 minutes here for nothing.
-      - name: Render presenter screenshots
+      - name: Render screenshots
         timeout-minutes: 20
-        run: ./gradlew :composeApp:recordRoborazziJvm --tests '*PresenterScreenshotTest*'
+        run: ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
 
       - name: Compare with the base branch
         uses: reg-viz/reg-actions@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-directory-path: ./composeApp/build/outputs/roborazzi
+          image-directory-path: ./composeApp/screenshots
           # Every changed image is shown in the comment; with a handful of surfaces there is no
           # reason to make a reviewer expand a details block to see what moved.
           comment-report-format: raw

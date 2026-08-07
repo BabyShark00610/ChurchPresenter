@@ -5,6 +5,9 @@ package org.churchpresenter.app.churchpresenter.tabs
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -150,6 +153,8 @@ internal fun bibleTab(
     width: Dp? = null,
     selectedVerseItem: ScheduleItem.BibleVerseItem? = null,
     bibleEngineClient: BibleEngineClient? = null,
+    /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
+    themeMode: ThemeMode? = null,
     block: ComposeUiTest.(vm: BibleViewModel, reports: BibleReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-bible-tab").toFile()
@@ -171,7 +176,7 @@ internal fun bibleTab(
         val reports = BibleReports()
         runComposeUiTest {
             setContent {
-                MaterialTheme {
+                ThemedForTest(themeMode) {
                     Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
                     BibleTab(
                         viewModel = vm,
@@ -305,3 +310,9 @@ internal fun ComposeUiTest.listedVerseLines(): List<String> =
         .sortedBy { it.first }
         .map { it.second }
         .distinct()
+
+@Composable
+private fun ThemedForTest(themeMode: ThemeMode?, content: @Composable () -> Unit) {
+    if (themeMode == null) MaterialTheme(content = content)
+    else ChurchPresenterTheme(themeMode = themeMode, content = content)
+}
