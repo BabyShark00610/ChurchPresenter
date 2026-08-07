@@ -47,9 +47,9 @@ fun AddWebsiteDialog(
 ) {
     val mainWindowState = LocalMainWindowState.current
     val dialogState = rememberDialogState(
-        position = centeredOnMainWindow(mainWindowState, 500.dp, 440.dp),
-        width = 500.dp,
-        height = 440.dp
+        position = centeredOnMainWindow(mainWindowState, ADD_WEBSITE_DIALOG_WIDTH, ADD_WEBSITE_DIALOG_HEIGHT),
+        width = ADD_WEBSITE_DIALOG_WIDTH,
+        height = ADD_WEBSITE_DIALOG_HEIGHT
     )
 
     DialogWindow(

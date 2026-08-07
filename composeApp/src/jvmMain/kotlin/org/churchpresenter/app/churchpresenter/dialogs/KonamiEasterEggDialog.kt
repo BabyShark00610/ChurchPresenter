@@ -74,9 +74,9 @@ fun KonamiEasterEggDialog(
     DialogWindow(
         onCloseRequest = onDismiss,
         state = rememberDialogState(
-            position = centeredOnMainWindow(mainWindowState, 420.dp, 340.dp),
-            width = 420.dp,
-            height = 340.dp
+            position = centeredOnMainWindow(mainWindowState, KONAMI_DIALOG_WIDTH, KONAMI_DIALOG_HEIGHT),
+            width = KONAMI_DIALOG_WIDTH,
+            height = KONAMI_DIALOG_HEIGHT
         ),
         title = stringResource(Res.string.konami_dialog_title),
         resizable = false
