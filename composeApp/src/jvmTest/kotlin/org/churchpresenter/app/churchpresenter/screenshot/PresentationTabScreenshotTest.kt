@@ -141,16 +141,16 @@ class PresentationTabScreenshotTest {
         waitUntil("every composed slide drawn", 5_000) {
             Snapshot.sendApplyNotifications()
             val labelled = semantics(SemanticsProperties.Text) { it.joinToString("") { t -> t.text } }
-                .filter { it.startsWith(SLIDE) }.toSet()
+                .filter { SLIDE_LABEL.matches(it) }.toSet()
             val drawn = semantics(SemanticsProperties.ContentDescription) { it.first() }
-                .filter { it.startsWith(SLIDE) }.toSet()
+                .filter { SLIDE_LABEL.matches(it) }.toSet()
             drawn.containsAll(labelled)
         }
         waitForIdle()
     }
 
     private fun <T> ComposeUiTest.semantics(key: SemanticsPropertyKey<T>, read: (T) -> String): List<String> =
-        onAllNodes(SemanticsMatcher.keyIsDefined(key))
+        onAllNodes(SemanticsMatcher.keyIsDefined(key), useUnmergedTree = true)
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
             .mapNotNull { node -> node.config.getOrNull(key)?.let(read) }
 
@@ -313,7 +313,8 @@ class PresentationTabScreenshotTest {
         const val SECTION = "presentationTab"
 
         const val PLAY = "Play"
-        const val SLIDE = "Slide "
+        // "Slide 3", the tile label — not "Slide 3 of 6", which is the counter in the controls bar.
+        val SLIDE_LABEL = Regex("""Slide \d+""")
         const val ANIMATION_TYPE = "ANIMATION TYPE"
         const val AUTO_SCROLL = "AUTO-SCROLL INTERVAL"
         const val TRANSITION = "TRANSITION DURATION"
