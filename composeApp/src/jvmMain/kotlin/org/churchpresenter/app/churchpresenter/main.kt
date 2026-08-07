@@ -179,6 +179,7 @@ import org.churchpresenter.app.churchpresenter.dialogs.StatisticsDialog
 import org.churchpresenter.app.churchpresenter.dialogs.UpdateAvailableDialog
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
+import java.awt.Dimension
 import java.awt.GraphicsDevice
 import java.awt.GraphicsEnvironment
 import java.io.File
@@ -1026,6 +1027,12 @@ fun main() {
                 icon = painterResource(Res.drawable.ic_app_icon),
                 state = state
             ) {
+                // The OS enforces this while the window is being dragged; `startupWindowSize` only
+                // sees the result afterwards. Without it a window can be dragged to nothing, and
+                // since the size is written back on exit, that nothing is what it reopens as.
+                LaunchedEffect(Unit) {
+                    window.minimumSize = Dimension(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
+                }
                 MacMenuBarActivationFix()
                 LanguageProvider(language = currentLanguage) {
                     AppThemeWrapper(theme = theme) {

@@ -74,4 +74,42 @@ class WindowUtilsTest {
         val result = centeredOnMainWindow(state, dialogWidth = 940.dp, dialogHeight = 700.dp)
         assertEquals(WindowPosition(490.dp, 190.dp), result)
     }
+
+    // dialogSizeWithin — the settings dialog asks for 1400x900, which exceeds a 1366x768 laptop
+    // panel in both directions, so it opened with its own edges and its Save row off the screen.
+
+    @Test
+    fun `a dialog that fits the display is left at the size it asked for`() {
+        assertEquals(
+            DpSize(1400.dp, 900.dp),
+            dialogSizeWithin(1400.dp, 900.dp, screenWidth = 2560.dp, screenHeight = 1440.dp),
+        )
+    }
+
+    @Test
+    fun `a dialog too big for the display is brought inside it on both axes`() {
+        assertEquals(
+            DpSize(1318.dp, 720.dp),
+            dialogSizeWithin(1400.dp, 900.dp, screenWidth = 1366.dp, screenHeight = 768.dp),
+        )
+    }
+
+    @Test
+    fun `only the axis that overflows is shrunk`() {
+        // A tall, narrow display: the width fits, the height does not.
+        assertEquals(
+            DpSize(1400.dp, 852.dp),
+            dialogSizeWithin(1400.dp, 900.dp, screenWidth = 1600.dp, screenHeight = 900.dp),
+        )
+    }
+
+    @Test
+    fun `an implausible screen size is ignored rather than resolved to nothing`() {
+        // What a headless probe reports. Preferring the declared size fails visibly, where honouring
+        // a 0x0 "display" would open every dialog at nothing and look like a rendering bug.
+        assertEquals(
+            DpSize(1400.dp, 900.dp),
+            dialogSizeWithin(1400.dp, 900.dp, screenWidth = 0.dp, screenHeight = 0.dp),
+        )
+    }
 }

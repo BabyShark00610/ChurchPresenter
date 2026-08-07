@@ -85,6 +85,8 @@ class SongHeaderParsingTest {
     fun `mismatched bracket pairs are not headers`() {
         assertFalse(isHeaderLine("[Verse}"))
         assertFalse(isHeaderLine("{Verse]"))
+        assertFalse(isChorusHeader("{Chorus"), "an unclosed brace is a lyric line, not a chorus")
+        assertFalse(isChorusHeader("Chorus}"), "and so is a stray closing one")
     }
 
     @Test

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performMouseInput
+import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -28,6 +29,11 @@ import kotlin.test.assertTrue
  * bare 6dp `Box` with no semantics — so it is reached positionally, just past the right edge of the
  * header it belongs to. That is stated rather than hidden: if the header layout changes, these two
  * resize tests are the ones to re-check.
+ *
+ * Only the columns shown by default — number, title, songbook — have a resize test. Tune, Plays,
+ * Author and Composer lay out past the right edge of the test window, so their dividers cannot be
+ * pressed: the header node exists, the drag lands outside the window and nothing moves. Their arms
+ * of `setColWidth` are therefore uncovered.
  *
  * See `SongsTabTestSupport.kt` for the harness.
  */
@@ -130,6 +136,37 @@ class SongsTabColumnLayoutTest {
             assertTrue(after > before, "the column must actually get wider ($before -> $after)")
         }
 
+    /**
+     * Drags [label]'s divider in a composition of its own and asserts the width [read]s back wider.
+     *
+     * One composition per column on purpose: dragging several in the same table pushes the headers
+     * after them along, so the next divider is no longer where it was measured.
+     */
+    private fun assertResizeWritesOwnField(label: String, read: (SongSettings) -> Int) =
+        songsTab(hiddenCols = allShown) { _, reports ->
+            dragDivider(label, dx = 60f)
+
+            val saved = assertNotNull(
+                reports.settingsAfterChange?.songSettings,
+                "dragging \"$label\" wrote nothing to settings",
+            )
+            assertTrue(
+                read(saved) > read(SongSettings()),
+                "\"$label\" did not widen its own field: ${read(SongSettings())} -> ${read(saved)}",
+            )
+        }
+
+    // Each header routes to its own settings field. Wired to the wrong one, a resize would silently
+    // move a different column — invisible until the table is reopened next Sunday.
+
+    @Test
+    fun `resizing Number writes the number width`() =
+        assertResizeWritesOwnField(Col.NUMBER) { it.colWidthNumber }
+
+    @Test
+    fun `resizing Song Book writes the songbook width`() =
+        assertResizeWritesOwnField(Col.SONG_BOOK) { it.colWidthSongbook }
+
     @Test
     fun `a column cannot be dragged narrower than its minimum`() =
         songsTab(hiddenCols = allShown) { _, reports ->
@@ -147,6 +184,12 @@ class SongsTabColumnLayoutTest {
         }
 
     private object Col {
+        const val NUMBER = "Number"
         const val TITLE = "Title"
+        const val SONG_BOOK = "Song Book"
+        const val TUNE = "Tune"
+        const val PLAY_COUNT = "Plays"
+        const val AUTHOR = "Author"
+        const val COMPOSER = "Composer"
     }
 }

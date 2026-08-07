@@ -68,9 +68,9 @@ fun AddLabelDialog(
     // at 560dp still cropped the recent-color swatches down to an unrecognizable sliver. 640dp
     // leaves ~50dp of slack over the measured worst case.
     val dialogState = rememberDialogState(
-        position = centeredOnMainWindow(mainWindowState, 500.dp, 640.dp),
-        width = 500.dp,
-        height = 640.dp
+        position = centeredOnMainWindow(mainWindowState, ADD_LABEL_DIALOG_WIDTH, ADD_LABEL_DIALOG_HEIGHT),
+        width = ADD_LABEL_DIALOG_WIDTH,
+        height = ADD_LABEL_DIALOG_HEIGHT
     )
 
     DialogWindow(

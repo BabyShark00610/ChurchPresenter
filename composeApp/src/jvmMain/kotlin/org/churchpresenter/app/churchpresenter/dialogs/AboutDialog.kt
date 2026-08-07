@@ -84,9 +84,9 @@ fun AboutDialog(
     DialogWindow(
         onCloseRequest = onDismiss,
         state = rememberDialogState(
-            position = centeredOnMainWindow(mainWindowState, 420.dp, 490.dp),
-            width = 420.dp,
-            height = 490.dp
+            position = centeredOnMainWindow(mainWindowState, ABOUT_DIALOG_WIDTH, ABOUT_DIALOG_HEIGHT),
+            width = ABOUT_DIALOG_WIDTH,
+            height = ABOUT_DIALOG_HEIGHT
         ),
         title = stringResource(Res.string.about_title),
         resizable = false
