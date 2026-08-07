@@ -11,6 +11,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 /**
@@ -240,5 +241,28 @@ class InterlinearRepositoryTest {
             repository.getVersesForEntry("G26").isEmpty(),
             "current behaviour: the retry returns without reading, and the index stays empty",
         )
+    }
+
+    /**
+     * The caller must not be handed the index's own list.
+     *
+     * The index stores `MutableList`s and loading appends to them, so returning one directly gave
+     * the caller a live view of a list this class goes on mutating. `DictionaryViewModel` holds the
+     * result in `interlinearVerses` and `cardAvailableBooks` iterates it during composition, so a
+     * load completing mid-recomposition threw `ConcurrentModificationException` out of the
+     * composition and took the Dictionary tab down with it. Seen on CI 2026-08-07.
+     *
+     * Asserting on identity rather than contents is the point: equal contents held either before or
+     * after the fix, and it is the sharing that does the damage.
+     */
+    @Test
+    fun `the verses for an entry are a copy, not the index's own list`() {
+        val repository = loaded()
+
+        val first = repository.getVersesForEntry("G26")
+        val second = repository.getVersesForEntry("G26")
+
+        assertEquals(first, second, "the same entry must still answer with the same verses")
+        assertNotSame(first, second, "callers were handed the index's own mutable list")
     }
 }
