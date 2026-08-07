@@ -3,10 +3,18 @@
 package org.churchpresenter.app.churchpresenter.screenshot
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.ic_add
+import churchpresenter.composeapp.generated.resources.ic_edit
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
@@ -76,12 +84,80 @@ class TabControlsScreenshotTest {
     }
 
     @Test
-    fun `focus lost banner`() = captureComponent(SECTION, "focus_lost_banner") {
-        FocusLostBanner(
-            state = rescueState(),
-            text = "Keyboard shortcuts paused — click here to restore",
+    fun `edit song button`() = captureComponent(SECTION, "edit_song_button") {
+        ActionIconButton(
+            onClick = {},
+            tooltipText = "Edit Song",
+            painter = painterResource(Res.drawable.ic_edit),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
         )
     }
+
+    @Test
+    fun `new song button`() = captureComponent(SECTION, "new_song_button") {
+        ActionIconButton(
+            onClick = {},
+            tooltipText = "New Song",
+            painter = painterResource(Res.drawable.ic_add),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+        )
+    }
+
+    @Test
+    fun `the songs action row with a song selected`() = captureComponent(SECTION, "songs_action_row") {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ActionIconButton(
+                onClick = {},
+                tooltipText = "Edit Song",
+                painter = painterResource(Res.drawable.ic_edit),
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+            )
+            ActionIconButton(
+                onClick = {},
+                tooltipText = "New Song",
+                painter = painterResource(Res.drawable.ic_add),
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+            )
+            AddToScheduleButton(onClick = {}, tooltipText = "Add to Schedule")
+            GoLiveButton(onClick = {}, tooltipText = "Go Live")
+        }
+    }
+
+    @Test
+    fun `focus lost banner`() = captureComponent(SECTION, "focus_lost_banner") {
+        Box(Modifier.width(640.dp)) {
+            FocusLostBanner(
+                state = rescueState(),
+                text = "Keyboard shortcuts paused — click here to restore",
+            )
+        }
+    }
+
+    @Test
+    fun `focus lost banner wrapped in a narrow panel`() =
+        captureComponent(SECTION, "focus_lost_banner_narrow") {
+            Box(Modifier.width(260.dp)) {
+                FocusLostBanner(
+                    state = rescueState(),
+                    text = "Keyboard shortcuts paused — click here to restore",
+                )
+            }
+        }
+
+    @Test
+    fun `focus lost banner hidden while the tab has focus`() =
+        captureComponent(SECTION, "focus_lost_banner_hidden") {
+            Box(Modifier.width(640.dp).height(56.dp)) {
+                FocusLostBanner(
+                    state = rescueState().apply { onFocusChanged(true) },
+                    text = "Keyboard shortcuts paused — click here to restore",
+                )
+            }
+        }
 
     private fun rescueState() = FocusLostRescueState(
         null,

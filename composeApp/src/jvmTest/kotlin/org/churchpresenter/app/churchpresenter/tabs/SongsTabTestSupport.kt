@@ -3,6 +3,9 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -51,6 +54,9 @@ internal data class SongFixture(
     val songbook: String = "Hymnal",
     val author: String = "",
     val lyrics: List<String> = listOf("[Verse 1]", "a line of $title"),
+    /** The second language, for the bilingual layouts. Empty for a single-language song. */
+    val secondaryLyrics: List<String> = emptyList(),
+    val secondaryTitle: String = "",
 )
 
 /**
@@ -145,6 +151,8 @@ internal fun songsTab(
      */
     scheduleSelection: MutableState<ScheduleItem.SongItem?> = mutableStateOf(null),
     scheduleSelectionVersion: MutableState<Int> = mutableStateOf(0),
+    /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
+    themeMode: ThemeMode? = null,
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -159,6 +167,8 @@ internal fun songsTab(
                     songbook = s.songbook,
                     author = s.author,
                     lyrics = s.lyrics,
+                    secondaryTitle = s.secondaryTitle,
+                    secondaryLyrics = s.secondaryLyrics,
                 ),
                 File(book, "${s.number} - ${s.title}.song").absolutePath,
             )
@@ -186,7 +196,7 @@ internal fun songsTab(
         reports.songsDir = dir
         runComposeUiTest {
             setContent {
-                MaterialTheme {
+                ThemedForTest(themeMode) {
                     SongsTab(
                         viewModel = vm,
                         appSettings = settings,
@@ -278,4 +288,10 @@ internal fun ComposeUiTest.listedTitles(from: List<SongFixture> = defaultSongs):
         .sortedBy { it.first }
         .map { it.second }
         .distinct()
+}
+
+@Composable
+private fun ThemedForTest(themeMode: ThemeMode?, content: @Composable () -> Unit) {
+    if (themeMode == null) MaterialTheme(content = content)
+    else ChurchPresenterTheme(themeMode = themeMode, content = content)
 }

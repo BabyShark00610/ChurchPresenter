@@ -84,13 +84,35 @@ class BibleTabScreenshotTest {
     }
 
     @Test
+    fun `a range of verses shift-selected`() = shoot("multi_verse_range") { vm ->
+        vm.selectVerse(0)
+        vm.shiftClickVerse(1)
+        waitForIdle()
+    }
+
+    @Test
+    fun `search mode reference`() = shoot("search_mode_reference") { vm ->
+        vm.cycleSearchMode()
+        waitForIdle()
+        bibleSearch("John 3:16")
+    }
+
+    @Test
+    fun `search mode text`() = shoot("search_mode_text") { vm ->
+        vm.cycleSearchMode()
+        vm.cycleSearchMode()
+        waitForIdle()
+        runSearch("shepherd")
+    }
+
+    @Test
     fun `search results`() = shoot("search_results") { runSearch("shepherd") }
 
     @Test
     fun `search with no matches`() = shoot("search_no_matches") { runSearch("zzzznotinthisbible") }
 
     @Test
-    fun `a reference typed into search`() = shoot("search_reference") { bibleSearch("John 3:16") }
+    fun `a reference in auto mode`() = shoot("search_mode_auto") { bibleSearch("John 3:16") }
 
     @Test
     fun `narrow window`() = shoot("narrow_window", width = 420.dp)
