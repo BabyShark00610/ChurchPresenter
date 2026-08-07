@@ -678,9 +678,18 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
 }
 
 // ── Screenshots (Roborazzi) ───────────────────────────────────────────────────
-// Committed, so a change on screen shows up in the diff. Record on Linux — see AGENT.md.
+// Record: ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
+//
+// Written under build/ and NOT committed. `.github/workflows/screenshots.yml` records both the base
+// branch and the branch on one runner and posts the visual difference as a PR comment, so nothing
+// reads a copy from git. See `ScreenshotSupport.SCREENSHOT_ROOT` for why they stopped being
+// committed — briefly: Skia rasterises text per platform, so re-recording unchanged states on
+// another OS rewrote nearly every file, and git keeps every version of a binary for ever.
+//
+// The tests pass paths relative to the module directory (`build/screenshots/...`), so this only has
+// to agree with them for the compare/verify tasks; the workflow reads the directory itself.
 roborazzi {
-    outputDir.set(layout.projectDirectory.dir("screenshots"))
+    outputDir.set(layout.buildDirectory.dir("screenshots"))
 }
 
 // ── Test coverage (JaCoCo) ────────────────────────────────────────────────────
