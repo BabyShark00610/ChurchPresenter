@@ -87,18 +87,30 @@ class CompanionServerPresentationRenderTest {
                     )
                 )
             )
+            // A refused connection is retried, not thrown. `isRunning` flips as soon as the engine
+            // has started, which is not the same instant Netty begins accepting on the socket, so a
+            // request issued in that gap comes back as ConnectException rather than as a status.
+            // The loop is already shaped to poll — it has a deadline and a sleep — but an unguarded
+            // `get()` escapes it on the very first refusal, so the deadline never got to do its job
+            // and @BeforeClass failed the whole class with "Connection refused". Seen on CI
+            // 2026-08-07 (run 31140371736).
             val deadline = System.currentTimeMillis() + 60_000
+            var warmed = false
             HttpClient(CIO).use { warmClient ->
-                while (System.currentTimeMillis() < deadline) {
-                    val status = runBlocking {
-                        warmClient.get(
-                            "http://127.0.0.1:$PORT${org.churchpresenter.app.churchpresenter.utils.Constants.ENDPOINT_PRESENTATIONS}/warm-up"
-                        ).status
-                    }
-                    if (status == HttpStatusCode.OK) break
-                    Thread.sleep(50)
+                while (!warmed && System.currentTimeMillis() < deadline) {
+                    val status = runCatching {
+                        runBlocking {
+                            warmClient.get(
+                                "http://127.0.0.1:$PORT${org.churchpresenter.app.churchpresenter.utils.Constants.ENDPOINT_PRESENTATIONS}/warm-up"
+                            ).status
+                        }
+                    }.getOrNull()
+                    if (status == HttpStatusCode.OK) warmed = true else Thread.sleep(50)
                 }
             }
+            // Previously the loop simply fell out after 60s and the class carried on against a
+            // server that had never answered, so the real failure surfaced later and somewhere else.
+            check(warmed) { "the companion server never served the warm-up deck on port $PORT" }
             server.updateSchedule(emptyList())
         }
 
