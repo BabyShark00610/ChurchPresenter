@@ -181,4 +181,85 @@ class AutoFitUtilsTest {
         assertTrue(measured.size.width <= w, "line is ${measured.size.width}px wide at size $size, box is ${w}px")
         assertEquals(1, measured.lineCount, "line wrapped, but this fit is supposed to prevent wrapping")
     }
+
+    // ── calculateChordChartFontSize ─────────────────────────────────────────────
+    //
+    // A chart stacks a chord row above every row of words, so its height is not the height of the
+    // same text measured plainly. Rather than re-implement that model here (which would only assert
+    // the test's copy of it), these pin the invariants the zone actually depends on: the result
+    // never exceeds the cap, never drops below the floor, and always moves the right way when the
+    // box shrinks or the content grows.
+
+    private val chordLines = listOf(
+        "[G]Amazing [C]grace how [D]sweet the sound",
+        "[G]That saved a [Em]wretch like [D]me",
+    )
+
+    private fun chartSize(
+        lines: List<String> = chordLines,
+        width: Int = 1600,
+        height: Int = 900,
+        maxFontSize: Int = 60,
+        hasInfoLine: Boolean = false,
+    ) = calculateChordChartFontSize(measurer, lines, style, width, height, maxFontSize, hasInfoLine)
+
+    @Test
+    fun `a chart with nothing to draw or nowhere to draw it keeps the requested size`() {
+        // Unlike the lyric fitter this returns the cap, not the floor: there is nothing to shrink
+        // to fit, and handing back the minimum would render an empty zone in 8pt for no reason.
+        assertEquals(40, chartSize(lines = emptyList(), maxFontSize = 40))
+        assertEquals(40, chartSize(width = 0, maxFontSize = 40))
+        assertEquals(40, chartSize(height = 0, maxFontSize = 40))
+        assertEquals(40, chartSize(width = -10, height = -10, maxFontSize = 40))
+    }
+
+    @Test
+    fun `a chart with room to spare is drawn at the size asked for`() {
+        assertEquals(30, chartSize(height = 4000, width = 4000, maxFontSize = 30))
+    }
+
+    @Test
+    fun `a chart never comes back larger than the cap or smaller than the floor`() {
+        val tight = chartSize(width = 60, height = 30, maxFontSize = 60)
+
+        assertTrue(tight >= 8, "the floor must hold even when nothing fits; got $tight")
+        assertTrue(tight <= 60, "the cap must hold; got $tight")
+    }
+
+    @Test
+    fun `a shorter zone cannot produce a larger chart`() {
+        val roomy = chartSize(height = 900)
+        val cramped = chartSize(height = 200)
+
+        assertTrue(cramped <= roomy, "shrinking the zone grew the chart: $roomy -> $cramped")
+    }
+
+    @Test
+    fun `more lines cannot produce a larger chart`() {
+        val two = chartSize(lines = chordLines, height = 300)
+        val eight = chartSize(lines = List(4) { chordLines }.flatten(), height = 300)
+
+        assertTrue(eight <= two, "adding lines grew the chart: $two -> $eight")
+    }
+
+    @Test
+    fun `the info line costs height, so it cannot make the chart bigger`() {
+        val without = chartSize(height = 260, hasInfoLine = false)
+        val with = chartSize(height = 260, hasInfoLine = true)
+
+        assertTrue(with <= without, "the info row must take space: $without -> $with")
+    }
+
+    @Test
+    fun `a chord-only intro line is one row, not a stacked pair`() {
+        // No words under the chords, so the chart writes them along the line. In the same zone that
+        // must never be tighter than the equivalent line that also carries words.
+        val introOnly = chartSize(lines = listOf("[G] [C] [D] [Em] [G] [C] [D]"), height = 120)
+        val withWords = chartSize(lines = listOf("[G]Amazing [C]grace how [D]sweet the [Em]sound"), height = 120)
+
+        assertTrue(
+            introOnly >= withWords,
+            "a chord-only line costs one row and a stacked line costs two: $introOnly vs $withWords",
+        )
+    }
 }

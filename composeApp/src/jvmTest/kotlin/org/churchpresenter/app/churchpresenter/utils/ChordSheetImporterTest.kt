@@ -149,4 +149,86 @@ class ChordSheetImporterTest {
         val plain = "[Verse 1]\nAmazing grace how sweet the sound"
         assertEquals(plain, ChordSheetImporter.convert(plain))
     }
+
+    @Test
+    fun `a blank line is neither a chord line nor a heading`() {
+        assertFalse(ChordSheetImporter.isChordLine(""))
+        assertFalse(ChordSheetImporter.isChordLine("    "))
+        assertNull(ChordSheetImporter.sectionMarkerOf("   ") { 1 })
+    }
+
+    @Test
+    fun `a chord line at the very end of the sheet has no words to merge with`() {
+        val converted = ChordSheetImporter.convert(
+            """
+            Verse 1
+            G       C
+            Amazing grace
+                D   G
+            """.trimIndent()
+        )
+
+        // The trailing chord row has nothing under it, so it becomes bare markers rather than
+        // reaching past the end of the sheet for words.
+        assertTrue(converted.trimEnd().endsWith("[D] [G]"), converted)
+    }
+
+    @Test
+    fun `a chord line followed by a blank line is not merged into it`() {
+        val converted = ChordSheetImporter.convert(
+            """
+            G       C
+
+            Amazing grace
+            """.trimIndent()
+        )
+
+        assertTrue("[G] [C]" in converted, converted)
+        assertTrue("Amazing grace" in converted, converted)
+        assertFalse("[G]Amazing" in converted, "a blank line separates them: $converted")
+    }
+
+    @Test
+    fun `a chord line immediately before a heading is not merged into the heading`() {
+        val converted = ChordSheetImporter.convert(
+            """
+            G       C
+            Chorus
+            Amazing grace
+            """.trimIndent()
+        )
+
+        assertTrue("[G] [C]" in converted, converted)
+        assertTrue("{Chorus}" in converted, converted)
+    }
+
+    @Test
+    fun `a heading at the very start does not open the song with a blank line`() {
+        val converted = ChordSheetImporter.convert(
+            """
+            Verse 1
+            Amazing grace
+            """.trimIndent()
+        )
+
+        assertTrue(converted.startsWith("[Verse 1]"), "leading blank line: ${converted.take(20)}")
+    }
+
+    @Test
+    fun `runs of blank lines between sections collapse to one`() {
+        val converted = ChordSheetImporter.convert(
+            """
+            Verse 1
+            Amazing grace
+
+
+
+            Chorus
+            How sweet the sound
+            """.trimIndent()
+        )
+
+        assertFalse("\n\n\n" in converted, "blank runs were not collapsed: ${converted.replace("\n", "|")}")
+        assertTrue("Amazing grace\n\n{Chorus}" in converted, converted.replace("\n", "|"))
+    }
 }
