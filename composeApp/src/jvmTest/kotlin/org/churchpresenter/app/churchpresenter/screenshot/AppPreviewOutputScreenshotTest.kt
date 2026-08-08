@@ -74,10 +74,10 @@ class AppPreviewOutputScreenshotTest {
         translationFileName = "kjv1769.spb",
         bibleAbbreviation = "KJV",
         bibleName = "King James Version",
-        bookName = "Psalm",
-        chapter = 23,
+        bookName = "Genesis",
+        chapter = 1,
         verseNumber = 1,
-        verseText = "The LORD is my shepherd; I shall not want.",
+        verseText = "In the beginning God created the heaven and the earth.",
     )
 
     private fun slideBitmap(): ImageBitmap =
