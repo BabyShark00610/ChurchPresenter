@@ -39,14 +39,27 @@ class ScheduleTabScreenshotTest {
             verseNumber = 16,
             verseText = "For God so loved the world, that he gave his only begotten Son.",
         )
+        // Paths and URLs here are drawn on screen — the schedule row prints the path of every
+        // file-backed item at detailed density — and these shots are exported for the website. They
+        // therefore match the app-preview fixture's library root and naming rather than standing in
+        // as `/decks/…` placeholders, so two images of the same app do not disagree about where a
+        // church keeps its files. See the LIBRARY note in AppPreviewSupport.kt.
         addPresentation(
-            filePath = "/decks/sermon.pptx",
-            fileName = "sermon.pptx",
+            filePath = "/Users/Shared/ChurchPresenter/Decks/Sermon.pptx",
+            fileName = "Sermon.pptx",
             slideCount = 24,
             fileType = "pptx",
         )
-        addPicture(folderPath = "/media/baptism", folderName = "Baptism", imageCount = 37)
-        addMedia(mediaUrl = "/media/welcome.mp4", mediaTitle = "Welcome loop", mediaType = "video")
+        addPicture(
+            folderPath = "/Users/Shared/ChurchPresenter/Gallery",
+            folderName = "Gallery",
+            imageCount = 12,
+        )
+        addMedia(
+            mediaUrl = "/Users/Shared/ChurchPresenter/Media/Welcome Loop.mp4",
+            mediaTitle = "Welcome Loop",
+            mediaType = "video",
+        )
         addLowerThird(
             presetId = "lt-1",
             presetLabel = "Guest speaker",
@@ -54,7 +67,7 @@ class ScheduleTabScreenshotTest {
             pauseDurationMs = 4000,
         )
         addAnnouncement(text = "Fellowship lunch after the service")
-        addWebsite(url = "https://example.org/notices", title = "Notices")
+        addWebsite(url = "https://churchpresenter.org/notices", title = "Notices")
         addScene(sceneId = "scene-1", sceneName = "Countdown scene")
         addDictionary(
             number = "H2617",
