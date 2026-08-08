@@ -308,6 +308,16 @@ class CanvasTabScreenshotTest {
 
         // Fixed path, not a temp dir: the properties panel prints the file's path, so a random name
         // would make every recording a diff.
-        val FIXTURES = File("build/screenshot-fixtures/canvas")
+        /**
+         * A neutral root, not a repo-relative `build/` one.
+         *
+         * The path is printed into the image, and a repo-relative fixture resolves through the
+         * developer's home directory — which on most machines is their name, committed into the PNG
+         * for ever. `/tmp` where there is one, the JVM's temp directory otherwise (Windows).
+         */
+        val FIXTURES: File = File("/tmp")
+            .takeIf { it.isDirectory }
+            ?.let { File(it, "churchpresenter-screenshots/canvas") }
+            ?: File(System.getProperty("java.io.tmpdir"), "churchpresenter-screenshots/canvas")
     }
 }
