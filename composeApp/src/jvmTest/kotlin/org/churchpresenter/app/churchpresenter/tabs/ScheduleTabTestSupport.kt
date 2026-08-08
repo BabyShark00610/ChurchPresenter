@@ -17,7 +17,10 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.builtins.ListSerializer
@@ -45,6 +48,13 @@ import java.nio.file.Files
  */
 
 // ── Harness ─────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The window [runComposeUiTest] composes into when it is not told otherwise, which is why every
+ * capture from this harness comes out 1024x768. Stated here only so the density branch below can
+ * hand the Skiko runner the same size instead of silently rendering into a different one.
+ */
+private val DEFAULT_TEST_WINDOW = Size(1024f, 768f)
 
 /** What the tab reported back, so a test asserts on the choice rather than on a stub. */
 internal class ScheduleReports {
@@ -80,6 +90,16 @@ internal fun scheduleTab(
     seed: ScheduleViewModel.() -> Unit = {},
     /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
     themeMode: ThemeMode? = null,
+    /**
+     * Null renders at the default 1 dp = 1 px, which every test here wants: they assert on layout,
+     * and more pixels of the same layout tells them nothing.
+     *
+     * Set only by the capture the website exports, which needs the same dp at more pixels to stay
+     * crisp on a retina display. It switches to the Skiko runner because [runComposeUiTest] has no
+     * density hook, and that runner needs its window size stated rather than defaulted — hence
+     * [DEFAULT_TEST_WINDOW], which is the size the other branch gets for free.
+     */
+    density: Float? = null,
     block: ComposeUiTest.(vm: ScheduleViewModel, reports: ScheduleReports) -> Unit,
 ) {
     TestSingletons.latchToTestHome()
@@ -90,7 +110,7 @@ internal fun scheduleTab(
     try {
         vm.seed()
         val reports = ScheduleReports()
-        runComposeUiTest {
+        val body: ComposeUiTest.() -> Unit = {
             setContent {
                 ThemedForTest(themeMode) {
                     Box(modifier = if (width != null) Modifier.width(width) else Modifier) {
@@ -117,6 +137,12 @@ internal fun scheduleTab(
                 }
             }
             block(vm, reports)
+        }
+        if (density == null) {
+            runComposeUiTest(block = body)
+        } else {
+            val window = Size(width?.value ?: DEFAULT_TEST_WINDOW.width, DEFAULT_TEST_WINDOW.height)
+            runSkikoComposeUiTest(size = window * density, density = Density(density), block = body)
         }
     } finally {
         runCatching { vm.dispose() }

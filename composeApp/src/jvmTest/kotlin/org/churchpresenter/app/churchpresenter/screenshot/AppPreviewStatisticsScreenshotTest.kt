@@ -86,8 +86,23 @@ class AppPreviewStatisticsScreenshotTest {
         waitForIdle()
     }
 
+    /**
+     * 1200dp because the table needs it, and shrinking — the intuitive fix for a cramped
+     * screenshot — makes it worse.
+     *
+     * The summary panel down the left is a fixed `width(300.dp)` and the table takes `weight(1f)`
+     * of what is left. Inside the table only title, author and songbook flex (weights 2, 1.5, 1);
+     * rank, CCLI number, count and the two dates are fixed, ~386dp once gaps and row padding are
+     * counted. At 940 that left the three flexible columns 253dp between them, so the songbook
+     * header rendered as "SONGBO" and titles and authors were ellipsised mid-word — which is what
+     * the website was publishing. 1200 gives them ~513dp and they fit.
+     *
+     * Not fixed by this, and not a capture problem: each row reserves `end = 20.dp` for the
+     * scrollbar overlaid at CenterEnd, and the date columns are wider than the dates. That gutter
+     * on the right is the dialog's own layout at any window size.
+     */
     private fun ccli(name: String, drive: ComposeUiTest.() -> Unit = {}) =
-        dialog(name, 940.dp, 700.dp, drive) { mode ->
+        dialog(name, 1200.dp, 700.dp, drive) { mode ->
             CCLIReportContent(
                 theme = mode,
                 statisticsManager = StatisticsManager(),
