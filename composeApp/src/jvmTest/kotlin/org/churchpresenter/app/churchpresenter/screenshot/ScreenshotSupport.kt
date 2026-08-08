@@ -25,15 +25,27 @@ internal val THEMES = listOf("light" to ThemeMode.LIGHT, "dark" to ThemeMode.DAR
 /**
  * Where every screenshot is written, relative to the module directory a Gradle test task runs in.
  *
- * **Committed**, so that what is on screen can be reviewed and approved before it is merged, and so
- * a change to it shows up in the diff of a pull request. `.github/workflows/screenshots.yml` still
- * records both sides on one runner and posts the visual difference as a PR comment; the committed
- * copies are what a human looks at and signs off, which the comment alone cannot be relied on for.
+ * **Nothing here is committed.** It is under `build/`, and `.github/workflows/screenshots.yml`
+ * renders *both* sides of the comparison on one runner and posts the visual difference as a PR
+ * comment. Recording locally is for looking at the images yourself: nothing you record is read by
+ * anything else, so there is no need to re-record before pushing and no reason to add an image to a
+ * commit.
  *
- * The cost is real and worth knowing: Skia rasterises text per platform, so re-recording the same
- * *unchanged* states on a different OS rewrites nearly every file (15 of 16, measured), and git
- * keeps every version of a binary for ever. **Record on one platform per branch** and do not
- * re-record just to re-record — only when a state actually changed.
+ * They were committed until 2026-08-07, so that a change on screen appeared in the diff. That cost
+ * more than it bought. Skia rasterises text per platform, so re-recording the same *unchanged*
+ * states on a different OS rewrote nearly every file — 15 of 16, measured — and git keeps every
+ * version of a binary for ever. The comparison comment shows before and after side by side, which is
+ * what a reviewer actually wants; two opaque PNG blobs in a diff cannot be compared by eye anyway.
+ *
+ * Two invariants follow from CI being the only consumer, and both have already been broken once:
+ *
+ * - **A capture must be written under this root.** Images are matched between the two sides **by
+ *   their path relative to it**, so one written elsewhere is not reported as *differing* — it has no
+ *   counterpart and silently stops being compared. Go through [stackedThemes]/[captureComponent] and
+ *   this is handled.
+ * - **A class must be named `…ScreenshotTest`.** The workflow records with `--tests
+ *   '*ScreenshotTest*'`; a class outside that pattern is never rendered in CI and its images are
+ *   never compared.
  */
 internal const val SCREENSHOT_ROOT = "build/screenshots"
 
