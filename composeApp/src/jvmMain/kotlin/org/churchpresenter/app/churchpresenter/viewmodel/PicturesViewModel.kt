@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -19,6 +20,7 @@ import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
 import org.jetbrains.skia.Image
 import java.io.File
@@ -26,6 +28,17 @@ import java.nio.file.FileSystems
 import java.nio.file.StandardWatchEventKinds
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
+
+/** How long to wait before re-reading a file whose first decode failed. */
+private const val THUMBNAIL_RETRY_MS = 120L
+
+/**
+ * How many times the folder watcher re-reads a newly created file before giving up on it.
+ *
+ * Three tries spanning ~240ms: enough to outlast a local copy finishing its write, short enough that
+ * a genuinely corrupt file is reported almost immediately rather than sitting on "Loading…".
+ */
+private const val THUMBNAIL_RETRY_ATTEMPTS = 3
 
 class PicturesViewModel(
     appSettings: AppSettings? = null
@@ -41,6 +54,48 @@ class PicturesViewModel(
 
     private val _thumbnails: SnapshotStateMap<File, ImageBitmap> = SnapshotStateMap()
     val thumbnails: Map<File, ImageBitmap> get() = _thumbnails
+
+    /**
+     * Files whose thumbnail could not be decoded, against the reason.
+     *
+     * The grid draws "Loading…" for any file with no entry in [thumbnails], so before this existed a
+     * decode that threw was indistinguishable from one still running — and since the failure was
+     * swallowed, the tile said "Loading…" for the rest of the session. A corrupt or truncated image
+     * meant a permanent placeholder and no error anywhere.
+     *
+     * Every file therefore ends up in exactly one of [thumbnails] or here, which is also what lets a
+     * test wait for a positive signal instead of for the absence of a label.
+     */
+    private val _thumbnailFailures: SnapshotStateMap<File, String> = SnapshotStateMap()
+    val thumbnailFailures: Map<File, String> get() = _thumbnailFailures
+
+    /**
+     * Decodes [file] into [thumbnails], or records why it could not be in [thumbnailFailures].
+     *
+     * [attempts] exists for the folder watcher: a file being copied into a watched folder is
+     * routinely seen the instant it is created and long before it is complete, so the first decode
+     * of a half-written file legitimately fails and the same read succeeds moments later. The
+     * initial folder load reads files that were already there and needs no retry.
+     */
+    private suspend fun decodeThumbnail(file: File, attempts: Int = 1) {
+        var lastError: Exception? = null
+        repeat(attempts) { attempt ->
+            try {
+                _thumbnails[file] = loadImageBitmap(file)
+                _thumbnailFailures.remove(file)
+                return
+            } catch (e: Exception) {
+                lastError = e
+                if (attempt < attempts - 1) delay(THUMBNAIL_RETRY_MS)
+            }
+        }
+        val reason = lastError?.message ?: lastError?.toString() ?: "unknown"
+        _thumbnailFailures[file] = reason
+        CrashReporter.reportWarning(
+            "Pictures: thumbnail for ${file.name} could not be decoded — $reason",
+            tags = mapOf("subsystem" to "pictures")
+        )
+    }
 
     private val _selectedImageIndex = mutableStateOf(0)
     var selectedImageIndex: Int
@@ -120,14 +175,7 @@ class PicturesViewModel(
 
         // Load thumbnails in background
         scope.launch {
-            imageFiles.forEach { file ->
-                try {
-                    val bitmap = loadImageBitmap(file)
-                    _thumbnails[file] = bitmap
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+            imageFiles.forEach { file -> decodeThumbnail(file) }
         }
     }
 
@@ -166,11 +214,7 @@ class PicturesViewModel(
                     if (!tmp.renameTo(cacheFile)) { tmp.delete(); continue }
                 }
                 _images.add(cacheFile)
-                try {
-                    _thumbnails[cacheFile] = loadImageBitmap(cacheFile)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                decodeThumbnail(cacheFile)
                 presenterManager?.let { syncWithPresenter(it) }
             }
         }
@@ -181,6 +225,7 @@ class PicturesViewModel(
         watchJob = null
         _images.clear()
         _thumbnails.clear()
+        _thumbnailFailures.clear()
         _selectedImageIndex.value = 0
         _isPlaying.value = false
     }
@@ -413,11 +458,10 @@ class PicturesViewModel(
                                         _images.add(file)
                                     }
                                     // Load thumbnail
-                                    launch {
-                                        try {
-                                            _thumbnails[file] = loadImageBitmap(file)
-                                        } catch (_: Exception) {}
-                                    }
+                                    // A file copied into a watched folder is seen the moment it
+                                    // is created, usually before it is fully written, so the first
+                                    // decode of it legitimately fails.
+                                    launch { decodeThumbnail(file, attempts = THUMBNAIL_RETRY_ATTEMPTS) }
                                     changed = true
                                 }
                             }
@@ -426,6 +470,7 @@ class PicturesViewModel(
                                 if (idx >= 0) {
                                     _images.removeAt(idx)
                                     _thumbnails.remove(file)
+                                    _thumbnailFailures.remove(file)
                                     if (idx < _selectedImageIndex.value) {
                                         _selectedImageIndex.value--
                                     } else if (_selectedImageIndex.value >= _images.size && _images.isNotEmpty()) {
