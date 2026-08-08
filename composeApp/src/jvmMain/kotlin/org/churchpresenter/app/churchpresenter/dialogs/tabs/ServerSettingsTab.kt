@@ -932,12 +932,6 @@ private fun ClientRow(
 
 @Composable
 private fun ConnectionQrDialog(serverUrl: String, apiKey: String?, onDismiss: () -> Unit) {
-    // Parse host and port from serverUrl (e.g. "http://192.168.1.50:8765")
-    val (parsedHost, parsedPort) = remember(serverUrl) { parseServerUrlHostPort(serverUrl) }
-
-    val qrContent = connectionQrContent(parsedHost, parsedPort, apiKey)
-    val qrBitmap = remember(qrContent) { connectionQrBitmap(qrContent) }
-
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val mainWindowState = LocalMainWindowState.current
     DialogWindow(
@@ -951,42 +945,61 @@ private fun ConnectionQrDialog(serverUrl: String, apiKey: String?, onDismiss: ()
         resizable = false
     ) {
         AppThemeWrapper(theme = if (isDark) ThemeMode.DARK else ThemeMode.LIGHT) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
+            ConnectionQrDialogContent(serverUrl = serverUrl, apiKey = apiKey, onDismiss = onDismiss)
+        }
+    }
+}
+
+/**
+ * What the connection dialog draws: the QR itself, the deep link it encodes, and a Close button.
+ *
+ * Separate from [ConnectionQrDialog] because that one is a [DialogWindow] — a real AWT window, which
+ * throws `HeadlessException` under a headless JVM, so nothing inside it could be rendered by a test
+ * or photographed for the screenshot set. The same split as `BibleCatalogBrowserDialogContent` and
+ * `LocalLibraryDialogContent`.
+ */
+@Composable
+internal fun ConnectionQrDialogContent(serverUrl: String, apiKey: String?, onDismiss: () -> Unit) {
+    // Parse host and port from serverUrl (e.g. "http://192.168.1.50:8765")
+    val (parsedHost, parsedPort) = remember(serverUrl) { parseServerUrlHostPort(serverUrl) }
+
+    val qrContent = connectionQrContent(parsedHost, parsedPort, apiKey)
+    val qrBitmap = remember(qrContent) { connectionQrBitmap(qrContent) }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (qrBitmap != null) {
+                Image(
+                    bitmap = qrBitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(300.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (qrBitmap != null) {
-                        Image(
-                            bitmap = qrBitmap,
-                            contentDescription = null,
-                            modifier = Modifier.size(300.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = qrContent,
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                    Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
-                        Text(stringResource(Res.string.close), style = MaterialTheme.typography.labelSmall)
-                    }
+                SelectionContainer {
+                    Text(
+                        text = qrContent,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
+            }
+            Button(shape = RoundedCornerShape(6.dp), onClick = onDismiss) {
+                Text(stringResource(Res.string.close), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
