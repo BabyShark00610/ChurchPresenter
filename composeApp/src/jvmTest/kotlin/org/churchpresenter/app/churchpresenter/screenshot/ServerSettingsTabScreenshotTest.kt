@@ -65,7 +65,7 @@ class ServerSettingsTabScreenshotTest {
         /**
          * The one running server, on a fixed port so the URL in the images never moves.
          *
-         * Not `freeServerPort()`, which the behaviour suite uses: a port picked at random is a
+         * Not `freeServerPort()`, which the behavior suite uses: a port picked at random is a
          * different Server URL on every recording and would rewrite these files for no change.
          */
         @BeforeClass
@@ -169,7 +169,7 @@ class ServerSettingsTabScreenshotTest {
      * Two allowed and one blocked.
      *
      * One of the allowed carries a friendly name and one does not, because that changes the row: a
-     * named device puts its name in the status colour and drops its id to a small monospace line
+     * named device puts its name in the status color and drops its id to a small monospace line
      * under it, while an unnamed one shows the raw id alone.
      */
     @Test

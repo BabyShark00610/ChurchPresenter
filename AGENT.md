@@ -94,7 +94,23 @@ bash cleanup_check.sh                  # repo code-quality report
 
 # Screenshots → composeApp/screenshots/<section>/ (COMMITTED; one folder per test class)
 ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
+./gradlew :composeApp:verifyRoborazziJvm --tests '*ScreenshotTest*'   # gate: fails past 0.5% of pixels
 ```
+
+**Verify before you commit a UI change, and re-record what it moved.** `verifyRoborazziJvm` compares
+the committed images against a fresh render and fails past `ScreenshotSupport.CHANGE_THRESHOLD`
+(0.5% of an image's pixels — measured: one switch flipping costs 0.19%, a status line 0.66%, a row
+appearing 32.6%, so anything looser hides real regressions). A failure writes a reference|diff|new
+image to `composeApp/build/outputs/roborazzi/<name>_compare.png` and names it in the message.
+
+**It runs locally, not in CI.** The committed set is a macOS recording and CI renders on Linux, where
+essentially every file differs — see the table below. CI still records and posts the advisory
+`reg-actions` comparison; it does not verify.
+
+Known red, both pre-existing and neither a regression: `previewApp/about_*` draws
+`BuildConfig.VERSION_DISPLAY`, which carries the git hash and so changes on every commit, and
+`previewApp/dictionary_light` renders a 14,197-row list whose row heights are not stable between
+runs. Both need their suite fixed, not the threshold widened.
 
 Every state is shot in **both themes and stacked into one image**, light above dark — go through
 `stackedThemes` (or `captureComponent`, which wraps it) and a state is written once, not twice. One

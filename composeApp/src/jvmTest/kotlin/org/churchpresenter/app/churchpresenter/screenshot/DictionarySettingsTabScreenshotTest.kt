@@ -16,7 +16,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
-import org.churchpresenter.app.churchpresenter.composables.RecentColors
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.DictionarySettings
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.DictionarySettingsTab
@@ -34,11 +33,11 @@ import kotlin.test.Test
  *
  * What changes the shape of the tab rather than a value in it:
  *
- *  - **The two shadow toggles.** Word and Reference each unfold a colour/size/opacity row when
+ *  - **The two shadow toggles.** Word and Reference each unfold a color/size/opacity row when
  *    switched on; the other four sections have no shadow at all. Off is the default, so the shape
  *    with them on is a different tab and is shot separately.
- *  - **Seven colour pickers** — one per section, plus one inside each unfolded shadow row. Each is
- *    shot from a fixture colour of its own, both so the field a picker opened from is legible and so
+ *  - **Seven color pickers** — one per section, plus one inside each unfolded shadow row. Each is
+ *    shot from a fixture color of its own, both so the field a picker opened from is legible and so
  *    no two of the images are the same picture.
  *
  * The four Show switches gate what reaches the *output*, not what this tab draws, so switching them
@@ -49,34 +48,21 @@ import kotlin.test.Test
  */
 class DictionarySettingsTabScreenshotTest {
 
-    /**
-     * The picker's "Recent" row, emptied for these images and put back afterwards.
-     *
-     * [RecentColors] is a JVM-wide singleton loaded from `~/.churchpresenter/recent_colors.json` and
-     * appended to by every picker anyone confirms, so left alone the row it draws depends on what
-     * ran before rather than on this tab. Emptied, it is not drawn at all.
-     */
-    private val stashedRecents = mutableListOf<String>()
+    /** The picker's "Recent" row is JVM-wide state — see [PinnedRecentColors]. */
+    private val recents = PinnedRecentColors()
 
     @BeforeTest
-    fun clearRecentColours() {
-        stashedRecents += RecentColors.colors
-        RecentColors.colors.clear()
-    }
+    fun pinRecentColors() = recents.clear()
 
     @AfterTest
-    fun restoreRecentColours() {
-        RecentColors.colors.clear()
-        RecentColors.colors.addAll(stashedRecents)
-        stashedRecents.clear()
-    }
+    fun unpinRecentColors() = recents.restore()
 
     // ── The tab ─────────────────────────────────────────────────────────────────────────────────
 
     @Test
     fun `as it opens`() = shoot("defaults")
 
-    /** Both shadows on, which unfolds a colour/size/opacity row under each. */
+    /** Both shadows on, which unfolds a color/size/opacity row under each. */
     @Test
     fun `the shadow rows unfolded`() = shoot(
         "shadows_on",
@@ -86,7 +72,7 @@ class DictionarySettingsTabScreenshotTest {
     /**
      * Every value off its default.
      *
-     * Bold and italic lit on the word, a colour and size per section, the card dimmed most of the
+     * Bold and italic lit on the word, a color and size per section, the card dimmed most of the
      * way and a long transition — so the two sliders sit somewhere other than where they open.
      */
     @Test
@@ -108,35 +94,35 @@ class DictionarySettingsTabScreenshotTest {
         settings = dictionary { copy(fadeIn = false, fadeOut = false, transitionDuration = 100f) },
     )
 
-    // ── Every colour picker ─────────────────────────────────────────────────────────────────────
+    // ── Every color picker ─────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `the word colour picker`() = picker("picker_word", WORD)
+    fun `the word color picker`() = picker("picker_word", WORD)
 
     @Test
-    fun `the word shadow colour picker`() = picker("picker_word_shadow", WORD_SHADOW)
+    fun `the word shadow color picker`() = picker("picker_word_shadow", WORD_SHADOW)
 
     @Test
-    fun `the definition colour picker`() = picker("picker_definition", DEFINITION)
+    fun `the definition color picker`() = picker("picker_definition", DEFINITION)
 
     @Test
-    fun `the card background colour picker`() = picker("picker_card_background", CARD)
+    fun `the card background color picker`() = picker("picker_card_background", CARD)
 
     @Test
-    fun `the reference colour picker`() = picker("picker_reference", REFERENCE)
+    fun `the reference color picker`() = picker("picker_reference", REFERENCE)
 
     @Test
-    fun `the reference shadow colour picker`() = picker("picker_reference_shadow", REFERENCE_SHADOW)
+    fun `the reference shadow color picker`() = picker("picker_reference_shadow", REFERENCE_SHADOW)
 
     @Test
-    fun `the KJV usage colour picker`() = picker("picker_kjv_usage", KJV)
+    fun `the KJV usage color picker`() = picker("picker_kjv_usage", KJV)
 
     // ── Driving ─────────────────────────────────────────────────────────────────────────────────
 
     /**
      * Opens the picker on the field showing [hex].
      *
-     * Every colour on the tab is given a distinct value first: the defaults repeat `#FFFFFF` on the
+     * Every color on the tab is given a distinct value first: the defaults repeat `#FFFFFF` on the
      * word and the reference and `#000000` on both shadows, so a field could not be addressed by
      * what it displays, and two pairs of these images would have come out identical.
      */
@@ -201,7 +187,7 @@ class DictionarySettingsTabScreenshotTest {
         )
     }
 
-    /** Both shadows unfolded and all seven colours distinct, so each picker can be addressed. */
+    /** Both shadows unfolded and all seven colors distinct, so each picker can be addressed. */
     private fun distinctColours() = dictionary {
         copy(
             wordShadow = true,
@@ -219,7 +205,7 @@ class DictionarySettingsTabScreenshotTest {
     private companion object {
         const val SECTION = "dictionarySettingsTab"
 
-        // One colour per picker, none of them repeated anywhere else on the tab.
+        // One color per picker, none of them repeated anywhere else on the tab.
         const val WORD = "#FFD54F"
         const val WORD_SHADOW = "#8B1E3F"
         const val DEFINITION = "#B3E5FC"

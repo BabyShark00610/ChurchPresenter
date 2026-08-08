@@ -34,7 +34,7 @@ import kotlin.test.Test
  *
  * The presets are fixtures written for this suite, not the ones that ship with the app: the preview
  * pane runs the animation on an endless loop, so anything with motion in it would be a different
- * image on every recording. Each fixture is a single solid colour holding still for its whole
+ * image on every recording. Each fixture is a single solid color holding still for its whole
  * duration, which makes the pane's contents the same whatever frame the capture lands on — and
  * makes which preset is selected legible at a glance.
  */
@@ -108,7 +108,7 @@ class LowerThirdSettingsTabScreenshotTest {
         // Frame, settle, frame: the pane's animation is parsed off the test dispatcher, so it needs
         // both frames to draw and passes of real work between them to arrive at all. Driving the
         // clock by hand rather than letting it run keeps the frame the capture lands on the same
-        // every time — the animation itself holds one colour, so only *whether* it has loaded can
+        // every time — the animation itself holds one color, so only *whether* it has loaded can
         // vary, and this is what settles that.
         repeat(FRAMES_TO_SETTLE) {
             mainClock.advanceTimeByFrame()
@@ -172,7 +172,7 @@ class LowerThirdSettingsTabScreenshotTest {
     }
 
     /**
-     * A one-layer Lottie holding a single colour across the bottom third for its whole duration.
+     * A one-layer Lottie holding a single color across the bottom third for its whole duration.
      *
      * Still on purpose: the preview loops whatever it is given for ever, so a fixture with motion in
      * it would land on a different frame each recording and rewrite these images for no change. The

@@ -27,6 +27,11 @@ env:
 
 permissions:
   contents: read
+  # The JUnit reporter near the end of this job writes the failing tests into the pull request as a
+  # comment and as inline annotations. Checks for the annotations, pull-requests for the comment;
+  # `contents` deliberately stays read-only.
+  checks: write
+  pull-requests: write
 
 concurrency:
   # A newer push to the same branch makes an in-flight run redundant. With `push` back to main only,
@@ -151,6 +156,29 @@ jobs:
         if: always()
         working-directory: composeApp/src/jvmMain/appResources/common/ChurchPresenter-Cross
         run: chmod +x gradlew && ./gradlew jvmTest
+
+      # Puts the failure message and stack trace of every failed test in the pull request itself,
+      # instead of leaving a reviewer to download the report artifact below and open it locally.
+      # Also annotates the failing line in the Files-changed view.
+      #
+      # `if: always()` so it runs after a failed suite — that is the only time it has anything to
+      # say — and `detailed_summary` so each failure is listed by name rather than as a count.
+      #
+      # It never fails the job on its own (`fail_on_failure: false`): the test step that produced
+      # the XML has already done that, and a reporter that can also fail turns one red step into
+      # two for the same cause.
+      - name: Report failing tests on the pull request
+        if: always() && github.event_name == 'pull_request'
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: |
+            composeApp/build/test-results/**/TEST-*.xml
+            composeApp/src/jvmMain/appResources/common/*/build/test-results/**/TEST-*.xml
+          detailed_summary: true
+          include_passed: false
+          fail_on_failure: false
+          comment: true
+          updateComment: true
 
       - name: Upload test reports
         if: failure()
