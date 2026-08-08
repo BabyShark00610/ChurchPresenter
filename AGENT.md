@@ -136,10 +136,30 @@ both sides on one runner and posts the before/after as a PR comment — that com
 not the approval. Note the record step overwrites the working copy before the comparison reads it,
 so the committed images are for humans and never enter the diff CI computes.
 
-The cost is real and does not go away by being committed. **Skia rasterises text per platform**, so
-re-recording the same *unchanged* states on a different OS rewrites nearly every file — 15 of 16,
-measured — and git keeps every version of a binary for ever. So: **record on ONE platform per
-branch**, and re-record only what actually changed. Never re-record the whole suite out of habit.
+The cost is real and does not go away by being committed. **Skia rasterises text per platform**, and
+git keeps every version of a binary for ever. Measured on 2026-08-08 against the 247-image set:
+
+| re-record | images that change |
+|---|---|
+| same platform, unchanged states (macOS → macOS) | **21 of 247 — 8.5%** |
+| across platforms (the committed set vs CI's Linux renders) | **246 of 247 — 99.6%** |
+
+**The two numbers are what matter, not an average of them.** Re-recording on the platform the set
+was recorded on is cheap, so *do* re-record after a change and commit what moved. Re-recording on a
+different OS rewrites essentially the whole set for no visual change — so **record on ONE platform
+per branch**, and never re-record the whole suite out of habit.
+
+> An earlier version of this paragraph said "15 of 16, measured" without saying across what. That
+> conflated the two axes and understated the cross-platform case, which is the one the "ONE
+> platform" rule exists for. To measure it yourself:
+> `gh run download <run-id> -n screenshots -D <dir>` then `cmp -s` file by file. **A local
+> re-record does not measure this** — it compares against your own platform and returns a
+> comfortable 8%.
+
+**The committed set is currently a macOS recording and CI renders on Linux**, so the two disagree on
+almost every file. That is not a fault in either; it is what the table above describes. Which
+platform is canonical has not been decided — if you are about to re-record broadly, ask first.
+
 To hand images to the website, download the `screenshots` artifact from a run on `main`: those are
 the Linux renders and they are consistent with each other.
 
