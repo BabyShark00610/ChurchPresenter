@@ -2,6 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -141,7 +142,7 @@ class StageMonitorSettingsTabStructureTest {
                 assertEquals(
                     marker.toString(),
                     numberFields()[index * 3].fetchSemanticsNode().config
-                        .let { c -> c[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text },
+                        .let { c -> c[SemanticsProperties.EditableText].text },
                     "the font size at ordinal $index must belong to $zone",
                 )
                 assertEquals(index, ZoneOrdinal.of(zone), "ZoneOrdinal.of($zone) must agree")

@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -208,7 +209,7 @@ class BackgroundSettingsTabRecompositionTest {
         )
     }
 
-    private fun assertEveryRowKindIsIntact(test: androidx.compose.ui.test.ComposeUiTest) = with(test) {
+    private fun assertEveryRowKindIsIntact(test: ComposeUiTest) = with(test) {
         onAllNodesWithText("Background Image:").assertCountEquals(2)
         onAllNodesWithText("Background Video:").assertCountEquals(2)
         onAllNodesWithContentDescription("Browse downloaded library").assertCountEquals(4)

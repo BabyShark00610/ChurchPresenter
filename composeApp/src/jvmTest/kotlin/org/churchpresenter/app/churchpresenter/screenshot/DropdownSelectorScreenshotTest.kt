@@ -3,6 +3,7 @@
 package org.churchpresenter.app.churchpresenter.screenshot
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -72,7 +73,7 @@ class DropdownSelectorScreenshotTest {
             modifier = box,
             itemTrailingContent = { _, index ->
                 Modifier.size(10.dp).let { modifier ->
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier
                             .background(
                                 if (index == 0) MaterialTheme.colorScheme.primary
