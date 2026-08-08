@@ -92,16 +92,16 @@ Presentation deps in `composeApp/build.gradle.kts` are mirrored in
 ./gradlew :composeApp:jacocoTestReport # coverage → build/reports/jacoco/jacocoTestReport/html/
 bash cleanup_check.sh                  # repo code-quality report
 
-# Screenshots → composeApp/screenshots/<section>/ (COMMITTED; one folder per test class)
+# Screenshots → composeApp/build/screenshots/<section>/ (NOT committed; one folder per test class)
 ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
 ```
 
 Every state is shot in **both themes and stacked into one image**, light above dark — go through
 `stackedThemes` (or `captureComponent`, which wraps it) and a state is written once, not twice. One
-folder per test class (`screenshots/<section>/`). An
+folder per test class (`build/screenshots/<section>/`). An
 open popup (dropdown, menu, tooltip) is its own compose root: pass `rootIndex = 1` or `onRoot()`
 fails with "expected exactly 1 node". Two captures that come out byte-identical mean the state was
-never reached — check with `md5 -q composeApp/screenshots/<section>/*.png | sort | uniq -d`.
+never reached — check with `md5 -q composeApp/build/screenshots/<section>/*.png | sort | uniq -d`.
 
 **Shoot a shared composable in its own suite rather than only through the tab that uses it** —
 `DropdownSelector`, `GoLiveButton`, `ActionIconButton` and friends are used by many tabs, so one
@@ -114,18 +114,17 @@ A tab's *own* extracted composables are `private` and stay that way: widening th
 photograph them is refactoring production code for testability. Their states are covered through
 the tab.
 
-**Screenshots ARE committed**, under `composeApp/screenshots/`. They are the artifact a human
-reviews and approves before a change to the UI is merged: a reviewer opens the images, and asks for
-changes when a state is wrong, missing, or framed badly. **Re-record and include the images in the
-commit whenever a state you touched changed.** `.github/workflows/screenshots.yml` additionally
-records both sides on one runner and posts the before/after as a PR comment — that comment is a
-convenience, not the approval.
+**Screenshots are NOT committed.** They are rendered into `composeApp/build/screenshots/` and
+compared in CI: `.github/workflows/screenshots.yml` records both sides on one runner and posts the
+before/after as a PR comment. That comment is the review surface. Recording locally is for looking
+at them yourself — nothing you record is read by anything else, so there is nothing to re-record
+before pushing and no reason to add images to a commit.
 
-They were moved under `build/` and uncommitted on 2026-08-07 and moved back the same day. The cost
-that motivated the move is real and still applies: **Skia rasterises text per platform**, so
-re-recording the same *unchanged* states on a different OS rewrites nearly every file — 15 of 16,
-measured — and git keeps every version of a binary for ever. So: **record on ONE platform per
-branch**, and re-record only what actually changed. Do not re-record the whole suite out of habit.
+To hand images to the website, download the `screenshots` artifact from a run on `main` rather than
+recording locally: those are the Linux renders and they are consistent with each other. **Skia
+rasterises text per platform**, so a local macOS or Windows recording differs from CI's in nearly
+every file — 15 of 16, measured — which is also why committing them cost a rewrite of most of the
+set on every UI change, for a duplicate of a PR comment CI already posts.
 
 **A capture must be written under `SCREENSHOT_ROOT`** (`ScreenshotSupport.kt`, the single definition
 of that path). Images are matched between the two sides of the comparison **by their path relative

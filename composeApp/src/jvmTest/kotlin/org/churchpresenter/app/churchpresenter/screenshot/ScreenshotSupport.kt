@@ -35,7 +35,7 @@ internal val THEMES = listOf("light" to ThemeMode.LIGHT, "dark" to ThemeMode.DAR
  * keeps every version of a binary for ever. **Record on one platform per branch** and do not
  * re-record just to re-record — only when a state actually changed.
  */
-internal const val SCREENSHOT_ROOT = "screenshots"
+internal const val SCREENSHOT_ROOT = "build/screenshots"
 
 /**
  * How long to let real work — decoding thumbnails, rasterising a deck — finish before failing.
