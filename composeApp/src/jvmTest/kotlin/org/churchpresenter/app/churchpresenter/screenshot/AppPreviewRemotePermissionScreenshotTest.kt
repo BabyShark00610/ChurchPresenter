@@ -2,9 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.screenshot
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -32,12 +30,16 @@ class AppPreviewRemotePermissionScreenshotTest {
             setContent {
                 ChurchPresenterTheme(themeMode = mode) {
                     Box(
-                        Modifier
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(24.dp)
-                            // The size the real DialogWindow opens at (DialogSizes.kt); without a
-                            // height the content stretches and leaves a gap the operator never sees.
-                            .size(500.dp, 290.dp)
+                        // The size the real DialogWindow opens at (DialogSizes.kt); without a
+                        // height the content stretches and leaves a gap the operator never sees.
+                        //
+                        // No backdrop behind it, and no padding around it: this shot is exported to
+                        // the website, which frames it itself. A painted margin inside the image
+                        // fought that frame — 24dp of surfaceVariant on all four sides, invisible
+                        // against the dark page and an obvious grey slab against the light one.
+                        // Safe to sit flush because the content is an opaque Surface with no shape
+                        // (RemoteEventDialog.kt), so there are no rounded corners to expose.
+                        Modifier.size(500.dp, 290.dp)
                     ) {
                         RemoteEventDialogContent(
                             event = event,
