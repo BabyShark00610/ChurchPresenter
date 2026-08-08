@@ -97,7 +97,7 @@ class ScreenshotInvariantsTest {
 
     @Test
     fun `every path that names the root derives it rather than restating it`() {
-        val literal = Regex(""""[^"]*build/screenshots""")
+        val literal = Regex(""""(\.?/)?screenshots/""")
         val offenders = sources()
             // This file spells the path out to search for it; matching itself would be noise.
             .filterNot { (file, _) -> file.name == "${this::class.simpleName}.kt" }
@@ -114,19 +114,20 @@ class ScreenshotInvariantsTest {
         )
     }
 
+    /**
+     * Screenshots are committed and must stay that way — see AGENT.md.
+     *
+     * Under `build/` they are unreviewable: `build/` is git-ignored and routinely deleted, so the
+     * images exist only on the machine that last recorded them and no reviewer can open them or ask
+     * for a state to be changed before it merges. This location has been flipped three times; this
+     * assertion is what stops the fourth from being silent.
+     */
     @Test
-    fun `no screenshot is committed`() {
-        // Under build/, and the old committed location stays empty. A recorded image reaching a
-        // commit is how 15-of-16 platform churn got into the history before 2026-08-07.
+    fun `screenshots are committed, not hidden under build`() {
         assertTrue(
-            SCREENSHOT_ROOT.startsWith("build/"),
-            "screenshots must land under build/ so they cannot be added to a commit, was $SCREENSHOT_ROOT"
-        )
-        val abandoned = File("screenshots")
-        assertTrue(
-            !abandoned.exists() || abandoned.walkTopDown().none { it.extension == "png" },
-            "${abandoned.absolutePath} holds recorded images again; nothing reads them and git keeps " +
-                "every version of a binary for ever"
+            !SCREENSHOT_ROOT.startsWith("build/") && !SCREENSHOT_ROOT.contains("/build/"),
+            "screenshots must be committed so they can be reviewed and approved; a root under " +
+                "build/ is git-ignored and wiped by `clean`, was $SCREENSHOT_ROOT"
         )
     }
 

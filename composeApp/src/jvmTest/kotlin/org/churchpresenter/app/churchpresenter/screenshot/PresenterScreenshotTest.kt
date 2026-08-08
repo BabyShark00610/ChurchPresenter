@@ -33,13 +33,14 @@ import kotlin.test.Test
  * sidesteps the platform problem entirely: no committed image is ever used as the baseline, so a
  * stale one cannot fail a build on the machine reading it.
  *
- * Nothing is committed: the PNGs live under `build/` and only ever exist on the machine that
- * rendered them. See `SCREENSHOT_ROOT`.
+ * The PNGs are committed, under `composeApp/screenshots/`, so a reviewer can approve what is on
+ * screen rather than take the diff on trust. See `SCREENSHOT_ROOT`.
  *
  * Consequences worth knowing:
- * - Recording locally writes PNGs to `composeApp/build/screenshots/` and asserts nothing. It is
- *   still a smoke test: a presenter that throws while composing fails here. What you record is for
- *   your own eyes — CI records its own, so there is nothing to re-record before pushing.
+ * - Recording locally writes PNGs to `composeApp/screenshots/` and asserts nothing. It is still a
+ *   smoke test: a presenter that throws while composing fails here. Re-record before pushing when a
+ *   surface here changed, and record on one platform per branch — Skia rasterises text per platform,
+ *   so recording on a second OS rewrites nearly every file whether anything changed or not.
  * - `captureRoboImage` is inert unless a Roborazzi task turned recording on, so an ordinary
  *   `./gradlew :composeApp:jvmTest` pays only the composition, not the file write.
  * - What a diff means is a judgement call, not a failure: a deliberate design change shows up here

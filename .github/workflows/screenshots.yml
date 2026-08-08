@@ -11,15 +11,17 @@ name: Screenshots
 #   * reg-actions needs write access to pull requests and to the repository, which `test`
 #     deliberately does not have (`contents: read`).
 #
-# **No images are committed.** They are rendered here and compared here: this job records the
-# branch's images and reg-actions diffs them against the base branch's, which it keeps on a
-# `reg_actions` branch of its own. Nothing in the comparison ever read a copy from git — the record
-# step overwrote them first — so committing 20 MB of PNGs bought a duplicate of the PR comment below
-# and cost a rewrite of most of them on every UI change.
+# **The images ARE committed**, under `composeApp/screenshots`, so a reviewer can open and approve
+# what is on screen rather than take the diff on trust. This job is a second, independent view of
+# the same thing: it records the branch's images and reg-actions diffs them against the base
+# branch's, which it keeps on a `reg_actions` branch of its own. Note the record step below
+# overwrites the working copy before reg-actions reads it, so the comparison is always between two
+# fresh renders — the committed copies are for humans, not for this job.
 #
 # Skia renders text differently on macOS, Windows and Linux (the same reason AGENT.md tells tests to
-# assert invariants rather than pixels). Rendering both sides on one runner is what makes the
-# comparison meaningful; a locally recorded image never enters it.
+# assert invariants rather than pixels), so the committed images are right for whoever recorded them
+# and differ everywhere else. Record on ONE platform per branch, and re-record only what actually
+# changed — a re-record on a second OS rewrites nearly every file for nothing.
 #
 # To update the website's screenshots, download the `screenshots` artifact from a run on `main`
 # rather than recording locally — those are the Linux renders, and they are consistent with each
@@ -87,7 +89,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
-          path: composeApp/build/screenshots
+          path: composeApp/screenshots
           retention-days: 30
           if-no-files-found: error
 
@@ -96,8 +98,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           # Where the record step above writes — `roborazzi.outputDir` in composeApp/build.gradle.kts
-          # and `ScreenshotSupport.SCREENSHOT_ROOT` both point here. Under build/, so nothing in git.
-          image-directory-path: ./composeApp/build/screenshots
+          # and `ScreenshotSupport.SCREENSHOT_ROOT` both point here. Committed, so a local re-record
+          # also updates what is in git.
+          image-directory-path: ./composeApp/screenshots
           # Every changed image is shown in the comment; with a handful of surfaces there is no
           # reason to make a reviewer expand a details block to see what moved.
           comment-report-format: raw
