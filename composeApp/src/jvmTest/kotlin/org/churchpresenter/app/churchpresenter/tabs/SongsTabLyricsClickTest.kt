@@ -2,6 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -29,7 +30,7 @@ import kotlin.test.assertTrue
  */
 class SongsTabLyricsClickTest {
 
-    private fun androidx.compose.ui.test.ComposeUiTest.clickRow(title: String) {
+    private fun ComposeUiTest.clickRow(title: String) {
         onAllNodes(hasText(title))[0].performClick()
         waitForIdle()
     }

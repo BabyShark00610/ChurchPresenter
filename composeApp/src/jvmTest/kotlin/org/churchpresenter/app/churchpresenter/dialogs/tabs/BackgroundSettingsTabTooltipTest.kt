@@ -2,6 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -30,7 +31,7 @@ class BackgroundSettingsTabTooltipTest {
         AppSettings().let { it.copy(backgroundSettings = it.backgroundSettings.change()) }
 
     /** Hovers the button described by [description] and waits for its tooltip to be composed. */
-    private fun androidx.compose.ui.test.ComposeUiTest.hoverAndAwaitTooltip(description: String) {
+    private fun ComposeUiTest.hoverAndAwaitTooltip(description: String) {
         onNodeWithContentDescription(description).performScrollTo()
         waitForIdle()
         onNodeWithContentDescription(description).performMouseInput { moveTo(center) }

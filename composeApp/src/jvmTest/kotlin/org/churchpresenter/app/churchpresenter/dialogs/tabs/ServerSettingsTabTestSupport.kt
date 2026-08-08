@@ -7,10 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
@@ -181,9 +183,9 @@ internal object Switch {
 
 internal fun ComposeUiTest.serverSwitches(): SemanticsNodeInteractionCollection =
     onAllNodes(
-        androidx.compose.ui.test.SemanticsMatcher.expectValue(
+        SemanticsMatcher.expectValue(
             SemanticsProperties.Role,
-            androidx.compose.ui.semantics.Role.Switch,
+            Role.Switch,
         ),
     )
 
@@ -218,7 +220,7 @@ internal fun ComposeUiTest.retypeField(showing: String, to: String) {
  * displayed text is what is searched instead.
  */
 internal fun ComposeUiTest.assertFieldShows(value: String, what: String) {
-    val shown = onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText))
+    val shown = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText))
         .fetchSemanticsNodes(atLeastOneRootRequired = false)
         .mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
     assertEquals(true, value in shown, "$what must display \"$value\" — fields show $shown")
@@ -226,7 +228,7 @@ internal fun ComposeUiTest.assertFieldShows(value: String, what: String) {
 
 /** Any text box displaying [value], whether or not it is editable. */
 internal fun ComposeUiTest.boxShowing(value: String): SemanticsNodeInteraction =
-    onNode(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText) and hasText(value))
+    onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText) and hasText(value))
 
 /** How many times [text] is rendered. */
 internal fun ComposeUiTest.countOf(text: String): Int =

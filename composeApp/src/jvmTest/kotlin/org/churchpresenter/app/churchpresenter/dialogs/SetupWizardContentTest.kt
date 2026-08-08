@@ -5,6 +5,7 @@ package org.churchpresenter.app.churchpresenter.dialogs
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.onNodeWithText
@@ -227,7 +228,7 @@ class SetupWizardContentTest {
         assertEquals(0, choices.dismissed, "walking to the end must not close the wizard on its own")
     }
 
-    private fun ComposeUiTest.onAllNodesCount(matcher: androidx.compose.ui.test.SemanticsMatcher): Int =
+    private fun ComposeUiTest.onAllNodesCount(matcher: SemanticsMatcher): Int =
         onAllNodes(matcher).fetchSemanticsNodes(atLeastOneRootRequired = false).size
 
     private fun ComposeUiTest.onAllNodesWithTextCount(text: String): Int =

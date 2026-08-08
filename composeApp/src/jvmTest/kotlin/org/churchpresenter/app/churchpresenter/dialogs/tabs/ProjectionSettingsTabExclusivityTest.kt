@@ -2,6 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
+import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
@@ -349,7 +350,7 @@ class ProjectionSettingsTabExclusivityTest {
     }
 }
 
-private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountAtLeast(n: Int) {
+private fun SemanticsNodeInteractionCollection.assertCountAtLeast(n: Int) {
     val found = fetchSemanticsNodes(atLeastOneRootRequired = false).size
     kotlin.test.assertTrue(found >= n, "expected at least $n nodes but found $found")
 }

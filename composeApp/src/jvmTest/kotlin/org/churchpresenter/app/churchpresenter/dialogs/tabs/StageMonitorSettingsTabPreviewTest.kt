@@ -4,6 +4,7 @@ package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -30,7 +31,7 @@ import kotlin.test.assertTrue
 class StageMonitorSettingsTabPreviewTest {
 
     /** The text of every non-clickable node, which is what the preview is built from. */
-    private fun androidx.compose.ui.test.ComposeUiTest.previewTexts(): List<String> =
+    private fun ComposeUiTest.previewTexts(): List<String> =
         onAllNodes(!hasClickAction()).fetchSemanticsNodes(atLeastOneRootRequired = false)
             .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }
 

@@ -3,6 +3,7 @@ package org.churchpresenter.app.churchpresenter.presenter
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
@@ -41,7 +42,7 @@ class STTPresenterRenderTest {
         settings: STTSettings,
         transcription: List<STTSegment> = emptyList(),
         translation: List<STTSegment> = emptyList(),
-        body: androidx.compose.ui.test.ComposeUiTest.() -> Unit,
+        body: ComposeUiTest.() -> Unit,
     ) = runComposeUiTest {
         setContent {
             Box(screen) {
