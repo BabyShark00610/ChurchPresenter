@@ -65,8 +65,13 @@ private const val ROOT = "$SCREENSHOT_ROOT/previewApp"
  * The two roots produce different text on screen, which is deliberate and harmless: CI only ever
  * compares its own renders against its own, and images are not committed, so a local recording never
  * enters the comparison.
+ *
+ * **The output snapshots resolve their files through this same value**, so they present the file the
+ * tab preview actually put live. A second root spelled out in that test picks the *other* candidate
+ * on any machine where both exist, and then quietly renders whatever a previous fixture left behind
+ * there.
  */
-private val LIBRARY = listOf(File("/Users/Shared/ChurchPresenter"), File("/tmp/ChurchPresenter"))
+internal val LIBRARY = listOf(File("/Users/Shared/ChurchPresenter"), File("/tmp/ChurchPresenter"))
     .firstOrNull { it.parentFile?.isDirectory == true && (it.isDirectory || it.mkdirs()) }
     ?: File("build/app-preview-library").absoluteFile
 
