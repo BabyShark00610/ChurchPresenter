@@ -38,10 +38,24 @@ else
     echo "   ✅ PASS"
 fi
 
-# Count fully qualified type names used inline (e.g. in a function signature) — import statements
-# are excluded since they're the correct, required way to reference a type, not a violation of the
-# "no fully-qualified names when an import exists" rule
-QUALIFIED=$(grep -rE 'androidx\.compose\.[a-z]*\.[a-zA-Z]*\.[A-Z]' --include='*.kt' composeApp/src/ 2>/dev/null | grep -vE '^\S*:\s*import\b' | wc -l | tr -d ' ')
+# Count fully qualified type names used inline (e.g. in a function signature). Three kinds of line
+# are excluded, because none of them is the thing the rule forbids — writing the long form where an
+# import already binds the name:
+#
+#   import ...                  the correct, required way to reference a type
+#   @file:OptIn(...::class)     a file-level annotation, which sits above the import block and is
+#                               conventionally written out in full; 283 of these alone, so leaving
+#                               them in made the count permanently non-zero
+#   * / // / /*                 KDoc links like [androidx.compose.ui.test.ComposeUiTest], which need
+#                               the full path precisely when the type is NOT imported
+#
+# Without those exclusions this reported 306 against a documented target of 0 — a check that cannot
+# pass is a check nobody reads, and it was hiding 21 real violations in the noise.
+QUALIFIED=$(grep -rE 'androidx\.compose\.[a-z]*\.[a-zA-Z]*\.[A-Z]' --include='*.kt' composeApp/src/ 2>/dev/null \
+    | grep -vE '^\S*:\s*import\b' \
+    | grep -vE '@file:OptIn|@OptIn' \
+    | grep -vE '^\S*:\s*(\*|//|/\*)' \
+    | wc -l | tr -d ' ')
 echo "📝 Fully qualified type names: $QUALIFIED"
 if [ "$QUALIFIED" -gt 0 ]; then
     echo "   ⚠️  WARN - Should be 0"

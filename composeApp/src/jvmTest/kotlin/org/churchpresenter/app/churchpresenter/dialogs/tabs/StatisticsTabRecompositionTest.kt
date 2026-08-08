@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -33,7 +34,7 @@ class StatisticsTabRecompositionTest {
     /** Renders the tab over [stats] with a recomposition trigger the test controls. */
     private fun rerenderable(
         stats: StatisticsManager,
-        block: androidx.compose.ui.test.ComposeUiTest.(recompose: () -> Unit) -> Unit,
+        block: ComposeUiTest.(recompose: () -> Unit) -> Unit,
     ) = runComposeUiTest {
         var tick by mutableStateOf(0)
         setContent {

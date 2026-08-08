@@ -2,6 +2,7 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
@@ -27,7 +28,7 @@ import kotlin.test.assertTrue
 class SongsTabSelectionTest {
 
     /** Clicks the row showing [title]. Rows are addressed by the title they display. */
-    private fun androidx.compose.ui.test.ComposeUiTest.clickRow(title: String) {
+    private fun ComposeUiTest.clickRow(title: String) {
         onAllNodes(hasText(title))[0].performClick()
         waitForIdle()
     }
@@ -40,7 +41,7 @@ class SongsTabSelectionTest {
      * (Note the capital L — `PrimaryActionButtonsTest` uses "Go live" because it passes its own
      * tooltip text; here the description comes from the `go_live` string resource.)
      */
-    private fun androidx.compose.ui.test.ComposeUiTest.goLive() {
+    private fun ComposeUiTest.goLive() {
         onAllNodes(hasContentDescription("Go Live"))[0].performClick()
         waitForIdle()
     }

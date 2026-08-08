@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
@@ -101,7 +102,7 @@ internal object StatsLabel {
 
 /** Every string the tab renders, in traversal order. */
 internal fun ComposeUiTest.renderedLines(): List<String> =
-    onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
+    onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
         .fetchSemanticsNodes(atLeastOneRootRequired = false)
         .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }
 
@@ -113,7 +114,7 @@ internal fun ComposeUiTest.renderedLines(): List<String> =
  * belongs to one row, and the bands below a heading and above the next one belong to that section.
  */
 internal fun ComposeUiTest.rowsUnder(heading: String): List<Triple<String, String, String>> {
-    val all = onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
+    val all = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
         .fetchSemanticsNodes(atLeastOneRootRequired = false)
         .map { it.boundsInRoot to (it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } ?: "") }
     val headings = all.filter { it.second.startsWith(StatsLabel.TOP_SONGS) || it.second.startsWith(StatsLabel.TOP_VERSES) }

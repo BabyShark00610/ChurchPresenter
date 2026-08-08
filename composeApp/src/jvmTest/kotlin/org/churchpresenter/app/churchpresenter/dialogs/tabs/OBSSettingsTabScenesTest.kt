@@ -2,6 +2,8 @@
 
 package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
+import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -92,10 +94,10 @@ class OBSSettingsTabScenesTest {
     }
 
     /** The default scene box sits directly under the "Default Scene" caption, above the mode rows. */
-    private fun androidx.compose.ui.test.ComposeUiTest.sceneOrDefaultBox() =
+    private fun ComposeUiTest.sceneOrDefaultBox() =
         onNode(
             androidx.compose.ui.test.hasSetTextAction() and
-                androidx.compose.ui.test.SemanticsMatcher("is the default-scene box") { node ->
+                SemanticsMatcher("is the default-scene box") { node ->
                     val caption = onAllNodesWithText(ObsLabel.DEFAULT_SCENE)
                         .fetchSemanticsNodes(atLeastOneRootRequired = false)
                         .minByOrNull { it.boundsInRoot.top } ?: return@SemanticsMatcher false
