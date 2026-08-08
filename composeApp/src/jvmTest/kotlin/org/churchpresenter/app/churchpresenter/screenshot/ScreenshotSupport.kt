@@ -84,7 +84,7 @@ internal const val RENDER_TIMEOUT_MS = 30_000L
 private val PARTS = File("$SCREENSHOT_ROOT/.parts")
 
 /**
- * How much of an image may differ before `verifyRoborazziJvm` fails: **0.5%** of its pixels.
+ * How much of an image may differ before `verifyRoborazziJvm` fails: **0.1%** of its pixels.
  *
  * Roborazzi's own default is **0** — one differing pixel fails. That is the right target and not yet
  * reachable here (see below), so this is deliberately a little above it rather than the order of
@@ -105,17 +105,23 @@ private val PARTS = File("$SCREENSHOT_ROOT/.parts")
  * At 2.5% the first three of those merge cleanly — a switch could be inverted, a status could go the
  * wrong color, and the gate would stay green.
  *
- * **What sets the floor is churn, not the threshold.** Re-recording the *unchanged* set on the same
- * machine moves 9 of ~330 images, by 0.07% to 4.2% each. Those overlap the real changes above, so no
- * number separates signal from noise while they exist — the churn has to be fixed instead. Known:
- * `bibleSettingsTab`/`songSettingsTab` `colour_picker` (0.87% each) draw the picker's "Recent" row,
- * which is a JVM-wide singleton loaded from `~/.churchpresenter/recent_colors.json` — the suites that
- * pin and restore it (`stageMonitorSettingsTab`, `dictionarySettingsTab`) do not churn. Unexplained:
- * `previewApp` `about_*` (0.55%), `settings_companion_satellite_*` (0.16%), `canvas_*` (0.07%) and
- * `dictionary_light` (4.2%).
+ * **What sets the floor is churn, not the threshold**, so the churn was fixed rather than the number
+ * widened. Nine images used to move on every re-record; each had a cause, and none of them was Skia:
  *
- * So: **0.5% catches everything from a status line upwards and is 25× tighter than a "typical"
- * screenshot gate; drop it toward 0 as each churning image is fixed.**
+ * - `colour_picker` (0.87%) — the picker's "Recent" row, JVM-wide state; see [PinnedRecentColors].
+ * - `previewApp/about_*` (0.55%) — `BuildConfig.VERSION_DISPLAY` carries the git hash, so it changed
+ *   on every commit. The dialog now takes the version as a parameter and the test pins it.
+ * - `previewApp/settings_companion_satellite_*` (0.16%) — `CompanionSatelliteSettings` generates its
+ *   device id with `UUID.randomUUID()` and the tab draws it. Pinned in the preview fixture.
+ * - `previewApp/dictionary_light` (4.2%) — the interlinear index loads in the background and is
+ *   queried once, when an entry is selected, so a selection made mid-load kept a partial count. The
+ *   test now re-selects until the count is complete.
+ * - `previewApp/canvas_*` (0.07%) — not churn at all: a stale image, never re-recorded after the
+ *   canvas source list moved from emoji to real icons.
+ *
+ * With those gone the set is byte-stable across consecutive recordings, so **0.1% is slack for
+ * anti-aliasing and nothing else — it sits under every real change measured above.** 0 is the
+ * target; keep this only as long as something still jitters.
  *
  * The threshold is a *fraction of the whole image*, so it scales with the picture: on a stacked
  * 1024×1538 tab shot it is ~7,900 pixels, on a trimmed component shot a few hundred.
@@ -124,7 +130,7 @@ private val PARTS = File("$SCREENSHOT_ROOT/.parts")
  * `SimpleImageComparator` counts a pixel as differing only past a color distance of 0.007, which is
  * about four levels of one 8-bit channel.
  */
-internal const val CHANGE_THRESHOLD = 0.005f
+internal const val CHANGE_THRESHOLD = 0.001f
 
 /**
  * What the record/compare/verify tasks apply to a **golden** — the stacked image that is committed.

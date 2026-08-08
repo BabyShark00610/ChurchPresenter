@@ -96,7 +96,19 @@ fun AboutDialog(
 }
 
 @Composable
-internal fun AboutDialogContent(onDismiss: () -> Unit, appSettings: AppSettings, theme: ThemeMode) {
+internal fun AboutDialogContent(
+    onDismiss: () -> Unit,
+    appSettings: AppSettings,
+    theme: ThemeMode,
+    /**
+     * The version line, as a parameter only so the screenshot of this dialog can pin it.
+     *
+     * [BuildConfig.VERSION_DISPLAY] carries the build's git hash, so it changes with every commit —
+     * and a committed image of this dialog would therefore be stale the moment it was recorded, and
+     * would fail `verifyRoborazziJvm` for ever after. Nothing but the test passes anything here.
+     */
+    versionDisplay: String = BuildConfig.VERSION_DISPLAY,
+) {
     AppThemeWrapper(theme = theme) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -136,7 +148,7 @@ internal fun AboutDialogContent(onDismiss: () -> Unit, appSettings: AppSettings,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = BuildConfig.VERSION_DISPLAY,
+                    text = versionDisplay,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -29,6 +29,9 @@ class AppPreviewAboutScreenshotTest {
                             onDismiss = {},
                             appSettings = appSettings,
                             theme = mode,
+                            // Pinned: the real one carries the build's git hash, so this image
+                            // would differ from the committed one after every single commit.
+                            versionDisplay = "26.8.0 (0000000)",
                         )
                     }
                 }
