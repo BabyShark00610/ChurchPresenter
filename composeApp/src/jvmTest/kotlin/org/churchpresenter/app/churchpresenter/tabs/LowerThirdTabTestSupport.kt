@@ -2,11 +2,15 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -18,11 +22,14 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.data.settings.AtemSettings
 import org.churchpresenter.app.churchpresenter.server.AtemState
 import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
+import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
+import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import java.io.File
 import java.nio.file.Files
 
@@ -43,6 +50,10 @@ import java.nio.file.Files
 /** A Lottie the app can time: 60 frames at 30fps = 2000ms. */
 internal const val LOWER_THIRD_LOTTIE =
     """{"v":"5.7.4","fr":30,"ip":0,"op":60,"w":1920,"h":1080,"layers":[]}"""
+
+/** Same, at an arbitrary canvas size — for the warnings that compare the design against a frame. */
+internal fun lottieSized(width: Int, height: Int): String =
+    """{"v":"5.7.4","fr":30,"ip":0,"op":60,"w":$width,"h":$height,"layers":[]}"""
 
 /** A folder holding [names] as real Lottie files, plus one file that is not a preset. */
 internal fun lottieFolder(vararg names: String): File =
@@ -115,50 +126,63 @@ internal fun lowerThirdTab(
     quickUpload: Boolean = false,
     /** A lower third clicked in the schedule, which the tab resolves back to one of its presets. */
     selectedLowerThirdItem: ScheduleItem.LowerThirdItem? = null,
+    /**
+     * Applied to the settings this harness builds, for the states the parameters above don't name —
+     * `goLiveKey` already armed, a wider preset list. Runs last, so it can override anything here.
+     */
+    settings: (AppSettings) -> AppSettings = { it },
+    /** Constrains the tab's width, for the screenshots that show how it reflows in a narrow panel. */
+    width: Dp? = null,
+    /** Non-null renders through the real app theme, which is what the screenshot suite shoots. */
+    themeMode: ThemeMode? = null,
     block: ComposeUiTest.(reports: LowerThirdReports) -> Unit,
 ) {
     val reports = LowerThirdReports()
     try {
         runComposeUiTest {
             setContent {
-                var settings by remember {
+                var appSettings by remember {
                     mutableStateOf(
-                        AppSettings(
-                            streamingSettings = StreamingSettings(
-                                lowerThirdFolder = folder?.absolutePath ?: ""
-                            ),
-                            atemSettings = if (atemReachable) {
-                                AtemSettings(
-                                    host = atemHost,
-                                    port = atemPort,
-                                    quickUpload = quickUpload,
-                                    renderWidth = atemRenderWidth,
-                                    renderHeight = atemRenderHeight,
-                                )
-                            } else {
-                                AtemSettings()
-                            },
+                        settings(
+                            AppSettings(
+                                streamingSettings = StreamingSettings(
+                                    lowerThirdFolder = folder?.absolutePath ?: ""
+                                ),
+                                atemSettings = if (atemReachable) {
+                                    AtemSettings(
+                                        host = atemHost,
+                                        port = atemPort,
+                                        quickUpload = quickUpload,
+                                        renderWidth = atemRenderWidth,
+                                        renderHeight = atemRenderHeight,
+                                    )
+                                } else {
+                                    AtemSettings()
+                                },
+                            )
                         )
                     )
                 }
-                MaterialTheme {
-                    LowerThirdTab(
-                        appSettings = settings,
-                        onSettingsChange = { transform ->
-                            settings = transform(settings)
-                            reports.settingsChanges++
-                        },
-                        onAddToSchedule = { id, label, pause, pauseMs ->
-                            reports.scheduled += listOf(id, label, pause, pauseMs)
-                        },
-                        onGoLive = { json, _, _, _, presetName ->
-                            reports.live += presetName
-                            reports.liveJson = json
-                        },
-                        selectedLowerThirdItem = selectedLowerThirdItem,
-                        queryAtemState = queryAtemState,
-                        probeAtemReachable = { _, _ -> atemReachable },
-                    )
+                ThemedForTest(themeMode) {
+                    Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
+                        LowerThirdTab(
+                            appSettings = appSettings,
+                            onSettingsChange = { transform ->
+                                appSettings = transform(appSettings)
+                                reports.settingsChanges++
+                            },
+                            onAddToSchedule = { id, label, pause, pauseMs ->
+                                reports.scheduled += listOf(id, label, pause, pauseMs)
+                            },
+                            onGoLive = { json, _, _, _, presetName ->
+                                reports.live += presetName
+                                reports.liveJson = json
+                            },
+                            selectedLowerThirdItem = selectedLowerThirdItem,
+                            queryAtemState = queryAtemState,
+                            probeAtemReachable = { _, _ -> atemReachable },
+                        )
+                    }
                 }
             }
             block(reports)
@@ -224,4 +248,10 @@ internal fun ComposeUiTest.openAtemDialog(presetName: String = "Welcome") {
     waitUntil("the dialog's upload-mode rows are composed", 5_000L) {
         onAllNodes(isSelectable()).fetchSemanticsNodes().size >= 2
     }
+}
+
+@Composable
+private fun ThemedForTest(themeMode: ThemeMode?, content: @Composable () -> Unit) {
+    if (themeMode == null) MaterialTheme(content = content)
+    else ChurchPresenterTheme(themeMode = themeMode, content = content)
 }
