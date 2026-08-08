@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
@@ -70,7 +71,7 @@ class BrowserSourceContentRenderTest {
         settings: AppSettings = AppSettings(),
         outputIndex: Int = 0,
         seed: PresenterManager.() -> Unit = {},
-        body: androidx.compose.ui.test.ComposeUiTest.() -> Unit,
+        body: ComposeUiTest.() -> Unit,
     ) = runComposeUiTest {
         val manager = PresenterManager().apply(seed)
         setContent {
