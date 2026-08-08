@@ -221,7 +221,17 @@ class PicturesTabScreenshotTest {
     private companion object {
         const val SECTION = "picturesTab"
 
-        val FIXTURES = File("build/screenshot-fixtures/pictures")
+        /**
+         * A neutral root, not a repo-relative `build/` one.
+         *
+         * The path is printed into the image, and a repo-relative fixture resolves through the
+         * developer's home directory — which on most machines is their name, committed into the PNG
+         * for ever. `/tmp` where there is one, the JVM's temp directory otherwise (Windows).
+         */
+        val FIXTURES: File = File("/tmp")
+            .takeIf { it.isDirectory }
+            ?.let { File(it, "churchpresenter-screenshots/pictures") }
+            ?: File(System.getProperty("java.io.tmpdir"), "churchpresenter-screenshots/pictures")
 
         val GALLERY = arrayOf(
             "01 Welcome.png",
