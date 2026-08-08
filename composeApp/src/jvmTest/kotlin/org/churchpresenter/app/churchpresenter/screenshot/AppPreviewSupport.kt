@@ -42,6 +42,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
+import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
@@ -149,6 +150,10 @@ internal fun appPreview(
                         presenterManager = presenterManager,
                         companionSatelliteViewModel = CompanionSatelliteViewModel(),
                         qaManager = QAManager(),
+                        // MainDesktop renders the STT tab only when this is non-null — with the
+                        // default null the tab is selectable and draws nothing at all. Constructing
+                        // one is inert: STTManager opens no socket until it is told to connect.
+                        sttManager = STTManager(),
                         // The app treats a non-empty server URL as "the companion server is up" —
                         // it is what clears the Q&A tab's "server not running" banner and gives the
                         // remote panels something to show.
@@ -256,7 +261,9 @@ private fun tabLabel(tab: Tabs) = when (tab) {
     Tabs.WEB -> "Web"
     Tabs.CANVAS -> "Canvas"
     Tabs.QA -> "Q&A"
-    Tabs.STT -> "Captions"
+    // "STT", not "Captions": `tab_stt` in strings.xml is the three letters. The map said Captions
+    // and nothing noticed, because no preview used this tab until one was added for the website.
+    Tabs.STT -> "STT"
     Tabs.DICTIONARY -> "Dictionary"
     Tabs.CROSSWORD -> "Crossword"
     Tabs.COMPANION_SURFACE -> "Companion"
