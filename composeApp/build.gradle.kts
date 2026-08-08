@@ -747,6 +747,23 @@ tasks.register<JacocoReport>("jacocoTestReport") {
             // rather than a documented feature in FEATURES.md — out of scope for the app's coverage
             // metrics regardless of how well tested it happens to be.
             exclude("**/CrosswordTabKt*")
+
+            // Three further "generated code" exclusions have been proposed and are deliberately NOT
+            // here, each measured against the report of 2026-08-08 (76.2% branch, 21,443/28,137):
+            //
+            //  - `**/*$$serializer*` and `**/*WhenMappings*` — JaCoCo already filters both. All 132
+            //    serializer classes and 49 WhenMappings appear in the XML as EMPTY self-closing
+            //    <class/> elements carrying zero instructions and zero branches. Adding the globs
+            //    moves the number by 0.0 points; they would be config that looks load-bearing and
+            //    is not.
+            //  - DI-generated classes — there is no DI framework in this build. Zero matches for
+            //    *_Factory*, *Hilt*, *Dagger*, *_Impl*.
+            //  - the UI packages (`tabs/`, `dialogs/`, `composables/`, `ui/`, `presenter/`), on the
+            //    theory that composables dilute branch coverage. They do not: those packages are at
+            //    76.1% branch against 76.2% for the whole, so excluding all of them moves branch
+            //    coverage from 76.2% to 76.4%. They are also hand-written, screenshot-tested UI, not
+            //    generated code. The single largest drag is main.kt at 0.3% branch (711 of 28,137
+            //    missed branches, 10.6% of the total), and the gate below already excludes it.
         }
     )
     sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
@@ -769,9 +786,15 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     finalizedBy("printCoverageLink")
 }
 
-// Coverage floor — the 75% line-coverage target agreed for this MVVM app. 85% overall isn't a sane
-// goal here: the View layer (tabs/dialogs/composables) is a large share of the lines but low-logic,
-// so chasing the last slices means render-testing near-pure UI wiring. 75% is the honest ceiling.
+// Coverage floors for this MVVM app, on all six JaCoCo counters (see violationRules below).
+//
+// This started as a single 75% LINE floor, on the reasoning that the View layer
+// (tabs/dialogs/composables) is a large share of the lines but low-logic, so 75% was the honest
+// ceiling. That reasoning is now out of date in one specific way: it was measured against the
+// REPORT scope, which includes main.kt and the rest of the permanently-uncoverable app entry. The
+// gated scope below excludes those and stands at 90.2% line, so an 85% line floor is a floor, not a
+// stretch. What the original note got right still holds for BRANCH, which is the counter the UI
+// layer genuinely does cap -- see the table in violationRules.
 //
 // Wired into `check` (see the bottom of this file) as of 2026-07-30, when the gated scope first
 // cleared the floor. Run it on its own with:
@@ -786,7 +809,7 @@ tasks.register<JacocoReport>("jacocoTestReport") {
 // actually cover; the report reports everything.
 tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     group = "verification"
-    description = "Fails the build if line coverage of the coverable code is below the 75% target."
+    description = "Fails the build if coverage of the coverable code is below the line/branch targets."
     dependsOn("jvmTest")
     executionData.setFrom(layout.buildDirectory.file("jacoco/jvmTest.exec"))
     classDirectories.setFrom(
@@ -815,11 +838,59 @@ tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     )
     sourceDirectories.setFrom(files("src/jvmMain/kotlin", "src/commonMain/kotlin"))
     violationRules {
+        // All six counters are gated as of 2026-08-08 (previously LINE alone at 0.75). Every floor is
+        // the highest multiple of 5 the gated scope currently clears, so each sits within 5 points of
+        // the real number and the gate pins the current level against regression:
+        //
+        //   counter      gate scope   floor   margin
+        //   INSTRUCTION     89.65%     85%     +4.6
+        //   BRANCH          78.18%     75%     +3.2
+        //   LINE            90.24%     90%     +0.2   <-- ~130 lines of headroom
+        //   COMPLEXITY      75.38%     75%     +0.4   <-- ~50 branches of headroom
+        //   METHOD          86.63%     85%     +1.6
+        //   CLASS           88.63%     85%     +3.6
+        //
+        // LINE and COMPLEXITY are deliberately set this tight and WILL fail on a small regression --
+        // that is the point, but it also means a PR that adds a chunk of legitimately hard-to-cover
+        // code trips them. When that happens the fix is to cover it or to argue the floor down, not
+        // to widen an exclusion above: exclusions decide what the number means, floors decide how
+        // much of it we insist on.
+        //
+        // BRANCH and COMPLEXITY sit lowest and cannot be pushed to where LINE is, for a structural
+        // reason rather than a testing gap: 396 classes are at 100% LINE and 88.6% BRANCH -- 757
+        // branches missed on code where every line ran. Those are the Compose compiler's `$changed`
+        // bitmask skip checks, emitted INSIDE each composable's own method, so no class-file
+        // exclusion can remove them. They are ~3.5% of the branch denominator.
         rule {
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.85".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.75".toBigDecimal()
+            }
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
+                minimum = "0.90".toBigDecimal()
+            }
+            limit {
+                counter = "COMPLEXITY"
+                value = "COVEREDRATIO"
                 minimum = "0.75".toBigDecimal()
+            }
+            limit {
+                counter = "METHOD"
+                value = "COVEREDRATIO"
+                minimum = "0.85".toBigDecimal()
+            }
+            limit {
+                counter = "CLASS"
+                value = "COVEREDRATIO"
+                minimum = "0.85".toBigDecimal()
             }
         }
     }
