@@ -700,7 +700,7 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
 // The tests pass paths relative to the module directory (`screenshots/...`), so this only has to
 // agree with them for the compare/verify tasks; the workflow reads the directory itself.
 roborazzi {
-    outputDir.set(layout.projectDirectory.dir("screenshots"))
+    outputDir.set(layout.buildDirectory.dir("screenshots"))
 }
 
 // ── Test coverage (JaCoCo) ────────────────────────────────────────────────────
