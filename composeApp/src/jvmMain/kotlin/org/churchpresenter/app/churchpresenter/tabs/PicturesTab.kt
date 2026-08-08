@@ -115,6 +115,7 @@ import churchpresenter.composeapp.generated.resources.ic_skip_next
 import churchpresenter.composeapp.generated.resources.ic_skip_previous
 import churchpresenter.composeapp.generated.resources.image_counter
 import churchpresenter.composeapp.generated.resources.loading
+import churchpresenter.composeapp.generated.resources.picture_thumbnail_unreadable
 import churchpresenter.composeapp.generated.resources.loop_off
 import churchpresenter.composeapp.generated.resources.loop_on
 import churchpresenter.composeapp.generated.resources.next_image
@@ -935,18 +936,28 @@ fun PicturesTab(
                                     .background(MaterialTheme.colorScheme.surfaceVariant),
                                 contentAlignment = Alignment.Center
                             ) {
-                                viewModel.thumbnails[imageFile]?.let { bitmap ->
-                                    Image(
-                                        bitmap = bitmap,
+                                val thumbnail = viewModel.thumbnails[imageFile]
+                                when {
+                                    thumbnail != null -> Image(
+                                        bitmap = thumbnail,
                                         contentDescription = imageFile.name,
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
                                     )
-                                } ?: Text(
-                                    text = stringResource(Res.string.loading),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                    // A decode that failed used to leave "Loading..." on the tile for
+                                    // the rest of the session, so a corrupt file looked like a slow
+                                    // one for ever. Say so instead.
+                                    imageFile in viewModel.thumbnailFailures -> Text(
+                                        text = stringResource(Res.string.picture_thumbnail_unreadable),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    else -> Text(
+                                        text = stringResource(Res.string.loading),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                             // Nameplate below image
                             Box(

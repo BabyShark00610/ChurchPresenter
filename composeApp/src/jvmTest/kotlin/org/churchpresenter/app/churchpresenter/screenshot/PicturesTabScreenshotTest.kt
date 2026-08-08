@@ -15,7 +15,6 @@ import org.churchpresenter.app.churchpresenter.tabs.openIntervalEditor
 import org.churchpresenter.app.churchpresenter.tabs.openTransitionEditor
 import org.churchpresenter.app.churchpresenter.tabs.pictureButton
 import org.churchpresenter.app.churchpresenter.tabs.picturesTab
-import org.churchpresenter.app.churchpresenter.tabs.showsExactly
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
@@ -27,6 +26,7 @@ import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class PicturesTabScreenshotTest {
 
@@ -76,15 +76,33 @@ class PicturesTabScreenshotTest {
         }
     }
 
+    /**
+     * Waits for every thumbnail to have resolved, one way or the other.
+     *
+     * The condition is deliberately **not** "the Loading… label is gone". That is the absence of a
+     * label, which a decode that failed satisfies never rather than late: the view model used to
+     * swallow the exception, so the tile kept saying "Loading…" for the rest of the run and this
+     * wait could only end by spending its whole budget. That is what took `main` red on CI run
+     * 31232339922 — 30s exhausted on five 480x300 gradients, which was never a decode speed problem.
+     *
+     * Now each file lands in either `thumbnails` or `thumbnailFailures`, so this ends on a positive
+     * signal, and a failure is reported immediately, naming the file and the reason, instead of
+     * thirty seconds later naming nothing.
+     */
     private fun ComposeUiTest.awaitAll(vm: PicturesViewModel) {
         if (vm.images.isEmpty()) return
-        waitUntil("no thumbnail still loading", RENDER_TIMEOUT_MS) {
+        waitUntil("every thumbnail to finish decoding", RENDER_TIMEOUT_MS) {
             // Thumbnails are decoded on Dispatchers.IO and written into a SnapshotStateMap from
             // there. Without this the write can sit in the global snapshot unapplied while this
             // loop spins, and the placeholder never goes away.
             Snapshot.sendApplyNotifications()
-            !showsExactly(PictureLabel.LOADING)
+            vm.images.all { it in vm.thumbnails || it in vm.thumbnailFailures }
         }
+        assertTrue(
+            vm.thumbnailFailures.isEmpty(),
+            "every fixture is a gradient this test just wrote, so none of them should fail to " +
+                "decode: ${vm.thumbnailFailures}"
+        )
         waitForIdle()
     }
 
