@@ -69,7 +69,7 @@ class AppPreviewOutputScreenshotTest {
     )
 
     private fun slideBitmap(): ImageBitmap =
-        PDDocument.load(File(LIBRARY_DIR, "Decks/Sermon.pdf")).use { doc ->
+        PDDocument.load(File(LIBRARY, "Decks/Sermon.pdf")).use { doc ->
             PDFRenderer(doc).renderImageWithDPI(2, 120f).toComposeImageBitmap()
         }
 
@@ -97,10 +97,11 @@ class AppPreviewOutputScreenshotTest {
         )
     }
 
+    // The gallery image `the pictures tab` clicks and puts live, so the two shots agree.
     @Test
     fun `picture on screen`() = output("picture") {
         PicturePresenter(
-            imagePath = File(LIBRARY_DIR, "Baptism/04 Baptism Pool.png").absolutePath,
+            imagePath = File(LIBRARY, "Gallery/04 Church.png").absolutePath,
         )
     }
 
@@ -154,9 +155,5 @@ class AppPreviewOutputScreenshotTest {
             ),
             dictionarySettings = settings().dictionarySettings,
         )
-    }
-
-    private companion object {
-        val LIBRARY_DIR: File = File("/tmp/ChurchPresenter")
     }
 }
