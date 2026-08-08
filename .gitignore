@@ -51,7 +51,3 @@ google-services.json
 .env
 **/analytics.properties
 CLAUDE*.md
-
-# Screenshots are generated into composeApp/build/screenshots and compared in CI — never committed.
-# See .github/workflows/screenshots.yml and ScreenshotSupport.SCREENSHOT_ROOT.
-composeApp/screenshots/

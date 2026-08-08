@@ -690,16 +690,17 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
 // ── Screenshots (Roborazzi) ───────────────────────────────────────────────────
 // Record: ./gradlew :composeApp:recordRoborazziJvm --tests '*ScreenshotTest*'
 //
-// Written under build/ and NOT committed. `.github/workflows/screenshots.yml` records both the base
-// branch and the branch on one runner and posts the visual difference as a PR comment, so nothing
-// reads a copy from git. See `ScreenshotSupport.SCREENSHOT_ROOT` for why they stopped being
-// committed — briefly: Skia rasterises text per platform, so re-recording unchanged states on
-// another OS rewrote nearly every file, and git keeps every version of a binary for ever.
+// Committed, so a change on screen can be reviewed and approved in the pull request that makes it.
+// `.github/workflows/screenshots.yml` also posts the before/after as a PR comment, but the images in
+// git are what a human signs off. See `ScreenshotSupport.SCREENSHOT_ROOT`.
 //
-// The tests pass paths relative to the module directory (`build/screenshots/...`), so this only has
-// to agree with them for the compare/verify tasks; the workflow reads the directory itself.
+// Record on ONE platform per branch: Skia rasterises text per platform, so re-recording the same
+// unchanged states on another OS rewrites nearly every file and git keeps every version for ever.
+//
+// The tests pass paths relative to the module directory (`screenshots/...`), so this only has to
+// agree with them for the compare/verify tasks; the workflow reads the directory itself.
 roborazzi {
-    outputDir.set(layout.buildDirectory.dir("screenshots"))
+    outputDir.set(layout.projectDirectory.dir("screenshots"))
 }
 
 // ── Test coverage (JaCoCo) ────────────────────────────────────────────────────
