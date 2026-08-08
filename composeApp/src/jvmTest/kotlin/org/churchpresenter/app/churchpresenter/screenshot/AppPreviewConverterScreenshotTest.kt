@@ -21,7 +21,7 @@ import kotlin.test.Test
  * The bundled format converter, reached from the Help menu. It ships its own colour scheme rather
  * than following the app theme, so each tab is one image instead of a light/dark pair.
  */
-class AppPreviewConverterTest {
+class AppPreviewConverterScreenshotTest {
 
     private fun converter(name: String, tab: String?) {
         TestSingletons.latchSkikoHostOs()
@@ -37,7 +37,7 @@ class AppPreviewConverterTest {
                 onNodeWithText(it).performClick()
                 waitForIdle()
             }
-            captureTo(File("screenshots/previewApp/converter_$name.png"))
+            captureTo(File("$SCREENSHOT_ROOT/previewApp/converter_$name.png"))
         }
     }
 

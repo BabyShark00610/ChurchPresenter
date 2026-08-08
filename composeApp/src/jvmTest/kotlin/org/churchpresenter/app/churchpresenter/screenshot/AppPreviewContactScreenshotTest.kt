@@ -16,7 +16,7 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
 import java.io.File
 import kotlin.test.Test
 
-class AppPreviewContactTest {
+class AppPreviewContactScreenshotTest {
 
     @Test
     fun `contact us`() {
@@ -48,7 +48,7 @@ class AppPreviewContactTest {
                     }
                 }
                 waitForIdle()
-                captureTo(File("screenshots/previewApp/contact_$suffix.png"))
+                captureTo(File("$SCREENSHOT_ROOT/previewApp/contact_$suffix.png"))
             }
         }
     }

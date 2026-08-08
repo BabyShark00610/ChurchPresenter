@@ -32,7 +32,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.Test
 
-class AppPreviewStatisticsTest {
+class AppPreviewStatisticsScreenshotTest {
 
     private fun dialog(
         name: String,
@@ -56,7 +56,7 @@ class AppPreviewStatisticsTest {
                 }
                 waitForIdle()
                 drive()
-                captureTo(File("screenshots/previewApp/${name}_$suffix.png"))
+                captureTo(File("$SCREENSHOT_ROOT/previewApp/${name}_$suffix.png"))
             }
         }
     }

@@ -14,7 +14,7 @@ import org.churchpresenter.app.churchpresenter.dialogs.AboutDialogContent
 import java.io.File
 import kotlin.test.Test
 
-class AppPreviewAboutTest {
+class AppPreviewAboutScreenshotTest {
 
     @Test
     fun about() {
@@ -33,7 +33,7 @@ class AppPreviewAboutTest {
                     }
                 }
                 waitForIdle()
-                captureTo(File("screenshots/previewApp/about_$suffix.png"))
+                captureTo(File("$SCREENSHOT_ROOT/previewApp/about_$suffix.png"))
             }
         }
     }

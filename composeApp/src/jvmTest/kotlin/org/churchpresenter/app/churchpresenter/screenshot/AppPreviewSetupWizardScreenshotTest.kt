@@ -17,7 +17,7 @@ import org.churchpresenter.app.churchpresenter.dialogs.SetupWizardContent
 import java.io.File
 import kotlin.test.Test
 
-class AppPreviewSetupWizardTest {
+class AppPreviewSetupWizardScreenshotTest {
 
     @Test
     fun `every step of the getting started wizard`() {
@@ -39,7 +39,7 @@ class AppPreviewSetupWizardTest {
                 }
                 waitForIdle()
                 STEPS.forEachIndexed { index, step ->
-                    captureTo(File("screenshots/previewApp/setup_${index + 1}_${step}_$suffix.png"))
+                    captureTo(File("$SCREENSHOT_ROOT/previewApp/setup_${index + 1}_${step}_$suffix.png"))
                     if (index < STEPS.lastIndex) {
                         onNodeWithText("Next").performClick()
                         waitForIdle()
