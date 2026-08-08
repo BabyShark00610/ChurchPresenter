@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import org.churchpresenter.app.churchpresenter.tabs.scheduleTab
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.viewmodel.ScheduleViewModel
+import java.io.File
 import kotlin.test.Test
 
 class ScheduleTabScreenshotTest {
@@ -176,6 +177,38 @@ class ScheduleTabScreenshotTest {
 
     @Test
     fun `a narrow panel wraps the toolbar`() = shoot("narrow_panel", width = 240.dp)
+
+    /**
+     * The schedule image the website's homepage uses, written straight into `previewApp/` — beside
+     * the app-preview captures it sits next to on the page.
+     *
+     * Every other shot in this class renders into the harness's full 1024dp window, because a
+     * layout test wants the panel given room and then observed. That is nearly three times the
+     * width an operator's panel actually has: `AppPreviewSupport.library()` settles on
+     * `schedulePanelWidthDp = 360`. So the rows come out with their text against the left edge and
+     * most of each row empty — fine for a regression diff, but on a marketing page it reads as a
+     * stretched, broken screenshot, which is what shipped. 400dp is a panel someone would really
+     * use, so the rows fill their width.
+     *
+     * Written unstacked, one file per theme, unlike everything else here. The website needs the two
+     * themes as separate images and was cutting them out of the stacked pair by hand — which is how
+     * it came to ship a crop of a *stale* render for a release. [stackedThemes] is still right for
+     * the regression shots; it is the wrong shape for an export.
+     */
+    @Test
+    fun `the schedule panel at the width an operator uses`() {
+        val dir = File("$SCREENSHOT_ROOT/previewApp").apply { mkdirs() }
+        THEMES.forEach { (suffix, mode) ->
+            scheduleTab(
+                width = 400.dp,
+                seed = { everyItemType() },
+                themeMode = mode,
+                density = PREVIEW_DENSITY,
+            ) { _, _ ->
+                captureTo(File(dir, "schedule_$suffix.png"))
+            }
+        }
+    }
 
     @Test
     fun `density extra compact`() = shoot("density_extra_compact", itemZoomPercent = 55)
