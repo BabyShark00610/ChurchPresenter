@@ -605,6 +605,13 @@ object PlanningCenterClient {
             destination.writeBytes(bytes)
             FileDownloadOutcome.Success(destination)
         } catch (e: Exception) {
+            // Also on stderr, the same way BibleEngineClient reports a failed connect. The Sentry
+            // warning below carries the exception, but `reportWarning` returns immediately when
+            // Sentry is not enabled — which is every test run, and every operator who has not opted
+            // in. Without this line the only surviving evidence is the word `NetworkError`, which
+            // says neither what failed nor why: a refused connection, a timeout and a closed client
+            // are indistinguishable, and each wants a different answer.
+            System.err.println("planning-center: download of $url failed — ${e.javaClass.simpleName}: ${e.message}")
             CrashReporter.reportWarning(
                 "Planning Center attachment download failed",
                 throwable = e,

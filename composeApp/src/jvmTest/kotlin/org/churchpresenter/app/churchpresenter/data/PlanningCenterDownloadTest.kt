@@ -9,7 +9,9 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.PrintStream
 import java.net.ServerSocket
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -126,6 +128,49 @@ class PlanningCenterDownloadTest {
         assertTrue(outcome is PlanningCenterClient.FileDownloadOutcome.Success, "got $outcome")
         assertEquals(target, (outcome as PlanningCenterClient.FileDownloadOutcome.Success).file)
         assertTrue(target.exists())
+    }
+
+    /**
+     * A download that fails has to say *why* somewhere a human can reach.
+     *
+     * `NetworkError` on its own does not distinguish a refused connection from a timeout from a
+     * closed client, and each wants a different answer. The `CrashReporter.reportWarning` alongside
+     * carries the exception but returns immediately when Sentry is not enabled — which is every test
+     * run, and every operator who has not opted in. This class's own
+     * `an attachment is written where it was asked for` failed once in a full suite with nothing but
+     * the word `NetworkError` recorded, which is what prompted this.
+     *
+     * `System.setErr` is JVM-wide, so it is restored in a `finally` rather than after the assertions.
+     *
+     * Points at port 1 rather than stopping [server]. Stopping the fixture mid-test frees its port,
+     * and the next test binds port 0 and can be handed the same number back — which showed up
+     * immediately as a sibling test downloading from a server that 404s its route. Port 1 is
+     * privileged, never bound, and refuses instantly.
+     */
+    @Test
+    fun `a failed download reports the reason, not just that it failed`() {
+        val deadUrl = "http://127.0.0.1:1/attachment.pdf"
+        val captured = ByteArrayOutputStream()
+        val realErr = System.err
+
+        val outcome = try {
+            System.setErr(PrintStream(captured, true))
+            runBlocking { PlanningCenterClient.downloadFile(deadUrl, File(dir, "plan.pdf")) }
+        } finally {
+            System.setErr(realErr)
+        }
+
+        assertEquals(PlanningCenterClient.FileDownloadOutcome.NetworkError, outcome)
+        val reported = captured.toString()
+        assertTrue(reported.contains("planning-center"), "nothing was reported at all: '$reported'")
+        assertTrue(
+            reported.contains(deadUrl),
+            "the URL that failed has to be in it, or it names no target: '$reported'"
+        )
+        assertTrue(
+            reported.substringAfter("failed — ").trim().isNotEmpty(),
+            "and the exception, or it says no more than the outcome already did: '$reported'"
+        )
     }
 
     @Test
