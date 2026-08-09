@@ -183,6 +183,7 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.pairLabel
 import org.churchpresenter.app.churchpresenter.utils.availableSongColumns
 import org.churchpresenter.app.churchpresenter.utils.draggedColumnIndex
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
@@ -402,7 +403,15 @@ fun SongsTab(
     // String resources
     val newSongStr = stringResource(Res.string.new_song)
     val backToLiveStr = stringResource(Res.string.back_to_live)
-    val lineNavHintStr = stringResource(Res.string.line_navigation_hint)
+    // Built from the live bindings rather than naming the arrow keys, and empty when the user has
+    // unbound both pairs so the render site can drop the hint entirely.
+    val lineKeys = shortcuts.pairLabel(ShortcutAction.SONGS_PREVIOUS, ShortcutAction.SONGS_NEXT)
+    val verseKeys = shortcuts.pairLabel(ShortcutAction.SONGS_PREVIOUS_SECTION, ShortcutAction.SONGS_NEXT_SECTION)
+    val lineNavHintStr = if (lineKeys.isEmpty() && verseKeys.isEmpty()) {
+        ""
+    } else {
+        stringResource(Res.string.line_navigation_hint, lineKeys, verseKeys)
+    }
     val allSongBooksText = stringResource(Res.string.all_song_books)
 
     // Prepend "All" option to songbooks
@@ -1497,9 +1506,11 @@ fun SongsTab(
                 }
             }
 
-            // Arrow key navigation hint — only in line mode
+            // Navigation hint — only in line mode, and drawn from the live bindings so a rebind is
+            // reflected here. Hidden when both pairs are unbound: a sentence naming keys that do
+            // nothing is worse than no hint.
             val isLineModeHint = isSongLineMode(appSettings.songSettings)
-            if (isLineModeHint) {
+            if (isLineModeHint && lineNavHintStr.isNotEmpty()) {
                 Text(
                     text = lineNavHintStr,
                     style = MaterialTheme.typography.bodySmall,

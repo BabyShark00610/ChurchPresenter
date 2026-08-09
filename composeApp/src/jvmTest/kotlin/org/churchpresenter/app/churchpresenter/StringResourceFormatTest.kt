@@ -55,6 +55,74 @@ class StringResourceFormatTest {
         )
     }
 
+    /**
+     * Strings allowed to name a key, and why.
+     *
+     * Two kinds: pointer gestures, which are not rebindable and so are correctly hand-written; and
+     * the label vocabulary the registry itself renders bindings *from* (`utils/ShortcutLabels.kt`),
+     * which has to name keys — that is its whole job.
+     */
+    private val mayNameAKey = setOf(
+        // Pointer gestures — no keyboard binding behind them.
+        "shortcut_key_double_click", "shortcut_key_right_click", "shortcut_key_shift_drag",
+        "shortcut_description_go_live", "shortcut_description_context_menu",
+        "shortcut_description_reorder_item", "shortcut_description_reorder_image",
+        "bible_verse_selection_hint", "hold_live_modifier_hint", "pictures_reorder_hint",
+        // The registry's own vocabulary.
+        "key_mod_ctrl", "key_mod_shift", "key_mod_alt", "key_mod_meta",
+        "key_name_space", "key_name_escape", "key_name_enter", "key_name_tab",
+        "key_name_backspace", "key_name_delete", "key_name_insert", "key_name_home",
+        "key_name_end", "key_name_page_up", "key_name_page_down",
+        // The capture dialog, which is literally asking for a key press.
+        "shortcut_capture_title", "shortcut_capture_prompt",
+        // Names an on-screen arrow *button*, not a key.
+        "bible_translation_order_hint",
+    )
+
+    /**
+     * The shapes a stale key reference takes.
+     *
+     * `→` alone is deliberately **not** matched: the app uses it as a menu-path separator
+     * ("Settings → General → About") and a direction label ("Slide Along Top (L→R)") far more often
+     * than as a key. `←`, `↑` and `↓` are only ever keys, so a right-arrow that means a key is
+     * caught by the company it keeps.
+     */
+    private val namesAKey = Regex("""[←↑↓]|\b(Ctrl|Cmd|Shift|Alt|Esc|Spacebar|PgUp|PgDn)\b|[⌘⌃⌥⇧]""")
+
+    /**
+     * No string may name a keyboard key unless it is on the allow-list.
+     *
+     * This is the guard for the miss that prompted it: `line_navigation_hint` read
+     * "Use ← → to navigate lines, ↑ ↓ for verses" as a plain literal and went on saying that after
+     * the keys became rebindable. It was missed by eye because the two hints already converted are
+     * named `*_arrow_key_hint` and this one is not — a name-shaped search could never have found it,
+     * but a content-shaped one does.
+     *
+     * Adding a string here is a deliberate act: either render it from `ShortcutMap`, or add it to
+     * [mayNameAKey] with a reason.
+     */
+    @Test
+    fun `no string hardcodes a key that the user can rebind`() {
+        val offenders = entries()
+            .filter { (name, _) -> name !in mayNameAKey }
+            .filter { (_, body) -> namesAKey.containsMatchIn(body) }
+            .map { (name, body) -> "$name = \"$body\"" }
+
+        assertEquals(
+            emptyList(),
+            offenders,
+            "render these from ShortcutMap, or allow-list them with a reason",
+        )
+    }
+
+    @Test
+    fun `the allow-list has no stale entries`() {
+        // A name left behind after its string was deleted would silently widen the guard.
+        val known = entries().map { it.first }.toSet()
+
+        assertEquals(emptyList(), (mayNameAKey - known).sorted())
+    }
+
     @Test
     fun `the file was actually read, so a bad path cannot make this suite vacuous`() {
         val found = entries()
