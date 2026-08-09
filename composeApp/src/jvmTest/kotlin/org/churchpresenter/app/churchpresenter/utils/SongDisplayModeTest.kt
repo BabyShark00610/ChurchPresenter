@@ -93,11 +93,31 @@ class SongDisplayModeTest {
     }
 
     @Test
-    fun `with two surfaces in line mode the smaller group wins`() {
-        // Otherwise the surface on 1 would be stepped straight past lines it never displayed.
+    fun `with both surfaces in line mode the fullscreen group decides the step`() {
+        // The regression this pins: `lowerThirdDisplayMode` SHIPS in line mode at one line a slide,
+        // so taking the smallest group meant an operator who had set the projector to three lines
+        // still had to press the arrow three times to turn the slide — via a lower third they had
+        // never configured and might not even be showing.
         val s = settings(fullscreen = line, lowerThird = line)
             .copy(fullscreenLinesPerSlide = 4, lowerThirdLinesPerSlide = 1)
-        assertEquals(1, songLineStep(s))
+        assertEquals(4, songLineStep(s))
+    }
+
+    @Test
+    fun `the default settings step by the configured fullscreen group`() {
+        // Exactly the shipped defaults but for the two fullscreen fields, which is the case above
+        // stated the way an operator would actually arrive at it.
+        val s = SongSettings(
+            fullscreenDisplayMode = line,
+            fullscreenLinesPerSlide = 2,
+        )
+        assertEquals(2, songLineStep(s))
+    }
+
+    @Test
+    fun `the lower third decides only when fullscreen is showing whole verses`() {
+        val s = settings(lowerThird = line).copy(fullscreenLinesPerSlide = 4, lowerThirdLinesPerSlide = 2)
+        assertEquals(2, songLineStep(s))
     }
 
     @Test

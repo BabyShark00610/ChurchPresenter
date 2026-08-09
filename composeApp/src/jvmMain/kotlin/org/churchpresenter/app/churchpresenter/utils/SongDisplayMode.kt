@@ -32,30 +32,35 @@ internal fun songLinesPerSlide(settings: SongSettings, isLowerThird: Boolean): I
         .coerceIn(1, MAX_LINES_PER_SLIDE)
 
 /**
- * How far one arrow-key press moves the shared line cursor.
+ * How far one arrow-key press moves the shared line cursor: one whole slide, not one line.
  *
- * There is exactly one cursor for every output, so the step has to be a single number even when the
- * projector shows three lines and the lower third one. The **smallest** group among the surfaces
- * actually in line mode wins, so no surface is ever stepped straight past a line it never showed;
- * a surface with a larger group simply holds the same slide for several presses, because
- * [songLineGroup] snaps it to its own group boundary rather than sliding it one line at a time.
+ * There is a single cursor behind every output, so this has to be one number even when the projector
+ * is set to three lines a slide and the lower third to one. **The fullscreen surface decides it**
+ * whenever it is in line mode, and the lower third only when fullscreen is showing whole verses and
+ * so has no slides to count.
+ *
+ * Taking the smallest group instead — which would guarantee no surface is ever stepped past a line
+ * it never displayed — reads as broken at the keyboard: `lowerThirdDisplayMode` ships set to line
+ * mode at one line a slide, so an operator who has never configured a lower third, and may not even
+ * have one on screen, still had to press the arrow key three times to turn a three-line slide. One
+ * press has to turn the slide the room is looking at.
+ *
+ * The cost is that a lower third set to a *smaller* group than fullscreen now skips the lines in
+ * between. That is a genuinely contradictory pair of settings — two different slide sequences off one
+ * cursor — and the main screen is the one to resolve it in favour of.
  */
 internal fun songLineStep(settings: SongSettings): Int {
-    var step = MAX_LINES_PER_SLIDE
-    var anyLineMode = false
-    if (settings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-        settings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
-    ) {
-        step = minOf(step, songLinesPerSlide(settings, isLowerThird = false))
-        anyLineMode = true
+    val fullscreenInLineMode =
+        settings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+            settings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+    val lowerThirdInLineMode =
+        settings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+            settings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+    return when {
+        fullscreenInLineMode -> songLinesPerSlide(settings, isLowerThird = false)
+        lowerThirdInLineMode -> songLinesPerSlide(settings, isLowerThird = true)
+        else -> 1
     }
-    if (settings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-        settings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
-    ) {
-        step = minOf(step, songLinesPerSlide(settings, isLowerThird = true))
-        anyLineMode = true
-    }
-    return if (anyLineMode) step else 1
 }
 
 /** The first line of the group [lineIndex] falls in, so a surface always shows whole groups —

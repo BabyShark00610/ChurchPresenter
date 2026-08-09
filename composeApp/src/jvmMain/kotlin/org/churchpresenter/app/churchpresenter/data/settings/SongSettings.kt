@@ -174,6 +174,11 @@ data class SongSettings(
     val lowerThirdLanguageDisplay: String = Constants.SONG_LANG_BOTH, // "both", "primary", "secondary"
 
     // End-of-song indicator spacing (number of spaces between each asterisk)
+    // The `* * *` row on a song's last slide. Off by default: it is laid out on every slide whether
+    // or not it is showing — so the words never shift when it appears — which means it takes a line's
+    // worth of height out of every slide, and leaves the readability band hugging that empty row
+    // rather than the words. Turn it on to get the original marker back.
+    val showEndOfSongIndicator: Boolean = false,
     val endOfSongIndicatorSpacing: Int = 2,
 
     // Bilingual layout: "side_by_side" or "top_bottom"

@@ -102,6 +102,7 @@ import churchpresenter.composeapp.generated.resources.bottom
 import churchpresenter.composeapp.generated.resources.left
 import churchpresenter.composeapp.generated.resources.right
 import churchpresenter.composeapp.generated.resources.screen
+import churchpresenter.composeapp.generated.resources.end_of_song_indicator
 import churchpresenter.composeapp.generated.resources.end_of_song_spacing
 import churchpresenter.composeapp.generated.resources.text_margins
 import churchpresenter.composeapp.generated.resources.top
@@ -659,17 +660,30 @@ private fun LeftColumn(
 
     Spacer(modifier = Modifier.height(20.dp))
 
-    // ── End-of-Song Indicator (*) Spacing ──
-    SettingRow(stringResource(Res.string.end_of_song_spacing)) {
-        NumberSettingsTextField(
-            initialText = settings.songSettings.endOfSongIndicatorSpacing,
-            range = 0..10,
-            onValueChange = { value ->
-                onSettingsChange { s ->
-                    s.copy(songSettings = s.songSettings.copy(endOfSongIndicatorSpacing = value))
+    // ── End-of-Song Indicator (*) ──
+    LabeledCheckbox(
+        checked = settings.songSettings.showEndOfSongIndicator,
+        onCheckedChange = { on ->
+            onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(showEndOfSongIndicator = on)) }
+        },
+        controlModifier = Modifier.size(24.dp),
+        label = stringResource(Res.string.end_of_song_indicator),
+        modifier = Modifier.testTag("song_showEndOfSongIndicator"),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    // The spacing has nothing to space out while the marker is off.
+    AnimatedVisibility(visible = settings.songSettings.showEndOfSongIndicator) {
+        SettingRow(stringResource(Res.string.end_of_song_spacing)) {
+            NumberSettingsTextField(
+                initialText = settings.songSettings.endOfSongIndicatorSpacing,
+                range = 0..10,
+                onValueChange = { value ->
+                    onSettingsChange { s ->
+                        s.copy(songSettings = s.songSettings.copy(endOfSongIndicatorSpacing = value))
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 
     } // end transition SettingsSection

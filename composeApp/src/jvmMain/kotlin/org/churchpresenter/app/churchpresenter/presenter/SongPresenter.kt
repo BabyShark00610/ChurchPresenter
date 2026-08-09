@@ -451,7 +451,9 @@ fun SongPresenter(
                     availableWidth = refWidth,
                     availableHeight = refHeight,
                     reservedHeight = reserved,
-                    includeEndIndicator = true
+                    // Only leave room for the marker when it can actually be drawn — with it off,
+                    // reserving its height would keep the text a size smaller than it needs to be.
+                    includeEndIndicator = ss.showEndOfSongIndicator
                 )
             }
         }
@@ -529,7 +531,15 @@ fun SongPresenter(
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(start = leftOffSet, end = rightOffSet, top = topOffSet, bottom = bottomOffSet),
+                // Only the vertical margins are applied here. The horizontal pair is applied further
+                // in — on the title/number rows and on the lyric block inside `LyricScrim` — so that
+                // the scrim itself is a genuinely full-width node rather than one drawing outside its
+                // own bounds. It cannot draw outside them: the crossfade wraps this subtree in a
+                // `graphicsLayer`, and while its alpha is animating the layer clips to these bounds,
+                // which is exactly why the band appeared narrow for the length of every transition
+                // and then snapped wide. Text position is unchanged — the same two values, applied
+                // one level down.
+                .padding(top = topOffSet, bottom = bottomOffSet),
             contentAlignment = if (isLowerThird) Alignment.BottomCenter else contentAlignment
         ) {
             val innerModifier = if (isLowerThird)
@@ -765,10 +775,24 @@ fun SongPresenter(
                         }
                     }
 
+                    /**
+                     * Wraps a block of lyrics in its readability band, and — scrim or no scrim — puts
+                     * back the horizontal margins that [Box] above no longer applies.
+                     *
+                     * The band is a real full-width node, sized by layout rather than painted past
+                     * its own edges, so it is whatever width it claims to be from the first frame of
+                     * a transition rather than growing into it.
+                     */
                     @Composable
                     fun LyricScrim(content: @Composable () -> Unit) {
+                        @Composable
+                        fun Margined() {
+                            Box(modifier = Modifier.padding(start = leftOffSet, end = rightOffSet)) {
+                                content()
+                            }
+                        }
                         if (!scrimVisible) {
-                            content()
+                            Margined()
                             return
                         }
                         Box(
@@ -776,11 +800,11 @@ fun SongPresenter(
                                 .fillMaxWidth(scrimWidthFraction)
                                 .wrapContentHeight()
                                 .background(scrimBrush)
-                                // Applied after the background on purpose: the band has to extend
-                                // past the text, so the padding must be inside what gets painted.
+                                // After the background on purpose: the band has to extend past the
+                                // text, so this padding is inside what gets painted.
                                 .padding(vertical = (scrimPadding * scaleFactor).dp),
                             contentAlignment = Alignment.Center
-                        ) { content() }
+                        ) { Margined() }
                     }
 
                     @Composable
@@ -807,6 +831,11 @@ fun SongPresenter(
 
                     @Composable
                     fun EndOfSongIndicator() {
+                        // Nothing at all when it is switched off — not an invisible row. Reserving the
+                        // space is only worth it while the marker can actually appear; otherwise it
+                        // silently costs every slide a line of height, and the readability band would
+                        // stretch to cover an empty row under the words.
+                        if (!ss.showEndOfSongIndicator) return
                         // Always reserve space so lyrics don't shift when the indicator appears on the last section
                         // In line mode the indicator belongs on the LAST SLIDE of the section, which
                         // with multi-line slides is the last group — not merely the last line.
@@ -888,6 +917,12 @@ fun SongPresenter(
                         val titleAlpha = if (invisible) 0f else if (shouldShowTitle) 1f else 0f
                         val numberAlpha = if (invisible) 0f else if (shouldShowSongNumber) 1f else 0f
 
+                        // The horizontal song margins, which the enclosing box no longer applies —
+                        // see the comment on its padding. Put back on each element rather than on a
+                        // wrapper around them: this composable is called both into a Column (where
+                        // the number and title stack) and into a Box (where they overlap), so any
+                        // single wrapper would change one of those two.
+                        val marginModifier = Modifier.fillMaxWidth().padding(start = leftOffSet, end = rightOffSet)
                         if (hasTitleHere && hasNumberHere && samePosition) {
                             if (sameHorizontal) {
                                 val sharedHAlign = if (isLowerThird) ss.songNumberLowerThirdHorizontalAlignment else ss.songNumberHorizontalAlignment
@@ -896,7 +931,7 @@ fun SongPresenter(
                                     Constants.CENTER -> Arrangement.Center
                                     else -> Arrangement.End
                                 }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = arrangement) {
+                                Row(modifier = marginModifier, horizontalArrangement = arrangement) {
                                     if (numberBeforeTitle) {
                                         NumberPart(visibilityAlpha = numberAlpha); Spacer(modifier = Modifier.padding(horizontal = (4 * scaleFactor).dp)); TitlePart(visibilityAlpha = titleAlpha)
                                     } else {
@@ -904,13 +939,13 @@ fun SongPresenter(
                                     }
                                 }
                             } else {
-                                NumberPart(modifier = Modifier.fillMaxWidth(), visibilityAlpha = numberAlpha)
-                                TitlePart(modifier = Modifier.fillMaxWidth(), visibilityAlpha = titleAlpha)
+                                NumberPart(modifier = marginModifier, visibilityAlpha = numberAlpha)
+                                TitlePart(modifier = marginModifier, visibilityAlpha = titleAlpha)
                             }
                         } else if (hasNumberHere) {
-                            NumberPart(modifier = Modifier.fillMaxWidth(), visibilityAlpha = numberAlpha)
+                            NumberPart(modifier = marginModifier, visibilityAlpha = numberAlpha)
                         } else if (hasTitleHere) {
-                            TitlePart(modifier = Modifier.fillMaxWidth(), visibilityAlpha = titleAlpha)
+                            TitlePart(modifier = marginModifier, visibilityAlpha = titleAlpha)
                         }
                     }
 
