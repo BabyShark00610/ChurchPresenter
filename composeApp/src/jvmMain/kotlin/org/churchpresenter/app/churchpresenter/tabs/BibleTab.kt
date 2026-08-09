@@ -1613,10 +1613,9 @@ fun BibleTab(
                         )
                     } else if (appSettings.bibleSettings.translationList().size > 2) {
                         val translations = appSettings.bibleSettings.translationList()
-                        // One header read per translation, so it does not belong in a `remember`
-                        // (which runs it during composition) and it certainly does not need a whole
-                        // BibleSettingsViewModel built to reach the helper. Until it lands, the
-                        // options below fall back to file stems on their own.
+                        // One header read per translation, so it does not belong in a `remember`,
+                        // which would run it during composition. Until it lands, the options below
+                        // fall back to file stems on their own.
                         val storageDirectory = appSettings.bibleSettings.storageDirectory
                         val translationDisplayNames by produceState(
                             initialValue = emptyMap<String, String>(),

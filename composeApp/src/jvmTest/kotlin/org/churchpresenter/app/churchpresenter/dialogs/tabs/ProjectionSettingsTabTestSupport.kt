@@ -16,6 +16,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTextExactly
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -71,7 +72,24 @@ internal fun projectionTab(
             )
         }
     }
+    awaitAudioDevices()
     block { current }
+}
+
+/** The audio device entry every machine has, and so the signal that VLC's probe has come back. */
+internal const val SYSTEM_DEFAULT_DEVICE = "System Default"
+
+/**
+ * Waits for the audio device dropdown to appear.
+ *
+ * The card asks VLC for its device list on `Dispatchers.IO` — which is why the tab no longer stalls
+ * composition on it, and also why `waitForIdle` does not cover it. This waits on the dropdown
+ * itself: a positive signal that lands as soon as the probe returns, never on a timeout. Where VLC
+ * is absent the card composes a message instead and there is nothing to wait for.
+ */
+internal fun ComposeUiTest.awaitAudioDevices() {
+    if (!isVlcAvailable) return
+    waitUntil { onAllNodesWithText(SYSTEM_DEFAULT_DEVICE).fetchSemanticsNodes(false).isNotEmpty() }
 }
 
 // ── Screen fixtures ─────────────────────────────────────────────────────────────────────────────
@@ -176,7 +194,13 @@ private val labelledButton =
     SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) and
         SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
 
-internal fun ComposeUiTest.gridButtons(): SemanticsNodeInteractionCollection = onAllNodes(labelledButton)
+internal fun ComposeUiTest.gridButtons(): SemanticsNodeInteractionCollection {
+    // The audio device dropdown is one of these buttons and arrives asynchronously, so counting
+    // before it lands is off by one. Waiting here covers the suites that compose the tab directly
+    // rather than through [projectionTab]; it returns immediately once the probe has come back.
+    awaitAudioDevices()
+    return onAllNodes(labelledButton)
+}
 
 /** One labelled button, addressed through [Grid]. */
 internal fun ComposeUiTest.gridButton(ordinal: Int): SemanticsNodeInteraction = gridButtons()[ordinal]

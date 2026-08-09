@@ -59,6 +59,7 @@ import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.composables.DeckLinkManager
 import org.churchpresenter.app.churchpresenter.utils.DevFlags
 import org.churchpresenter.app.churchpresenter.utils.LottieFonts
+import org.churchpresenter.app.churchpresenter.utils.SystemFonts
 import org.churchpresenter.app.churchpresenter.utils.findScreenIndexByBounds
 import org.churchpresenter.app.churchpresenter.utils.rememberScreenDevices
 import presentation.engine.fonts.SlideFontRegistry
@@ -351,6 +352,10 @@ fun main() {
             }
         }
         SlideFontRegistry.initialize()
+        // Snapshot the family names for every font picker in the app, after the bundled faces are
+        // registered so they are in it. Enumerating costs a full font-directory walk and used to
+        // happen inline in composition on each settings dialog open — see SystemFonts.
+        SystemFonts.families()
     }.apply { isDaemon = true }.start()
 
     // Set custom VLC path from saved settings before any composable checks isVlcAvailable
