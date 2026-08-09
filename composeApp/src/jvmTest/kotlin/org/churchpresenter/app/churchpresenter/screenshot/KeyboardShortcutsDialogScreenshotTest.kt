@@ -9,6 +9,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -62,6 +65,18 @@ class KeyboardShortcutsDialogScreenshotTest {
         ),
     )
 
+    /**
+     * Filtered down to one category.
+     *
+     * The search box matches descriptions *and* keys, and drops any category with nothing in it —
+     * so a filtered dialog is a visibly different layout, not the same list with rows greyed out.
+     */
+    @Test
+    fun `filtered by a search`() = shoot("filtered") {
+        onNode(hasSetTextAction()).performTextInput("verse")
+        waitForIdle()
+    }
+
     // ── Harness ─────────────────────────────────────────────────────────────────────────────────
 
     /**
@@ -74,6 +89,7 @@ class KeyboardShortcutsDialogScreenshotTest {
     private fun shoot(
         name: String,
         settings: AppSettings = AppSettings(),
+        drive: SkikoComposeUiTest.() -> Unit = {},
     ) = stackedThemes(SECTION, name) { mode, file ->
         runSkikoComposeUiTest(size = Size(DIALOG_WIDTH, DIALOG_HEIGHT), density = Density(1f)) {
             setContent {
@@ -89,6 +105,8 @@ class KeyboardShortcutsDialogScreenshotTest {
                     }
                 }
             }
+            waitForIdle()
+            drive()
             waitForIdle()
             captureTo(file)
         }

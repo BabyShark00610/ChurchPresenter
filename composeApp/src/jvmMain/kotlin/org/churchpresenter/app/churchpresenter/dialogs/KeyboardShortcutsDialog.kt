@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
@@ -40,6 +41,7 @@ import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.apply
 import churchpresenter.composeapp.generated.resources.cancel
 import churchpresenter.composeapp.generated.resources.keyboard_shortcuts_title
+import churchpresenter.composeapp.generated.resources.no_results_found
 import churchpresenter.composeapp.generated.resources.ok
 import churchpresenter.composeapp.generated.resources.shortcut_category_mouse
 import churchpresenter.composeapp.generated.resources.shortcut_description_context_menu
@@ -48,6 +50,7 @@ import churchpresenter.composeapp.generated.resources.shortcut_description_reord
 import churchpresenter.composeapp.generated.resources.shortcut_key_double_click
 import churchpresenter.composeapp.generated.resources.shortcut_key_right_click
 import churchpresenter.composeapp.generated.resources.shortcut_key_shift_drag
+import churchpresenter.composeapp.generated.resources.shortcut_search_placeholder
 import churchpresenter.composeapp.generated.resources.shortcut_settings_change
 import churchpresenter.composeapp.generated.resources.shortcut_settings_clear
 import churchpresenter.composeapp.generated.resources.shortcut_settings_reset
@@ -56,12 +59,14 @@ import churchpresenter.composeapp.generated.resources.symbol_cancel
 import churchpresenter.composeapp.generated.resources.symbol_ok
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import org.churchpresenter.app.churchpresenter.centeredOnMainWindow
+import org.churchpresenter.app.churchpresenter.composables.SearchField
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.KeyChord
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.models.ShortcutScope
 import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import org.churchpresenter.app.churchpresenter.utils.labelOrUnbound
+import org.churchpresenter.app.churchpresenter.utils.searchText
 import org.jetbrains.compose.resources.stringResource
 
 /** Fits `⌃⇧N` / `Ctrl+Shift+N` and the "Not set" placeholder without the chip resizing per row. */
@@ -75,6 +80,9 @@ private val BUTTON_PADDING = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
 
 /** Test tag for the reset-everything button, which several tests need to locate. */
 internal const val SHORTCUT_RESET_ALL_TAG = "shortcut_reset_all"
+
+/** The "no results" line, which has no other stable handle once the list is empty. */
+internal const val SHORTCUT_NO_RESULTS_TAG = "shortcut_no_results"
 
 /** The per-action row's key chip, tagged by action so a test can read one row's binding. */
 internal fun shortcutChipTag(action: ShortcutAction) = "shortcut_chip_${action.name}"
@@ -144,11 +152,41 @@ internal fun KeyboardShortcutsDialogContent(
 ) {
     var currentSettings by remember { mutableStateOf(initialSettings) }
     var capturing by remember { mutableStateOf<ShortcutAction?>(null) }
+    // View state only. It must never reach currentSettings, or what Apply saves would depend on
+    // whether the user happened to be searching at the time.
+    var query by remember { mutableStateOf("") }
 
     val shortcuts = remember(currentSettings.keyboardShortcutSettings) {
         ShortcutMap.from(currentSettings.keyboardShortcutSettings)
     }
     val actionsByScope = remember { ShortcutAction.entries.groupBy { it.scope } }
+
+    // Resolved in composition because descriptions and key labels both come from string resources;
+    // the match itself is plain Kotlin below.
+    val haystacks: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { action ->
+        "${stringResource(action.descriptionRes)} ${shortcuts.searchText(action)}".lowercase()
+    }
+    val visibleByScope = remember(query, haystacks) {
+        val needle = query.trim().lowercase()
+        actionsByScope.mapValues { (_, actions) ->
+            if (needle.isEmpty()) actions else actions.filter { needle in haystacks.getValue(it) }
+        }
+    }
+
+    // The mouse rows are plain strings rather than registry entries, so they match on their own
+    // resolved text.
+    val mouseRows = listOf(
+        stringResource(Res.string.shortcut_key_double_click) to stringResource(Res.string.shortcut_description_go_live),
+        stringResource(Res.string.shortcut_key_right_click) to stringResource(Res.string.shortcut_description_context_menu),
+        stringResource(Res.string.shortcut_key_shift_drag) to stringResource(Res.string.shortcut_description_reorder_item),
+    )
+    val visibleMouseRows = remember(query, mouseRows) {
+        val needle = query.trim().lowercase()
+        if (needle.isEmpty()) mouseRows
+        else mouseRows.filter { (keys, description) -> needle in "$keys $description".lowercase() }
+    }
+
+    val nothingMatched = visibleByScope.values.all { it.isEmpty() } && visibleMouseRows.isEmpty()
 
     fun editOverrides(update: (Map<String, List<KeyChord>>) -> Map<String, List<KeyChord>>) {
         currentSettings = currentSettings.copy(
@@ -166,8 +204,15 @@ internal fun KeyboardShortcutsDialogContent(
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                SearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = stringResource(Res.string.shortcut_search_placeholder),
+                    modifier = Modifier.weight(1f),
+                )
                 TextButton(
                     onClick = { editOverrides { emptyMap() } },
                     modifier = Modifier.testTag(SHORTCUT_RESET_ALL_TAG)
@@ -182,9 +227,10 @@ internal fun KeyboardShortcutsDialogContent(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Scope order is the enum's own order, which is menus → global → per tab.
+                // Scope order is the enum's own order, which is menus → global → per tab. A scope
+                // with nothing matching is dropped entirely rather than drawn as an empty box.
                 ShortcutScope.entries.forEach { scope ->
-                    val actions = actionsByScope[scope].orEmpty()
+                    val actions = visibleByScope[scope].orEmpty()
                     if (actions.isNotEmpty()) {
                         ShortcutsCategory(stringResource(scope.titleRes)) {
                             actions.forEach { action ->
@@ -201,10 +247,22 @@ internal fun KeyboardShortcutsDialogContent(
                     }
                 }
 
-                ShortcutsCategory(stringResource(Res.string.shortcut_category_mouse)) {
-                    ShortcutRow(stringResource(Res.string.shortcut_key_double_click), stringResource(Res.string.shortcut_description_go_live))
-                    ShortcutRow(stringResource(Res.string.shortcut_key_right_click), stringResource(Res.string.shortcut_description_context_menu))
-                    ShortcutRow(stringResource(Res.string.shortcut_key_shift_drag), stringResource(Res.string.shortcut_description_reorder_item))
+                if (visibleMouseRows.isNotEmpty()) {
+                    ShortcutsCategory(stringResource(Res.string.shortcut_category_mouse)) {
+                        visibleMouseRows.forEach { (keys, description) ->
+                            ShortcutRow(keys, description)
+                        }
+                    }
+                }
+
+                if (nothingMatched) {
+                    Text(
+                        text = stringResource(Res.string.no_results_found, query),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp).testTag(SHORTCUT_NO_RESULTS_TAG),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
 

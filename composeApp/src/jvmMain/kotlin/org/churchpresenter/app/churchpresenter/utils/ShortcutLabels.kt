@@ -75,9 +75,19 @@ private fun keyDisplayName(key: Key): String = when (key) {
 
 /** This chord as the user sees it, e.g. `Ctrl+Shift+Z` — or `⇧⌘Z` on macOS. */
 @Composable
-fun KeyChord.label(): String {
+fun KeyChord.label(): String = label(useSymbols = isMac)
+
+/**
+ * This chord rendered with either the Mac modifier symbols or the spelled-out words.
+ *
+ * The form is a parameter rather than always following the platform because search has to match
+ * both: a Mac user sees `⌃⇧N` but will type "ctrl", and someone reading Windows documentation on a
+ * Mac will type the symbol. See [KeyChord.searchText].
+ */
+@Composable
+fun KeyChord.label(useSymbols: Boolean): String {
     val name = keyDisplayName(key)
-    return if (isMac) {
+    return if (useSymbols) {
         // Mac convention: symbols, no separator, and a fixed order regardless of press order.
         buildString {
             if (ctrl) append("⌃")
@@ -95,6 +105,31 @@ fun KeyChord.label(): String {
             add(name)
         }.joinToString("+")
     }
+}
+
+/**
+ * Everything a user might type to find this chord, lower-cased.
+ *
+ * Both renderings plus the common names for each modifier, because what is on screen is only one of
+ * several things someone will reach for. Without this the key search would work on Windows and
+ * Linux and silently match nothing on macOS, where every modifier is drawn as a symbol.
+ */
+@Composable
+fun KeyChord.searchText(): String = buildString {
+    append(label(useSymbols = true)).append(' ')
+    append(label(useSymbols = false)).append(' ')
+    if (ctrl) append("ctrl control ⌃ ")
+    if (meta) append("meta cmd command ⌘ ")
+    if (alt) append("alt option ⌥ ")
+    if (shift) append("shift ⇧ ")
+}.lowercase()
+
+/** Every chord bound to [action], as searchable text. Empty when the action is unbound. */
+@Composable
+fun ShortcutMap.searchText(action: ShortcutAction): String {
+    val parts = mutableListOf<String>()
+    chordsFor(action).forEach { parts.add(it.searchText()) }
+    return parts.joinToString(" ")
 }
 
 /**

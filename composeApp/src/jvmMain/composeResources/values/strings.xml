@@ -230,6 +230,8 @@
     <string name="shortcut_unbound">Not set</string>
     <string name="hold_live_modifier_hint">⌘/Ctrl Shift</string>
     <string name="shortcut_settings_reset_all">Reset All to Defaults</string>
+    <string name="shortcut_search_placeholder">Search actions or keys…</string>
+    <string name="search_clear">Clear search</string>
     <string name="shortcut_settings_reset">Reset</string>
     <string name="shortcut_settings_clear">Clear</string>
     <string name="shortcut_settings_change">Change</string>
