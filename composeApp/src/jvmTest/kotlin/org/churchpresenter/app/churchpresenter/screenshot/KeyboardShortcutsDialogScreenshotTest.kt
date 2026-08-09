@@ -11,12 +11,18 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.KeyboardShortcutSettings
 import org.churchpresenter.app.churchpresenter.dialogs.KeyboardShortcutsDialogContent
+import org.churchpresenter.app.churchpresenter.dialogs.SHORTCUT_PRESS_MODE_TAG
+import org.churchpresenter.app.churchpresenter.dialogs.SHORTCUT_PRESS_PANEL_TAG
 import org.churchpresenter.app.churchpresenter.models.KeyChord
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
@@ -74,6 +80,21 @@ class KeyboardShortcutsDialogScreenshotTest {
     @Test
     fun `filtered by a search`() = shoot("filtered") {
         onNode(hasSetTextAction()).performTextInput("verse")
+        waitForIdle()
+    }
+
+    /**
+     * "Press key" mode, after pressing the left arrow.
+     *
+     * A distinct layout, not a variant of the text search: the box stops accepting text and shows
+     * the chord instead, because the arrow keys have to reach the filter rather than move a cursor.
+     * This is also the only shot where the header's listening state is visible.
+     */
+    @Test
+    fun `filtered by a pressed key`() = shoot("press_key") {
+        onNodeWithTag(SHORTCUT_PRESS_MODE_TAG).performClick()
+        waitForIdle()
+        onNodeWithTag(SHORTCUT_PRESS_PANEL_TAG).performKeyInput { pressKey(Key.DirectionLeft) }
         waitForIdle()
     }
 

@@ -254,6 +254,12 @@
     <string name="key_name_end">End</string>
     <string name="key_name_page_up">PgUp</string>
     <string name="key_name_page_down">PgDn</string>
+    <string name="key_alias_up">up arrow</string>
+    <string name="key_alias_down">down arrow</string>
+    <string name="key_alias_left">left arrow</string>
+    <string name="key_alias_right">right arrow</string>
+    <string name="shortcut_search_by_key">Press key</string>
+    <string name="shortcut_search_press_prompt">Press a key combination to find what uses it…</string>
     <string name="shortcut_description_delete_source">Delete Selected Source</string>
     <string name="shortcut_key_right_click">Right-click</string>
     <string name="shortcut_key_shift_drag">Shift+Drag</string>

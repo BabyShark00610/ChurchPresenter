@@ -3,6 +3,7 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
@@ -12,8 +13,11 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.withKeyDown
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import kotlin.test.Test
@@ -133,6 +137,120 @@ class KeyboardShortcutsSearchTest {
 
         onNodeWithText("Go Live (Double-click item)").assertExists()
         assertTrue(!rowExists(ShortcutAction.UNDO))
+    }
+
+    // ── Arrows, which cannot be typed ───────────────────────────────────────────
+
+    /**
+     * The arrows are the one binding you cannot search for by its own glyph.
+     *
+     * `←` is not on the keyboard, so before the aliases existed an arrow binding could only be
+     * found by its description — which is exactly the gap that was reported.
+     */
+    @Test
+    fun `an arrow binding is found by typing its name`() = dialog {
+        search("left")
+
+        assertTrue(rowExists(ShortcutAction.BIBLE_PREVIOUS_CHAPTER), "← should be findable as \"left\"")
+        assertTrue(rowExists(ShortcutAction.PICTURES_PREVIOUS))
+        assertTrue(!rowExists(ShortcutAction.BIBLE_NEXT_CHAPTER), "→ must not match \"left\"")
+    }
+
+    @Test
+    fun `the word arrow finds every arrow binding`() = dialog {
+        search("arrow")
+
+        listOf(
+            ShortcutAction.BIBLE_PREVIOUS_CHAPTER, ShortcutAction.BIBLE_NEXT_CHAPTER,
+            ShortcutAction.BIBLE_PREVIOUS_VERSE, ShortcutAction.BIBLE_NEXT_VERSE,
+        ).forEach { assertTrue(rowExists(it), "$it is bound to an arrow and should match") }
+        assertTrue(!rowExists(ShortcutAction.MEDIA_MUTE))
+    }
+
+    @Test
+    fun `the glyph still works for anyone who pastes it`() = dialog {
+        search("←")
+
+        assertTrue(rowExists(ShortcutAction.BIBLE_PREVIOUS_CHAPTER))
+    }
+
+    // ── Press-key mode ──────────────────────────────────────────────────────────
+
+    private fun ComposeUiTest.enterPressMode() {
+        onNodeWithTag(SHORTCUT_PRESS_MODE_TAG).performClick()
+        waitForIdle()
+    }
+
+    private fun ComposeUiTest.pressToSearch(key: Key, ctrl: Boolean = false) {
+        onNodeWithTag(SHORTCUT_PRESS_PANEL_TAG).performKeyInput {
+            if (ctrl) withKeyDown(Key.CtrlLeft) { pressKey(key) } else pressKey(key)
+        }
+        waitForIdle()
+    }
+
+    @Test
+    fun `pressing a key shows what is bound to it`() = dialog {
+        enterPressMode()
+        pressToSearch(Key.DirectionLeft)
+
+        assertTrue(rowExists(ShortcutAction.BIBLE_PREVIOUS_CHAPTER))
+        assertTrue(rowExists(ShortcutAction.PICTURES_PREVIOUS))
+        assertTrue(!rowExists(ShortcutAction.BIBLE_NEXT_CHAPTER))
+    }
+
+    @Test
+    fun `the match is on the exact combination, not just the key`() = dialog {
+        enterPressMode()
+        pressToSearch(Key.DirectionLeft, ctrl = true)
+
+        // Nothing ships on Ctrl+←, so a filter that ignored modifiers would wrongly list every
+        // plain-← binding here.
+        assertTrue(!rowExists(ShortcutAction.BIBLE_PREVIOUS_CHAPTER))
+        onNodeWithTag(SHORTCUT_NO_RESULTS_TAG).assertExists()
+    }
+
+    @Test
+    fun `an unused combination reports itself rather than an empty query`() = dialog {
+        enterPressMode()
+        pressToSearch(Key.DirectionLeft, ctrl = true)
+
+        val message = onNodeWithTag(SHORTCUT_NO_RESULTS_TAG).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text }
+
+        // The bug this guards: the message is built from the text query, which is empty in this
+        // mode, so it would have read: No results found for "".
+        assertTrue(message.trim().endsWith("\"\"").not(), "the message must name the chord: '$message'")
+        assertTrue("Z" !in message)
+    }
+
+    @Test
+    fun `Escape is a searchable key here rather than a way out`() = dialog {
+        enterPressMode()
+        pressToSearch(Key.Escape)
+
+        assertTrue(rowExists(ShortcutAction.CLEAR_OUTPUT), "Escape is a real binding and must be findable")
+    }
+
+    @Test
+    fun `leaving press mode drops its filter`() = dialog {
+        enterPressMode()
+        pressToSearch(Key.DirectionLeft)
+        assertTrue(!rowExists(ShortcutAction.MEDIA_MUTE))
+
+        onNodeWithTag(SHORTCUT_PRESS_MODE_TAG).performClick()
+        waitForIdle()
+
+        ShortcutAction.entries.forEach { assertTrue(rowExists(it), "$it should be back") }
+    }
+
+    @Test
+    fun `entering press mode drops the text query`() = dialog {
+        search("verse")
+        enterPressMode()
+
+        // Both filters narrowing the same list at once has no sensible reading, so each clears the
+        // other. With nothing pressed yet, everything is listed.
+        ShortcutAction.entries.forEach { assertTrue(rowExists(it)) }
     }
 
     // ── Empty and cleared ───────────────────────────────────────────────────────

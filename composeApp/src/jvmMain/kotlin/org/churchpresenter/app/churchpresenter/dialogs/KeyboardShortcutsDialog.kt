@@ -1,6 +1,8 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -24,12 +27,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,7 +59,9 @@ import churchpresenter.composeapp.generated.resources.shortcut_description_reord
 import churchpresenter.composeapp.generated.resources.shortcut_key_double_click
 import churchpresenter.composeapp.generated.resources.shortcut_key_right_click
 import churchpresenter.composeapp.generated.resources.shortcut_key_shift_drag
+import churchpresenter.composeapp.generated.resources.shortcut_search_by_key
 import churchpresenter.composeapp.generated.resources.shortcut_search_placeholder
+import churchpresenter.composeapp.generated.resources.shortcut_search_press_prompt
 import churchpresenter.composeapp.generated.resources.shortcut_settings_change
 import churchpresenter.composeapp.generated.resources.shortcut_settings_clear
 import churchpresenter.composeapp.generated.resources.shortcut_settings_reset
@@ -65,6 +76,7 @@ import org.churchpresenter.app.churchpresenter.models.KeyChord
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.models.ShortcutScope
 import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
+import org.churchpresenter.app.churchpresenter.utils.label
 import org.churchpresenter.app.churchpresenter.utils.labelOrUnbound
 import org.churchpresenter.app.churchpresenter.utils.searchText
 import org.jetbrains.compose.resources.stringResource
@@ -83,6 +95,12 @@ internal const val SHORTCUT_RESET_ALL_TAG = "shortcut_reset_all"
 
 /** The "no results" line, which has no other stable handle once the list is empty. */
 internal const val SHORTCUT_NO_RESULTS_TAG = "shortcut_no_results"
+
+/** The "Press key" toggle. */
+internal const val SHORTCUT_PRESS_MODE_TAG = "shortcut_press_mode"
+
+/** The panel that listens for a key while "Press key" is on. */
+internal const val SHORTCUT_PRESS_PANEL_TAG = "shortcut_press_panel"
 
 /** The per-action row's key chip, tagged by action so a test can read one row's binding. */
 internal fun shortcutChipTag(action: ShortcutAction) = "shortcut_chip_${action.name}"
@@ -155,6 +173,12 @@ internal fun KeyboardShortcutsDialogContent(
     // View state only. It must never reach currentSettings, or what Apply saves would depend on
     // whether the user happened to be searching at the time.
     var query by remember { mutableStateOf("") }
+    // "Press key" mode: filter by pressing a combination rather than describing it. The two filters
+    // are mutually exclusive — each clears the other — because a text query and a pressed chord
+    // narrowing the same list at once has no sensible reading.
+    var pressMode by remember { mutableStateOf(false) }
+    var pressed by remember { mutableStateOf<KeyChord?>(null) }
+    val pressFocus = remember { FocusRequester() }
 
     val shortcuts = remember(currentSettings.keyboardShortcutSettings) {
         ShortcutMap.from(currentSettings.keyboardShortcutSettings)
@@ -166,10 +190,18 @@ internal fun KeyboardShortcutsDialogContent(
     val haystacks: Map<ShortcutAction, String> = ShortcutAction.entries.associateWith { action ->
         "${stringResource(action.descriptionRes)} ${shortcuts.searchText(action)}".lowercase()
     }
-    val visibleByScope = remember(query, haystacks) {
+    val visibleByScope = remember(query, haystacks, pressed, shortcuts) {
+        val chord = pressed
         val needle = query.trim().lowercase()
         actionsByScope.mapValues { (_, actions) ->
-            if (needle.isEmpty()) actions else actions.filter { needle in haystacks.getValue(it) }
+            when {
+                // Exact chord match, the same question `conflictFor` asks: what is *this*
+                // combination already doing? A looser match would fold Ctrl+← in with ← and stop
+                // answering it.
+                chord != null -> actions.filter { chord in shortcuts.chordsFor(it) }
+                needle.isEmpty() -> actions
+                else -> actions.filter { needle in haystacks.getValue(it) }
+            }
         }
     }
 
@@ -180,10 +212,14 @@ internal fun KeyboardShortcutsDialogContent(
         stringResource(Res.string.shortcut_key_right_click) to stringResource(Res.string.shortcut_description_context_menu),
         stringResource(Res.string.shortcut_key_shift_drag) to stringResource(Res.string.shortcut_description_reorder_item),
     )
-    val visibleMouseRows = remember(query, mouseRows) {
+    val visibleMouseRows = remember(query, mouseRows, pressed) {
         val needle = query.trim().lowercase()
-        if (needle.isEmpty()) mouseRows
-        else mouseRows.filter { (keys, description) -> needle in "$keys $description".lowercase() }
+        when {
+            // A pressed key can never be a mouse gesture, so the section drops out entirely.
+            pressed != null -> emptyList()
+            needle.isEmpty() -> mouseRows
+            else -> mouseRows.filter { (keys, description) -> needle in "$keys $description".lowercase() }
+        }
     }
 
     val nothingMatched = visibleByScope.values.all { it.isEmpty() } && visibleMouseRows.isEmpty()
@@ -207,11 +243,53 @@ internal fun KeyboardShortcutsDialogContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = stringResource(Res.string.shortcut_search_placeholder),
-                    modifier = Modifier.weight(1f),
+                if (pressMode) {
+                    // While listening, the box shows what was pressed rather than accepting text —
+                    // the arrow keys have to reach the filter, and they cannot also move a cursor.
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                            .focusRequester(pressFocus)
+                            .focusable()
+                            .onPreviewKeyEvent { event ->
+                                capturedChord(event)?.let { pressed = it }
+                                event.type == KeyEventType.KeyDown
+                            }
+                            .testTag(SHORTCUT_PRESS_PANEL_TAG),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = pressed?.label() ?: stringResource(Res.string.shortcut_search_press_prompt),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (pressed != null) FontWeight.Bold else FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    LaunchedEffect(Unit) { pressFocus.requestFocus() }
+                } else {
+                    SearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = stringResource(Res.string.shortcut_search_placeholder),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // Toggling either way drops whatever the other mode had filtered by, so the list is
+                // never narrowed by a filter the header is no longer showing.
+                FilterChip(
+                    selected = pressMode,
+                    onClick = {
+                        pressMode = !pressMode
+                        pressed = null
+                        query = ""
+                    },
+                    label = { Text(stringResource(Res.string.shortcut_search_by_key), maxLines = 1, softWrap = false) },
+                    modifier = Modifier.testTag(SHORTCUT_PRESS_MODE_TAG),
                 )
                 TextButton(
                     onClick = { editOverrides { emptyMap() } },
@@ -256,8 +334,11 @@ internal fun KeyboardShortcutsDialogContent(
                 }
 
                 if (nothingMatched) {
+                    // Names whichever filter is active — the typed text, or the chord that was
+                    // pressed. "No results found for \"\"" would be the obvious bug here.
+                    val describedFilter = pressed?.label() ?: query
                     Text(
-                        text = stringResource(Res.string.no_results_found, query),
+                        text = stringResource(Res.string.no_results_found, describedFilter),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp).testTag(SHORTCUT_NO_RESULTS_TAG),

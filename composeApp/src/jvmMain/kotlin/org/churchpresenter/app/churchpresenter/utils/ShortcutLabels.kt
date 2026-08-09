@@ -3,6 +3,10 @@ package org.churchpresenter.app.churchpresenter.utils
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
 import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.key_alias_down
+import churchpresenter.composeapp.generated.resources.key_alias_left
+import churchpresenter.composeapp.generated.resources.key_alias_right
+import churchpresenter.composeapp.generated.resources.key_alias_up
 import churchpresenter.composeapp.generated.resources.key_mod_alt
 import churchpresenter.composeapp.generated.resources.key_mod_ctrl
 import churchpresenter.composeapp.generated.resources.key_mod_meta
@@ -108,16 +112,35 @@ fun KeyChord.label(useSymbols: Boolean): String {
 }
 
 /**
+ * A typeable name for a key that is otherwise drawn as an un-typeable glyph.
+ *
+ * Only the four arrows need this. Every other symbol the app binds — `.` `,` `/` `[` and the rest —
+ * is a key you can actually press into a search box, so it needs no alias; the arrows are the sole
+ * bindings that could not be searched for at all.
+ */
+@Composable
+private fun keySearchAlias(key: Key): String = when (key) {
+    Key.DirectionUp -> stringResource(Res.string.key_alias_up)
+    Key.DirectionDown -> stringResource(Res.string.key_alias_down)
+    Key.DirectionLeft -> stringResource(Res.string.key_alias_left)
+    Key.DirectionRight -> stringResource(Res.string.key_alias_right)
+    else -> ""
+}
+
+/**
  * Everything a user might type to find this chord, lower-cased.
  *
- * Both renderings plus the common names for each modifier, because what is on screen is only one of
- * several things someone will reach for. Without this the key search would work on Windows and
- * Linux and silently match nothing on macOS, where every modifier is drawn as a symbol.
+ * Both renderings, a typeable alias for the arrows, and the common names for each modifier —
+ * because what is on screen is only one of several things someone will reach for. Without the
+ * modifier names the key search would work on Windows and Linux and match nothing on macOS, where
+ * every modifier is a symbol; without the arrow aliases an arrow binding could not be found by key
+ * on any platform, since `←` is not on the keyboard.
  */
 @Composable
 fun KeyChord.searchText(): String = buildString {
     append(label(useSymbols = true)).append(' ')
     append(label(useSymbols = false)).append(' ')
+    append(keySearchAlias(key)).append(' ')
     if (ctrl) append("ctrl control ⌃ ")
     if (meta) append("meta cmd command ⌘ ")
     if (alt) append("alt option ⌥ ")
