@@ -272,7 +272,15 @@ fun LottieGenWindow(theme: ThemeMode, outputDir: File?, onClose: () -> Unit, onF
         state = rememberWindowState(width = 1200.dp, height = 800.dp)
     ) {
         AppThemeWrapper(theme = theme) {
-            LottieGenApp(outputDir = outputDir, onFileSaved = onFileSaved, canvasWidth = canvasWidth, canvasHeight = canvasHeight)
+            // embedded = true regardless of outputDir: opened from the Help menu there is no output
+            // folder, but the generator is still inside the app's theme and must follow it.
+            LottieGenApp(
+                outputDir = outputDir,
+                onFileSaved = onFileSaved,
+                canvasWidth = canvasWidth,
+                canvasHeight = canvasHeight,
+                embedded = true
+            )
         }
     }
 }
