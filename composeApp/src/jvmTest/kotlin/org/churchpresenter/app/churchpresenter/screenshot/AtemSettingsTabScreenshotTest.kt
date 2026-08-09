@@ -87,7 +87,7 @@ class AtemSettingsTabScreenshotTest {
      * Slots and keyers pointing past what the switcher has.
      *
      * Nothing stops a number being typed that the hardware cannot honour, so every field that knows
-     * its range marks itself in the error colour instead — four of them at once here, across both
+     * its range marks itself in the error color instead — four of them at once here, across both
      * cards.
      */
     @Test

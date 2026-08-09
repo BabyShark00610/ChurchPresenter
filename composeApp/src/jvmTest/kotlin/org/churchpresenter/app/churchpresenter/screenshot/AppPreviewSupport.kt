@@ -20,6 +20,7 @@ import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.data.settings.AnnouncementsSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.PictureSettings
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.data.settings.StreamingSettings
@@ -454,6 +455,11 @@ internal fun library(): AppSettings {
             WebBookmark(url = "https://www.biblegateway.com", title = "Bible Gateway"),
         ),
         hiddenTabs = emptySet(),
+        // Pinned: both default to `UUID.randomUUID()`, and the device id is drawn in a text field on
+        // the Companion Satellite settings tab — so its screenshot carried a fresh id every run.
+        companionSatelliteConnections = listOf(
+            CompanionSatelliteSettings(id = "preview-connection", deviceId = "churchpresenter-preview"),
+        ),
     )
 }
 

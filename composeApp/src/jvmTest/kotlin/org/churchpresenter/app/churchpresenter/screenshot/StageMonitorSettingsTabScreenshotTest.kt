@@ -16,7 +16,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
-import org.churchpresenter.app.churchpresenter.composables.RecentColors
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.MetronomePosition
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorContentType
@@ -45,11 +44,11 @@ import kotlin.test.Test
  *    Bible, Songs and Next are offered one option fewer — they are meant to share the screen, so
  *    Full Screen is not on their list. The layout preview redraws from those choices.
  *  - **Six style blocks, one per drawable zone**, identical in shape but not in what they offer:
- *    only the two top zones can hold a song's chart, so only those ask for a chord colour — and
- *    that renames the text colour to "Lyrics Color", because once chords are on screen "Color" no
+ *    only the two top zones can hold a song's chart, so only those ask for a chord color — and
+ *    that renames the text color to "Lyrics Color", because once chords are on screen "Color" no
  *    longer says which.
- *  - **Four colour pickers per block** — text, chord, background and shadow. Each is shot from a
- *    fixture colour of its own, so the picker opens on a different hue in each image and it is
+ *  - **Four color pickers per block** — text, chord, background and shadow. Each is shot from a
+ *    fixture color of its own, so the picker opens on a different hue in each image and it is
  *    visible which field it came from.
  *
  * The font dropdowns are never opened: their list is whatever `GraphicsEnvironment` reports on the
@@ -57,28 +56,14 @@ import kotlin.test.Test
  */
 class StageMonitorSettingsTabScreenshotTest {
 
-    /**
-     * The colours the picker offers as "Recent" — emptied for these images, and put back afterwards.
-     *
-     * [RecentColors] is a JVM-wide singleton loaded from `~/.churchpresenter/recent_colors.json` at
-     * class init and appended to by every picker anyone confirms. Left alone, the row it draws is
-     * whatever the machine and the tests that ran before happened to leave there, so a picker image
-     * would change with test order rather than with the UI. Emptied, the row is not drawn at all.
-     */
-    private val stashedRecents = mutableListOf<String>()
+    /** The picker's "Recent" row is JVM-wide state — see [PinnedRecentColors]. */
+    private val recents = PinnedRecentColors()
 
     @BeforeTest
-    fun clearRecentColours() {
-        stashedRecents += RecentColors.colors
-        RecentColors.colors.clear()
-    }
+    fun pinRecentColors() = recents.clear()
 
     @AfterTest
-    fun restoreRecentColours() {
-        RecentColors.colors.clear()
-        RecentColors.colors.addAll(stashedRecents)
-        stashedRecents.clear()
-    }
+    fun unpinRecentColors() = recents.restore()
 
     // ── As it opens ─────────────────────────────────────────────────────────────────────────────
 
@@ -147,7 +132,7 @@ class StageMonitorSettingsTabScreenshotTest {
     // Not shot: the Full Screen and Top-Left blocks on their own. Both are already drawn in the
     // first viewport, so scrolling to either lands where the tab already was and produces `top`.
 
-    /** Top-Right — and above it Top-Left, the other block that asks for a chord colour. */
+    /** Top-Right — and above it Top-Left, the other block that asks for a chord color. */
     @Test
     fun `the chord-carrying style blocks`() = shoot("style_top_right") { scrollToBlock(TOP_RIGHT_BLOCK) }
 
@@ -163,24 +148,24 @@ class StageMonitorSettingsTabScreenshotTest {
      * a shade apart.
      */
     @Test
-    fun `a zone styled away from the defaults`() = shoot("style_customised", settings = customised())
+    fun `a zone styled away from the defaults`() = shoot("style_customised", settings = customized())
 
-    // ── The colour pickers ──────────────────────────────────────────────────────────────────────
+    // ── The color pickers ──────────────────────────────────────────────────────────────────────
     // One image per field rather than one for the picker, because the field a picker opens from is
     // the only thing that tells them apart — the popup itself is the same hue strip, saturation
-    // square and hex box every time, opened on whatever colour that field holds.
+    // square and hex box every time, opened on whatever color that field holds.
 
     @Test
-    fun `the text colour picker`() = picker("picker_text_colour", TEXT_COLOUR)
+    fun `the text color picker`() = picker("picker_text_colour", TEXT_COLOUR)
 
     @Test
-    fun `the chord colour picker`() = picker("picker_chord_colour", CHORD_COLOUR, block = TOP_LEFT_BLOCK)
+    fun `the chord color picker`() = picker("picker_chord_colour", CHORD_COLOUR, block = TOP_LEFT_BLOCK)
 
     @Test
-    fun `the background colour picker`() = picker("picker_background_colour", BACKGROUND_COLOUR)
+    fun `the background color picker`() = picker("picker_background_colour", BACKGROUND_COLOUR)
 
     @Test
-    fun `the shadow colour picker`() = picker("picker_shadow_colour", SHADOW_COLOUR)
+    fun `the shadow color picker`() = picker("picker_shadow_colour", SHADOW_COLOUR)
 
     // ── Driving ─────────────────────────────────────────────────────────────────────────────────
 
@@ -190,17 +175,17 @@ class StageMonitorSettingsTabScreenshotTest {
         waitForIdle()
     }
 
-    /** Opens the zone dropdown belonging to the content row labelled [label]. */
+    /** Opens the zone dropdown belonging to the content row labeled [label]. */
     private fun ComposeUiTest.openZoneMenuFor(label: String) {
         onAllNodesWithText(label)[0].performScrollTo().performClick()
         waitForIdle()
     }
 
     /**
-     * Opens the picker on the field holding [hex], with the tab styled so that colour is unique.
+     * Opens the picker on the field holding [hex], with the tab styled so that color is unique.
      *
-     * Unique because a picker is addressed by the colour its field displays, and the six style
-     * blocks otherwise carry the same handful of colours several times over.
+     * Unique because a picker is addressed by the color its field displays, and the six style
+     * blocks otherwise carry the same handful of colors several times over.
      */
     private fun picker(name: String, hex: String, block: Int = FULL_SCREEN_BLOCK) = shoot(
         name,
@@ -286,7 +271,7 @@ class StageMonitorSettingsTabScreenshotTest {
     }
 
     /** The Full Screen block with every text style and both alignments off their defaults. */
-    private fun customised() = stageMonitor {
+    private fun customized() = stageMonitor {
         copy(
             zoneStyles = zoneStyles + (
                 StageMonitorStyleZone.FULL_SCREEN to styleFor(StageMonitorStyleZone.FULL_SCREEN).copy(
@@ -307,7 +292,7 @@ class StageMonitorSettingsTabScreenshotTest {
     }
 
     /**
-     * Every colour a picker image opens from, made unique across the whole tab.
+     * Every color a picker image opens from, made unique across the whole tab.
      *
      * The four fields on a block otherwise show `#FFFFFF` and `#000000` twice over, and the other
      * five blocks show the same again — so the field a picker was opened from could not be told
@@ -346,7 +331,7 @@ class StageMonitorSettingsTabScreenshotTest {
         const val TOP_RIGHT_BLOCK = 2
         const val BOTTOM_RIGHT_BLOCK = 5
 
-        // Fixture colours, each unique on the tab so its picker can be addressed by it.
+        // Fixture colors, each unique on the tab so its picker can be addressed by it.
         const val TEXT_COLOUR = "#FFD54F"
         const val CHORD_COLOUR = "#7BE38F"
         const val BACKGROUND_COLOUR = "#123A6B"

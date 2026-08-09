@@ -24,6 +24,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import java.io.File
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 
 /**
@@ -46,6 +48,15 @@ import kotlin.test.Test
  *  - **A live [PresenterManager]**, which adds an auto-fit button beside each font size.
  */
 class SongSettingsTabScreenshotTest {
+
+    /** The picker's "Recent" row is JVM-wide state — see [PinnedRecentColors]. */
+    private val recents = PinnedRecentColors()
+
+    @BeforeTest
+    fun pinRecentColors() = recents.clear()
+
+    @AfterTest
+    fun unpinRecentColors() = recents.restore()
 
     private fun shoot(
         name: String,
