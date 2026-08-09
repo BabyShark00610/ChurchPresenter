@@ -1,0 +1,129 @@
+package org.churchpresenter.app.churchpresenter.utils
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.input.key.Key
+import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.key_mod_alt
+import churchpresenter.composeapp.generated.resources.key_mod_ctrl
+import churchpresenter.composeapp.generated.resources.key_mod_meta
+import churchpresenter.composeapp.generated.resources.key_mod_shift
+import churchpresenter.composeapp.generated.resources.key_name_backspace
+import churchpresenter.composeapp.generated.resources.key_name_delete
+import churchpresenter.composeapp.generated.resources.key_name_end
+import churchpresenter.composeapp.generated.resources.key_name_enter
+import churchpresenter.composeapp.generated.resources.key_name_escape
+import churchpresenter.composeapp.generated.resources.key_name_home
+import churchpresenter.composeapp.generated.resources.key_name_insert
+import churchpresenter.composeapp.generated.resources.key_name_page_down
+import churchpresenter.composeapp.generated.resources.key_name_page_up
+import churchpresenter.composeapp.generated.resources.key_name_space
+import churchpresenter.composeapp.generated.resources.key_name_tab
+import churchpresenter.composeapp.generated.resources.shortcut_unbound
+import org.churchpresenter.app.churchpresenter.models.KeyChord
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.jetbrains.compose.resources.stringResource
+
+/** Chords of a multi-key binding are shown separated by this, e.g. `← / ↑`. */
+private const val CHORD_SEPARATOR = " / "
+
+/**
+ * Whether to draw modifiers as the Mac symbols.
+ *
+ * Read once into a `val` rather than per call. `os.name` is also what skiko latches its host OS
+ * from, and tests that fake it must go through `TestSingletons.latchSkikoHostOs()` first — see the
+ * `os.name` rule in AGENT.md.
+ */
+private val isMac: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+
+/**
+ * The printable name of a key.
+ *
+ * Only the keys worth naming are listed; anything else falls back to Compose's own `toString`,
+ * which yields a usable "Key: F13"-style name rather than a blank. Arrows and punctuation are
+ * symbols and identical in every locale, so they are literals, not resources.
+ */
+@Composable
+private fun keyDisplayName(key: Key): String = when (key) {
+    Key.Spacebar -> stringResource(Res.string.key_name_space)
+    Key.Escape -> stringResource(Res.string.key_name_escape)
+    Key.Enter, Key.NumPadEnter -> stringResource(Res.string.key_name_enter)
+    Key.Tab -> stringResource(Res.string.key_name_tab)
+    Key.Backspace -> stringResource(Res.string.key_name_backspace)
+    Key.Delete -> stringResource(Res.string.key_name_delete)
+    Key.Insert -> stringResource(Res.string.key_name_insert)
+    Key.MoveHome -> stringResource(Res.string.key_name_home)
+    Key.MoveEnd -> stringResource(Res.string.key_name_end)
+    Key.PageUp -> stringResource(Res.string.key_name_page_up)
+    Key.PageDown -> stringResource(Res.string.key_name_page_down)
+    Key.DirectionUp -> "↑"
+    Key.DirectionDown -> "↓"
+    Key.DirectionLeft -> "←"
+    Key.DirectionRight -> "→"
+    Key.Period -> "."
+    Key.Comma -> ","
+    Key.Semicolon -> ";"
+    Key.Apostrophe -> "'"
+    Key.Slash -> "/"
+    Key.Backslash -> "\\"
+    Key.LeftBracket -> "["
+    Key.RightBracket -> "]"
+    Key.Minus -> "-"
+    Key.Equals -> "="
+    Key.Grave -> "`"
+    else -> key.toString().substringAfter(": ", key.toString())
+}
+
+/** This chord as the user sees it, e.g. `Ctrl+Shift+Z` — or `⇧⌘Z` on macOS. */
+@Composable
+fun KeyChord.label(): String {
+    val name = keyDisplayName(key)
+    return if (isMac) {
+        // Mac convention: symbols, no separator, and a fixed order regardless of press order.
+        buildString {
+            if (ctrl) append("⌃")
+            if (alt) append("⌥")
+            if (shift) append("⇧")
+            if (meta) append("⌘")
+            append(name)
+        }
+    } else {
+        buildList {
+            if (ctrl) add(stringResource(Res.string.key_mod_ctrl))
+            if (meta) add(stringResource(Res.string.key_mod_meta))
+            if (alt) add(stringResource(Res.string.key_mod_alt))
+            if (shift) add(stringResource(Res.string.key_mod_shift))
+            add(name)
+        }.joinToString("+")
+    }
+}
+
+/**
+ * Every chord bound to [action], joined — or an empty string when it is unbound.
+ *
+ * Empty rather than a placeholder so callers can decide: the settings tab shows "Not set", while an
+ * inline hint hides itself entirely rather than describing a key that does nothing.
+ */
+@Composable
+fun ShortcutMap.label(action: ShortcutAction): String {
+    // Built with an explicit loop, not joinToString: its transform lambda is not a composable
+    // context, and KeyChord.label() reads string resources.
+    val parts = mutableListOf<String>()
+    chordsFor(action).forEach { parts.add(it.label()) }
+    return parts.joinToString(CHORD_SEPARATOR)
+}
+
+/** [label] with "Not set" substituted, for places that must render something. */
+@Composable
+fun ShortcutMap.labelOrUnbound(action: ShortcutAction): String =
+    label(action).ifEmpty { stringResource(Res.string.shortcut_unbound) }
+
+/**
+ * The combined label for a pair of opposed actions, e.g. `←  →` for prev/next.
+ *
+ * The inline tab hints describe the pair as one phrase ("next/prev image"), so they need the two
+ * bindings side by side rather than two separate rows. Returns empty when **both** are unbound, so
+ * the caller can drop the phrase.
+ */
+@Composable
+fun ShortcutMap.pairLabel(first: ShortcutAction, second: ShortcutAction): String =
+    listOf(label(first), label(second)).filter { it.isNotEmpty() }.joinToString("  ")

@@ -180,7 +180,9 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SongTuning
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.availableSongColumns
 import org.churchpresenter.app.churchpresenter.utils.draggedColumnIndex
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
@@ -369,6 +371,7 @@ fun SongsTab(
     // holds keyboard focus AND the window is focused — full machinery in
     // composables/FocusLostRescue.kt (shared with Presentation/Bible).
     val focusRescue = rememberFocusLostRescue(hostWindow, tabFocusRequester)
+    val shortcuts = LocalShortcuts.current
 
     // React to schedule item selection
     // Uses selectedSongItemVersion as a key so clicking the same song twice always re-fires
@@ -583,8 +586,8 @@ fun SongsTab(
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     val isLineMode = isSongLineMode(appSettings.songSettings)
-                    when (keyEvent.key) {
-                        Key.DirectionLeft -> {
+                    when {
+                        shortcuts.matches(ShortcutAction.SONGS_PREVIOUS, keyEvent) -> {
                             if (isLineMode) {
                                 viewModel.navigatePreviousLine()
                                 sendToPresenter(goLive = isPresenting)
@@ -593,7 +596,7 @@ fun SongsTab(
                             }
                             true
                         }
-                        Key.DirectionRight -> {
+                        shortcuts.matches(ShortcutAction.SONGS_NEXT, keyEvent) -> {
                             if (isLineMode) {
                                 viewModel.navigateNextLine()
                                 sendToPresenter(goLive = isPresenting)
@@ -602,12 +605,12 @@ fun SongsTab(
                             }
                             true
                         }
-                        Key.DirectionUp -> {
+                        shortcuts.matches(ShortcutAction.SONGS_PREVIOUS_SECTION, keyEvent) -> {
                             if (!viewModel.navigatePreviousSection() && !isPresenting) viewModel.navigatePreviousSong()
                             sendToPresenter(goLive = isPresenting)
                             true
                         }
-                        Key.DirectionDown -> {
+                        shortcuts.matches(ShortcutAction.SONGS_NEXT_SECTION, keyEvent) -> {
                             if (!viewModel.navigateNextSection() && !isPresenting) viewModel.navigateNextSong()
                             sendToPresenter(goLive = isPresenting)
                             true

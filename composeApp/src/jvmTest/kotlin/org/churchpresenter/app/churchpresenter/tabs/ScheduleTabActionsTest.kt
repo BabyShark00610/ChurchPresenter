@@ -156,7 +156,7 @@ class ScheduleTabActionsTest {
         scheduleTab(seed = { seedService() }) { vm, _ ->
             buttonAt(ScheduleLabel.REMOVE, 1).performClick()
             waitForIdle()
-            button(ScheduleLabel.UNDO).performClick()
+            taggedButton(ScheduleLabel.UNDO).performClick()
             waitForIdle()
 
             assertEquals(
@@ -171,9 +171,9 @@ class ScheduleTabActionsTest {
         scheduleTab(seed = { seedService() }) { vm, _ ->
             buttonAt(ScheduleLabel.REMOVE, 1).performClick()
             waitForIdle()
-            button(ScheduleLabel.UNDO).performClick()
+            taggedButton(ScheduleLabel.UNDO).performClick()
             waitForIdle()
-            button(ScheduleLabel.REDO).performClick()
+            taggedButton(ScheduleLabel.REDO).performClick()
             waitForIdle()
 
             assertEquals(

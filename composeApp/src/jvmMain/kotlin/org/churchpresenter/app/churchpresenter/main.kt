@@ -161,6 +161,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
 import org.churchpresenter.app.churchpresenter.utils.presenterScreenBounds
 
@@ -1038,7 +1040,10 @@ fun main() {
                     AppThemeWrapper(theme = theme) {
                         CompositionLocalProvider(
                             LocalMediaViewModel provides mediaViewModel,
-                            LocalMainWindowState provides state
+                            LocalMainWindowState provides state,
+                            LocalShortcuts provides remember(appSettings.keyboardShortcutSettings) {
+                                ShortcutMap.from(appSettings.keyboardShortcutSettings)
+                            }
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
 

@@ -51,6 +51,7 @@ import churchpresenter.composeapp.generated.resources.song
 import churchpresenter.composeapp.generated.resources.obs_settings
 import churchpresenter.composeapp.generated.resources.atem_settings
 import churchpresenter.composeapp.generated.resources.companion_satellite_settings
+import churchpresenter.composeapp.generated.resources.shortcut_settings_tab
 import churchpresenter.composeapp.generated.resources.stage_monitor
 import churchpresenter.composeapp.generated.resources.tab_dictionary
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -61,6 +62,7 @@ import org.churchpresenter.app.churchpresenter.dialogs.tabs.AtemSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.CompanionSatelliteSettingsTab
 import org.churchpresenter.app.churchpresenter.viewmodel.CompanionSatelliteViewModel
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.OBSSettingsTab
+import org.churchpresenter.app.churchpresenter.dialogs.tabs.ShortcutSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.SystemSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.BackgroundSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.BibleSettingsTab
@@ -162,7 +164,10 @@ internal fun OptionsDialogContent(
 ) {
     var currentSettings by remember { mutableStateOf(initialSettings ?: settingsManager.loadSettings()) }
     val companionSatelliteTabIndex = if (obsManager != null) 11 else 10
-    val tabCount = companionSatelliteTabIndex + 1
+    // Appended last on purpose: inserting anywhere earlier shifts OBS and Companion Satellite and
+    // silently repoints every `openOptionsDialog(N)` call site at the wrong tab.
+    val shortcutsTabIndex = companionSatelliteTabIndex + 1
+    val tabCount = shortcutsTabIndex + 1
     var selectedTabIndex by remember(initialTab) { mutableStateOf(initialTab) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
 
@@ -240,6 +245,11 @@ internal fun OptionsDialogContent(
                             selected = safeTabIndex == companionSatelliteTabIndex,
                             onClick = { selectedTabIndex = companionSatelliteTabIndex },
                             text = { Text(stringResource(Res.string.companion_satellite_settings)) }
+                        )
+                        Tab(
+                            selected = safeTabIndex == shortcutsTabIndex,
+                            onClick = { selectedTabIndex = shortcutsTabIndex },
+                            text = { Text(stringResource(Res.string.shortcut_settings_tab)) }
                         )
                     }
 
@@ -341,12 +351,21 @@ internal fun OptionsDialogContent(
                                     viewModel = companionSatelliteViewModel
                                 )
                             }
-                            11 -> CompanionSatelliteSettingsTab(
+                            // Past index 10 the numbering depends on whether the OBS tab is
+                            // present, so these two are matched by their computed index rather
+                            // than by a literal that would be right in only one of the two cases.
+                            companionSatelliteTabIndex -> CompanionSatelliteSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 },
                                 viewModel = companionSatelliteViewModel
+                            )
+                            shortcutsTabIndex -> ShortcutSettingsTab(
+                                settings = currentSettings,
+                                onSettingsChange = { updateFn ->
+                                    currentSettings = updateFn(currentSettings)
+                                }
                             )
                         }
                     }
