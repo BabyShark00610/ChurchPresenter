@@ -26,13 +26,12 @@ import org.churchpresenter.app.churchpresenter.utils.Constants
  * current page" (OBS won't do this on its own even with no-store, since it doesn't re-request
  * an already loaded page) — no-store only guarantees a *fresh* page load gets current JS.
  */
-/** `internal` rather than private so the extracted route groups can call it. */
 internal fun browserSourceOverlayPage(
-index: Int,
-output: ScreenAssignment,
-apiKeyEnabled: Boolean,
-apiKey: String,
-bgOverride: String? = null,
+    index: Int,
+    output: ScreenAssignment,
+    apiKeyEnabled: Boolean,
+    apiKey: String,
+    bgOverride: String? = null,
 ): String {
     val needsKey = output.browserSourceApiKeyRequired || (apiKeyEnabled && apiKey.isNotEmpty())
     val keyParam = if (needsKey) "?${Constants.QUERY_PARAM_API_KEY}=" + java.net.URLEncoder.encode(apiKey, "UTF-8") else ""

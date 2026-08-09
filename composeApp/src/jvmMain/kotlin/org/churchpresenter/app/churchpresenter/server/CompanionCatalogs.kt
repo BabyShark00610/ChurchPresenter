@@ -11,7 +11,6 @@ import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
  * companion API serves. Pure functions of their arguments — they were members of `CompanionServer`
  * only because that is where the callers happened to live.
  */
-/** `internal` rather than private so the extracted route groups can call it. */
 internal fun buildSongDetail(song: SongItem): SongDetailDto {
     val sections = mutableListOf<SongSectionDto>()
     var currentType = Constants.SECTION_TYPE_VERSE

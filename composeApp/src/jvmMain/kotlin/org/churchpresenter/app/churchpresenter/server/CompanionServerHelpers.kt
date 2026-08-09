@@ -7,7 +7,6 @@ import java.net.NetworkInterface
  * Small pure helpers used by `CompanionServer` and its route groups. None of them read server
  * state, so they live here rather than as members.
  */
-/** `internal` rather than private so the extracted route groups can call it. */
 internal fun jsonEscape(s: String): String = buildString {
     for (c in s) {
         when {
@@ -22,7 +21,6 @@ internal fun jsonEscape(s: String): String = buildString {
     }
 }
 
-/** `internal` rather than private so the extracted route groups can call it. */
 internal fun contentTypeForExtension(ext: String): ContentType = when (ext.lowercase()) {
     "jpg", "jpeg" -> ContentType.Image.JPEG
     "png"         -> ContentType.Image.PNG
