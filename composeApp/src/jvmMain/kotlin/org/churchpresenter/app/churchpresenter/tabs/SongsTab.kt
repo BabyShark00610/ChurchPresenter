@@ -189,6 +189,11 @@ import org.churchpresenter.app.churchpresenter.utils.isDualLanguagePresentation
 import org.churchpresenter.app.churchpresenter.utils.isSplitScreenSong
 import org.churchpresenter.app.churchpresenter.utils.isChordChartPresentation
 import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
+import org.churchpresenter.app.churchpresenter.dialogs.SongBackgroundDialog
+import androidx.compose.material.icons.filled.Image
+import churchpresenter.composeapp.generated.resources.song_background_menu
+import org.churchpresenter.app.churchpresenter.utils.songLineGroupStart
+import org.churchpresenter.app.churchpresenter.utils.songLineStep
 import org.churchpresenter.app.churchpresenter.utils.mergeColumnOrder
 import org.churchpresenter.app.churchpresenter.utils.moveColumn
 import org.churchpresenter.app.churchpresenter.utils.songColumnSortKey
@@ -262,6 +267,8 @@ fun SongsTab(
     // Edit Song Dialog state (pure UI state — fine to keep here)
     var showEditDialog by remember { mutableStateOf(false) }
     var songToEdit by remember { mutableStateOf<SongItem?>(null) }
+    var showBackgroundDialog by remember { mutableStateOf(false) }
+    var songForBackground by remember { mutableStateOf<SongItem?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var songToDelete by remember { mutableStateOf<SongItem?>(null) }
     var showNewSongDialog by remember { mutableStateOf(false) }
@@ -583,10 +590,11 @@ fun SongsTab(
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     val isLineMode = isSongLineMode(appSettings.songSettings)
+                    val lineStep = songLineStep(appSettings.songSettings)
                     when (keyEvent.key) {
                         Key.DirectionLeft -> {
                             if (isLineMode) {
-                                viewModel.navigatePreviousLine()
+                                viewModel.navigatePreviousLine(lineStep)
                                 sendToPresenter(goLive = isPresenting)
                             } else if (!isPresenting) {
                                 viewModel.navigatePreviousSong()
@@ -595,7 +603,7 @@ fun SongsTab(
                         }
                         Key.DirectionRight -> {
                             if (isLineMode) {
-                                viewModel.navigateNextLine()
+                                viewModel.navigateNextLine(lineStep)
                                 sendToPresenter(goLive = isPresenting)
                             } else if (!isPresenting) {
                                 viewModel.navigateNextSong()
@@ -1211,6 +1219,22 @@ fun SongsTab(
                                     showContextMenu = false
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.song_background_menu)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Image,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.tertiary
+                                    )
+                                },
+                                onClick = {
+                                    songForBackground = song
+                                    showBackgroundDialog = true
+                                    showContextMenu = false
+                                }
+                            )
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text(stringResource(Res.string.delete_saved_string), color = MaterialTheme.colorScheme.error) },
@@ -1684,8 +1708,12 @@ fun SongsTab(
                                     MaterialTheme.colorScheme.onSurface
 
                                 val isPerLineMode = isSongLineMode(appSettings.songSettings)
+                                // Highlight the whole group that goes on one slide, snapped to its
+                                // boundary — with multi-line slides, marking only the cursor's own
+                                // line would understate what the congregation is looking at.
+                                val perLineStep = songLineStep(appSettings.songSettings)
                                 val activeLineIndex = if (isPerLineMode && sectionIndex == selectedSectionIndex)
-                                    viewModel.selectedLineIndex.value else -1
+                                    songLineGroupStart(viewModel.selectedLineIndex.value, perLineStep) else -1
 
                                 // Render section header if present — the same chip the editor's
                                 // preview uses, so a verse is recognised the same way in both.
@@ -1721,16 +1749,16 @@ fun SongsTab(
                                 if (showPrimary && showSecondary) {
                                     Row(modifier = Modifier.fillMaxWidth()) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
+                                            LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
                                         }
                                         Column(modifier = Modifier.weight(1f)) {
-                                            LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
+                                            LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
                                         }
                                     }
                                 } else if (showSecondary) {
-                                    LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
+                                    LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
                                 } else {
-                                    LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
+                                    LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
                                 }
                             }
                             // No separator between sections: each one opens with its own labelled
@@ -1786,6 +1814,27 @@ fun SongsTab(
                     if (wasLive) sendEditedSongToPresenter(updatedSong, tuning)
                 }
             }
+        }
+    )
+
+    // Per-song background dialog
+    SongBackgroundDialog(
+        isVisible = showBackgroundDialog,
+        songTitle = songForBackground?.let { song ->
+            listOf(song.number, song.title).filter { it.isNotBlank() }.joinToString(" – ")
+        } ?: "",
+        background = songForBackground?.let { appSettings.songBackgroundFor(it.songId) },
+        theme = theme,
+        onDismiss = { showBackgroundDialog = false; songForBackground = null },
+        onSave = { config ->
+            songForBackground?.let { song ->
+                onSettingsChangeState.value { s -> s.withSongBackground(song.songId, config) }
+            }
+            showBackgroundDialog = false
+            songForBackground = null
+            // No re-push: the presenter resolves the background out of `appSettings` on every
+            // composition, so a song already live picks the new one up as the settings write
+            // propagates. Only the *section* would need re-sending, and it has not changed.
         }
     )
 
@@ -1872,9 +1921,12 @@ private fun LyricLines(
     activeLineIndex: Int = -1,
     onLineClick: ((Int) -> Unit)? = null,
     onLineDoubleClick: ((Int) -> Unit)? = null,
+    activeLineCount: Int = 1,
 ) {
     lines.forEachIndexed { lineIndex, line ->
-        val isActiveLine = activeLineIndex >= 0 && lineIndex == activeLineIndex
+        val isActiveLine = activeLineIndex >= 0 &&
+            lineIndex >= activeLineIndex &&
+            lineIndex < activeLineIndex + activeLineCount.coerceAtLeast(1)
         Text(
             text = line,
             style = MaterialTheme.typography.bodyMedium,

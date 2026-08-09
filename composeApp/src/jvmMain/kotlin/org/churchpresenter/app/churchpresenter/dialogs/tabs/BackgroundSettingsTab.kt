@@ -459,8 +459,13 @@ fun BackgroundSettingsTab(
 }
 
 
+/**
+ * One background editor: the type dropdown and whichever picker that type needs. `internal` rather
+ * than private because the per-song background dialog presents the same choice over the same
+ * [BackgroundConfig] and should not offer a second, subtly different version of it.
+ */
 @Composable
-private fun BackgroundColumn(
+internal fun BackgroundColumn(
     subtitle: String,
     config: BackgroundConfig,
     onConfigChange: (BackgroundConfig) -> Unit,

@@ -107,6 +107,23 @@ data class SongSettings(
     val songNumberLowerThirdShadow: Boolean = false,
     val songNumberBeforeTitle: Boolean = true,
 
+    // Readability scrim — a darkened band drawn behind the lyric block so words stay legible over a
+    // busy photo or video background. Sized to the text, not to the screen: it grows and shrinks with
+    // however many lines the current slide holds. Off by default; existing installs keep relying on
+    // the text shadow alone, which is what they are set up around.
+    val lyricsScrimEnabled: Boolean = false,
+    val lyricsScrimColor: String = "#000000",
+    val lyricsScrimOpacity: Int = 55,       // percent
+    val lyricsScrimSoftness: Int = 45,      // percent — how much of the band fades out at each edge
+    val lyricsScrimPadding: Int = 40,       // reference px (1920x1080) the band extends past the text
+    val lyricsScrimWidthPercent: Int = 100, // percent of the content width the band spans
+    val lyricsLowerThirdScrimEnabled: Boolean = false,
+    val lyricsLowerThirdScrimColor: String = "#000000",
+    val lyricsLowerThirdScrimOpacity: Int = 55,
+    val lyricsLowerThirdScrimSoftness: Int = 45,
+    val lyricsLowerThirdScrimPadding: Int = 24,
+    val lyricsLowerThirdScrimWidthPercent: Int = 100,
+
     // Text margins (additional padding inside global projection offsets)
     val marginTop: Int = 54,
     val marginBottom: Int = 54,
@@ -145,10 +162,15 @@ data class SongSettings(
 
     // Fullscreen display
     val fullscreenDisplayMode: String = Constants.SONG_DISPLAY_MODE_VERSE, // "verse" or "line"
+    // How many lines one slide holds in line mode. 1 reproduces the original one-line-at-a-time
+    // behaviour, which is why it is the default — an existing settings.json has no such key and
+    // must keep presenting exactly as it did.
+    val fullscreenLinesPerSlide: Int = 1,
     val fullscreenLanguageDisplay: String = Constants.SONG_LANG_BOTH, // "both", "primary", "secondary"
 
     // Lower third display
     val lowerThirdDisplayMode: String = Constants.SONG_DISPLAY_MODE_LINE, // "verse" or "line"
+    val lowerThirdLinesPerSlide: Int = 1,
     val lowerThirdLanguageDisplay: String = Constants.SONG_LANG_BOTH, // "both", "primary", "secondary"
 
     // End-of-song indicator spacing (number of spaces between each asterisk)

@@ -1554,7 +1554,21 @@
     <string name="fullscreen_display">Fullscreen Display</string>
     <string name="display_mode_label">Display Mode:</string>
     <string name="display_mode_one_verse">1 Verse</string>
-    <string name="display_mode_one_line">1 Line</string>
+    <string name="display_mode_one_line">By Lines</string>
+    <string name="display_mode_lines_per_slide">Lines per slide:</string>
+
+    <!-- Song Settings - Readability scrim behind the lyrics -->
+    <string name="lyrics_scrim">Darken behind text</string>
+    <string name="lyrics_scrim_opacity">Strength</string>
+    <string name="lyrics_scrim_softness">Softness</string>
+    <string name="lyrics_scrim_padding">Spread</string>
+    <string name="lyrics_scrim_width">Width</string>
+
+    <!-- Per-song background -->
+    <string name="song_background_title">Song Background</string>
+    <string name="song_background_menu">Background for this song…</string>
+    <string name="song_background_own">Give this song its own background</string>
+    <string name="song_background_follow_general">This song uses the general song background from Settings.</string>
     <string name="song_language_both">Both</string>
     <string name="song_language_primary">Primary</string>
     <string name="song_language_secondary">Secondary</string>

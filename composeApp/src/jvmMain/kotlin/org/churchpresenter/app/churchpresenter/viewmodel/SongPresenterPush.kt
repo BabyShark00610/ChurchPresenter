@@ -41,6 +41,9 @@ internal fun titleSlideSection(
     },
     bpm = tuning.bpm,
     capo = tuning.capo,
+    // The title slide is part of the song, so it presents on the song's own background too —
+    // without this it would be the one slide that jumps back to the shared one.
+    songId = song.songId,
 )
 
 /** Where a live-edited song lands: the section/line to select and the section to send. */
@@ -69,5 +72,11 @@ internal fun resolveEditedSongPush(
         type = Constants.SECTION_TYPE_SONG,
     )
     val lineIndex = liveLineIndex.coerceIn(0, (section.lines.size - 1).coerceAtLeast(0))
-    return EditedSongPush(sectionIndex, lineIndex, section.copy(bpm = tuning.bpm, capo = tuning.capo))
+    // songId set here rather than only on the fallback: the sections list is rebuilt from the
+    // edited song, whose id changes with its number or title, so the stamp has to be refreshed.
+    return EditedSongPush(
+        sectionIndex,
+        lineIndex,
+        section.copy(bpm = tuning.bpm, capo = tuning.capo, songId = editedSong.songId),
+    )
 }

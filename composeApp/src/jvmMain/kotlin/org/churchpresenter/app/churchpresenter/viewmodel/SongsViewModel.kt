@@ -24,6 +24,7 @@ import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
 import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
 import org.churchpresenter.app.churchpresenter.utils.isChorusHeader
 import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
+import org.churchpresenter.app.churchpresenter.utils.songLineGroupStart
 import java.io.File
 
 class SongsViewModel(
@@ -395,7 +396,8 @@ class SongsViewModel(
             songNumber = song.number.toIntOrNull() ?: 0,
             lines = song.lyrics,
             secondaryLines = song.secondaryLyrics,
-            type = Constants.SECTION_TYPE_SONG
+            type = Constants.SECTION_TYPE_SONG,
+            songId = song.songId
         )
     }
 
@@ -424,7 +426,10 @@ class SongsViewModel(
             val secondary = secondarySections.getOrNull(index)
             section.copy(
                 secondaryTitle = song.secondaryTitle,
-                secondaryLines = secondary?.lines ?: emptyList()
+                secondaryLines = secondary?.lines ?: emptyList(),
+                // Stamped here, the one place every presentable section of a song is built, so
+                // nothing downstream has to remember to attach it.
+                songId = song.songId
             )
         }
 
@@ -603,12 +608,20 @@ class SongsViewModel(
         return false
     }
 
-    fun navigateNextLine(): Boolean {
+    /**
+     * Advances the line cursor by [step] — the number of lines one slide holds, so a press moves to
+     * the next slide rather than the next line. Defaulted to 1 so the many callers that predate
+     * multi-line slides, and the tests, keep the original one-line-at-a-time behaviour; SongsTab
+     * passes the configured step. Taking it as a parameter rather than reading settings here keeps
+     * the ViewModel free of a settings dependency and leaves the stepping directly testable.
+     */
+    fun navigateNextLine(step: Int = 1): Boolean {
+        val stepSize = step.coerceAtLeast(1)
         val section = getSelectedLyricSection() ?: return false
         val displayLines = section.lines
         val currentLine = _selectedLineIndex.value
-        if (currentLine < displayLines.size - 1) {
-            _selectedLineIndex.value = currentLine + 1
+        if (currentLine + stepSize < displayLines.size) {
+            _selectedLineIndex.value = currentLine + stepSize
             return true
         }
         // Move to next section with content lines (skip empty sections)
@@ -625,10 +638,12 @@ class SongsViewModel(
         return false
     }
 
-    fun navigatePreviousLine(): Boolean {
+    /** The mirror of [navigateNextLine]; see it for why [step] is a parameter. */
+    fun navigatePreviousLine(step: Int = 1): Boolean {
+        val stepSize = step.coerceAtLeast(1)
         val currentLine = _selectedLineIndex.value
         if (currentLine > 0) {
-            _selectedLineIndex.value = currentLine - 1
+            _selectedLineIndex.value = (currentLine - stepSize).coerceAtLeast(0)
             return true
         }
         // Move to previous section with content lines (skip empty sections)
@@ -637,7 +652,10 @@ class SongsViewModel(
         while (prevIdx >= 0) {
             if (sections[prevIdx].lines.isNotEmpty()) {
                 _selectedSectionIndex.value = prevIdx
-                _selectedLineIndex.value = (sections[prevIdx].lines.size - 1).coerceAtLeast(0)
+                // Land on the START of that section's last slide, not its last line — otherwise a
+                // multi-line slide would come back showing only its final line.
+                _selectedLineIndex.value =
+                    songLineGroupStart(sections[prevIdx].lines.size - 1, stepSize)
                 return true
             }
             prevIdx--

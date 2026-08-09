@@ -51,6 +51,12 @@ import churchpresenter.composeapp.generated.resources.bilingual_left_right
 import churchpresenter.composeapp.generated.resources.bilingual_top_bottom
 import churchpresenter.composeapp.generated.resources.color
 import churchpresenter.composeapp.generated.resources.display_mode_label
+import churchpresenter.composeapp.generated.resources.lyrics_scrim
+import churchpresenter.composeapp.generated.resources.lyrics_scrim_opacity
+import churchpresenter.composeapp.generated.resources.lyrics_scrim_padding
+import churchpresenter.composeapp.generated.resources.lyrics_scrim_softness
+import churchpresenter.composeapp.generated.resources.lyrics_scrim_width
+import churchpresenter.composeapp.generated.resources.display_mode_lines_per_slide
 import churchpresenter.composeapp.generated.resources.display_mode_one_line
 import churchpresenter.composeapp.generated.resources.display_mode_one_verse
 import churchpresenter.composeapp.generated.resources.every_page
@@ -121,6 +127,7 @@ import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
+import org.churchpresenter.app.churchpresenter.utils.MAX_LINES_PER_SLIDE
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
@@ -809,6 +816,16 @@ private fun RightColumn(
                 icon = {}
             ) { Text(stringResource(Res.string.display_mode_one_line), style = MaterialTheme.typography.labelSmall, maxLines = 1) }
         }
+        // Only meaningful in line mode — in verse mode the slide is the whole verse and the group
+        // size has nothing to divide.
+        if (fsDisplayMode == Constants.SONG_DISPLAY_MODE_LINE) {
+            LinesPerSlideRow(
+                value = settings.songSettings.fullscreenLinesPerSlide,
+                onValueChange = { n ->
+                    onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(fullscreenLinesPerSlide = n)) }
+                }
+            )
+        }
         val fsModes = listOf(
             Constants.SONG_LANG_BOTH to stringResource(Res.string.song_language_both),
             Constants.SONG_LANG_PRIMARY to stringResource(Res.string.song_language_primary),
@@ -942,6 +959,22 @@ private fun RightColumn(
         )
     }
 
+    ScrimSettingsBlock(
+        enabled = settings.songSettings.lyricsScrimEnabled,
+        color = settings.songSettings.lyricsScrimColor,
+        opacity = settings.songSettings.lyricsScrimOpacity,
+        softness = settings.songSettings.lyricsScrimSoftness,
+        padding = settings.songSettings.lyricsScrimPadding,
+        widthPercent = settings.songSettings.lyricsScrimWidthPercent,
+        testTagPrefix = "song_lyrics",
+        onEnabledChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsScrimEnabled = it)) } },
+        onColorChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsScrimColor = it)) } },
+        onOpacityChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsScrimOpacity = it)) } },
+        onSoftnessChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsScrimSoftness = it)) } },
+        onPaddingChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsScrimPadding = it)) } },
+        onWidthPercentChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsScrimWidthPercent = it)) } },
+    )
+
     } // end fullscreen_display SettingsSection
 
     // ── Lower Third Display ──
@@ -966,6 +999,14 @@ private fun RightColumn(
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                 icon = {}
             ) { Text(stringResource(Res.string.display_mode_one_line), style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+        }
+        if (ltDisplayMode == Constants.SONG_DISPLAY_MODE_LINE) {
+            LinesPerSlideRow(
+                value = settings.songSettings.lowerThirdLinesPerSlide,
+                onValueChange = { n ->
+                    onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lowerThirdLinesPerSlide = n)) }
+                }
+            )
         }
         val ltModes = listOf(
             Constants.SONG_LANG_BOTH to stringResource(Res.string.song_language_both),
@@ -1100,6 +1141,22 @@ private fun RightColumn(
             onOpacityChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdShadowOpacity = it)) } }
         )
     }
+
+    ScrimSettingsBlock(
+        enabled = settings.songSettings.lyricsLowerThirdScrimEnabled,
+        color = settings.songSettings.lyricsLowerThirdScrimColor,
+        opacity = settings.songSettings.lyricsLowerThirdScrimOpacity,
+        softness = settings.songSettings.lyricsLowerThirdScrimSoftness,
+        padding = settings.songSettings.lyricsLowerThirdScrimPadding,
+        widthPercent = settings.songSettings.lyricsLowerThirdScrimWidthPercent,
+        testTagPrefix = "song_lyricsLowerThird",
+        onEnabledChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdScrimEnabled = it)) } },
+        onColorChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdScrimColor = it)) } },
+        onOpacityChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdScrimOpacity = it)) } },
+        onSoftnessChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdScrimSoftness = it)) } },
+        onPaddingChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdScrimPadding = it)) } },
+        onWidthPercentChange = { onSettingsChange { s -> s.copy(songSettings = s.songSettings.copy(lyricsLowerThirdScrimWidthPercent = it)) } },
+    )
     } // end lower_third_display SettingsSection
 }
 
@@ -1456,6 +1513,104 @@ private fun LookAheadColumn(
         )
     }
     } // end look_ahead_next_lower_third SettingsSection
+}
+
+/**
+ * The readability-scrim controls: a checkbox, and — once it is on — the four numbers and the colour
+ * that shape the band. Shared by the fullscreen and lower-third sections, which configure their own
+ * copies of the same six settings.
+ */
+@Composable
+private fun ScrimSettingsBlock(
+    enabled: Boolean,
+    color: String,
+    opacity: Int,
+    softness: Int,
+    padding: Int,
+    widthPercent: Int,
+    testTagPrefix: String,
+    onEnabledChange: (Boolean) -> Unit,
+    onColorChange: (String) -> Unit,
+    onOpacityChange: (Int) -> Unit,
+    onSoftnessChange: (Int) -> Unit,
+    onPaddingChange: (Int) -> Unit,
+    onWidthPercentChange: (Int) -> Unit,
+) {
+    LabeledCheckbox(
+        checked = enabled,
+        onCheckedChange = onEnabledChange,
+        controlModifier = Modifier.size(24.dp),
+        label = stringResource(Res.string.lyrics_scrim),
+        modifier = Modifier.testTag("${testTagPrefix}ScrimEnabled"),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    AnimatedVisibility(visible = enabled) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ColorPickerField(
+                    label = stringResource(Res.string.color),
+                    modifier = Modifier.width(120.dp),
+                    color = color,
+                    onColorChange = onColorChange
+                )
+                NumberSettingsTextField(
+                    modifier = Modifier.width(96.dp),
+                    label = stringResource(Res.string.lyrics_scrim_opacity),
+                    initialText = opacity,
+                    range = 0..100,
+                    onValueChange = onOpacityChange
+                )
+                NumberSettingsTextField(
+                    modifier = Modifier.width(96.dp),
+                    label = stringResource(Res.string.lyrics_scrim_softness),
+                    initialText = softness,
+                    range = 0..100,
+                    onValueChange = onSoftnessChange
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberSettingsTextField(
+                    modifier = Modifier.width(96.dp),
+                    label = stringResource(Res.string.lyrics_scrim_padding),
+                    initialText = padding,
+                    range = 0..400,
+                    onValueChange = onPaddingChange
+                )
+                NumberSettingsTextField(
+                    modifier = Modifier.width(96.dp),
+                    label = stringResource(Res.string.lyrics_scrim_width),
+                    initialText = widthPercent,
+                    range = 10..100,
+                    onValueChange = onWidthPercentChange
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The "Lines per slide" stepper that follows a display-mode toggle in line mode. Its own composable
+ * because both the fullscreen and the lower-third section show it, and they are 170 lines apart.
+ */
+@Composable
+private fun LinesPerSlideRow(value: Int, onValueChange: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(Res.string.display_mode_lines_per_slide),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        NumberSettingsTextField(
+            initialText = value,
+            range = 1..MAX_LINES_PER_SLIDE,
+            onValueChange = onValueChange
+        )
+    }
 }
 
 private fun segmentedItemShape(index: Int, count: Int): Shape {

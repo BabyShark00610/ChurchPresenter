@@ -61,6 +61,10 @@ data class AppSettings(
     val songFavoritesPanelHeightDp: Int = 120,
     val songBpm: Map<String, Int> = emptyMap(), // songId -> metronome BPM (0 = off), not stored in the .song file
     val songCapo: Map<String, Int> = emptyMap(), // songId -> capo fret (0 = none), not stored in the .song file
+    // songId -> the background that song brings with it, overriding the shared song background.
+    // Kept here rather than in the .song file for the same reason as songBpm/songCapo above: the
+    // file is a shared document, while a background is a path into THIS machine's media folder.
+    val songBackgrounds: Map<String, BackgroundConfig> = emptyMap(),
     val songColOrder: List<String> = emptyList(),
     val songHiddenCols: Set<String> = setOf("tune", "play_count", "author", "composer"),
     val setupWizardShown: Boolean = false,
@@ -78,6 +82,24 @@ data class AppSettings(
         songBpm = songBpm + (songId to tuning.bpm),
         songCapo = songCapo + (songId to tuning.capo),
     )
+
+    /**
+     * The background [songId] carries of its own, or null when it has none and should present on
+     * whatever the shared song background is. A blank [songId] is never a key — songs with neither a
+     * number nor a title would otherwise all collide on one entry.
+     */
+    fun songBackgroundFor(songId: String): BackgroundConfig? =
+        if (songId.isBlank()) null else songBackgrounds[songId]
+
+    /** These settings with [songId]'s own background set to [config], or removed when it is null —
+     * removal being how "follow the general song background again" is expressed. */
+    fun withSongBackground(songId: String, config: BackgroundConfig?): AppSettings {
+        if (songId.isBlank()) return this
+        return copy(
+            songBackgrounds = if (config == null) songBackgrounds - songId
+            else songBackgrounds + (songId to config)
+        )
+    }
 
     companion object {
         /**

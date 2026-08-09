@@ -21,4 +21,16 @@ data class LyricSection(
      * words to present but is exactly what the band needs.
      */
     val chordLines: List<String> = emptyList(),
+    /**
+     * Which song this section came from, as `SongItem.songId`. Carried so a presenter can look up
+     * what belongs to the song rather than to the section — today that is only the song's own
+     * background (`AppSettings.songBackgroundFor`).
+     *
+     * The id rather than the background itself, because unlike [bpm]/[capo] a background is a whole
+     * config the section has no other use for, and every future per-song lookup would otherwise want
+     * its own field here. Blank when the section did not come from the local catalogue — a section
+     * pushed by a linked instance or the mobile remote — and a blank id simply finds no override, so
+     * those keep presenting on the shared song background.
+     */
+    val songId: String = "",
 )

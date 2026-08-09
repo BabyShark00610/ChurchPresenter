@@ -51,6 +51,10 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitForAllSections
+import org.churchpresenter.app.churchpresenter.utils.songLineGroup
+import org.churchpresenter.app.churchpresenter.utils.songLineGroupStart
+import org.churchpresenter.app.churchpresenter.utils.songLineGroups
+import org.churchpresenter.app.churchpresenter.utils.songLinesPerSlide
 import org.churchpresenter.app.churchpresenter.utils.Utils.parseHexColor
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.jetbrains.skia.Image
@@ -200,8 +204,15 @@ fun SongPresenter(
     val songNumberHorizontalAlignment = getTextAlign(
         if (isLowerThird) ss.songNumberLowerThirdHorizontalAlignment else ss.songNumberHorizontalAlignment
     )
-    val bgConfig = if (isLowerThird) appSettings.backgroundSettings.songLowerThirdBackground
-    else appSettings.backgroundSettings.songBackground
+    // Three levels now, innermost first: the song's own background, then the shared song background
+    // for this surface, then — when that one is left on "Default" — the global default resolved
+    // below. A song without its own entry behaves exactly as it did before.
+    //
+    // The song's background covers the lower third too: it is one setting on one song, and having it
+    // silently not apply to whichever surface happens to be live would be the more surprising rule.
+    val bgConfig = appSettings.songBackgroundFor(lyricSection.songId)
+        ?: if (isLowerThird) appSettings.backgroundSettings.songLowerThirdBackground
+        else appSettings.backgroundSettings.songBackground
 
     // Resolve effective background type/paths (handle Default → inherit from global)
     // For fill/key output: force black background, skip images/videos
@@ -373,21 +384,24 @@ fun SongPresenter(
 
                 // For lookahead: combine each section with its next section so auto-fit
                 // accounts for displaying both simultaneously at the same font size.
-                // In line mode, only 2 lines are shown (1 main + 1 lookahead), so create
-                // 2-line sections pairing each line with the next.
-                val sectionsForFit = if (lookAheadEnabled && fitIsLineMode) {
-                    // Line mode: pair each line with the next line across all sections
-                    val allLines = allLyricSections.flatMap { it.lines }
-                    val allSecLines = allLyricSections.flatMap { it.secondaryLines }
-                    allLines.indices.map { i ->
-                        val nextLine = allLines.getOrElse(i + 1) { allLines[i] }
+                val sectionsForFit = if (fitIsLineMode) {
+                    // Line mode never puts a whole verse on screen — it puts one group of
+                    // `linesPerSlide` lines there, plus the following group when look-ahead is on.
+                    // Fitting the verse anyway is what made a single line render far smaller than the
+                    // screen allowed. Fit the groups instead; the binary search still takes the
+                    // largest of them, so the size stays constant across the whole song.
+                    val fitLinesPerSlide = songLinesPerSlide(ss, isLowerThird)
+                    val groups = allLyricSections.flatMap { songLineGroups(it.lines, fitLinesPerSlide) }
+                    val secondaryGroups =
+                        allLyricSections.flatMap { songLineGroups(it.secondaryLines, fitLinesPerSlide) }
+                    groups.indices.map { i ->
+                        val next = if (lookAheadEnabled) groups.getOrElse(i + 1) { emptyList() } else emptyList()
+                        val secondary = secondaryGroups.getOrElse(i) { emptyList() }
+                        val secondaryNext =
+                            if (lookAheadEnabled) secondaryGroups.getOrElse(i + 1) { emptyList() } else emptyList()
                         LyricSection(
-                            lines = listOf(allLines[i], nextLine),
-                            secondaryLines = if (allSecLines.isNotEmpty()) {
-                                val secLine = allSecLines.getOrElse(i) { "" }
-                                val secNext = allSecLines.getOrElse(i + 1) { secLine }
-                                listOf(secLine, secNext)
-                            } else emptyList()
+                            lines = groups[i] + next,
+                            secondaryLines = if (secondaryGroups.isNotEmpty()) secondary + secondaryNext else emptyList()
                         )
                     }
                 } else if (lookAheadEnabled) {
@@ -561,6 +575,11 @@ fun SongPresenter(
 
                     val isLineMode = displayMode == Constants.SONG_DISPLAY_MODE_LINE
                     val effectiveLineIndex = if (isLineMode && displayLineIndex < 0) 0 else displayLineIndex
+                    // How many lines this surface puts on one slide, and where the cursor's group
+                    // starts. At 1 both collapse to the original single-line behaviour.
+                    val linesPerSlide = songLinesPerSlide(ss, isLowerThird)
+                    val groupStart = songLineGroupStart(effectiveLineIndex, linesPerSlide)
+                    val groupEndExclusive = groupStart + linesPerSlide
 
                     // Get next section for look-ahead
                     val nextSection: LyricSection? = if (lookAheadEnabled && displaySectionIndex >= 0) {
@@ -570,7 +589,7 @@ fun SongPresenter(
                     // Build main display lines (current section)
                     val mainLines: List<String>
                     if (isLineMode && effectiveLineIndex >= 0 && effectiveLineIndex < allDisplayLines.size) {
-                        mainLines = listOf(allDisplayLines[effectiveLineIndex])
+                        mainLines = songLineGroup(allDisplayLines, effectiveLineIndex, linesPerSlide)
                     } else {
                         mainLines = allDisplayLines
                     }
@@ -578,25 +597,25 @@ fun SongPresenter(
                     // Build look-ahead primary lines
                     val laLines: List<String> = if (nextSection != null) {
                         if (laIsLineMode) {
-                            // Look-ahead = 1 line: next line after current position
+                            // Look-ahead = next slide's worth of lines, however many that is
                             if (isLineMode && effectiveLineIndex >= 0) {
-                                // Main is line mode: if there's a next line in same section, show it; otherwise first line of next section
-                                if (effectiveLineIndex + 1 < allDisplayLines.size) {
-                                    listOf(allDisplayLines[effectiveLineIndex + 1])
+                                // Main is line mode: if there's a further group in the same section, show it; otherwise the next section's first group
+                                if (groupEndExclusive < allDisplayLines.size) {
+                                    songLineGroup(allDisplayLines, groupEndExclusive, linesPerSlide)
                                 } else {
-                                    listOf(nextSection.lines.first())
+                                    songLineGroup(nextSection.lines, 0, linesPerSlide)
                                 }
                             } else {
-                                // Main is verse mode: first line of next section
-                                listOf(nextSection.lines.first())
+                                // Main is verse mode: first group of next section
+                                songLineGroup(nextSection.lines, 0, linesPerSlide)
                             }
                         } else {
                             // Look-ahead = 1 verse: all lines of next section
                             nextSection.lines
                         }
-                    } else if (lookAheadEnabled && isLineMode && effectiveLineIndex >= 0 && effectiveLineIndex + 1 < allDisplayLines.size) {
-                        // No next section but there's a next line in the current section
-                        if (laIsLineMode) listOf(allDisplayLines[effectiveLineIndex + 1]) else emptyList()
+                    } else if (lookAheadEnabled && isLineMode && effectiveLineIndex >= 0 && groupEndExclusive < allDisplayLines.size) {
+                        // No next section but there are further lines in the current section
+                        if (laIsLineMode) songLineGroup(allDisplayLines, groupEndExclusive, linesPerSlide) else emptyList()
                     } else {
                         emptyList()
                     }
@@ -608,7 +627,7 @@ fun SongPresenter(
                     // Build main secondary lines (for bilingual)
                     val mainSecondaryLines: List<String> = if (section.secondaryLines.isNotEmpty()) {
                         if (isLineMode && effectiveLineIndex >= 0 && effectiveLineIndex < section.secondaryLines.size) {
-                            listOf(section.secondaryLines[effectiveLineIndex])
+                            songLineGroup(section.secondaryLines, effectiveLineIndex, linesPerSlide)
                         } else {
                             section.secondaryLines
                         }
@@ -618,19 +637,19 @@ fun SongPresenter(
                     val laSecondaryLines: List<String> = if (nextSection != null && nextSection.secondaryLines.isNotEmpty()) {
                         if (laIsLineMode) {
                             if (isLineMode && effectiveLineIndex >= 0) {
-                                if (effectiveLineIndex + 1 < (section.secondaryLines.size)) {
-                                    listOf(section.secondaryLines[effectiveLineIndex + 1])
+                                if (groupEndExclusive < (section.secondaryLines.size)) {
+                                    songLineGroup(section.secondaryLines, groupEndExclusive, linesPerSlide)
                                 } else {
-                                    listOf(nextSection.secondaryLines.first())
+                                    songLineGroup(nextSection.secondaryLines, 0, linesPerSlide)
                                 }
                             } else {
-                                listOf(nextSection.secondaryLines.first())
+                                songLineGroup(nextSection.secondaryLines, 0, linesPerSlide)
                             }
                         } else {
                             nextSection.secondaryLines
                         }
-                    } else if (lookAheadEnabled && isLineMode && effectiveLineIndex >= 0 && effectiveLineIndex + 1 < (section.secondaryLines.size)) {
-                        if (laIsLineMode) listOf(section.secondaryLines[effectiveLineIndex + 1]) else emptyList()
+                    } else if (lookAheadEnabled && isLineMode && effectiveLineIndex >= 0 && groupEndExclusive < (section.secondaryLines.size)) {
+                        if (laIsLineMode) songLineGroup(section.secondaryLines, groupEndExclusive, linesPerSlide) else emptyList()
                     } else {
                         emptyList()
                     }
@@ -714,6 +733,56 @@ fun SongPresenter(
                     } else laFontSize
                     val scaledLaFontSize = (effectiveLaFontSize * scaleFactor).sp
 
+                    // ── Readability scrim ──
+                    // A band of darkness behind the words, sized to the words rather than to the
+                    // screen, so it tracks however many lines the slide currently holds. The edges
+                    // fade rather than cut, which is what stops it reading as a black rectangle
+                    // pasted over the photo.
+                    val scrimEnabled = if (isLowerThird) ss.lyricsLowerThirdScrimEnabled else ss.lyricsScrimEnabled
+                    val scrimColor = parseHexColor(if (isLowerThird) ss.lyricsLowerThirdScrimColor else ss.lyricsScrimColor)
+                    val scrimAlpha = ((if (isLowerThird) ss.lyricsLowerThirdScrimOpacity else ss.lyricsScrimOpacity)
+                        .coerceIn(0, 100)) / 100f
+                    val scrimSoftness = ((if (isLowerThird) ss.lyricsLowerThirdScrimSoftness else ss.lyricsScrimSoftness)
+                        .coerceIn(0, 100)) / 200f  // 100% means the fade meets in the middle
+                    val scrimPadding = (if (isLowerThird) ss.lyricsLowerThirdScrimPadding else ss.lyricsScrimPadding)
+                        .coerceAtLeast(0)
+                    val scrimWidthFraction = ((if (isLowerThird) ss.lyricsLowerThirdScrimWidthPercent else ss.lyricsScrimWidthPercent)
+                        .coerceIn(10, 100)) / 100f
+                    // Key/fill output carries the alpha channel for the hardware keyer, so the scrim
+                    // is part of the fill, not the key — the key must stay a clean matte of the text.
+                    val scrimVisible = scrimEnabled && scrimAlpha > 0f && outputRole != Constants.OUTPUT_ROLE_KEY
+                    val scrimBrush = remember(scrimColor, scrimAlpha, scrimSoftness) {
+                        val solid = scrimColor.copy(alpha = scrimAlpha)
+                        if (scrimSoftness <= 0f) {
+                            Brush.verticalGradient(0f to solid, 1f to solid)
+                        } else {
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                scrimSoftness to solid,
+                                (1f - scrimSoftness) to solid,
+                                1f to Color.Transparent
+                            )
+                        }
+                    }
+
+                    @Composable
+                    fun LyricScrim(content: @Composable () -> Unit) {
+                        if (!scrimVisible) {
+                            content()
+                            return
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(scrimWidthFraction)
+                                .wrapContentHeight()
+                                .background(scrimBrush)
+                                // Applied after the background on purpose: the band has to extend
+                                // past the text, so the padding must be inside what gets painted.
+                                .padding(vertical = (scrimPadding * scaleFactor).dp),
+                            contentAlignment = Alignment.Center
+                        ) { content() }
+                    }
+
                     @Composable
                     fun LyricLine(lineIdx: Int, line: String, laStart: Int) {
                         val isLookAheadLine = laStart >= 0 && lineIdx >= laStart
@@ -739,7 +808,9 @@ fun SongPresenter(
                     @Composable
                     fun EndOfSongIndicator() {
                         // Always reserve space so lyrics don't shift when the indicator appears on the last section
-                        val visible = section.isLastSection && (!isLineMode || effectiveLineIndex >= allDisplayLines.size - 1)
+                        // In line mode the indicator belongs on the LAST SLIDE of the section, which
+                        // with multi-line slides is the last group — not merely the last line.
+                        val visible = section.isLastSection && (!isLineMode || groupEndExclusive >= allDisplayLines.size)
                         val indicatorAlpha = if (visible) 1f else 0f
                         Spacer(modifier = Modifier.padding(top = (4 * scaleFactor).dp))
                         val indicatorPad = " ".repeat(ss.endOfSongIndicatorSpacing)
@@ -865,6 +936,7 @@ fun SongPresenter(
                             ) {
                                 if (hasBilingual) {
                                     if (useSideBySide) {
+                                        LyricScrim {
                                         Row(
                                             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                             horizontalArrangement = Arrangement.SpaceEvenly
@@ -886,10 +958,12 @@ fun SongPresenter(
                                                 LookAheadPlaceholder()
                                             }
                                         }
+                                        }
                                     } else {
                                         // Top/bottom bilingual layout
                                         if (isLowerThird) {
                                             // Lower third: compact layout, no height splitting
+                                            LyricScrim {
                                             Column(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
                                                 combinedPrimaryLines.forEachIndexed { idx, line ->
                                                     LookAheadSpacer(idx, primaryLaStart)
@@ -905,11 +979,17 @@ fun SongPresenter(
                                                 EndOfSongIndicator()
                                                 LookAheadPlaceholder()
                                             }
+                                            }
                                         } else {
                                             // Full screen: each language gets its own half
                                             val halfAlignment = contentAlignment
                                             Column(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
                                                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = halfAlignment) {
+                                                    // One band per half, not one behind the pair: the
+                                                    // two languages sit in separate halves of the
+                                                    // screen with empty space between them, and a
+                                                    // single band would darken that gap too.
+                                                    LyricScrim {
                                                     Column(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
                                                         combinedPrimaryLines.forEachIndexed { idx, line ->
                                                             LookAheadSpacer(idx, primaryLaStart)
@@ -918,9 +998,11 @@ fun SongPresenter(
                                                         EndOfSongIndicator()
                                                         LookAheadPlaceholder()
                                                     }
+                                                    }
                                                 }
                                                 Spacer(modifier = Modifier.padding(top = (12 * scaleFactor).dp))
                                                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = halfAlignment) {
+                                                    LyricScrim {
                                                     Column(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
                                                         combinedSecondaryLines.forEachIndexed { idx, line ->
                                                             LookAheadSpacer(idx, secondaryLaStart)
@@ -929,12 +1011,14 @@ fun SongPresenter(
                                                         EndOfSongIndicator()
                                                         LookAheadPlaceholder()
                                                     }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 } else {
                                     // Single language layout
+                                    LyricScrim {
                                     Column(
                                         modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                         verticalArrangement = if (isLowerThird) Arrangement.Bottom else Arrangement.Top
@@ -945,6 +1029,7 @@ fun SongPresenter(
                                         }
                                         EndOfSongIndicator()
                                         LookAheadPlaceholder()
+                                    }
                                     }
                                 }
                             }
