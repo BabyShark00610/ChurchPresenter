@@ -3,18 +3,16 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.KeyboardShortcutSettings
 import org.churchpresenter.app.churchpresenter.models.KeyChord
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
-import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
-import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,25 +27,31 @@ import kotlin.test.assertEquals
 class KeyboardShortcutsContentTest {
 
     private fun dialog(
-        shortcuts: ShortcutMap = ShortcutMap.DEFAULT,
+        settings: AppSettings = AppSettings(),
         block: ComposeUiTest.(dismissed: () -> Int) -> Unit,
     ) {
         var dismissed = 0
         runComposeUiTest {
             setContent {
                 MaterialTheme {
-                    CompositionLocalProvider(LocalShortcuts provides shortcuts) {
-                        KeyboardShortcutsDialogContent(onDismiss = { dismissed++ })
-                    }
+                    KeyboardShortcutsDialogContent(
+                        initialSettings = settings,
+                        onSave = {},
+                        onDismiss = { dismissed++ },
+                    )
                 }
             }
             block { dismissed }
         }
     }
 
+    private fun settingsWith(action: ShortcutAction, chords: List<KeyChord>) = AppSettings(
+        keyboardShortcutSettings = KeyboardShortcutSettings(overrides = mapOf(action.name to chords))
+    )
+
     @Test
-    fun `clicking close dismisses the dialog`() = dialog { dismissed ->
-        onNodeWithText("✓ OK").performClick()
+    fun `clicking OK dismisses the dialog`() = dialog { dismissed ->
+        onNodeWithText("OK", substring = true).performClick()
         assertEquals(1, dismissed())
     }
 
@@ -91,12 +95,7 @@ class KeyboardShortcutsContentTest {
 
     @Test
     fun `a rebound action shows its new key, not the shipped one`() {
-        val remapped = ShortcutMap.from(
-            KeyboardShortcutSettings(
-                overrides = mapOf(ShortcutAction.MEDIA_MUTE.name to listOf(KeyChord.of(Key.J)))
-            )
-        )
-        dialog(remapped) {
+        dialog(settingsWith(ShortcutAction.MEDIA_MUTE, listOf(KeyChord.of(Key.J)))) {
             onNodeWithText("J").assertExists()
             onNodeWithText("Mute / Unmute").assertExists()
         }
@@ -111,10 +110,7 @@ class KeyboardShortcutsContentTest {
 
         dialog { assertEquals(1, unboundRows()) }
 
-        val cleared = ShortcutMap.from(
-            KeyboardShortcutSettings(overrides = mapOf(ShortcutAction.MEDIA_MUTE.name to emptyList()))
-        )
-        dialog(cleared) { assertEquals(2, unboundRows()) }
+        dialog(settingsWith(ShortcutAction.MEDIA_MUTE, emptyList())) { assertEquals(2, unboundRows()) }
     }
 
     @Test

@@ -1816,6 +1816,11 @@ fun main() {
                                 )
                                 KeyboardShortcutsDialog(
                                     isVisible = showKeyboardShortcutsDialog,
+                                    settings = appSettings,
+                                    onSave = { updated ->
+                                        appSettings = updated
+                                        settingsManager.saveSettings(updated)
+                                    },
                                     onDismiss = { showKeyboardShortcutsDialog = false; dialogDismissSignal++ }
                                 )
                                 StatisticsDialog(

@@ -6,54 +6,47 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.unit.Density
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.KeyboardShortcutSettings
-import org.churchpresenter.app.churchpresenter.dialogs.tabs.ShortcutSettingsTab
+import org.churchpresenter.app.churchpresenter.dialogs.KeyboardShortcutsDialogContent
 import org.churchpresenter.app.churchpresenter.models.KeyChord
 import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
 import kotlin.test.Test
 
 /**
- * The Shortcuts tab of the settings dialog, in both themes.
+ * The Keyboard Shortcuts dialog (Help → Keyboard Shortcuts, F1), in both themes.
  *
- * One row per rebindable action, grouped by the scope that decides what can collide with what, laid
- * out over two columns split by action count so the two sides come out roughly level.
+ * One row per rebindable action grouped by the scope that decides what can collide with what, a
+ * read-only Mouse section at the bottom, and Cancel/Apply/OK. This is now the only place shortcuts
+ * are both listed and changed — the editing UI was briefly a Settings tab and was merged in here.
  *
  * What changes the shape of a row rather than a value in it:
  *
  *  - **Whether the action is customized.** An untouched row offers *Clear*; one the user has moved
- *    offers *Reset* instead. Both are shot, because which of the two is showing is the only
- *    indication in the row that a binding is no longer the shipped one.
+ *    offers *Reset*. Which of the two is showing is the only sign in the row that a binding is no
+ *    longer the shipped one, so both are shot.
  *  - **Whether the action is bound at all.** An unbound row reads "Not set" rather than an empty
  *    chip. Save As ships that way, so the default image already carries one; the customized image
  *    adds a deliberately cleared row.
  *
  * The capture dialog is not shot: it is a `DialogWindow`, which needs a real window and cannot be
- * composed by the test runner. Its logic is covered by `ShortcutCaptureLogicTest`.
+ * composed by the test runner. Its states are covered by `ShortcutCaptureContentTest`.
  *
- * **These images are macOS renders**, so modifiers appear as `⌃⌥⇧⌘` rather than `Ctrl+Alt+…`. That
- * is the label the same code produces on this platform, not a defect — see the platform table in
- * AGENT.md before re-recording anywhere else.
+ * **These are macOS renders**, so modifiers appear as `⌃⌥⇧⌘` rather than `Ctrl+Alt+…`. That is what
+ * the same code produces on this platform, not a defect — see the platform table in AGENT.md before
+ * re-recording anywhere else.
  */
-class ShortcutSettingsTabScreenshotTest {
+class KeyboardShortcutsDialogScreenshotTest {
 
     @Test
     fun `as it opens`() = shoot("defaults")
 
-    /**
-     * Several bindings moved off their defaults, plus one cleared.
-     *
-     * Covers all three row states at once: a rebound chip with *Reset* beside it, an unbound row
-     * reading "Not set", and untouched rows still offering *Clear*.
-     */
     @Test
     fun `with customized bindings`() = shoot(
         "customized",
@@ -61,8 +54,8 @@ class ShortcutSettingsTabScreenshotTest {
             keyboardShortcutSettings = KeyboardShortcutSettings(
                 overrides = mapOf(
                     ShortcutAction.UNDO.name to listOf(KeyChord.of(Key.U, ctrl = true)),
-                    ShortcutAction.BIBLE_NEXT_VERSE.name to listOf(KeyChord.of(Key.J)),
-                    ShortcutAction.MEDIA_MUTE.name to emptyList(),
+                    ShortcutAction.SAVE_SCHEDULE.name to listOf(KeyChord.of(Key.S, ctrl = true, shift = true)),
+                    ShortcutAction.CLEAR_OUTPUT.name to emptyList(),
                     ShortcutAction.SWITCH_TO_BIBLE.name to listOf(KeyChord.of(Key.B, ctrl = true, alt = true)),
                 )
             )
@@ -71,19 +64,26 @@ class ShortcutSettingsTabScreenshotTest {
 
     // ── Harness ─────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Shot at the dialog's real size rather than the runner's default window.
+     *
+     * `KeyboardShortcutsDialog` opens at 760×720, and at the default 1024 the rows stretch and the
+     * gap between description and key chip is far wider than anyone will ever see. The point of a
+     * committed image is that a reviewer can approve what ships.
+     */
     private fun shoot(
         name: String,
         settings: AppSettings = AppSettings(),
     ) = stackedThemes(SECTION, name) { mode, file ->
-        runComposeUiTest {
+        runSkikoComposeUiTest(size = Size(DIALOG_WIDTH, DIALOG_HEIGHT), density = Density(1f)) {
             setContent {
                 ChurchPresenterTheme(themeMode = mode) {
                     Surface(color = MaterialTheme.colorScheme.background) {
                         Box(Modifier.fillMaxSize()) {
-                            var current by remember { mutableStateOf(settings) }
-                            ShortcutSettingsTab(
-                                settings = current,
-                                onSettingsChange = { transform -> current = transform(current) },
+                            KeyboardShortcutsDialogContent(
+                                initialSettings = settings,
+                                onSave = {},
+                                onDismiss = {},
                             )
                         }
                     }
@@ -95,6 +95,10 @@ class ShortcutSettingsTabScreenshotTest {
     }
 
     private companion object {
-        const val SECTION = "shortcutSettingsTab"
+        const val SECTION = "keyboardShortcutsDialog"
+
+        /** Matches the DialogWindow size in `KeyboardShortcutsDialog`. */
+        const val DIALOG_WIDTH = 760f
+        const val DIALOG_HEIGHT = 720f
     }
 }

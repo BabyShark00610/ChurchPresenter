@@ -261,7 +261,6 @@
     <string name="shortcut_description_mute">Mute / Unmute</string>
     <string name="shortcut_unbound">Not set</string>
     <string name="hold_live_modifier_hint">⌘/Ctrl Shift</string>
-    <string name="shortcut_settings_tab">Shortcuts</string>
     <string name="shortcut_settings_reset_all">Reset All to Defaults</string>
     <string name="shortcut_settings_reset">Reset</string>
     <string name="shortcut_settings_clear">Clear</string>
@@ -269,7 +268,7 @@
     <string name="shortcut_settings_customized">Customized</string>
     <string name="shortcut_capture_title">Press a Key Combination</string>
     <string name="shortcut_capture_prompt">Press the keys you want to use for this action.</string>
-    <string name="shortcut_capture_conflict">Already used by: %s</string>
+    <string name="shortcut_capture_conflict">Already used by: %1$s</string>
     <string name="key_mod_ctrl">Ctrl</string>
     <string name="key_mod_shift">Shift</string>
     <string name="key_mod_alt">Alt</string>
@@ -607,8 +606,8 @@
     <string name="tooltip_new_schedule">New Schedule</string>
     <string name="tooltip_open_schedule">Open Schedule</string>
     <string name="tooltip_save_schedule">Save Schedule</string>
-    <string name="tooltip_undo">Undo (%s)</string>
-    <string name="tooltip_redo">Redo (%s)</string>
+    <string name="tooltip_undo">Undo (%1$s)</string>
+    <string name="tooltip_redo">Redo (%1$s)</string>
     <string name="tooltip_undo_unbound">Undo</string>
     <string name="tooltip_redo_unbound">Redo</string>
     <string name="tooltip_note">Note</string>

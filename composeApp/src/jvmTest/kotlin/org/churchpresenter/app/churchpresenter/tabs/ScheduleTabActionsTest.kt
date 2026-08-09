@@ -2,12 +2,15 @@
 
 package org.churchpresenter.app.churchpresenter.tabs
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -150,6 +153,27 @@ class ScheduleTabActionsTest {
         }
 
     // ── Undo and redo ───────────────────────────────────────────────────────────
+
+    /**
+     * The tooltip names the key that is actually bound.
+     *
+     * It shipped reading the literal `Undo (%s)`: the string used a bare `%s`, which Compose
+     * resources leave unsubstituted rather than failing. Asserted by *absence of a placeholder*
+     * plus presence of the key, because the rendered modifier differs by platform (`⌃Z` on macOS,
+     * `Ctrl+Z` elsewhere) and pinning the whole string would only pass on one of them.
+     */
+    @Test
+    fun `the undo and redo tooltips name the bound key`() =
+        scheduleTab(seed = { seedService() }) { _, _ ->
+            listOf(ScheduleLabel.UNDO, ScheduleLabel.REDO).forEach { tag ->
+                val tooltip = taggedButton(tag).fetchSemanticsNode()
+                    .config.getOrNull(SemanticsProperties.ContentDescription).orEmpty().joinToString("")
+
+                assertFalse("%" in tooltip, "an unsubstituted placeholder is showing: '$tooltip'")
+                assertTrue("Z" in tooltip, "the bound key should be named: '$tooltip'")
+                assertTrue("(" in tooltip && ")" in tooltip, "expected the key in parentheses: '$tooltip'")
+            }
+        }
 
     @Test
     fun `undo puts back a row removed by mistake`() =

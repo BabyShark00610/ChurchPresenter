@@ -92,7 +92,7 @@ class OptionsContentTest {
     fun `every settings tab is shown without an OBS connection`() = dialog {
         listOf(
             "System", "Bible", "Song", "Background", "Projection", "Lower Third",
-            "Server", "Stage Monitor", "ATEM", "Dictionary", "Companion Satellite", "Shortcuts",
+            "Server", "Stage Monitor", "ATEM", "Dictionary", "Companion Satellite",
         ).forEach { onNodeWithText(it).assertExists() }
         onNodeWithText("OBS").assertDoesNotExist()
     }
@@ -116,7 +116,7 @@ class OptionsContentTest {
 
     @Test
     fun `an out-of-range initialTab is coerced onto the last real tab`() = dialog(initialTab = 999) {
-        onNodeWithText("Shortcuts").assertIsSelected()
+        onNodeWithText("Companion Satellite").assertIsSelected()
     }
 
     @Test
@@ -149,7 +149,7 @@ class OptionsContentTest {
     fun `every tab renders its own settings content when selected`() = dialog {
         listOf(
             "System", "Song", "Background", "Projection", "Lower Third", "Server",
-            "Stage Monitor", "ATEM", "Dictionary", "Shortcuts",
+            "Stage Monitor", "ATEM", "Dictionary",
         ).forEach { label ->
             onNode(hasText(label) and hasClickAction()).performClick()
             onNode(hasText(label) and hasClickAction()).assertIsSelected()
