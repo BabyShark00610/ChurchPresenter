@@ -3,6 +3,10 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -27,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
@@ -34,7 +39,9 @@ import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
+import org.churchpresenter.app.churchpresenter.data.CrossReferenceRepository
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
+import org.churchpresenter.app.churchpresenter.data.VerseSequenceLog
 import java.io.File
 import java.nio.file.Files
 
@@ -86,6 +93,9 @@ internal val bibleFixture = SpbFixture.buildContent(
     ),
 )
 
+/** File name of the optional second module — see `bibleTab`'s `secondContent`. */
+internal const val SECOND_MODULE = "second.spb"
+
 // ── Harness ─────────────────────────────────────────────────────────────────────────────────────
 
 /** What the tab reported back, so a test asserts on the choice rather than on a stub. */
@@ -118,6 +128,14 @@ internal class BibleReports {
 @OptIn(ExperimentalTestApi::class)
 internal fun bibleTab(
     content: String = bibleFixture,
+    /**
+     * A second module, written alongside the first and configured as the secondary translation.
+     *
+     * Needed by anything exercising a translation change — the swap button does nothing with one
+     * module configured. Give it wording that differs from [content] so a test can tell which
+     * module the tab is reading from.
+     */
+    secondContent: String? = null,
     settings: (AppSettings) -> AppSettings = { it },
     /**
      * Passed to the tab as its [STTManager] when non-null.
@@ -140,6 +158,21 @@ internal fun bibleTab(
      * `user.home` first — see [bibleTabWithStatistics].
      */
     statistics: StatisticsManager? = null,
+    /**
+     * Passed as the tab's [VerseSequenceLog] when non-null.
+     *
+     * Its default store is under `~/.churchpresenter`, so build one over a temp file rather than
+     * calling `VerseSequenceLog()`.
+     */
+    sequenceLog: VerseSequenceLog? = null,
+    /**
+     * Passed as the tab's [CrossReferenceRepository] when non-null.
+     *
+     * Left null the tab falls back to the shared instance over the real 3 MB dataset, which would
+     * make a test depend on what TSK happens to say about a verse. Cross-reference tests build
+     * their own over a fixture instead.
+     */
+    crossReferences: CrossReferenceRepository? = null,
     /** Instance Link Controller mode: non-null makes the tab mirror every go-live to the primary. */
     onInstanceLinkSendVerse: ((SelectedVerse) -> Unit)? = null,
     onInstanceLinkSendBibleHold: ((Boolean) -> Unit)? = null,
@@ -160,22 +193,33 @@ internal fun bibleTab(
     val dir = Files.createTempDirectory("cp-bible-tab").toFile()
     try {
         SpbFixture.spbFile(dir, content = content)
-        val appSettings = settings(
+        secondContent?.let { SpbFixture.spbFile(dir, name = SECOND_MODULE, content = it) }
+        val initialSettings = settings(
             AppSettings(
                 bibleSettings = BibleSettings(
                     storageDirectory = dir.absolutePath,
                     primaryBible = "test.spb",
+                    secondaryBible = if (secondContent != null) SECOND_MODULE else "",
+                    translations = if (secondContent == null) emptyList() else listOf(
+                        BibleTranslationSettings(fileName = "test.spb"),
+                        BibleTranslationSettings(fileName = SECOND_MODULE),
+                    ),
                 )
             )
         )
         val vm = BibleViewModel(
-            appSettings,
+            initialSettings,
             dispatcher = Dispatchers.Unconfined,
             ioDispatcher = Dispatchers.Unconfined,
         )
         val reports = BibleReports()
         runComposeUiTest {
             setContent {
+                // The tab holds no settings of its own — the host applies its transform and hands
+                // the result back. Doing that here rather than only recording it is what lets a
+                // test drive a settings change through to its effect on the tab: a swap, for
+                // instance, has to reach BibleViewModel.updateSettings to reload anything.
+                var appSettings by remember { mutableStateOf(initialSettings) }
                 ThemedForTest(themeMode) {
                     Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
                     BibleTab(
@@ -183,7 +227,9 @@ internal fun bibleTab(
                         appSettings = appSettings,
                         onSettingsChange = { transform ->
                             reports.settingsChanges++
-                            reports.settingsAfterChange = transform(appSettings)
+                            val updated = transform(appSettings)
+                            reports.settingsAfterChange = updated
+                            appSettings = updated
                         },
                         onAddToSchedule = { book, chapter, verse, _, _, _ ->
                             reports.scheduled += "$book $chapter:$verse"
@@ -193,6 +239,8 @@ internal fun bibleTab(
                         sttManager = stt,
                         presenterManager = presenter,
                         statisticsManager = statistics,
+                        verseSequenceLog = sequenceLog,
+                        crossReferences = crossReferences,
                         onInstanceLinkSendVerse = onInstanceLinkSendVerse?.let { send ->
                             { book, chapter, verseNumber, verseText, verseRange ->
                                 send(
@@ -229,6 +277,9 @@ internal object BibleLabel {
     const val GO_LIVE = "Go Live"
     const val ADD_TO_SCHEDULE = "Add to Schedule"
     const val HISTORY = "History"
+    const val CROSS_REFS = "Refs"
+    const val CROSS_REFS_EMPTY = "No cross references"
+    const val OFTEN_NEXT = "Often next"
     const val CLEAR_HISTORY = "Clear"
     const val ENTIRE_BIBLE = "Entire Bible"
     const val CURRENT_BOOK = "Current Book"

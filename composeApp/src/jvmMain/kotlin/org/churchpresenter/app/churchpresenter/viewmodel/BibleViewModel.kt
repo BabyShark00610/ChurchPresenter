@@ -294,6 +294,14 @@ class BibleViewModel(
     // Recently emitted keys so repeated engine events don't add duplicate rows.
     private val recentDetectionKeys = ArrayDeque<String>()
 
+    /** A reference as the loaded module writes it, with its verse text. See [moduleRefFor]. */
+    data class ModuleRef(
+        val abbreviation: String,
+        val chapter: Int,
+        val verse: Int,
+        val text: String,
+    )
+
     // History of presented verses (most recent first)
     data class HistoryEntry(
         val bookName: String,
@@ -1009,6 +1017,66 @@ class BibleViewModel(
             _verseSelectionToken.value++
             refreshFilteredLists()
         }
+    }
+
+    /**
+     * Navigates to a canonical (KJV-numbered) reference, such as a bundled cross-reference.
+     *
+     * Cross-references and the sequence log are both stored canonically, but the loaded module may
+     * number its own text differently — Synodal Psalms run one behind KJV's for most of the book —
+     * so the reference is translated into this Bible's display numbering before anything is
+     * selected. [Bible.getVerseDetailsByCode] does that, resolving the exact verse by its internal
+     * code where it can; the engine path uses the same bridge.
+     *
+     * Passing [goLiveSource] makes this go live as well as select, through the same deferred token
+     * the history panel and detection chips use — so a cross-reference go-live is recorded in
+     * history, statistics, the training log and the sequence log exactly like any other.
+     *
+     * @return false when the reference does not resolve in the loaded module — an NT-only or
+     * abridged module simply does not contain some of what TSK points at, and the caller is
+     * expected to show that row as unavailable rather than as one that does nothing when clicked.
+     */
+    fun selectVerseByCanonicalRef(
+        bookId: Int,
+        chapter: Int,
+        verse: Int,
+        goLiveSource: String? = null,
+    ): Boolean {
+        val bible = _primaryBible.value ?: return false
+        // Not getDisplayIndexForBookId: it falls back to (bookId - 1) rather than reporting a miss,
+        // so it never says no. The verse lookup does.
+        val details = bible.getVerseDetailsByCode(bookId, chapter, verse) ?: return false
+
+        return selectVerseByDetails(
+            bookName = details.bookName,
+            chapter = details.displayChapter,
+            verseNumber = details.displayVerse,
+            goLiveSource = goLiveSource,
+            bookId = bookId,
+        )
+    }
+
+    /**
+     * How a canonical reference reads in the loaded module: its own short book name, its own
+     * chapter and verse numbering, and the verse text.
+     *
+     * The cross-reference dataset and the sequence log both store KJV numbering, but a module may
+     * number and name differently — so a reference shown beside that module's text has to be
+     * translated into it, or a Synodal psalm is labelled with a KJV number the operator cannot
+     * find. Null when the module has no such verse, which is the same condition
+     * [selectVerseByCanonicalRef] refuses on.
+     *
+     * Every lookup behind this is an indexed map read, so it is cheap enough to call per row.
+     */
+    fun moduleRefFor(bookId: Int, chapter: Int, verse: Int): ModuleRef? {
+        val bible = _primaryBible.value ?: return null
+        val details = bible.getVerseDetailsByCode(bookId, chapter, verse) ?: return null
+        return ModuleRef(
+            abbreviation = bible.getBookAbbreviation(bookId) ?: details.bookName,
+            chapter = details.displayChapter,
+            verse = details.displayVerse,
+            text = details.verseText,
+        )
     }
 
     fun getChaptersForCurrentBook(): List<String> {
@@ -1796,6 +1864,29 @@ class BibleViewModel(
         val bookId = bible.getBookId(displayBookIndex)
         val code = bible.getCodeReference(bookId, chapter, verse ?: 1) ?: return null
         return Triple(code.first, code.second, verse?.let { code.third })
+    }
+
+    /**
+     * The display index of a book named as this module names it, or -1.
+     *
+     * The live-chapter panel holds a book *name* rather than an index, because what is live may be
+     * a different book from what is being browsed.
+     */
+    fun displayIndexForBookName(bookName: String): Int =
+        _books.value.indexOfFirst { it.equals(bookName, ignoreCase = true) }
+
+    /**
+     * Canonical ref for a reference named the way this module names it.
+     *
+     * The counterpart to [canonicalRefForDisplay] for callers holding a name instead of a browse
+     * index — the live panel above all, where using the browse index would name the wrong book
+     * entirely whenever the two sides have diverged.
+     */
+    fun canonicalRefForBookName(bookName: String, chapter: Int, verse: Int): Triple<Int, Int, Int>? {
+        val displayIndex = displayIndexForBookName(bookName).takeIf { it >= 0 } ?: return null
+        val (book, mappedChapter, mappedVerse) =
+            canonicalRefForDisplay(displayIndex, chapter, verse) ?: return null
+        return mappedVerse?.let { Triple(book, mappedChapter, it) }
     }
 
     /**

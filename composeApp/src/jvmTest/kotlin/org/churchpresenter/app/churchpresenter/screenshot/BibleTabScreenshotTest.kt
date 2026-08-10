@@ -2,11 +2,15 @@
 
 package org.churchpresenter.app.churchpresenter.screenshot
 
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import org.churchpresenter.app.churchpresenter.data.CrossReferenceRepository
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
@@ -52,12 +56,26 @@ class BibleTabScreenshotTest {
         width: Dp? = null,
         stt: STTManager? = null,
         rootIndex: Int = 0,
+        crossReferences: CrossReferenceRepository? = null,
         drive: ComposeUiTest.(BibleViewModel) -> Unit = {},
     ) = stackedThemes(SECTION, name) { mode, file ->
-        bibleTab(settings = settings, width = width, stt = stt, themeMode = mode) { vm, _ ->
+        bibleTab(
+            settings = settings, width = width, stt = stt, themeMode = mode,
+            crossReferences = crossReferences,
+        ) { vm, _ ->
             drive(vm)
             captureTo(file, rootIndex)
         }
+    }
+
+    /**
+     * Cross-references for Genesis 1:1, as a fixture.
+     *
+     * The shipped dataset would work, but then the image would change whenever that file did, and
+     * a reviewer could not tell a layout change from a data change.
+     */
+    private fun crossReferenceFixture() = CrossReferenceRepository {
+        """{"v":1,"r":{"001001001":"043003016 019023001 045005008 019023001-003"}}""".toByteArray()
     }
 
     @Test
@@ -140,8 +158,71 @@ class BibleTabScreenshotTest {
         waitForIdle()
     }
 
+    /**
+     * Waits for the column to have resolved its rows.
+     *
+     * The references are read through a repository that loads off the main thread, so `waitForIdle`
+     * — which waits for composition, not for that — can return with the column still showing "No
+     * cross references". Shooting then photographs the empty state, and whether it does is a matter
+     * of which side of a race the capture lands on.
+     */
+    private fun ComposeUiTest.awaitCrossReferences() =
+        waitUntilAtLeastOneExists(hasText("Rom 5:8", substring = true))
+
     @Test
-    fun `auto-follow panel`() = shoot("auto_follow_panel", stt = connectedStt())
+    fun `cross references`() = shoot(
+        "cross_references",
+        settings = { it.copy(bibleSettings = it.bibleSettings.copy(crossReferencesPanel = true)) },
+        crossReferences = crossReferenceFixture(),
+    ) { vm ->
+        vm.selectVerse(0)
+        awaitCrossReferences()
+    }
+
+    @Test
+    fun `cross references pooled over a passage`() = shoot(
+        "cross_references_passage",
+        settings = { it.copy(bibleSettings = it.bibleSettings.copy(crossReferencesPanel = true)) },
+        crossReferences = CrossReferenceRepository {
+            """{"v":1,"r":{
+                 "001001001":"019023001 043003016",
+                 "001001002":"019023001 045005008",
+                 "001001003":"019023001"
+               }}""".toByteArray()
+        },
+    ) { _ ->
+        // Read three verses in sequence, which is what turns the column into a passage view.
+        for (line in listOf(
+            "1. In the beginning God created the heaven and the earth.",
+            "2. And the earth was without form, and void.",
+            "3. And God said, Let there be light.",
+        )) {
+            onNodeWithText(line).performClick()
+            waitForIdle()
+            actionButton(BibleLabel.GO_LIVE).performClick()
+            waitForIdle()
+        }
+    }
+
+    @Test
+    fun `cross references beside the split panel`() = shoot(
+        "cross_references_split",
+        settings = {
+            it.copy(bibleSettings = it.bibleSettings.copy(crossReferencesPanel = true, splitBrowseMode = true))
+        },
+        crossReferences = crossReferenceFixture(),
+    ) { vm ->
+        vm.selectVerse(0)
+        awaitCrossReferences()
+    }
+
+    @Test
+    fun `auto-follow panel`() = shoot("auto_follow_panel", stt = connectedStt()) { _ ->
+        // The mic button is the point of this shot and appears a recomposition after the manager
+        // reports connected, so waiting for it is the difference between photographing the panel
+        // and photographing the moment before it.
+        waitUntilAtLeastOneExists(hasContentDescription(BibleLabel.STT_DISCONNECT))
+    }
 
     @Test
     fun `no bible configured`() = shoot(
