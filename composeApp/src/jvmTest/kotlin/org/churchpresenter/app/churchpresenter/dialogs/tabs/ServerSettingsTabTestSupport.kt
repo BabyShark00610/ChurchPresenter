@@ -131,6 +131,7 @@ internal fun serverTab(
                 )
             }
         }
+        awaitFolderScan()
         block({ current }, clients)
     }
 }
