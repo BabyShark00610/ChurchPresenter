@@ -37,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -137,6 +138,8 @@ import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.viewmodel.isLottieFile
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @Composable
@@ -580,13 +583,18 @@ fun ServerSettingsTab(
             // ── Card: Lower Third Triggers (Bitfocus Companion) ───────────────
             run {
                 val lowerThirdFolder = settings.streamingSettings.lowerThirdFolder
-                val lowerThirds = remember(lowerThirdFolder, isRunning) {
-                    java.io.File(lowerThirdFolder)
-                        .takeIf { lowerThirdFolder.isNotEmpty() && it.isDirectory }
-                        ?.listFiles { f -> f.extension.lowercase() == "json" && isLottieFile(f) }
-                        ?.sortedBy { it.nameWithoutExtension.lowercase() }
-                        ?.toList()
-                        ?: emptyList()
+                // `isLottieFile` reads each JSON in full, so this is the folder's whole weight in
+                // bytes — off the composition thread. The card is a list of trigger URLs, so a
+                // frame of it empty says nothing misleading.
+                val lowerThirds by produceState(emptyList<java.io.File>(), lowerThirdFolder, isRunning) {
+                    value = withContext(Dispatchers.IO) {
+                        java.io.File(lowerThirdFolder)
+                            .takeIf { lowerThirdFolder.isNotEmpty() && it.isDirectory }
+                            ?.listFiles { f -> f.extension.lowercase() == "json" && isLottieFile(f) }
+                            ?.sortedBy { it.nameWithoutExtension.lowercase() }
+                            ?.toList()
+                            ?: emptyList()
+                    }
                 }
                 val atemConfigured = settings.atemSettings.host.isNotBlank()
 

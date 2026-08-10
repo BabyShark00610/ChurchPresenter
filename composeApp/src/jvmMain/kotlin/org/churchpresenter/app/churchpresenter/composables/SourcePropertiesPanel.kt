@@ -194,7 +194,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.models.SourceTransform
-import org.churchpresenter.app.churchpresenter.utils.Utils
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.FileManager
@@ -351,7 +351,7 @@ private fun ImageProperties(source: SceneSource.ImageSource, onUpdate: (SceneSou
 private fun TextProperties(source: SceneSource.TextSource, onUpdate: (SceneSource) -> Unit) {
     val isTransparentBg = source.backgroundColor.equals("#00000000", ignoreCase = true)
 
-    val availableFonts = remember { Utils.getAvailableSystemFonts() }
+    val availableFonts = rememberSystemFonts()
 
     Text(stringResource(Res.string.canvas_source_text), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // Multiline text input — supports Enter for line breaks
@@ -1848,7 +1848,7 @@ private fun BibleProperties(
     onUpdate: (SceneSource) -> Unit,
     appSettings: AppSettings?
 ) {
-    val availableFonts = remember { Utils.getAvailableSystemFonts() }
+    val availableFonts = rememberSystemFonts()
 
     // Available bible files, each paired with the name to show for it.
     //

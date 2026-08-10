@@ -7,6 +7,10 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import org.churchpresenter.app.churchpresenter.data.settings.KeyboardShortcutSettings
+import org.churchpresenter.app.churchpresenter.models.KeyChord
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -130,5 +134,39 @@ class PicturesTabKeyboardTest {
         // the presses to fall through rather than moving a selection that does not exist.
         assertEquals(0, vm.selectedImageIndex)
         assertEquals(false, vm.isPlaying)
+    }
+
+    // ── Rebound keys ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a rebound next-image key steps the slideshow and the shipped key stops doing so`() {
+        val remapped = ShortcutMap.from(
+            KeyboardShortcutSettings(
+                overrides = mapOf(ShortcutAction.PICTURES_NEXT.name to listOf(KeyChord.of(Key.N)))
+            )
+        )
+        picturesTab(shortcuts = remapped) { vm, _ ->
+            press(Key.N)
+            assertEquals(1, vm.selectedImageIndex, "the rebound key must drive the action")
+
+            press(Key.DirectionRight)
+            assertEquals(1, vm.selectedImageIndex, "the shipped key must stop working once rebound")
+        }
+    }
+
+    @Test
+    fun `an unbound play-pause key stops toggling playback`() {
+        val cleared = ShortcutMap.from(
+            KeyboardShortcutSettings(overrides = mapOf(ShortcutAction.PICTURES_PLAY_PAUSE.name to emptyList()))
+        )
+        picturesTab(shortcuts = cleared) { vm, _ ->
+            press(Key.Spacebar)
+
+            assertEquals(false, vm.isPlaying)
+            // Navigation is untouched, so this is the binding being gone rather than the whole
+            // handler having stopped responding.
+            press(Key.DirectionRight)
+            assertEquals(1, vm.selectedImageIndex)
+        }
     }
 }

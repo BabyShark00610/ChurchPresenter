@@ -136,7 +136,10 @@ import org.churchpresenter.app.churchpresenter.composables.DropdownSelector
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.pairLabel
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -308,6 +311,7 @@ fun PicturesTab(
     // focus AND the window is focused — full machinery in composables/FocusLostRescue.kt
     // (shared with Presentation/Bible/Songs).
     val focusRescue = rememberFocusLostRescue(hostWindow, focusRequester)
+    val shortcuts = LocalShortcuts.current
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -323,28 +327,28 @@ fun PicturesTab(
                     // since Controller mode doesn't mirror the primary's content.
                     val hasInstanceLinkNav = onInstanceLinkSendNextPicture != null || onInstanceLinkSendPreviousPicture != null
                     return@onPreviewKeyEvent if (hasInstanceLinkNav) {
-                        when (keyEvent.key) {
-                            Key.DirectionLeft -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
-                            Key.DirectionRight -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
+                        when {
+                            shortcuts.matches(ShortcutAction.PICTURES_PREVIOUS, keyEvent) -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
+                            shortcuts.matches(ShortcutAction.PICTURES_NEXT, keyEvent) -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
                             else -> false
                         }
                     } else false
                 }
                 val columnCount = (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
-                when (keyEvent.key) {
-                    Key.DirectionLeft -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
-                    Key.DirectionRight -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
-                    Key.DirectionUp -> {
+                when {
+                    shortcuts.matches(ShortcutAction.PICTURES_PREVIOUS, keyEvent) -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
+                    shortcuts.matches(ShortcutAction.PICTURES_NEXT, keyEvent) -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
+                    shortcuts.matches(ShortcutAction.PICTURES_ROW_UP, keyEvent) -> {
                         val target = viewModel.selectedImageIndex - columnCount
                         if (target >= 0) viewModel.selectImage(target)
                         true
                     }
-                    Key.DirectionDown -> {
+                    shortcuts.matches(ShortcutAction.PICTURES_ROW_DOWN, keyEvent) -> {
                         val target = viewModel.selectedImageIndex + columnCount
                         if (target < viewModel.images.size) viewModel.selectImage(target)
                         true
                     }
-                    Key.Spacebar -> { viewModel.togglePlayPause(); true }
+                    shortcuts.matches(ShortcutAction.PICTURES_PLAY_PAUSE, keyEvent) -> { viewModel.togglePlayPause(); true }
                     else -> false
                 }
             }
@@ -792,20 +796,27 @@ fun PicturesTab(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = stringResource(Res.string.pictures_arrow_key_hint),
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = TextUnit(11.5f, TextUnitType.Sp)
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "·",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
-                )
+                // Drawn from the live bindings, so a rebind is reflected here rather than the hint
+                // going on describing the arrow keys. Hidden entirely when the user has unbound
+                // both pairs — an empty "  next/prev image" would be worse than no hint.
+                val navLabel = shortcuts.pairLabel(ShortcutAction.PICTURES_PREVIOUS, ShortcutAction.PICTURES_NEXT)
+                val rowLabel = shortcuts.pairLabel(ShortcutAction.PICTURES_ROW_UP, ShortcutAction.PICTURES_ROW_DOWN)
+                if (navLabel.isNotEmpty() || rowLabel.isNotEmpty()) {
+                    Text(
+                        text = stringResource(Res.string.pictures_arrow_key_hint, navLabel, rowLabel),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = TextUnit(11.5f, TextUnitType.Sp)
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                    )
+                }
                 Text(
                     text = stringResource(Res.string.pictures_reorder_hint),
                     style = MaterialTheme.typography.bodySmall.copy(

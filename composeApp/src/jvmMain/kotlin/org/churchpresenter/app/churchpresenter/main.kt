@@ -59,6 +59,7 @@ import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.composables.DeckLinkManager
 import org.churchpresenter.app.churchpresenter.utils.DevFlags
 import org.churchpresenter.app.churchpresenter.utils.LottieFonts
+import org.churchpresenter.app.churchpresenter.utils.SystemFonts
 import org.churchpresenter.app.churchpresenter.utils.findScreenIndexByBounds
 import org.churchpresenter.app.churchpresenter.utils.rememberScreenDevices
 import presentation.engine.fonts.SlideFontRegistry
@@ -161,6 +162,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
 import org.churchpresenter.app.churchpresenter.utils.presenterScreenBounds
 
@@ -349,6 +352,10 @@ fun main() {
             }
         }
         SlideFontRegistry.initialize()
+        // Snapshot the family names for every font picker in the app, after the bundled faces are
+        // registered so they are in it. Enumerating costs a full font-directory walk and used to
+        // happen inline in composition on each settings dialog open — see SystemFonts.
+        SystemFonts.families()
     }.apply { isDaemon = true }.start()
 
     // Set custom VLC path from saved settings before any composable checks isVlcAvailable
@@ -1038,7 +1045,10 @@ fun main() {
                     AppThemeWrapper(theme = theme) {
                         CompositionLocalProvider(
                             LocalMediaViewModel provides mediaViewModel,
-                            LocalMainWindowState provides state
+                            LocalMainWindowState provides state,
+                            LocalShortcuts provides remember(appSettings.keyboardShortcutSettings) {
+                                ShortcutMap.from(appSettings.keyboardShortcutSettings)
+                            }
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
 
@@ -1811,6 +1821,11 @@ fun main() {
                                 )
                                 KeyboardShortcutsDialog(
                                     isVisible = showKeyboardShortcutsDialog,
+                                    settings = appSettings,
+                                    onSave = { updated ->
+                                        appSettings = updated
+                                        settingsManager.saveSettings(updated)
+                                    },
                                     onDismiss = { showKeyboardShortcutsDialog = false; dialogDismissSignal++ }
                                 )
                                 StatisticsDialog(

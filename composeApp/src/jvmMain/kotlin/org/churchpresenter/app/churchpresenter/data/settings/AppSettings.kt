@@ -31,6 +31,7 @@ data class AppSettings(
     val bibleEngineSettings: BibleEngineSettings = BibleEngineSettings(),
     val serverSettings: ServerSettings = ServerSettings(),
     val stageMonitorSettings: StageMonitorSettings = StageMonitorSettings(),
+    val keyboardShortcutSettings: KeyboardShortcutSettings = KeyboardShortcutSettings(),
     val presentationStorageDirectory: String = "",
     val mediaStorageDirectory: String = "",
     val schedulePanelWidthDp: Int = 280,

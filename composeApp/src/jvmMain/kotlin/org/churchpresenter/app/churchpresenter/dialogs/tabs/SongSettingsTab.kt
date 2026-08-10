@@ -117,7 +117,7 @@ import org.churchpresenter.app.churchpresenter.composables.TvScreenBox
 import org.churchpresenter.app.churchpresenter.composables.VerticalAlignmentButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
-import org.churchpresenter.app.churchpresenter.utils.Utils
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
@@ -133,7 +133,7 @@ fun SongSettingsTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     presenterManager: PresenterManager? = null
 ) {
-    val availableFonts = remember { Utils.getAvailableSystemFonts() }
+    val availableFonts = rememberSystemFonts()
 
     Box(
         modifier = Modifier

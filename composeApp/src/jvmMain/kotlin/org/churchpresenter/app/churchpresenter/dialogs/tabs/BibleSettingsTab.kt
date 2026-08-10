@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +77,7 @@ import churchpresenter.composeapp.generated.resources.bible_transition_settings
 import churchpresenter.composeapp.generated.resources.bottom
 import churchpresenter.composeapp.generated.resources.left
 import churchpresenter.composeapp.generated.resources.right
+import churchpresenter.composeapp.generated.resources.scanning_directory
 import churchpresenter.composeapp.generated.resources.screen
 import churchpresenter.composeapp.generated.resources.text_margins
 import churchpresenter.composeapp.generated.resources.top
@@ -93,6 +93,8 @@ import org.churchpresenter.app.churchpresenter.composables.DropdownSettingsField
 import org.churchpresenter.app.churchpresenter.composables.rememberDropdownWidthFor
 import org.churchpresenter.app.churchpresenter.composables.FontSettingsDropdown
 import org.churchpresenter.app.churchpresenter.composables.HorizontalAlignmentButtons
+import org.churchpresenter.app.churchpresenter.composables.ScanningRow
+import org.churchpresenter.app.churchpresenter.composables.rememberBibleFolderListing
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.PositionButtons
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
@@ -119,12 +121,10 @@ import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
-import org.churchpresenter.app.churchpresenter.viewmodel.BibleSettingsViewModel
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
-import java.io.File
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 /** [ActionIconButton]'s own default size, which the reorder buttons take and their gaps stand in for. */
@@ -136,28 +136,12 @@ fun BibleSettingsTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     presenterManager: PresenterManager? = null
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
-    val viewModel = remember {
-        BibleSettingsViewModel().also { vm ->
-            val dir = settings.bibleSettings.storageDirectory
-            if (dir.isNotEmpty()) vm.setDirectory(dir)
-        }
-    }
-
-    // Keep viewModel directory in sync if settings change after initial load
-    LaunchedEffect(settings.bibleSettings.storageDirectory) {
-        val dir = settings.bibleSettings.storageDirectory
-        if (viewModel.storageDirectory != dir) viewModel.setDirectory(dir)
-    }
-
-    val bibleFilesInDirectory = remember(viewModel.storageDirectory, viewModel.refreshTrigger) {
-        viewModel.filesInDirectory()
-    }
-    val bibleFileDisplayNames = remember(viewModel.storageDirectory, bibleFilesInDirectory) {
-        viewModel.fileDisplayNames(bibleFilesInDirectory)
-    }
+    val availableFonts = rememberSystemFonts()
+    // Null while the folder is still being read. Walking it and reading a header out of every module
+    // used to happen inline here, so the whole dialog waited on it before painting once per open.
+    val listing = rememberBibleFolderListing(settings.bibleSettings.storageDirectory)
+    val bibleFilesInDirectory = listing?.files.orEmpty()
+    val bibleFileDisplayNames = listing?.displayNames.orEmpty()
 
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(14.dp)
@@ -174,7 +158,8 @@ fun BibleSettingsTab(
                     settings,
                     onSettingsChange,
                     bibleFilesInDirectory,
-                    bibleFileDisplayNames
+                    bibleFileDisplayNames,
+                    scanning = listing == null
                 )
             }
             Column(
@@ -240,7 +225,8 @@ private fun LeftColumn(
     settings: AppSettings,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     bibleFilesInDirectory: List<String>,
-    bibleFileDisplayNames: Map<String, String>
+    bibleFileDisplayNames: Map<String, String>,
+    scanning: Boolean
 ) {
     val noneStr = stringResource(Res.string.none)
     val bibleDisplayOptions = listOf(noneStr) + bibleFilesInDirectory.map { fileName ->
@@ -339,7 +325,11 @@ private fun LeftColumn(
             }
             // Hidden at the cap as well as when nothing is left to add: `addTranslation` refuses past
             // it, and a picker that answers a selection by doing nothing is worse than no picker.
-            if (unselectedFiles.isNotEmpty() && translations.size < Constants.MAX_BIBLE_TRANSLATIONS) {
+            // Until the folder has been read there is nothing to offer yet — say so, because an
+            // absent picker otherwise reads as "this folder holds no other translations".
+            if (scanning) {
+                ScanningRow(stringResource(Res.string.scanning_directory))
+            } else if (unselectedFiles.isNotEmpty() && translations.size < Constants.MAX_BIBLE_TRANSLATIONS) {
                 DropdownSettingsField(
                     width = pickerWidth,
                     label = addTranslationLabel,

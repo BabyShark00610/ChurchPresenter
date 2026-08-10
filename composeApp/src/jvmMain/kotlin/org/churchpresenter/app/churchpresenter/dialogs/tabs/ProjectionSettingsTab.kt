@@ -145,6 +145,7 @@ import churchpresenter.composeapp.generated.resources.identify_screen
 import churchpresenter.composeapp.generated.resources.key_output
 import churchpresenter.composeapp.generated.resources.key_output_none
 import churchpresenter.composeapp.generated.resources.left
+import churchpresenter.composeapp.generated.resources.loading
 import churchpresenter.composeapp.generated.resources.lower_third_height
 import churchpresenter.composeapp.generated.resources.media_vlc_install
 import churchpresenter.composeapp.generated.resources.media_vlc_load_failed
@@ -190,6 +191,8 @@ import org.churchpresenter.app.churchpresenter.composables.detectVlcInstallPath
 import org.churchpresenter.app.churchpresenter.composables.isVlcAvailable
 import org.churchpresenter.app.churchpresenter.composables.isVlcLoadFailed
 import org.churchpresenter.app.churchpresenter.composables.listVlcAudioDevices
+import org.churchpresenter.app.churchpresenter.composables.ScanningRow
+import org.churchpresenter.app.churchpresenter.composables.VlcAudioDevice
 import org.churchpresenter.app.churchpresenter.composables.recheckVlcAvailability
 import org.churchpresenter.app.churchpresenter.composables.vlcCustomPath
 import org.churchpresenter.app.churchpresenter.BuildConfig
@@ -555,14 +558,28 @@ fun ProjectionSettingsTab(
     SettingsSection(title = stringResource(Res.string.audio_output)) {
 
         var vlcDetected by remember { mutableStateOf(isVlcAvailable) }
-        var vlcPathText by remember { mutableStateOf(proj.vlcPath.ifBlank { detectVlcInstallPath() }) }
+        var vlcPathText by remember { mutableStateOf(proj.vlcPath) }
         var vlcPathError by remember { mutableStateOf(false) }
 
+        // Both of these ask VLC itself — the slowest thing this dialog does, and it used to happen
+        // inline in composition, so opening the Projection tab stalled on it.
+        LaunchedEffect(Unit) {
+            if (vlcPathText.isBlank()) {
+                val detected = withContext(Dispatchers.IO) { detectVlcInstallPath() }
+                if (vlcPathText.isBlank()) vlcPathText = detected
+            }
+        }
+
         if (vlcDetected) {
-            val audioDevices = remember(vlcDetected) { listVlcAudioDevices() }
+            // Null while VLC is being asked. The configured device's own name only exists in this
+            // list, so an empty list would label it "Default" — a wrong answer, not a pending one.
+            val audioDevices by produceState<List<VlcAudioDevice>?>(null, vlcDetected) {
+                value = withContext(Dispatchers.IO) { listVlcAudioDevices() }
+            }
             val defaultLabel = stringResource(Res.string.audio_output_default)
 
-            Row(
+            if (audioDevices == null) ScanningRow(stringResource(Res.string.loading))
+            else Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -574,7 +591,7 @@ fun ProjectionSettingsTab(
 
                 Box {
                     var expanded by remember { mutableStateOf(false) }
-                    val currentDevice = audioDevices.find { it.id == proj.audioOutputDeviceId }
+                    val currentDevice = audioDevices.orEmpty().find { it.id == proj.audioOutputDeviceId }
                     val currentLabel = currentDevice?.description ?: defaultLabel
 
                     OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = { expanded = true }) {
@@ -599,7 +616,7 @@ fun ProjectionSettingsTab(
                             }
                         )
                         // VLC-detected devices
-                        audioDevices.forEach { device ->
+                        audioDevices.orEmpty().forEach { device ->
                             DropdownMenuItem(
                                 text = { Text(device.description, style = MaterialTheme.typography.bodySmall) },
                                 onClick = {
