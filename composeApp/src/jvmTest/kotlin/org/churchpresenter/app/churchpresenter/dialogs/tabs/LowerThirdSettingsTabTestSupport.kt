@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -41,6 +42,7 @@ internal fun lowerThirdTab(
             )
         }
     }
+    awaitFolderScan()
     block { current }
 }
 
@@ -73,3 +75,40 @@ internal fun withLottieFolder(vararg files: Pair<String, String>, block: (File) 
         folder.deleteRecursively()
     }
 }
+
+/**
+ * Waits out the folder scan the tab now does off the UI thread (PR #259 moved it there, because
+ * deciding whether a JSON file is a Lottie means reading the whole of it).
+ *
+ * Until that finishes the tab shows "Scanning folder…" rather than a verdict, so asserting straight
+ * after composing sees an empty list. Waiting on the scanning row disappearing is a positive signal
+ * that the read finished — it works for a folder with files and for an empty one alike.
+ */
+internal fun ComposeUiTest.awaitFolderScan() {
+    waitUntil("the folder scan finished") {
+        onAllNodesWithText("Scanning folder", substring = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+    }
+}
+
+/**
+ * Waits for the lower-third rows that [settings]' folder should produce.
+ *
+ * The server tab loads them off the UI thread too, but unlike the lower-third tab it starts from an
+ * empty list with no "Scanning folder" marker — so [awaitFolderScan] passes vacuously there and an
+ * assertion would run against an empty list. Waiting for the names the folder actually holds is a
+ * positive signal that the read landed, and it stays correct for an empty folder (nothing to wait
+ * for).
+ */
+internal fun ComposeUiTest.awaitLowerThirdRows(settings: AppSettings) {
+    val folder = File(settings.streamingSettings.lowerThirdFolder)
+    val names = folder.listFiles()
+        ?.filter { it.extension.equals("json", ignoreCase = true) && it.readText().contains("\"layers\"") }
+        ?.map { it.nameWithoutExtension }
+        ?: return
+    if (names.isEmpty()) return
+    waitUntil("the lower-third rows loaded") {
+        names.all { onAllNodesWithText(it, substring = true).fetchSemanticsNodes(false).isNotEmpty() }
+    }
+}
+

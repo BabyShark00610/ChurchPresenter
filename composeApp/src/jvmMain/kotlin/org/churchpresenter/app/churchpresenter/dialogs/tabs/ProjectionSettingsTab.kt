@@ -386,8 +386,6 @@ fun ProjectionSettingsTab(
 
     // Content-type columns — shared by the per-hardware Screen Assignment grid (Card 1)
     // and the per-output Browser Source checkboxes (Card 1.5).
-    val bibleLabel = stringResource(Res.string.content_bible)
-    val songsLabel = stringResource(Res.string.content_songs)
     val picturesLabel = stringResource(Res.string.content_pictures)
     val mediaLabel = stringResource(Res.string.content_media)
     val streamingLabel = stringResource(Res.string.content_streaming)
@@ -500,12 +498,9 @@ fun ProjectionSettingsTab(
 
     // Shared column widths — used by both the Screen Assignment table (Card 1) and the
     // Browser Source Outputs table (Card 1.5) so their columns line up the same way.
-    val langDropdownWidth = 95.dp
-    val cellWidth = 82.dp
     // Reserves 2 lines of bodySmall (16.sp line height) so single-line labels (Bible, display
     // mode, etc.) sit flush with the bottom of the tallest label (e.g. "Pictures/Presentation",
     // which wraps to 2 lines) — keeping every checkbox/radio button in the row aligned.
-    val contentLabelHeight = 32.dp
 
     Box(
         modifier = Modifier

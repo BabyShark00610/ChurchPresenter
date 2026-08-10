@@ -2,6 +2,8 @@
 
 package org.churchpresenter.app.churchpresenter.screenshot
 
+import org.churchpresenter.app.churchpresenter.dialogs.tabs.awaitFolderScan
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -138,6 +140,7 @@ class LowerThirdSettingsTabScreenshotTest {
                 }
             }
             waitForIdle()
+            awaitFolderScan()
             drive()
             captureTo(file)
         }
