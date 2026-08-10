@@ -3,10 +3,12 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,7 +17,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import org.churchpresenter.app.churchpresenter.TestSingletons
+import org.churchpresenter.app.churchpresenter.composables.TAB_STRIP_ARROW_BACK_TAG
+import org.churchpresenter.app.churchpresenter.composables.TAB_STRIP_ARROW_FORWARD_TAG
 import org.churchpresenter.app.churchpresenter.data.RemoteClientManager
 import org.churchpresenter.app.churchpresenter.data.SettingsManager
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -264,15 +269,34 @@ class OptionsContentTest {
     }
 
     @Test
+    fun `the tab strip's overflow arrows appear with the overflow and scroll it`() = dialog {
+        // A dozen tabs do not fit this dialog's width, which is the whole reason the arrows exist:
+        // there is somewhere to go forward to, and nowhere to go back to until we have.
+        onNodeWithTag(TAB_STRIP_ARROW_BACK_TAG).assertDoesNotExist()
+        onNodeWithTag(TAB_STRIP_ARROW_FORWARD_TAG).assertExists()
+
+        onNodeWithTag(TAB_STRIP_ARROW_FORWARD_TAG).performClick()
+        // The strip moved: there is now a way back, which there was not a moment ago.
+        waitUntilAtLeastOneExists(hasTestTag(TAB_STRIP_ARROW_BACK_TAG))
+
+        // And back again returns the first tab to view.
+        onNodeWithTag(TAB_STRIP_ARROW_BACK_TAG).performClick()
+        waitUntilAtLeastOneExists(hasText("System") and hasClickAction())
+        onNodeWithText("System").assertIsDisplayed()
+    }
+
+    @Test
     fun `an OBS connection adds an OBS tab ahead of Companion Satellite`() = dialog(
         obsManager = OBSWebSocketManager(),
     ) {
         onNodeWithText("OBS").assertExists()
 
-        onNodeWithText("OBS").performClick()
+        // The last two tabs sit past the right edge of the strip at this window width — which is
+        // what the strip's own overflow arrows are for, so scroll them in the way a user would.
+        onNodeWithText("OBS").performScrollTo().performClick()
         onNodeWithText("OBS").assertIsSelected()
 
-        onNodeWithText("Companion Satellite").performClick()
+        onNodeWithText("Companion Satellite").performScrollTo().performClick()
         onNodeWithText("Companion Satellite").assertIsSelected()
     }
 

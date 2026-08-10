@@ -64,6 +64,8 @@ import churchpresenter.composeapp.generated.resources.companion_satellite_status
 import churchpresenter.composeapp.generated.resources.companion_satellite_status_error
 import companionsatellite.CompanionConnectionStatus
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.SettingsTextField
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -105,6 +107,7 @@ fun CompanionSatelliteSettingsTab(
         }
     }
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -114,7 +117,8 @@ fun CompanionSatelliteSettingsTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState)
+                .padding(end = SettingsScrollbarGutter),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             connections.forEach { connection ->
@@ -131,6 +135,7 @@ fun CompanionSatelliteSettingsTab(
                 Text(stringResource(Res.string.companion_satellite_add_connection))
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }
 

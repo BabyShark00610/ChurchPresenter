@@ -1,5 +1,6 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,6 +73,8 @@ import org.churchpresenter.app.churchpresenter.dialogs.tabs.SongSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.LowerThirdSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.DictionarySettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.StageMonitorSettingsTab
+import org.churchpresenter.app.churchpresenter.composables.TabStripBackArrow
+import org.churchpresenter.app.churchpresenter.composables.TabStripForwardArrow
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.viewmodel.OBSWebSocketManager
@@ -165,6 +168,7 @@ internal fun OptionsDialogContent(
     val tabCount = companionSatelliteTabIndex + 1
     var selectedTabIndex by remember(initialTab) { mutableStateOf(initialTab) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
+    val tabScrollState = remember { ScrollState(0) }
 
         AppThemeWrapper(theme = theme) {
             Surface(
@@ -172,75 +176,87 @@ internal fun OptionsDialogContent(
                 color = MaterialTheme.colorScheme.background
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Tab Row
-                    PrimaryScrollableTabRow(
-                        selectedTabIndex = safeTabIndex,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        edgePadding = 0.dp
+                    // Tab Row — with the same overflow arrows as the main window's tab strip, since
+                    // a dozen tabs outrun the dialog's width long before the window is narrow.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Tab(
-                            selected = safeTabIndex == 0,
-                            onClick = { selectedTabIndex = 0 },
-                            text = { Text(stringResource(Res.string.appearance)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 1,
-                            onClick = { selectedTabIndex = 1 },
-                            text = { Text(stringResource(Res.string.bible)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 2,
-                            onClick = { selectedTabIndex = 2 },
-                            text = { Text(stringResource(Res.string.song)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 3,
-                            onClick = { selectedTabIndex = 3 },
-                            text = { Text(stringResource(Res.string.background)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 4,
-                            onClick = { selectedTabIndex = 4 },
-                            text = { Text(stringResource(Res.string.projection)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 5,
-                            onClick = { selectedTabIndex = 5 },
-                            text = { Text(stringResource(Res.string.display_lower_third)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 6,
-                            onClick = { selectedTabIndex = 6 },
-                            text = { Text(stringResource(Res.string.server_settings)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 7,
-                            onClick = { selectedTabIndex = 7 },
-                            text = { Text(stringResource(Res.string.stage_monitor)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 8,
-                            onClick = { selectedTabIndex = 8 },
-                            text = { Text(stringResource(Res.string.atem_settings)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 9,
-                            onClick = { selectedTabIndex = 9 },
-                            text = { Text(stringResource(Res.string.tab_dictionary)) }
-                        )
-                        if (obsManager != null) {
+                        TabStripBackArrow(tabScrollState)
+                        PrimaryScrollableTabRow(
+                            selectedTabIndex = safeTabIndex,
+                            modifier = Modifier.weight(1f),
+                            scrollState = tabScrollState,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            edgePadding = 0.dp
+                        ) {
                             Tab(
-                                selected = safeTabIndex == 10,
-                                onClick = { selectedTabIndex = 10 },
-                                text = { Text(stringResource(Res.string.obs_settings)) }
+                                selected = safeTabIndex == 0,
+                                onClick = { selectedTabIndex = 0 },
+                                text = { Text(stringResource(Res.string.appearance)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 1,
+                                onClick = { selectedTabIndex = 1 },
+                                text = { Text(stringResource(Res.string.bible)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 2,
+                                onClick = { selectedTabIndex = 2 },
+                                text = { Text(stringResource(Res.string.song)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 3,
+                                onClick = { selectedTabIndex = 3 },
+                                text = { Text(stringResource(Res.string.background)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 4,
+                                onClick = { selectedTabIndex = 4 },
+                                text = { Text(stringResource(Res.string.projection)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 5,
+                                onClick = { selectedTabIndex = 5 },
+                                text = { Text(stringResource(Res.string.display_lower_third)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 6,
+                                onClick = { selectedTabIndex = 6 },
+                                text = { Text(stringResource(Res.string.server_settings)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 7,
+                                onClick = { selectedTabIndex = 7 },
+                                text = { Text(stringResource(Res.string.stage_monitor)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 8,
+                                onClick = { selectedTabIndex = 8 },
+                                text = { Text(stringResource(Res.string.atem_settings)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 9,
+                                onClick = { selectedTabIndex = 9 },
+                                text = { Text(stringResource(Res.string.tab_dictionary)) }
+                            )
+                            if (obsManager != null) {
+                                Tab(
+                                    selected = safeTabIndex == 10,
+                                    onClick = { selectedTabIndex = 10 },
+                                    text = { Text(stringResource(Res.string.obs_settings)) }
+                                )
+                            }
+                            Tab(
+                                selected = safeTabIndex == companionSatelliteTabIndex,
+                                onClick = { selectedTabIndex = companionSatelliteTabIndex },
+                                text = { Text(stringResource(Res.string.companion_satellite_settings)) }
                             )
                         }
-                        Tab(
-                            selected = safeTabIndex == companionSatelliteTabIndex,
-                            onClick = { selectedTabIndex = companionSatelliteTabIndex },
-                            text = { Text(stringResource(Res.string.companion_satellite_settings)) }
-                        )
+                        TabStripForwardArrow(tabScrollState)
                     }
 
                     // Tab Content
