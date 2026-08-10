@@ -51,7 +51,7 @@ internal fun Route.browserSourceRoutes(
                         call.respond(HttpStatusCode.NotFound, "Browser source output is disabled")
                         return@get
                     }
-                    if (!server.checkBrowserSourceApiKey(call, output)) return@get
+                    if (!server.browserSource.checkBrowserSourceApiKey(call, output)) return@get
                     val bgOverride = call.request.queryParameters["bg"]
                     // OBS/browsers cache this page aggressively and won't refetch it on their own
                     // (OBS requires an explicit "Refresh cache of current page"). no-store ensures
@@ -65,7 +65,7 @@ internal fun Route.browserSourceRoutes(
                 // BrowserSourceVideoRenderer in main.kt. A frame is only pushed when its pixels
                 // actually changed since the previous tick, so a static slide costs one frame,
                 // not continuous encoding. Each message is usually just the changed sub-rectangle,
-                // not the full frame — see server.encodeBrowserSourceFrameMessage for the binary layout.
+                // not the full frame — see server.browserSource.encodeBrowserSourceFrameMessage for the binary layout.
                 // The client composites deltas onto an offscreen full-frame canvas (see
                 // server.browserSourceOverlayPageHtml below). Previously HTTP multipart/x-mixed-replace;
                 // see the comment above _browserSourceFrameFlows for why that was replaced.
@@ -86,7 +86,7 @@ internal fun Route.browserSourceRoutes(
                         close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Browser source output is disabled"))
                         return@webSocket
                     }
-                    if (!server.browserSourceApiKeyValid(call, output)) {
+                    if (!server.browserSource.browserSourceApiKeyValid(call, output)) {
                         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid API key"))
                         return@webSocket
                     }
@@ -113,7 +113,7 @@ internal fun Route.browserSourceRoutes(
                     val sendMutex = Mutex()
                     suspend fun sendFrame(frame: BrowserSourceFrame) {
                         sendMutex.withLock {
-                            send(Frame.Binary(true, server.encodeBrowserSourceFrameMessage(frame)))
+                            send(Frame.Binary(true, server.browserSource.encodeBrowserSourceFrameMessage(frame)))
                         }
                     }
                     // Launched in the session scope (not the server scope) so they can never

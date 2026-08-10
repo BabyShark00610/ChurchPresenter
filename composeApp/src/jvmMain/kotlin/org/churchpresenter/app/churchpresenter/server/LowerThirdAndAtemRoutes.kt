@@ -30,7 +30,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
 ) {
                 get("/api/lowerthirds") {
                     if (!server.checkApiKey(call)) return@get
-                    val items = server.lowerThirdFiles().map { f ->
+                    val items = server.atem.lowerThirdFiles().map { f ->
                         val dur = try { LottieRenderCache.lottieDurationMs(f.readText()) ?: 0L } catch (_: Exception) { 0L }
                         val nameJson = json.encodeToString(kotlinx.serialization.serializer<String>(), f.nameWithoutExtension)
                         """{"name":$nameJson,"durationMs":$dur}"""
@@ -47,7 +47,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
                 get("/api/lowerthirds/{name}/json") {
                     if (!server.checkApiKey(call)) return@get
                     val rawName = call.parameters["name"] ?: ""
-                    val file = server.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
+                    val file = server.atem.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
                     if (file == null) {
                         server.logRest("/api/lowerthirds/{name}/json", 404, "lower_third_not_found")
                         call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
@@ -64,12 +64,12 @@ internal fun Route.lowerThirdAndAtemRoutes(
 
                 post("/api/lowerthirds/{name}/run") {
                     if (!server.checkApiKey(call)) return@post
-                    server.handleLowerThirdTrigger(call, autoEnd = true)
+                    server.atem.handleLowerThirdTrigger(call, autoEnd = true)
                 }
 
                 post("/api/lowerthirds/{name}/show") {
                     if (!server.checkApiKey(call)) return@post
-                    server.handleLowerThirdTrigger(call, autoEnd = false)
+                    server.atem.handleLowerThirdTrigger(call, autoEnd = false)
                 }
 
                 post("/api/lowerthirds/hide") {
@@ -91,12 +91,12 @@ internal fun Route.lowerThirdAndAtemRoutes(
                         call.respond(HttpStatusCode.BadRequest, """{"error":"name required"}""")
                         return@post
                     }
-                    val file = server.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
+                    val file = server.atem.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
                     if (file == null) {
                         call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
                         return@post
                     }
-                    val atem = server._atemSettings
+                    val atem = server.atem._atemSettings
                     if (atem == null || atem.host.isBlank()) {
                         call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"ATEM not configured"}""")
                         return@post
@@ -107,12 +107,12 @@ internal fun Route.lowerThirdAndAtemRoutes(
                     val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
                     val meParam = call.request.queryParameters["me"]?.toIntOrNull()
                     val keyOn = keyParam != null && keyParam > 0
-                    val useDsk = server.resolveUseDsk(call, atem)
+                    val useDsk = server.atem.resolveUseDsk(call, atem)
                     val mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
                     val keyer = if (keyParam != null && keyParam > 0) keyParam - 1
                         else if (useDsk) atem.dskIndex else atem.keyIndex
-                    if (keyOn) server.validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":${server.jsonStr(it)}}""")
+                    if (keyOn) server.atem.validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
+                        call.respond(HttpStatusCode.BadRequest, """{"error":${server.atem.jsonStr(it)}}""")
                         return@post
                     }
                     scope.launch {
@@ -151,7 +151,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
                         else -> ""","me":${mixEffect + 1},"key":${keyer + 1}"""
                     }
                     call.respondText(
-                        """{"status":"uploading","type":"still","name":${server.jsonStr(name)},"slot":${slot + 1}$keyInfo}""",
+                        """{"status":"uploading","type":"still","name":${server.atem.jsonStr(name)},"slot":${slot + 1}$keyInfo}""",
                         ContentType.Application.Json
                     )
                 }
@@ -167,12 +167,12 @@ internal fun Route.lowerThirdAndAtemRoutes(
                         call.respond(HttpStatusCode.BadRequest, """{"error":"name required"}""")
                         return@post
                     }
-                    val file = server.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
+                    val file = server.atem.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
                     if (file == null) {
                         call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
                         return@post
                     }
-                    val atem = server._atemSettings
+                    val atem = server.atem._atemSettings
                     if (atem == null || atem.host.isBlank()) {
                         call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"ATEM not configured"}""")
                         return@post
@@ -182,12 +182,12 @@ internal fun Route.lowerThirdAndAtemRoutes(
                     val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
                     val meParam = call.request.queryParameters["me"]?.toIntOrNull()
                     val keyOn = keyParam != null && keyParam > 0
-                    val useDsk = server.resolveUseDsk(call, atem)
+                    val useDsk = server.atem.resolveUseDsk(call, atem)
                     val mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
                     val keyer = if (keyParam != null && keyParam > 0) keyParam - 1
                         else if (useDsk) atem.dskIndex else atem.keyIndex
-                    if (keyOn) server.validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":${server.jsonStr(it)}}""")
+                    if (keyOn) server.atem.validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
+                        call.respond(HttpStatusCode.BadRequest, """{"error":${server.atem.jsonStr(it)}}""")
                         return@post
                     }
                     val lottieJson = file.readText()
@@ -200,7 +200,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
                         val secs = String.format(java.util.Locale.US, "%.1f", clipCapacity / fps)
                         call.respond(
                             HttpStatusCode.UnprocessableEntity,
-                            """{"error":${server.jsonStr("Clip is $frameCount frames but slot ${slot + 1} holds at most $clipCapacity frames (≈$secs s); use a shorter clip or lower fps")}}"""
+                            """{"error":${server.atem.jsonStr("Clip is $frameCount frames but slot ${slot + 1} holds at most $clipCapacity frames (≈$secs s); use a shorter clip or lower fps")}}"""
                         )
                         return@post
                     }
@@ -250,7 +250,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
                         else -> ""","me":${mixEffect + 1},"key":${keyer + 1}"""
                     }
                     call.respondText(
-                        """{"status":"uploading","type":"clip","name":${server.jsonStr(name)},"slot":${slot + 1}$keyInfoClip}""",
+                        """{"status":"uploading","type":"clip","name":${server.atem.jsonStr(name)},"slot":${slot + 1}$keyInfoClip}""",
                         ContentType.Application.Json
                     )
                 }
@@ -258,13 +258,13 @@ internal fun Route.lowerThirdAndAtemRoutes(
                 // POST /api/atem/key/on?me=E&key=M  — turn upstream key M on M/E E on air (standalone)
                 post("/api/atem/key/on") {
                     if (!server.checkApiKey(call)) return@post
-                    server.handleKeyToggle(call, onAir = true)
+                    server.atem.handleKeyToggle(call, onAir = true)
                 }
 
                 // POST /api/atem/key/off?me=E&key=M  — turn upstream key M on M/E E off air (standalone)
                 post("/api/atem/key/off") {
                     if (!server.checkApiKey(call)) return@post
-                    server.handleKeyToggle(call, onAir = false)
+                    server.atem.handleKeyToggle(call, onAir = false)
                 }
 
                 // ── Browser Source Endpoints (OBS/vMix overlay) ────────────────────

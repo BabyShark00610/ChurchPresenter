@@ -188,12 +188,12 @@ internal fun Route.presentationRoutes(
                         val id = file.absolutePath.hashCode().toUInt().toString(16)
                         // Evict the previous device-uploaded presentation so the mobile list
                         // never accumulates stale entries — only the latest upload is shown.
-                        server._lastDeviceUploadedPresentationId?.let { oldId ->
+                        server.presentations._lastDeviceUploadedPresentationId?.let { oldId ->
                             _presentationCatalogs.remove(oldId)
                             _slideBytes.remove(oldId)
                             _presentationFilePaths.remove(oldId)
                         }
-                        server._lastDeviceUploadedPresentationId = id
+                        server.presentations._lastDeviceUploadedPresentationId = id
                         val uploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
                         scope.launch { server.onPresentationUploaded.emit(file) }
                         scope.launch { server.onInstantAction.emit(CompanionServer.RemoteInstantAction(

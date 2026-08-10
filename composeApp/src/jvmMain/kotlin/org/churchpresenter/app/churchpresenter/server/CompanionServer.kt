@@ -119,14 +119,6 @@ import presentation.engine.cache.SlideDiskCache
 class CompanionServer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Serializes background presentation renders for the companion API. A schedule with several
-     * presentations would otherwise render every deck concurrently (one IO coroutine each), and
-     * each deck holds a full POI [SlideShow] plus a 1920px frame buffer — a few heavy decks at
-     * once exhaust the heap (OutOfMemoryError). Rendering one deck at a time caps peak memory to a
-     * single deck's footprint; the renders just queue.
-     */
-    private val presentationRenderMutex = Mutex()
 
     private var _qaEventJob: kotlinx.coroutines.Job? = null
     var qaManager: QAManager? = null
@@ -221,7 +213,7 @@ class CompanionServer {
         _currentSlideIndex = index
         _currentSlideTotalCount = total
         _presentationIsPlaying = isPlaying
-        val note = _presentationNotes[id]?.getOrNull(index) ?: ""
+        val note = presentations._presentationNotes[id]?.getOrNull(index) ?: ""
         broadcast(WebSocketMessage(
             type = Constants.WS_EVENT_PRESENTATION_SLIDE_CHANGED,
             payload = """{"id":"$id","index":$index,"total":$total,"isPlaying":$isPlaying,"isLive":$_presentationIsLive,"notes":"${jsonEscape(note)}"}"""
@@ -291,17 +283,8 @@ class CompanionServer {
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
 
-    // ATEM + lower-third folder config for the Companion lower-third sequencer
-    @Volatile internal var _atemSettings: AtemSettings? = null
-    @Volatile private var _lowerThirdFolder: String = ""
-
     fun updateAtemConfig(atem: AtemSettings, lowerThirdFolder: String) {
-        val prev = _atemSettings
-        if (prev == null || prev.host != atem.host || prev.port != atem.port) {
-            AtemConnectionManager.invalidate()
-        }
-        _atemSettings = atem
-        _lowerThirdFolder = lowerThirdFolder
+        this.atem.updateConfig(atem, lowerThirdFolder)
         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "state_updated", mapOf("type" to "atem_config"))
     }
 
@@ -315,60 +298,9 @@ class CompanionServer {
     // outright with "Load failed" for this exact indefinitely-long streaming response pattern,
     // even on localhost. WebSocket is what the rest of this server already uses for real-time
     // push, and has none of that legacy baggage.)
-    @Volatile private var _browserSourceOutputs: List<ScreenAssignment> = emptyList()
-    private val _browserSourceFrameFlows = ConcurrentHashMap<Int, SharedFlow<BrowserSourceFrame>>()
 
-    // Live WebSocket sessions per output index, so a renderer replacement can close them —
-    // a session holds the flow it captured at connect time, and after re-registration that
-    // old flow never emits again while the heartbeat keeps re-sending its stale last frame.
-    // Closing forces the overlay page to reconnect (2s backoff) and reseed at the new stream.
-    private val _browserSourceSessions = ConcurrentHashMap<Int, MutableSet<DefaultWebSocketServerSession>>()
 
-    fun updateBrowserSourceOutputs(outputs: List<ScreenAssignment>) {
-        _browserSourceOutputs = outputs
-        InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "state_updated", mapOf("type" to "browser_source_outputs", "count" to outputs.size))
-    }
 
-    fun browserSourceOutput(index: Int): ScreenAssignment? = _browserSourceOutputs.getOrNull(index)
-
-    /**
-     * Registers (or replaces) the frame delta flow a given output's renderer produces.
-     * Replacing an existing flow (renderer restarted, e.g. after a resolution/fps change)
-     * closes that output's connected sessions so clients reconnect to the new stream.
-     */
-    fun registerBrowserSourceFrames(index: Int, frames: SharedFlow<BrowserSourceFrame>) {
-        val previous = _browserSourceFrameFlows.put(index, frames)
-        if (previous != null && previous !== frames) {
-            val stranded = _browserSourceSessions.remove(index) ?: return
-            scope.launch {
-                stranded.forEach { session ->
-                    try {
-                        session.close(CloseReason(CloseReason.Codes.SERVICE_RESTART, "Renderer restarted"))
-                    } catch (_: Exception) {
-                        // already gone
-                    }
-                }
-            }
-        }
-    }
-
-    /** Pure check for the given output's independent Browser Source API-key requirement (separate from [_apiKeyEnabled]) — no response side effects, usable from both HTTP and WebSocket routes. */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal fun browserSourceApiKeyValid(call: ApplicationCall, output: ScreenAssignment): Boolean {
-        if (!output.browserSourceApiKeyRequired || _apiKey.value.isEmpty()) return true
-        val provided = call.request.headers[Constants.HEADER_API_KEY]
-            ?: call.request.queryParameters[Constants.QUERY_PARAM_API_KEY]
-            ?: ""
-        return MessageDigest.isEqual(provided.toByteArray(), _apiKey.value.toByteArray())
-    }
-
-    /** Same check as [browserSourceApiKeyValid], but responds 401 on an HTTP route when invalid. */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal suspend fun checkBrowserSourceApiKey(call: ApplicationCall, output: ScreenAssignment): Boolean {
-        if (browserSourceApiKeyValid(call, output)) return true
-        call.respond(HttpStatusCode.Unauthorized, "Invalid API key")
-        return false
-    }
 
     /**
      * Packs one [BrowserSourceFrame] into a single WebSocket binary message: a fixed 24-byte
@@ -393,165 +325,12 @@ class CompanionServer {
         index, output, _apiKeyEnabled.value, _apiKey.value, bgOverride
     )
 
-    internal fun encodeBrowserSourceFrameMessage(frame: BrowserSourceFrame): ByteArray {
-        val buf = java.nio.ByteBuffer.allocate(24 + frame.png.size)
-        buf.putInt(frame.x)
-        buf.putInt(frame.y)
-        buf.putInt(frame.rectWidth)
-        buf.putInt(frame.rectHeight)
-        buf.putInt(frame.fullWidth)
-        buf.putInt(frame.fullHeight)
-        buf.put(frame.png)
-        return buf.array()
-    }
 
-    /** Lottie files in the configured lower-third folder. */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal fun lowerThirdFiles(): List<File> =
-        File(_lowerThirdFolder).takeIf { _lowerThirdFolder.isNotEmpty() && it.isDirectory }
-            ?.listFiles { f -> f.extension.lowercase() == "json" && isLottieFile(f) }
-            ?.sortedBy { it.nameWithoutExtension.lowercase() } ?: emptyList()
 
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal fun jsonStr(s: String): String =
-        json.encodeToString(kotlinx.serialization.serializer<String>(), s)
 
-    /** Shared body of the run/show endpoints. */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal suspend fun handleLowerThirdTrigger(
-        call: ApplicationCall,
-        autoEnd: Boolean
-    ) {
-        val rawName = call.parameters["name"] ?: ""
-        val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
-        if (file == null) {
-            call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
-            return
-        }
-        val ltJson = try { file.readText() } catch (_: Exception) {
-            call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
-            return
-        }
-        val durationMs = LottieRenderCache.lottieDurationMs(ltJson)
-        if (durationMs == null) {
-            call.respond(HttpStatusCode.UnprocessableEntity, """{"error":"lottie has no timing information"}""")
-            return
-        }
-        val atem = _atemSettings ?: AtemSettings()
 
-        // Key target: USK (M/E + keyer) or DSK (?keytype / setting) from settings;
-        // ?me=N&key=M (1-based) override; ?key=0 skips. For DSK ?key overrides the DSK index.
-        val useDsk = resolveUseDsk(call, atem)
-        val meParam = call.request.queryParameters["me"]?.toIntOrNull()
-        val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
-        val mixEffect: Int?
-        val keyer: Int?
-        if (keyParam == 0) {
-            mixEffect = null; keyer = null
-        } else {
-            mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
-            keyer = if (keyParam != null) keyParam - 1
-                else if (useDsk) atem.dskIndex else atem.keyIndex
-            validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-                call.respond(HttpStatusCode.BadRequest, """{"error":${jsonStr(it)}}""")
-                return
-            }
-        }
 
-        val pause = call.request.queryParameters["pause"]?.toBooleanStrictOrNull() ?: false
-        val pauseDurationMs = call.request.queryParameters["pauseDurationMs"]?.toLongOrNull() ?: 2000L
 
-        val keyError = LowerThirdSequencer.run(
-            name = file.nameWithoutExtension,
-            json = ltJson,
-            durationMs = durationMs,
-            pauseAtFrame = pause,
-            pauseDurationMs = pauseDurationMs,
-            mixEffect = mixEffect,
-            keyer = keyer,
-            atem = atem,
-            useDownstreamKey = useDsk,
-            autoEnd = autoEnd
-        )
-        val totalMs = atem.keyPreRollMs + durationMs +
-            (if (pause) pauseDurationMs else 0L) + atem.keyPostRollMs
-        call.respondText(
-            """{"status":"started","name":${jsonStr(file.nameWithoutExtension)},"durationMs":$durationMs,""" +
-                """"totalMs":${if (autoEnd) totalMs else -1},"keyError":${keyError?.let { jsonStr(it) } ?: "null"}}""",
-            ContentType.Application.Json
-        )
-    }
-
-    /**
-     * Standalone upstream-key on/off (POST /api/atem/key/on|off). Reuses the shared
-     * keepalive connection when free; falls back to a short-lived connection when an
-     * upload holds it, so a key cut never waits behind an upload. Synchronous 200/502.
-     */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal suspend fun handleKeyToggle(call: ApplicationCall, onAir: Boolean) {
-        val atem = _atemSettings
-        if (atem == null || atem.host.isBlank()) {
-            call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"ATEM not configured"}""")
-            return
-        }
-        val useDsk = resolveUseDsk(call, atem)
-        val meParam = call.request.queryParameters["me"]?.toIntOrNull()
-        val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
-        val mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
-        val keyer = if (keyParam != null) keyParam - 1
-            else if (useDsk) atem.dskIndex else atem.keyIndex
-        validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-            call.respond(HttpStatusCode.BadRequest, """{"error":${jsonStr(it)}}""")
-            return
-        }
-        try {
-            val ran = AtemConnectionManager.tryRun(atem.host, atem.port) { client ->
-                client.setKeyOnAir(useDsk, mixEffect, keyer, onAir)
-            }
-            if (!ran) AtemClient.cutKey(atem.host, atem.port, useDsk, mixEffect, keyer, onAir)
-            val target = if (useDsk) """"dsk":${keyer + 1}""" else """"me":${mixEffect + 1},"key":${keyer + 1}"""
-            call.respondText(
-                """{"status":"${if (onAir) "on" else "off"}",$target}""",
-                ContentType.Application.Json
-            )
-        } catch (e: Exception) {
-            call.respond(
-                HttpStatusCode.BadGateway,
-                """{"error":${jsonStr(e.message ?: "ATEM command failed")}}"""
-            )
-        }
-    }
-
-    /**
-     * Validate a 0-based key target against the detected topology. Null = OK.
-     * For a downstream key [keyer] is the DSK index and [mixEffect] is ignored.
-     */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal fun validateKeyTarget(atem: AtemSettings, useDsk: Boolean, mixEffect: Int, keyer: Int): String? {
-        if (useDsk) {
-            if (atem.detectedDownstreamKeyers > 0 && keyer !in 0 until atem.detectedDownstreamKeyers)
-                return "DSK ${keyer + 1} does not exist (available: 1-${atem.detectedDownstreamKeyers})"
-            return null
-        }
-        if (atem.detectedMixEffects > 0 && mixEffect !in 0 until atem.detectedMixEffects)
-            return "M/E ${mixEffect + 1} does not exist (available: 1-${atem.detectedMixEffects})"
-        val keyers = atem.detectedKeyersPerMe.getOrNull(mixEffect)
-        if (keyers != null && keyers > 0 && keyer !in 0 until keyers)
-            return "Key ${keyer + 1} does not exist on M/E ${mixEffect + 1} (available: 1-$keyers)"
-        return null
-    }
-
-    /**
-     * Resolves whether a request should drive a downstream key: `?keytype=dsk|usk` (or
-     * `downstream|upstream`) overrides; otherwise the persisted [AtemSettings.useDownstreamKey].
-     */
-    /** `internal` rather than private so the extracted route groups can call it. */
-    internal fun resolveUseDsk(call: ApplicationCall, atem: AtemSettings): Boolean =
-        when (call.request.queryParameters["keytype"]?.lowercase()) {
-            "dsk", "downstream" -> true
-            "usk", "upstream" -> false
-            else -> atem.useDownstreamKey
-        }
 
     // Current data — thread-safe StateFlows
     // All songs flat list
@@ -598,58 +377,13 @@ class CompanionServer {
     /** schedule item UUID → absolute local media file path — populated by updateSchedule, serves /api/media/stream */
     private val _scheduleItemToMediaPath = ConcurrentHashMap<String, String>()
 
-    // Presentation catalog — metadata only; raw JPEG bytes stored per-slide in _slideBytes
-    private val _presentationCatalog = MutableStateFlow(PresentationCatalogResponse(emptyList(), 0))
-    /** presentationId → list of JPEG-encoded slide bytes (index = slide number). Max 5 cached. */
-    private val _slideBytes = ConcurrentHashMap<String, List<ByteArray>>()
-    private val _slideBytesOrder = java.util.concurrent.ConcurrentLinkedDeque<String>()
-    private val MAX_CACHED_PRESENTATIONS = 5
-    /** presentationId (file hash) → PresentationDto — covers tab-loaded and background-rendered items */
-    private val _presentationCatalogs = ConcurrentHashMap<String, PresentationDto>()
-    /** presentationId (file hash) → absolute file path — populated by updatePresentation and updateSchedule */
-    private val _presentationFilePaths = ConcurrentHashMap<String, String>()
-    /** presentationId (file hash) → per-slide presenter notes (index = slide number) */
-    private val _presentationNotes = ConcurrentHashMap<String, List<String>>()
-    /** schedule item UUID → presentation file hash — populated when schedule is updated */
-    private val _scheduleItemToPresentationId = ConcurrentHashMap<String, String>()
-    /** Set of presentation IDs currently being background-rendered (avoids duplicate renders) */
-    private val _renderingPresentations = ConcurrentHashMap<String, Unit>()
-    /** Cancels previous updatePresentation encode job when a new presentation is loaded */
-    private var _activeUpdateJob: Job? = null
-    /** Shared slide disk cache — same directory PresentationViewModel renders into (one render, both consumers). */
-    private val slideDiskCache = SlideDiskCache()
 
-    private fun cacheSlideBytes(id: String, slides: List<ByteArray>) {
-        _slideBytes[id] = slides
-        _slideBytesOrder.remove(id)
-        _slideBytesOrder.addFirst(id)
-        while (_slideBytesOrder.size > MAX_CACHED_PRESENTATIONS) {
-            val evicted = _slideBytesOrder.pollLast()
-            if (evicted != null) {
-                _slideBytes.remove(evicted)
-                _presentationNotes.remove(evicted)
-            }
-        }
-    }
 
     /** Stable folder ID used for all device-uploaded photos (accumulates across sessions). */
-    private val DEVICE_UPLOADS_FOLDER_ID = "device_uploads"
 
-    /**
-     * ID of the most recently device-uploaded presentation file.
-     * Cleared from [_presentationCatalogs], [_slideBytes], and [_presentationFilePaths] when a new
-     * upload replaces it, so the mobile's presentation list never accumulates stale entries.
-     */
-    @Volatile internal var _lastDeviceUploadedPresentationId: String? = null
 
-    // Picture catalog — metadata + file references stored per folder
-    private val _pictureCatalog = MutableStateFlow<PictureFolderResponse?>(null)
-    /** folderId → ordered list of image Files (index = image order) */
-    private val _pictureFiles = ConcurrentHashMap<String, List<File>>()
-    /** folderId → catalog metadata (covers both the active folder and all schedule picture items) */
-    private val _pictureCatalogs = ConcurrentHashMap<String, PictureFolderResponse>()
-    /** Recognised image extensions — matches PicturesViewModel */
-    private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif")
+    /** Everything the API can serve as a picture — see [PictureLibrary]. */
+    internal val pictures = PictureLibrary()
 
     // API key config (updated from settings without restart)
     private val _apiKeyEnabled = MutableStateFlow(false)
@@ -846,6 +580,44 @@ class CompanionServer {
         encodeDefaults = true
     }
 
+    /** ATEM hardware and the lower-third folder — see [AtemBridge]. */
+    internal val atem = AtemBridge(json)
+
+    /** Presentation catalogue, slide cache and background renders — see [PresentationStore]. */
+    internal val presentations = PresentationStore(json, scope, ::broadcast)
+
+    /**
+     * Publishes a presentation and its slides to connected companions.
+     * The work is [PresentationStore]'s; this is the API main.kt calls.
+     */
+    fun updatePresentation(
+        id: String,
+        filePath: String,
+        fileName: String,
+        fileType: String,
+        slideFiles: List<File>,
+        slideNotes: List<String> = emptyList()
+    ) = presentations.updatePresentation(id, filePath, fileName, fileType, slideFiles, slideNotes)
+
+    /** OBS/vMix Browser Source outputs and their frame streams — see [BrowserSourceHub]. */
+    internal val browserSource = BrowserSourceHub(scope, _apiKey)
+
+    /** Publishes the configured Browser Source outputs. Called from main.kt. */
+    fun updateBrowserSourceOutputs(outputs: List<ScreenAssignment>) {
+        browserSource.updateBrowserSourceOutputs(outputs)
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.PRIMARY, "state_updated",
+            mapOf("type" to "browser_source_outputs", "count" to outputs.size)
+        )
+    }
+
+    /** The output configured at [index], or null. */
+    fun browserSourceOutput(index: Int): ScreenAssignment? = browserSource.browserSourceOutput(index)
+
+    /** Registers the frame flow an output's renderer produces. Called from main.kt. */
+    fun registerBrowserSourceFrames(index: Int, frames: SharedFlow<BrowserSourceFrame>) =
+        browserSource.registerBrowserSourceFrames(index, frames)
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /** Update API key settings without restarting the server. */
@@ -981,53 +753,10 @@ class CompanionServer {
         broadcast(WebSocketMessage(type = Constants.WS_EVENT_BACKGROUNDS_UPDATED, payload = ""))
     }
 
-    /**
-     * Feed a loaded presentation (id, fileName, fileType and already-encoded JPEG slide files).
-     * Reads bytes from disk on the IO thread; no re-encoding needed since files are already JPEG.
-     */
-    fun updatePresentation(
-        id: String,
-        filePath: String,
-        fileName: String,
-        fileType: String,
-        slideFiles: List<File>,
-        slideNotes: List<String> = emptyList()
-    ) {
-        if (filePath.isNotBlank()) {
-            _presentationFilePaths[id] = filePath
-        }
-        _presentationNotes[id] = slideNotes
-        _activeUpdateJob?.cancel()
-        _activeUpdateJob = scope.launch {
-            // slideFiles can be deleted out from under this coroutine (e.g. removePresentation()
-            // invalidating the shared disk cache) while it's queued on Dispatchers.IO — treat a
-            // vanished cache the same way renderPresentationForServer does: skip, don't crash.
-            try {
-                val jpegSlides = slideFiles.map { it.readBytes() }
-                cacheSlideBytes(id, jpegSlides)
-
-                val catalog = buildPresentationCatalog(id, fileName, fileType, jpegSlides.size)
-                _presentationCatalogs[id] = catalog.presentations.first()
-                _presentationCatalog.value = catalog
-                broadcast(WebSocketMessage(
-                    type = Constants.WS_EVENT_PRESENTATION_UPDATED,
-                    payload = json.encodeToString(PresentationCatalogResponse.serializer(), catalog)
-                ))
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
 
     /**
-     * Feed the current picture folder — stores file references and broadcasts
-     * [Constants.WS_EVENT_PICTURES_UPDATED]. Image bytes are read from disk on-demand
-     * when a remote client requests [Constants.ENDPOINT_PICTURES]/{id}/images/{index}.
-     *
-     * [folderId] is a stable ID derived from the folder path (e.g. hex hash).
-     * [folderName] is the display name shown to remote clients.
-     * [folderPath] is the absolute filesystem path.
-     * [imageFiles] is the ordered list of image Files in the folder.
+     * Publishes a picture folder to connected companions and tells them it changed.
+     * The catalogue itself is built by [PictureLibrary].
      */
     fun updatePictures(
         folderId: String,
@@ -1035,24 +764,7 @@ class CompanionServer {
         folderPath: String,
         imageFiles: List<File>
     ) {
-        // Store file references — bytes are read on-demand when a client requests an image
-        _pictureFiles[folderId] = imageFiles.toList()
-
-        val catalog = PictureFolderResponse(
-            folderId = folderId,
-            folderName = folderName,
-            folderPath = folderPath,
-            imageTotal = imageFiles.size,
-            images = imageFiles.mapIndexed { index, file ->
-                PictureFileDto(
-                    index = index,
-                    fileName = file.name,
-                    thumbnailUrl = "${Constants.ENDPOINT_PICTURES}/$folderId/images/$index"
-                )
-            }
-        )
-        _pictureCatalog.value = catalog
-        _pictureCatalogs[folderId] = catalog
+        val catalog = pictures.update(folderId, folderName, folderPath, imageFiles)
         broadcast(WebSocketMessage(
             type = Constants.WS_EVENT_PICTURES_UPDATED,
             payload = json.encodeToString(PictureFolderResponse.serializer(), catalog)
@@ -1060,151 +772,22 @@ class CompanionServer {
     }
 
     /**
-     * Returns the [File] for a specific image by folder ID and zero-based index, or null if not
-     * found.  Used by the remote-select handler in MainDesktop so the correct file is presented
-     * even when the requested folder differs from the currently loaded folder in the Pictures tab
-     * (e.g. when the mobile sends a `device_uploads` selection).
+     * The [File] for a specific image by folder ID and zero-based index, or null if not found.
+     * Used by the remote-select handler in MainDesktop so the correct file is presented even when
+     * the requested folder differs from the one open in the Pictures tab (e.g. a `device_uploads`
+     * selection).
      */
-    fun getImageFile(folderId: String, index: Int): File? =
-        _pictureFiles[folderId]?.getOrNull(index)
+    fun getImageFile(folderId: String, index: Int): File? = pictures.imageFile(folderId, index)
 
     /**
      * The folder-id of the currently active picture folder pushed to mobile companions via
      * GET /api/pictures.  Null until a folder has been loaded in the Pictures tab.
      */
-    val activeFolderId: String? get() = _pictureCatalog.value?.folderId
+    val activeFolderId: String? get() = pictures.activeFolderId
 
-    /**
-     * Scans [folderPath] for image files, then caches them in [_pictureFiles] and [_pictureCatalogs]
-     * under [id] (the schedule item's UUID).  Skipped if [id] is already registered.
-     * Must be called on an IO thread.
-     */
-    private fun registerPictureItem(id: String, folderPath: String, folderName: String) {
-        if (_pictureFiles.containsKey(id)) return          // already cached
-        val folder = File(folderPath)
-        if (!folder.exists() || !folder.isDirectory) return
-        val imageFiles = folder.listFiles()
-            ?.filter { it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS }
-            ?.sortedBy { it.name }
-            ?: return
-        if (imageFiles.isEmpty()) return
-        _pictureFiles[id] = imageFiles
-        _pictureCatalogs[id] = PictureFolderResponse(
-            folderId   = id,
-            folderName = folderName,
-            folderPath = folderPath,
-            imageTotal = imageFiles.size,
-            images     = imageFiles.mapIndexed { index, file ->
-                PictureFileDto(
-                    index        = index,
-                    fileName     = file.name,
-                    thumbnailUrl = "${Constants.ENDPOINT_PICTURES}/$id/images/$index"
-                )
-            }
-        )
-    }
 
-    /**
-     * Clears the device_uploads directory tree on server startup so that device photos
-     * are session-only — they disappear when the server is restarted.
-     * Deletes all dated subdirectories (e.g. device_uploads/2026-04-13/) and resets
-     * every in-memory catalog entry whose folder-id starts with [DEVICE_UPLOADS_FOLDER_ID].
-     */
-    private fun clearDeviceUploads() {
-        val baseDir = File(System.getProperty("user.home"), ".churchpresenter/device_uploads")
-        baseDir.deleteRecursively()   // removes dated subdirs and all files inside them
-        // Purge every device_uploads_* entry (handles any date or legacy flat entries)
-        _pictureFiles.keys
-            .filter { it == DEVICE_UPLOADS_FOLDER_ID || it.startsWith("${DEVICE_UPLOADS_FOLDER_ID}_") }
-            .forEach { id -> _pictureFiles.remove(id); _pictureCatalogs.remove(id) }
-    }
 
-    /**
-     * Renders a schedule presentation for the mobile companion API using the shared presentation
-     * engine. When the Presentation tab already rendered this file into the shared disk cache the
-     * JPEGs are reused directly (any resolution); otherwise the deck is rendered here — into the
-     * same shared cache, so a later tab open at the default width hits it too.
-     */
-    private fun renderPresentationForServer(presentationId: String, filePath: String) {
-        val file = File(filePath)
-        if (!file.exists()) return
-        try {
-            val jpegSlides: List<ByteArray>
-            val notes: List<String>
-            val cached = slideDiskCache.lookup(file, renderWidthPx = null)
-            if (cached != null) {
-                jpegSlides = cached.slideFiles.map { it.readBytes() }
-                notes = cached.notes
-            } else {
-                val deck = when (val result = PresentationLoader.load(file)) {
-                    is LoadResult.Failure -> {
-                        CrashReporter.reportWarning(
-                            "Presentation: No slides extracted from ${file.extension.lowercase()} file (server)",
-                            tags = mapOf(
-                                "subsystem" to "presentation",
-                                "file.type" to file.extension.lowercase(),
-                                "failure.reason" to result.error.name.lowercase()
-                            )
-                        )
-                        return
-                    }
-                    is LoadResult.Success -> result.deck
-                }
-                notes = deck.slides.map { it.notes }
-                val writer = slideDiskCache.beginWrite(file, deck.format, DeckRasterizer.DEFAULT_TARGET_WIDTH_PX)
-                var committed = false
-                try {
-                    jpegSlides = CrashReporter.trace("server.render", "Server render presentation") {
-                        DeckRasterizer(deck).use { rasterizer ->
-                            deck.slides.map { slide ->
-                                val slideFile = writer.putSlide(
-                                    index = slide.index,
-                                    image = rasterizer.renderFinalFrame(slide.index),
-                                    note = slide.notes,
-                                    fidelity = slide.fidelity,
-                                    hasTimeline = slide.timeline != null
-                                )
-                                slideFile.readBytes()
-                            }
-                        }
-                    }
-                    writer.commit()
-                    committed = true
-                } finally {
-                    if (!committed) writer.abort()
-                }
-            }
-            if (jpegSlides.isEmpty()) return
-            cacheSlideBytes(presentationId, jpegSlides)
-            _presentationFilePaths[presentationId] = filePath
-            _presentationNotes[presentationId] = notes
-            val slideDtos = jpegSlides.indices.map { i ->
-                SlideDto(slideIndex = i, thumbnailUrl = "${Constants.ENDPOINT_PRESENTATIONS}/$presentationId/slides/$i")
-            }
-            _presentationCatalogs[presentationId] = PresentationDto(
-                id         = presentationId,
-                fileName   = file.nameWithoutExtension,
-                fileType   = file.extension.lowercase(),
-                slideTotal = jpegSlides.size,
-                slides     = slideDtos
-            )
-        } catch (oom: OutOfMemoryError) {
-            // A background companion-API render must never take down the live app. OOM is an
-            // Error, not an Exception, so the catch below wouldn't stop it escaping the coroutine
-            // as an uncaught crash. Degrade to a warning and drop this presentation's render — the
-            // client falls back to the 404-retry path (rendering still pending) just as it would
-            // for any other render failure.
-            CrashReporter.reportWarning(
-                "Presentation: Out of memory rendering ${file.extension.lowercase()} for companion API (server)",
-                tags = mapOf(
-                    "subsystem" to "presentation",
-                    "file.type" to file.extension.lowercase()
-                )
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
+
 
     fun updateSchedule(items: List<ScheduleItem>) {
         items.forEach(::registerScheduleItemResources)
@@ -1229,22 +812,22 @@ class CompanionServer {
     private fun registerScheduleItemResources(item: ScheduleItem) {
         when (item) {
             is ScheduleItem.PictureItem -> scope.launch(Dispatchers.IO) {
-                registerPictureItem(item.id, item.folderPath, item.folderName)
+                pictures.registerScheduleFolder(item.id, item.folderPath, item.folderName)
             }
             is ScheduleItem.PresentationItem -> {
                 val presentationId = item.filePath.hashCode().toUInt().toString(16)
-                _scheduleItemToPresentationId[item.id] = presentationId
-                _presentationFilePaths[presentationId] = item.filePath
-                if (!_slideBytes.containsKey(presentationId) &&
-                    _renderingPresentations.putIfAbsent(presentationId, Unit) == null) {
+                presentations._scheduleItemToPresentationId[item.id] = presentationId
+                presentations._presentationFilePaths[presentationId] = item.filePath
+                if (!presentations._slideBytes.containsKey(presentationId) &&
+                    presentations._renderingPresentations.putIfAbsent(presentationId, Unit) == null) {
                     scope.launch(Dispatchers.IO) {
                         try {
-                            // One render at a time — see presentationRenderMutex.
-                            presentationRenderMutex.withLock {
-                                renderPresentationForServer(presentationId, item.filePath)
+                            // One render at a time — see presentations.presentationRenderMutex.
+                            presentations.presentationRenderMutex.withLock {
+                                presentations.renderPresentationForServer(presentationId, item.filePath)
                             }
                         } finally {
-                            _renderingPresentations.remove(presentationId)
+                            presentations._renderingPresentations.remove(presentationId)
                         }
                     }
                 }
@@ -1285,7 +868,7 @@ class CompanionServer {
         songSectionIndex: Int? = null,
         songLineIndex: Int? = null
     ) {
-        val (pictureFolderId, pictureIndex) = resolvePictureLocation(pictureImagePath)
+        val (pictureFolderId, pictureIndex) = pictures.locate(pictureImagePath)
         val mediaId = mediaUrl?.let { url -> _scheduleItemToMediaPath.entries.find { it.value == url }?.key }
         val dto = LiveStateDto(
             contentType = mode,
@@ -1330,15 +913,7 @@ class CompanionServer {
         ))
     }
 
-    /** Finds which registered picture folder (if any) contains [path], for [updateLiveState]. */
-    private fun resolvePictureLocation(path: String?): Pair<String?, Int?> {
-        if (path.isNullOrEmpty()) return null to null
-        for ((folderId, files) in _pictureFiles) {
-            val idx = files.indexOfFirst { it.absolutePath == path }
-            if (idx >= 0) return folderId to idx
-        }
-        return null to null
-    }
+
 
     /**
      * Starts the companion server on [port].
@@ -1374,7 +949,7 @@ class CompanionServer {
             _isRunning.value = true
             _serverUrl.value = "http://$displayHost:$port"
             CrashReporter.breadcrumb("Server started on port $port", category = "server")
-            scope.launch { clearDeviceUploads() }
+            scope.launch { pictures.clearDeviceUploads() }
         } catch (_: java.net.BindException) {
             server = null
         } catch (_: Exception) {
@@ -1438,28 +1013,29 @@ class CompanionServer {
                 )
                 scheduleRoutes(this@CompanionServer, _schedule, json, scope)
                 bibleAndDictionaryRoutes(
-                    this@CompanionServer, _bible, _bibleCatalog, _presentationCatalog, json, scope
+                    this@CompanionServer, _bible, _bibleCatalog, presentations._presentationCatalog, json, scope
                 )
                 presentationRoutes(
-                    this@CompanionServer, _fileUploadEnabled, _maxMediaUploadMb, _presentationCatalog,
-                    _presentationCatalogs, _presentationFilePaths, _scheduleItemToPresentationId,
-                    _slideBytes, json, scope
+                    this@CompanionServer, _fileUploadEnabled, _maxMediaUploadMb, presentations._presentationCatalog,
+                    presentations._presentationCatalogs, presentations._presentationFilePaths, presentations._scheduleItemToPresentationId,
+                    presentations._slideBytes, json, scope
                 )
-                presentationRemoteRoutes(this@CompanionServer, _presentationNotes, scope)
+                presentationRemoteRoutes(this@CompanionServer, presentations._presentationNotes, scope)
                 mediaAndAssetRoutes(
-                    this@CompanionServer, DEVICE_UPLOADS_FOLDER_ID, _backgroundSettings,
-                    _fileUploadEnabled, _pictureCatalog, _pictureCatalogs, _pictureFiles,
+                    this@CompanionServer, PictureLibrary.DEVICE_UPLOADS_FOLDER_ID, _backgroundSettings,
+                    _fileUploadEnabled, pictures.catalog, pictures.catalogs, pictures.files,
                     _scheduleItemToMediaPath, json, scope
                 )
                 webSocketRoute(
                     this@CompanionServer, _apiKey, _apiKeyEnabled, _bibleCatalog, _catalog,
-                    _connectedInstanceLinkFollowers, _liveState, _pictureCatalog, _pictureCatalogs,
-                    _presentationCatalog, _presentationCatalogs, _schedule,
-                    _scheduleItemToPresentationId, json, scope
+                    _connectedInstanceLinkFollowers, _liveState, pictures.catalog, pictures.catalogs,
+                    presentations._presentationCatalog, presentations._presentationCatalogs, _schedule,
+                    presentations._scheduleItemToPresentationId, json, scope
                 )
                 lowerThirdAndAtemRoutes(this@CompanionServer, json, scope)
                 browserSourceRoutes(
-                    this@CompanionServer, _browserSourceFrameFlows, _browserSourceSessions, scope
+                    this@CompanionServer, browserSource._browserSourceFrameFlows,
+                    browserSource._browserSourceSessions, scope
                 )
                 qaRoutes(this@CompanionServer, json, scope)
             }
@@ -1486,12 +1062,15 @@ class CompanionServer {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    //
+    // Several of these are `internal` rather than private because the route groups now live in
+    // their own files (ScheduleRoutes.kt, QaRoutes.kt, …) and call back into them. Immutable state
+    // is handed to those groups as parameters instead, so only behaviour is widened, not data.
 
     /**
      * Try to parse a [ScheduleItem] from raw JSON using the flat [RemoteItemRequest] format first,
      * then fall back to the legacy sealed-class [AddToScheduleRequest] format.
      */
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal fun parseRemoteItem(body: String): ScheduleItem? {
         // 1. Try flat format: {"item":{"songNumber":42,"title":"…","songbook":"…"}}
         try {
@@ -1500,7 +1079,7 @@ class CompanionServer {
             // Handle picture identified by folder-id (companion app format).
             // folderPath is null in this case — resolve via the cached catalog.
             if (dto.folderId != null && dto.folderPath == null) {
-                val catalog = _pictureCatalogs[dto.folderId]
+                val catalog = pictures.catalogs[dto.folderId]
                 if (catalog != null) {
                     val safeId = dto.id.ifBlank { java.util.UUID.randomUUID().toString() }
                     return ScheduleItem.PictureItem(
@@ -1512,13 +1091,13 @@ class CompanionServer {
                 }
             }
             // Handle presentation identified by id/fileHash (companion app format).
-            // filePath is not sent — resolve via _presentationFilePaths (populated by
+            // filePath is not sent — resolve via presentations._presentationFilePaths (populated by
             // updatePresentation and updateSchedule) then fall back to _schedule scan.
             // NOTE: mobile may omit the "type" field when it equals the default ("presentation"),
-            // so also accept type==null as long as the id resolves in _presentationFilePaths.
+            // so also accept type==null as long as the id resolves in presentations._presentationFilePaths.
             if (dto.filePath == null && dto.folderId == null && dto.id.isNotBlank() &&
                 (dto.type == "presentation" || dto.type == null)) {
-                val filePath = _presentationFilePaths[dto.id]
+                val filePath = presentations._presentationFilePaths[dto.id]
                     ?: _schedule.value.firstOrNull { s ->
                         s.type == "presentation" && (
                             s.id == dto.id ||
@@ -1526,7 +1105,7 @@ class CompanionServer {
                         )
                     }?.filePath
                 if (filePath != null) {
-                    val catalog = _presentationCatalogs[dto.id]
+                    val catalog = presentations._presentationCatalogs[dto.id]
                     return ScheduleItem.PresentationItem(
                         id         = java.util.UUID.randomUUID().toString(),
                         filePath   = filePath,
@@ -1550,7 +1129,6 @@ class CompanionServer {
         return null
     }
 
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal suspend fun checkApiKey(call: ApplicationCall): Boolean {
         if (!_apiKeyEnabled.value || _apiKey.value.isEmpty()) return true
         val provided = call.request.headers[Constants.HEADER_API_KEY]
@@ -1564,7 +1142,6 @@ class CompanionServer {
         }
     }
 
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal suspend fun checkPresentationRemoteAuth(call: ApplicationCall): Boolean {
         if (!presentationRemoteEnabled) {
             call.respond(HttpStatusCode.Forbidden, """{"error":"remote control is disabled"}""")
@@ -1588,7 +1165,6 @@ class CompanionServer {
      * Only called from the initial /auth handshake — not on every subsequent action —
      * so an approved or session-approved device is never re-prompted mid-session.
      */
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal suspend fun checkPresentationRemoteConnect(call: ApplicationCall): Boolean {
         val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
         val pending = PendingConnectionRequest(clientId)
@@ -1600,7 +1176,6 @@ class CompanionServer {
         return approved
     }
 
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal suspend fun handlePresentationFileUpload(call: ApplicationCall) {
         try {
             val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
@@ -1637,12 +1212,12 @@ class CompanionServer {
             val file = File(uploadDir, uniqueName)
             file.writeBytes(fileBytes)
             val id = file.absolutePath.hashCode().toUInt().toString(16)
-            _lastDeviceUploadedPresentationId?.let { oldId ->
-                _presentationCatalogs.remove(oldId)
-                _slideBytes.remove(oldId)
-                _presentationFilePaths.remove(oldId)
+            presentations._lastDeviceUploadedPresentationId?.let { oldId ->
+                presentations._presentationCatalogs.remove(oldId)
+                presentations._slideBytes.remove(oldId)
+                presentations._presentationFilePaths.remove(oldId)
             }
-            _lastDeviceUploadedPresentationId = id
+            presentations._lastDeviceUploadedPresentationId = id
             val uploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
             scope.launch { onPresentationUploaded.emit(file) }
             scope.launch { onInstantAction.emit(RemoteInstantAction(
@@ -1694,7 +1269,6 @@ class CompanionServer {
     }
 
 
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal fun broadcast(msg: WebSocketMessage) {
         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "broadcast", mapOf("type" to msg.type))
         scope.launch {
@@ -1705,7 +1279,6 @@ class CompanionServer {
     /** Logs one REST hit on an Instance-Link-relevant endpoint — success and failure alike, so the
      *  primary's own log shows exactly what it served without needing to infer it from a follower's
      *  fetch_result. [status] is the HTTP status code actually sent. */
-    /** `internal` rather than private so the extracted route groups can call it. */
     internal fun logRest(endpoint: String, status: Int, reason: String? = null) {
         InstanceLinkLogger.log(
             InstanceLinkLogSide.PRIMARY, "rest_request",
