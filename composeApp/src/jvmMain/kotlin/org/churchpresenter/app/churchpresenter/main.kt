@@ -209,22 +209,10 @@ import org.churchpresenter.app.churchpresenter.server.shouldMirrorRemoteOutput
 import org.churchpresenter.app.churchpresenter.server.shouldUseRemoteContent
 import org.churchpresenter.app.churchpresenter.server.withAnnouncement
 
-
 private const val CURRENT_EULA_VERSION = 1
 
 private var singleInstanceSocket: java.net.ServerSocket? = null
 
-/**
- * Attempt to bind a local port to enforce single-instance.
- * Returns true if this is the first instance, false if another is already running.
- */
-/**
- * Drops the single-instance lock, letting another instance take it.
- *
- * The running app holds it for its whole life, so nothing in the app calls this — but the lock is a
- * process-wide resource, and anything that takes it without giving it back holds the port until the
- * JVM ends.
- */
 internal fun releaseSingleInstanceLock() {
     runCatching { singleInstanceSocket?.close() }
     singleInstanceSocket = null
@@ -232,10 +220,6 @@ internal fun releaseSingleInstanceLock() {
 
 internal fun acquireSingleInstanceLock(): Boolean {
     return try {
-        // Bind to a fixed localhost port — if it's already taken, another instance is running.
-        // The system property override exists for development/testing (e.g. running an
-        // InstanceLink follower side by side with a primary on one machine, combined with
-        // -Duser.home to isolate its settings and caches).
         val lockPort = singleInstanceLockPort(
             System.getProperty("churchpresenter.singleInstancePort"),
             Constants.SINGLE_INSTANCE_PORT,
@@ -248,11 +232,9 @@ internal fun acquireSingleInstanceLock(): Boolean {
 }
 
 fun main() {
-    // Ensure Skiko uses Metal on macOS — prevents OPENGL fallback crash
     if (shouldForceMetalRenderer(System.getProperty("os.name", ""))) {
         System.setProperty("skiko.renderApi", "METAL")
     }
-    // Enforce single instance — exit immediately if another is already running
     if (!acquireSingleInstanceLock()) {
         System.err.println("ChurchPresenter is already running.")
         javax.swing.JOptionPane.showMessageDialog(
@@ -265,14 +247,10 @@ fun main() {
         return
     }
 
-    // Install crash reporting before anything else
     val startupSettings = SettingsManager().loadSettings()
     CrashReporter.initialize(startupSettings.analyticsReportingEnabled)
     CrashReporter.breadcrumb("Application started", category = "lifecycle")
 
-    // First run only: if no Bible has been configured yet, bundle the KJV 1769
-    // into a default folder and set it as the primary Bible so the app works
-    // out of the box without requiring the user to pick a Bible folder first.
     if (shouldBundleDefaultBible(startupSettings.bibleSettings)) {
         try {
             val defaultBibleDir = File(System.getProperty("user.home"), Constants.DEFAULT_BIBLES_DIR)
@@ -289,10 +267,6 @@ fun main() {
         }
     }
 
-    // Pass the install id only when analytics is enabled, so opted-out users
-    // still send an anonymous geo ping but no persistent identifier.
-    // Usage events are reported as a delta and only marked delivered once the ping lands, so a
-    // launch with no network reports them again next time instead of losing or double counting them.
     val pendingUsageEvents = LiveMapReporter.eventsToReport(startupSettings, UsageEvents.unreported())
     val previousSessionMinutes = UsageEvents.lastSessionMinutes()
     LiveMapReporter.pingOnOpen(
@@ -313,38 +287,25 @@ fun main() {
         }
     )
 
-    // How long this run lasts, recorded as it ends and reported by the next launch. A shutdown hook
-    // covers a normal quit and a SIGTERM; a crash or a hard kill records nothing, which is correct —
-    // that run's length is not something to report as if it were a session someone sat through.
     val sessionStartedAt = System.currentTimeMillis()
     Runtime.getRuntime().addShutdownHook(Thread {
         UsageEvents.recordSessionMinutes(((System.currentTimeMillis() - sessionStartedAt) / 60_000L).toInt())
     })
 
-    // Catch exceptions thrown inside coroutines / Compose lambdas —
-    // these never reach Thread.setDefaultUncaughtExceptionHandler on their own.
     val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
         CrashReporter.reportException(throwable, context = "CoroutineExceptionHandler")
     }
 
-    // Pre-warm JavaFX on a background thread before UI starts
     preWarmJavaFX()
 
-    // Initialize JCEF (Chromium) for embedded web browsing
     CefManager.init()
-    // Startup config tag: whether the embedded browser engine loaded (aids triage of web errors).
     CrashReporter.setTag("jcef.available", CefManager.initialized.toString())
     if (CefManager.macOsUnsupported) CrashReporter.setTag("jcef.macos_unsupported", "true")
 
-    // Initialize FileKit so native file dialogs can resolve app directories
     io.github.vinceglb.filekit.FileKit.init(appId = "ChurchPresenter")
 
-    // Repair a stale login-launch registration if the install path changed (e.g. after an update)
     Thread { AutoStartManager.syncRegistration() }.apply { isDaemon = true }.start()
 
-    // Register bundled fonts with AWT and scan platform font dirs so slide rendering (POI/PDF)
-    // resolves real typefaces instead of silently substituting the JVM default. Runs in the
-    // background — the registry substitutes safely for any slide rendered before it finishes.
     Thread {
         LottieFonts.bundledFontResources().forEach { resource ->
             LottieFonts::class.java.getResourceAsStream(resource)?.let {
@@ -352,17 +313,11 @@ fun main() {
             }
         }
         SlideFontRegistry.initialize()
-        // Snapshot the family names for every font picker in the app, after the bundled faces are
-        // registered so they are in it. Enumerating costs a full font-directory walk and used to
-        // happen inline in composition on each settings dialog open — see SystemFonts.
         SystemFonts.families()
     }.apply { isDaemon = true }.start()
 
-    // Set custom VLC path from saved settings before any composable checks isVlcAvailable
     vlcCustomPath = startupSettings.projectionSettings.vlcPath
 
-    // Pre-render lower-third frame caches in the background so playback starts on raw
-    // frames and "Send to ATEM" is instant even before the Lower Third tab is opened
     LottieRenderCache.ensureForFolder(
         startupSettings.streamingSettings.lowerThirdFolder,
         startupSettings.atemSettings
@@ -370,7 +325,6 @@ fun main() {
 
     application(exitProcessOnExit = true) {
         var appReady by remember { mutableStateOf(false) }
-        // Business logic layer
         val settingsManager = remember { SettingsManager() }
         val statisticsManager = remember { StatisticsManager() }
         var appSettings by remember {
@@ -379,8 +333,6 @@ fun main() {
             })
         }
 
-        // Resolve any unassigned (-1 auto) screen assignments at startup so that
-        // DeckLink-only slots are set to None before the UI renders.
         remember {
             val screenDevicesAll = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
             val primaryDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
@@ -404,8 +356,6 @@ fun main() {
         }
 
         val presenterManager = remember { PresenterManager() }
-        // Keep the manager's copy of the ATEM settings current — lower-third pre-renders use
-        // them to pick the shared render size so playback and ATEM uploads hit one cache entry.
         LaunchedEffect(appSettings.atemSettings) {
             presenterManager.setAtemRenderSettings(appSettings.atemSettings)
         }
@@ -440,14 +390,10 @@ fun main() {
         val obsManager = remember { OBSWebSocketManager() }
         val companionSatelliteViewModel = remember { CompanionSatelliteViewModel() }
         DisposableEffect(Unit) { onDispose { companionSatelliteViewModel.dispose() } }
-        // Auto-connect newly-added connections once; re-keying on id list (not full settings) avoids
-        // reconnecting everything whenever an unrelated field on an existing connection is edited.
         val autoConnectedIds = remember { mutableSetOf<String>() }
         LaunchedEffect(appSettings.companionSatelliteConnections.map { it.id }) {
             for (connection in appSettings.companionSatelliteConnections) {
                 if (connection.autoConnect && autoConnectedIds.add(connection.id)) {
-                    // Companion requires a non-empty DEVICEID — generate + persist one if it was
-                    // cleared, same guard as the manual Connect button in settings.
                     val effective = if (needsGeneratedDeviceId(connection)) {
                         val generated = java.util.UUID.randomUUID().toString()
                         appSettings = appSettings.copy(
@@ -462,59 +408,18 @@ fun main() {
                 }
             }
         }
-        // Reconcile any live settings edit for already-active connections — otherwise unchecking
-        // e.g. "Left Sidebar", or editing rows/columns/host/port/etc. on a connection that's
-        // already live, would leave that slot's client running with stale registration until the
-        // user manually hits Disconnect/Connect again. connectAll() is diff-based (see
-        // CompanionSatelliteViewModel), so this is a no-op for connections that aren't changing.
-        // Keyed on the full connection list (not hand-picked fields) so this never needs updating
-        // when a new registration-affecting setting is added.
         val lastReconciled = remember { mutableMapOf<String, CompanionSatelliteSettings>() }
-        LaunchedEffect(appSettings.companionSatelliteConnections) {
-            for (connection in appSettings.companionSatelliteConnections) {
-                val hasLiveSlot = companionSatelliteViewModel.connectionStates.keys.any { it.connectionId == connection.id }
-                // A connection seen before by this effect with different settings than last time
-                // was actively edited by the user just now (not merely observed for the first time
-                // at startup) — treat that the same as toggling the placement checkbox itself: an
-                // explicit action, so it should connect even if autoConnect is off and nothing was
-                // live yet. A brand-new/never-before-seen connection still only auto-connects when
-                // autoConnect is set, preserving startup's opt-in-only behavior (handled primarily
-                // by the auto-connect-once effect above).
-                if (shouldConnectCompanion(
-                        hasLiveSlot = hasLiveSlot,
-                        autoConnect = connection.autoConnect,
-                        lastSeen = lastReconciled[connection.id],
-                        current = connection,
-                    )
-                ) {
-                    companionSatelliteViewModel.connectAll(connection)
-                }
-                lastReconciled[connection.id] = connection
-            }
-        }
+        CompanionSatelliteWiring(appSettings, companionSatelliteViewModel, lastReconciled)
 
         val instanceLinkViewModel = remember { InstanceLinkViewModel() }
         DisposableEffect(Unit) { onDispose { instanceLinkViewModel.dispose() } }
-        // Captured from the existing onBibleLoaded callback below (BibleViewModel itself stays owned
-        // by MainDesktop — only the plain Bible object it already hands out crosses here, same as
-        // onBibleLoaded already does for companionServer.updateBible). Used to compute a canonical
-        // verse code when broadcasting a live Bible verse, for followers in BibleSyncMode.REFERENCE_ONLY.
         var primaryBibleForInstanceLink by remember { mutableStateOf<Bible?>(null) }
-        // Same hoist pattern for the Canvas scene list (SceneViewModel stays owned by MainDesktop;
-        // only the plain Scene list crosses here) — used to resolve a mirrored CANVAS live state
-        // by scene id.
         var scenesForInstanceLink by remember { mutableStateOf<List<Scene>>(emptyList()) }
-        // Records the operator's connect/disconnect intent so it survives a restart: without this,
-        // `enabled` was only ever written as true and Disconnect was silently undone by the next
-        // launch's auto-connect, with no way to turn the link off short of editing settings.json.
         fun setInstanceLinkEnabled(enabled: Boolean) {
             if (!instanceLinkEnabledChanged(appSettings.instanceLink, enabled)) return
             appSettings = appSettings.copy(instanceLink = appSettings.instanceLink.copy(enabled = enabled))
             settingsManager.saveSettings(appSettings)
         }
-        // Auto-connect on launch (and reconnect if the saved connection details change while
-        // enabled). Keys are the CONNECTION parameters only — role/bibleSyncMode/mirrorBackgrounds
-        // are consumed reactively elsewhere and must not force a spurious reconnect when toggled.
         LaunchedEffect(
             appSettings.instanceLink.enabled,
             appSettings.instanceLink.autoConnect,
@@ -530,16 +435,9 @@ fun main() {
                     link.reconnectDelayMs.toLong()
                 )
             } else if (shouldDisconnectInstanceLink(link)) {
-                // Toggling the link off should actually drop the connection, not leave it
-                // running until the next app restart.
                 instanceLinkViewModel.disconnect()
             }
         }
-        // Mirrors the primary's live content locally — the counterpart to onLiveStateChanged below.
-        // collectLatest: applying a state does suspend network fetches (pictures, lottie JSON), so
-        // a newer state must cancel an in-flight apply instead of queueing behind it — otherwise a
-        // slow fetch can finish late and clobber content the operator has already moved past.
-        // Controlled mode only — see shouldMirrorRemoteOutput for why a Controller must not mirror.
         LaunchedEffect(instanceLinkViewModel, appSettings.instanceLink.role) {
             if (!shouldMirrorRemoteOutput(appSettings.instanceLink.role)) return@LaunchedEffect
             instanceLinkViewModel.remoteLiveState.collectLatest { state ->
@@ -556,15 +454,10 @@ fun main() {
                 )
             }
         }
-        // Presentations have their own dedicated broadcast (richer than LiveStateDto's mode-only
-        // PRESENTATION entry) — fetch and mirror whichever slide the primary is currently showing.
-        // Controlled mode only, same reasoning as the live-state mirror above.
         LaunchedEffect(instanceLinkViewModel, appSettings.instanceLink.role) {
             if (!shouldMirrorRemoteOutput(appSettings.instanceLink.role)) return@LaunchedEffect
             instanceLinkViewModel.remotePresentationSlide.collectLatest { slide ->
                 if (slide == null) return@collectLatest
-                // The connect snapshot always sends this event, with an empty id when the primary
-                // has no presentation loaded — nothing to fetch, and the request would 404.
                 if (!hasFetchableSlide(slide.id)) return@collectLatest
                 val bytes = instanceLinkViewModel.fetchPresentationSlideBytes(slide.id, slide.index)
                 if (bytes == null) {
@@ -595,12 +488,8 @@ fun main() {
                 )
             }
         }
-        // Controlled mode only — a Controller sending Clear must not have its own display cleared by
-        // the echo of the primary acting on that command.
         LaunchedEffect(instanceLinkViewModel, appSettings.instanceLink.role) {
             if (!shouldMirrorRemoteOutput(appSettings.instanceLink.role)) return@LaunchedEffect
-            // Skip the value the StateFlow replays on subscribe (and on any re-subscribe when the
-            // role changes) — only an actual increment past the count seen here is a fresh clear.
             var lastSeen = instanceLinkViewModel.displayClearedSignal.value
             instanceLinkViewModel.displayClearedSignal.collect { signal ->
                 if (!isFreshClearSignal(signal, lastSeen)) return@collect
@@ -608,36 +497,10 @@ fun main() {
                 presenterManager.requestClearDisplay()
             }
         }
-        // Controller-mode command failures → toast (see InstanceLinkToastHost below).
         val instanceLinkCommandFailures = remember { mutableStateListOf<InstanceLinkCommandFailure>() }
-        LaunchedEffect(instanceLinkViewModel) {
-            instanceLinkViewModel.commandFailures.collect { failure ->
-                instanceLinkCommandFailures.add(failure)
-            }
-        }
-        // The primary's picture folders changed — cached picture files are keyed by folderId+index
-        // only, so a replaced image at the same position would otherwise be served stale forever.
-        // Clearing the whole cache is cheap: live pictures re-fetch lazily on next display.
-        LaunchedEffect(instanceLinkViewModel) {
-            instanceLinkViewModel.picturesUpdatedSignal.collect { signal ->
-                if (!shouldInvalidatePictureCache(signal)) return@collect
-                withContext(Dispatchers.IO) {
-                    instanceLinkPictureCacheDir.listFiles()?.forEach { it.delete() }
-                }
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "cache_invalidated",
-                    mapOf("kind" to "pictures", "trigger" to "pictures_updated")
-                )
-            }
-        }
-        // Backgrounds change rarely (initial setup, not per-service) so this fetches once per
-        // connection rather than needing a live WS push, same as the Bible file fetch — only when
-        // the follower opted in via InstanceLinkSettings.mirrorBackgrounds (off by default, since
-        // backgrounds are often venue-specific).
+        InstanceLinkFailureWiring(instanceLinkViewModel, instanceLinkCommandFailures)
         var mirroredBackgroundSettings by remember { mutableStateOf<BackgroundSettings?>(null) }
         val instanceLinkConnectionStatusForBackgrounds by instanceLinkViewModel.connectionStatus.collectAsState()
-        // backgroundsUpdatedSignal re-runs this when the primary announces a background change —
-        // the asset cache is cleared first so the per-file exists() gate re-downloads fresh bytes.
         val instanceLinkBackgroundsSignal by instanceLinkViewModel.backgroundsUpdatedSignal.collectAsState()
         LaunchedEffect(instanceLinkConnectionStatusForBackgrounds, appSettings.instanceLink.mirrorBackgrounds, appSettings.instanceLink.role, instanceLinkBackgroundsSignal) {
             if (!shouldMirrorRemoteBackgrounds(
@@ -661,101 +524,24 @@ fun main() {
             val remote = instanceLinkViewModel.fetchBackgroundSettings() ?: return@LaunchedEffect
             mirroredBackgroundSettings = downloadMirroredBackgroundSettings(remote, instanceLinkViewModel)
         }
-        // The single override point for rendering paths (PresenterWindows, BrowserSourceVideoRenderer,
-        // and MainDesktop's live preview) — everywhere else appSettings is used as-is (editing,
-        // persistence, general settings), since those should never show the mirrored backgrounds as
-        // if they were this instance's own configuration.
         val effectiveAppSettings = remember(appSettings, mirroredBackgroundSettings) {
             withMirroredBackgrounds(appSettings, mirroredBackgroundSettings)
         }
-        // Hardware counts for the audience-output check below. Remembered rather than re-enumerated
-        // on every live change: GraphicsEnvironment and the DeckLink driver are both native calls.
         val screenCountForUsage = remember { LiveMapReporter.detectScreenCount() }
         val deckLinkCountForUsage = remember {
             deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
         }
 
-        // Broadcasts this instance's live content to any connected InstanceLink follower — the
-        // counterpart to the remoteLiveState collector above.
-        LaunchedEffect(Unit) {
-            presenterManager.onLiveStateChanged = { pm, source ->
-                // The one-off "this install has actually shown something to a congregation" mark.
-                // Costs a file read per live change only until it fires, then never writes again.
-                if (pm.presentingMode.value != Presenting.NONE &&
-                    hasAudienceOutput(
-                        appSettings.projectionSettings.screenAssignments,
-                        screenCountForUsage,
-                        deckLinkCountForUsage,
-                    )
-                ) {
-                    UsageEvents.recordOncePerInstall(UsageEvent.FIRST_LIVE_ON_SCREEN)
-                }
-                val liveVerse = pm.selectedVerse.value
-                val verseCode = liveVerseCode(
-                    source = source,
-                    bookName = liveVerse.bookName,
-                    chapter = liveVerse.chapter,
-                    verseNumber = liveVerse.verseNumber,
-                    bookIdByName = { name -> primaryBibleForInstanceLink?.getBookIdByName(name) },
-                    codeReference = { bookId, chapter, verse ->
-                        primaryBibleForInstanceLink?.getCodeReference(bookId, chapter, verse)
-                    },
-                )
-                companionServer.updateLiveState(
-                    mode = source.name,
-                    bibleVerse = pm.selectedVerse.value,
-                    lyricSection = pm.lyricSection.value,
-                    pictureImagePath = pm.selectedImagePath.value,
-                    mediaUrl = nullIfEmpty(pm.currentMediaUrl.value),
-                    mediaType = nullIfEmpty(pm.currentMediaType.value),
-                    announcementText = nullIfEmpty(pm.announcementText.value),
-                    websiteUrl = nullIfEmpty(pm.websiteUrl.value),
-                    websiteTitle = nullIfEmpty(pm.webPageTitle.value),
-                    sceneId = pm.activeScene.value?.id,
-                    sceneName = pm.activeScene.value?.name,
-                    questionId = pm.displayedQuestion.value?.id,
-                    questionText = pm.displayedQuestion.value?.text,
-                    dictionaryWord = pm.displayedDictionaryEntry.value?.word,
-                    dictionaryEntry = pm.displayedDictionaryEntry.value,
-                    lowerThirdName = nullIfEmpty(pm.currentLowerThirdName.value),
-                    verseCode = verseCode,
-                    songSectionIndex = livePositionOrNull(source, Presenting.LYRICS, pm.songDisplaySectionIndex.value),
-                    songLineIndex = livePositionOrNull(source, Presenting.LYRICS, pm.songDisplayLineIndex.value)
-                )
-            }
-        }
+        LiveStateBroadcastWiring(
+            appSettings = { appSettings },
+            primaryBible = { primaryBibleForInstanceLink },
+            presenterManager = presenterManager,
+            companionServer = companionServer,
+            screenCountForUsage = screenCountForUsage,
+            deckLinkCountForUsage = deckLinkCountForUsage,
+        )
         remember(qaManager) { companionServer.qaManager = qaManager; true }
-        // Auto-connect OBS when settings change (or on first load if enabled)
-        LaunchedEffect(
-            appSettings.obsSettings.enabled,
-            appSettings.obsSettings.host,
-            appSettings.obsSettings.port,
-            appSettings.obsSettings.password
-        ) {
-            if (shouldConnectObs(appSettings.obsSettings)) {
-                obsManager.connect(
-                    appSettings.obsSettings.host,
-                    appSettings.obsSettings.port,
-                    appSettings.obsSettings.password
-                )
-            } else {
-                obsManager.disconnect()
-            }
-        }
-        // Switch OBS scene when presenting mode changes
-        LaunchedEffect(Unit) {
-            snapshotFlow { presenterManager.presentingMode.value }
-                .collect { mode ->
-                    val sceneName = obsSceneFor(mode, appSettings.obsSettings) ?: return@collect
-                    obsManager.setScene(sceneName)
-                }
-        }
-        // Sync QA settings to server — admin auth reuses the server API key, just like the presentation remote
-        LaunchedEffect(appSettings.serverSettings.apiKeyEnabled, appSettings.serverSettings.apiKey, appSettings.qaSettings.rateLimitCooldownSeconds, appSettings.qaSettings.votingEnabled) {
-            companionServer.qaAdminPassword = activeApiKey(appSettings.serverSettings)
-            companionServer.qaCooldownSeconds = appSettings.qaSettings.rateLimitCooldownSeconds
-            companionServer.qaVotingEnabled = appSettings.qaSettings.votingEnabled
-        }
+        ObsSceneWiring(appSettings, companionServer, obsManager, presenterManager)
         val tunnelStatus by companionServer.tunnelManager.status.collectAsState()
         val tunnelUrl by companionServer.tunnelManager.tunnelUrl.collectAsState()
         val prevTunnelWasConnected = remember { mutableStateOf(false) }
@@ -788,77 +574,12 @@ fun main() {
                 presenterManager.setSlideFrozen(presentationFrozen)
             }
         }
-        // Broadcast media playback state to companions (mobile Media tab). Position ticks
-        // continuously, so poll on a fixed cadence rather than per-frame.
-        LaunchedEffect(Unit) {
-            var wasLoaded = false
-            while (true) {
-                val loaded = mediaViewModel.isLoaded
-                if (loaded) {
-                    companionServer.broadcastMediaState(
-                        isLive = isMediaLive(presenterManager.presentingMode.value),
-                        isLoaded = true,
-                        isPlaying = mediaViewModel.isPlaying,
-                        title = mediaViewModel.mediaTitle,
-                        positionMs = mediaViewModel.currentPosition,
-                        durationMs = mediaViewModel.duration,
-                        volume = mediaViewModel.volume,
-                        muted = mediaViewModel.isMuted,
-                        mediaType = mediaViewModel.mediaType,
-                        source = mediaViewModel.mediaUrl,
-                    )
-                    wasLoaded = true
-                } else if (shouldBroadcastMediaCleared(loaded, wasLoaded)) {
-                    // One final "not loaded" so the mobile clears its now-playing view.
-                    companionServer.broadcastMediaState(
-                        isLive = false, isLoaded = false, isPlaying = false,
-                        title = "", positionMs = 0L, durationMs = 0L,
-                        volume = mediaViewModel.volume, muted = mediaViewModel.isMuted,
-                        mediaType = mediaViewModel.mediaType, source = "",
-                    )
-                    wasLoaded = false
-                }
-                delay(500)
-            }
-        }
-        // Media transport controls from a companion remote (mobile Media tab).
-        LaunchedEffect(Unit) { companionServer.onMediaPlayPause.collect { mediaViewModel.togglePlayPause() } }
-        LaunchedEffect(Unit) { companionServer.onMediaStop.collect { mediaViewModel.stop() } }
-        LaunchedEffect(Unit) { companionServer.onMediaSeekForward.collect { mediaViewModel.seekForward() } }
-        LaunchedEffect(Unit) { companionServer.onMediaSeekBackward.collect { mediaViewModel.seekBackward() } }
-        LaunchedEffect(Unit) { companionServer.onMediaSeekTo.collect { mediaViewModel.seekTo(it) } }
-        LaunchedEffect(Unit) { companionServer.onMediaSetVolume.collect { mediaViewModel.setVolume(it) } }
-        LaunchedEffect(Unit) { companionServer.onMediaMuteToggle.collect { mediaViewModel.toggleMute() } }
+        MediaRemoteWiring(companionServer, mediaViewModel, presenterManager)
         val presentingModeValue = presenterManager.presentingMode.value
-        LaunchedEffect(presentingModeValue) {
-            companionServer.updatePresentationLiveStatus(isPresentationLive(presentingModeValue))
-        }
-        // ── Browser Source outputs (OBS/vMix overlay) ─────────────────────────────
-        // Each output gets its own off-screen renderer (BrowserSourceVideoRenderer) that
-        // renders the same BiblePresenter/SongPresenter/AnnouncementsPresenter/PicturePresenter/
-        // StageMonitorScreen composables used everywhere else, streamed to CompanionServer as
-        // PNG frames — pixel-identical to the native output, no separate styling logic to
-        // maintain. PresenterManager itself never leaves this scope; only each renderer's
-        // frame flow crosses into CompanionServer.
-        LaunchedEffect(appSettings.projectionSettings.browserSourceOutputs) {
-            companionServer.updateBrowserSourceOutputs(appSettings.projectionSettings.browserSourceOutputs)
-        }
-        LaunchedEffect(appSettings.backgroundSettings) {
-            companionServer.updateBackgroundSettings(appSettings.backgroundSettings)
-        }
+        LiveStatusWiring(appSettings, companionServer, presentingModeValue)
         val browserSourceServerUrlState = companionServer.serverUrl.collectAsState()
         appSettings.projectionSettings.browserSourceOutputs.indices.forEach { i ->
             composeKey(i) {
-                // rememberUpdatedState, not remember { derivedStateOf { ... } } — appSettings and
-                // qaDisplayUrl are plain composable parameters, not Compose State reads, so a
-                // keyless derivedStateOf wrapping them would only ever capture their value from
-                // this composeKey block's first-ever composition and never update again (no
-                // tracked State read inside the calculation to invalidate on). That silently
-                // froze every appSettings-driven Browser Source setting — background
-                // image/type, fonts, colors, etc. — at whatever it was when the app started,
-                // which is why a background image change only took effect after restarting the
-                // app. effectiveModeState is unaffected since it genuinely reads presenterManager
-                // State objects (.value), which derivedStateOf tracks correctly.
                 val appSettingsState = rememberUpdatedState(effectiveAppSettings)
                 val screenAssignmentState = rememberUpdatedState(
                     browserSourceOutputAt(appSettings.projectionSettings.browserSourceOutputs, i)
@@ -871,9 +592,6 @@ fun main() {
                     }
                 }
                 val qaDisplayUrlState = rememberUpdatedState(qaDisplayUrl)
-                // Keyed on geometry/fps so a settings change tears the renderer down and builds a
-                // fresh one; registerBrowserSourceFrames then closes connected clients, which
-                // reconnect and reseed with a full frame at the new size.
                 val bsOutput = browserSourceOutputAt(appSettings.projectionSettings.browserSourceOutputs, i)
                 val renderer = remember(i, bsOutput.browserSourceWidth, bsOutput.browserSourceHeight, bsOutput.browserSourceFps) {
                     BrowserSourceVideoRenderer(
@@ -905,10 +623,6 @@ fun main() {
         }
         val remoteSelectSongFlow =
             remember { kotlinx.coroutines.flow.MutableSharedFlow<ScheduleItem.SongItem>(extraBufferCapacity = 8) }
-        // Same backfill mechanism as remoteSelectSongFlow — a remote PROJECT go-live only adds the
-        // item to the schedule and flips presentingMode; these flows drive MainDesktop to actually
-        // load and push real content (see executeProjectItem below, which deliberately does NOT push
-        // picture/slide content itself).
         val remoteSelectPictureFlow =
             remember { kotlinx.coroutines.flow.MutableSharedFlow<ScheduleItem.PictureItem>(extraBufferCapacity = 8) }
         val remoteSelectPresentationFlow =
@@ -916,7 +630,6 @@ fun main() {
         var dialogDismissSignal by remember { mutableStateOf(0) }
         var showOptionsDialog by remember { mutableStateOf(false) }
         var optionsDialogInitialTab by remember { mutableStateOf(0) }
-        // Single entry point so every open site picks its tab explicitly
         val openOptionsDialog: (Int) -> Unit = { tab ->
             optionsDialogInitialTab = tab
             showOptionsDialog = true
@@ -930,8 +643,6 @@ fun main() {
         var showLottieGenWindow by remember { mutableStateOf(false) }
         var showStyleEditorWindow by remember { mutableStateOf(false) }
         var showMemoryMonitorWindow by remember { mutableStateOf(false) }
-        // Secret keypress unlock (press D seven times) — reveals the Developer menu in a
-        // packaged build for this session only. See MainDesktop's onPreviewKeyEvent.
         var developerMenuUnlocked by remember { mutableStateOf(false) }
         var lottieGenOutputDir by remember { mutableStateOf<File?>(null) }
         var lottieGenOnFileSaved by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -939,7 +650,6 @@ fun main() {
         var pendingUpdateCheckWasManual by remember { mutableStateOf(false) }
         var selectedScheduleItemId by remember { mutableStateOf<String?>(null) }
 
-        // Preload songs and bible at startup, then signal ready
         LaunchedEffect(Unit) {
             withContext(Dispatchers.IO) {
                 companionServer.preloadData(
@@ -947,8 +657,6 @@ fun main() {
                     bibleStorageDir = appSettings.bibleSettings.storageDirectory,
                     primaryBibleFileName = appSettings.bibleSettings.primaryBible
                 )
-                // Seed API key from saved settings before starting, so the first
-                // request is already checked against the correct key.
                 companionServer.updateApiKey(
                     enabled = appSettings.serverSettings.apiKeyEnabled,
                     key = appSettings.serverSettings.apiKey
@@ -959,7 +667,6 @@ fun main() {
                     appSettings.atemSettings,
                     appSettings.streamingSettings.lowerThirdFolder
                 )
-                // Auto-start server if user previously enabled it
                 if (appSettings.serverSettings.enabled) {
                     companionServer.start(
                         port = appSettings.serverSettings.port,
@@ -968,14 +675,12 @@ fun main() {
                 }
             }
             appReady = true
-            // Check for updates in background after startup, respecting the configured interval
             val isFirstEverUpdateCheck = isFirstEverUpdateCheck(appSettings.lastUpdateCheckTimestamp)
             if (appSettings.updateCheckInterval.isDueSince(appSettings.lastUpdateCheckTimestamp)) {
                 val result = UpdateChecker.checkForUpdate(includePrereleases = appSettings.participateInPrereleases)
                 appSettings = appSettings.copy(lastUpdateCheckTimestamp = System.currentTimeMillis())
                 settingsManager.saveSettings(appSettings)
                 if (isFirstEverUpdateCheck) {
-                    // Let the user pick their update-check frequency the first time it ever runs.
                     pendingUpdateResult = result
                     pendingUpdateCheckWasManual = true
                 } else if (result is UpdateCheckResult.Available) {
@@ -985,10 +690,8 @@ fun main() {
             }
         }
 
-
         val screens = rememberScreenDevices()
         val savedPlacement = windowPlacementFromSettings(appSettings.windowPlacement)
-        // Use OS primary monitor bounds so maximized/fullscreen stays on one screen
         val primaryBounds = GraphicsEnvironment.getLocalGraphicsEnvironment()
             .defaultScreenDevice.defaultConfiguration.bounds
         val isFloating = savedPlacement == WindowPlacement.Floating
@@ -1008,7 +711,6 @@ fun main() {
             size = DpSize(startWidth.dp, startHeight.dp),
         )
 
-        // Splash screen while app is loading
         if (!appReady) {
             SplashWindow(theme = theme)
         }
@@ -1034,9 +736,6 @@ fun main() {
                 icon = painterResource(Res.drawable.ic_app_icon),
                 state = state
             ) {
-                // The OS enforces this while the window is being dragged; `startupWindowSize` only
-                // sees the result afterwards. Without it a window can be dragged to nothing, and
-                // since the size is written back on exit, that nothing is what it reopens as.
                 LaunchedEffect(Unit) {
                     window.minimumSize = Dimension(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
                 }
@@ -1052,32 +751,22 @@ fun main() {
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
 
-                                // ── Remote API permission state (inside Window so schedule actions are live) ──
-                                // Each entry: Triple(RemoteEvent, allowAction, denyAction)
                                 val remoteEventQueue =
                                     remember { mutableStateListOf<Triple<RemoteEvent, () -> Unit, () -> Unit>>() }
 
-                                // Persistent allow/block lists (survive app restarts)
                                 val remoteClientManager = remember { RemoteClientManager() }
-                                // Session-only sets (cleared on app restart)
                                 val sessionAllowedClients =
                                     remember { mutableStateListOf<String>() }
                                 val sessionBlockedClients =
                                     remember { mutableStateListOf<String>() }
-                                // Activity toasts for already-allowed clients (auto-approved actions)
                                 val remoteActivityNotifications =
                                     remember { mutableStateListOf<RemoteActivityNotification>() }
 
-                                // Both block lists reach the server itself, so a blocked device is
-                                // refused at the socket instead of only at the approval-gated
-                                // commands — see CompanionServer.blockedClientIds for what that
-                                // used to leave open.
                                 LaunchedEffect(remoteClientManager.blockedClients, sessionBlockedClients.toList()) {
                                     companionServer.blockedClientIds =
                                         remoteClientManager.blockedClients + sessionBlockedClients
                                 }
 
-                                // ── Remote add-to-schedule requests ──────────────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onAddToSchedule.collect { pending ->
                                         val clientId = pending.clientId
@@ -1114,7 +803,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote remove-from-schedule requests ──────────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onRemoveFromSchedule.collect { pending ->
                                         val clientId = pending.clientId
@@ -1146,7 +834,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote add-batch-to-schedule requests ─────────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onAddBatchToSchedule.collect { pending ->
                                         val clientId = pending.clientId
@@ -1163,7 +850,6 @@ fun main() {
                                             }
                                             pending.decision.complete(true)
                                         }
-                                        // First 3 items joined, then "…" if more
                                         val (batchTitle, batchDetail) = batchEventSummary(pending.items)
                                         when (val outcome = remoteApproval(
                                             access,
@@ -1185,7 +871,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote project requests ──────────────────────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onProject.collect { pending ->
                                         val clientId = pending.clientId
@@ -1205,7 +890,6 @@ fun main() {
                                                 presenterManager,
                                                 statisticsManager
                                             )
-                                            // Also drive the owning tab so it loads the real content
                                             coroutineScope.launch {
                                                 emitRemoteTabSelection(
                                                     item, remoteSelectSongFlow,
@@ -1235,9 +919,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote song-section navigation ───────────────────────────────────────────
-                                // Fires when a mobile client calls POST /api/songs/{n}/select or sends
-                                // WS "select_song_section".  No approval required — applied instantly.
                                 LaunchedEffect(Unit) {
                                     companionServer.onSelectSongSection.collect { req ->
                                         val sections = presenterManager.allLyricSections.value
@@ -1245,7 +926,6 @@ fun main() {
                                         presenterManager.setLyricSection(section)
                                         presenterManager.setSongDisplaySectionIndex(req.section)
                                         presenterManager.setSongDisplayLineIndex(remoteSongLineIndex(req.lineIndex))
-                                        // Make sure the presenter is showing lyrics
                                         if (shouldSwitchToLyrics(presenterManager.presentingMode.value)) {
                                             presenterManager.setPresentingMode(Presenting.LYRICS)
                                             presenterManager.setShowPresenterWindow(true)
@@ -1253,8 +933,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote clear / display-off ────────────────────────────────────────────────
-                                // Fires when a mobile client calls POST /api/clear or sends WS "clear".
                                 LaunchedEffect(Unit) {
                                     companionServer.onClear.collect {
                                         mediaViewModel.pause()
@@ -1262,9 +940,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Companion lower-third sequence (POST /api/lowerthirds/{name}/run) ───────
-                                // The sequencer handles the ATEM DSK and timing; these collectors do the
-                                // same go-live / off-air the Lower Third tab does.
                                 LaunchedEffect(Unit) {
                                     LowerThirdSequencer.onShow.collect { req ->
                                         presenterManager.setLottieContent(
@@ -1294,7 +969,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote QA admin requests (add / edit / delete) ───────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onQAAdminRequest.collect { pending ->
                                         val clientId = pending.clientId
@@ -1324,7 +998,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Presentation remote connection requests ───────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onPresentationRemoteConnect.collect { pending ->
                                         val clientId = pending.clientId
@@ -1354,7 +1027,6 @@ fun main() {
                                     }
                                 }
 
-                                // ── Q&A admin connection requests ─────────────────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onQaAdminConnect.collect { pending ->
                                         val clientId = pending.clientId
@@ -1384,14 +1056,12 @@ fun main() {
                                     }
                                 }
 
-                                // ── Remote Bible hold toggle ──────────────────────────────────────────────────
                                 LaunchedEffect(Unit) {
                                     companionServer.onBibleHold.collect { hold ->
                                         presenterManager.setBibleHold(hold)
                                     }
                                 }
 
-                                // ── Notify mobile clients when display is cleared ─────────────────────────────
                                 LaunchedEffect(Unit) {
                                     snapshotFlow { presenterManager.presentingMode.value }
                                         .collect { mode ->
@@ -1401,7 +1071,6 @@ fun main() {
                                         }
                                 }
 
-                                // ── Notify mobile clients when song section changes ──────────────────────────
                                 LaunchedEffect(Unit) {
                                     snapshotFlow { presenterManager.songDisplaySectionIndex.value }
                                         .collect { index ->
@@ -1411,9 +1080,6 @@ fun main() {
                                         }
                                 }
 
-                                // ── Instant-action activity toasts ────────────────────────────────────────────
-                                // For every no-approval action (present, upload, clear) show a toast so the
-                                // operator can see what a remote client just did and optionally block them.
                                 LaunchedEffect(Unit) {
                                     companionServer.onInstantAction.collect { action ->
                                         val type = remoteActionType(action.actionType)
@@ -1489,10 +1155,6 @@ fun main() {
                                         currentScheduleActions.clearSchedule()
                                         selectedScheduleItemId = null
                                     },
-                                    // Mirrors the devWindowedFallback gate below (main.kt) and in
-                                    // ProjectionSettingsTab.kt — a dev build or the forced flag
-                                    // gets this menu, plus the secret D-x7 keypress unlock
-                                    // (developerMenuUnlocked, session-only) for packaged builds.
                                     showDeveloperMenu = shouldShowDeveloperMenu(
                                         BuildConfig.IS_RELEASE, DevFlags.forceDevWindow, developerMenuUnlocked,
                                     ),
@@ -1503,7 +1165,6 @@ fun main() {
                                     onOpenStyleEditor = { showStyleEditorWindow = true },
                                     onOpenMemoryMonitor = { showMemoryMonitorWindow = true },
                                 )
-                                // Crash recovery warning banner
                                 if (CrashReporter.didCrashLastRun && CrashReporter.videoBackgroundsDisabled) {
                                     var showBanner by remember { mutableStateOf(true) }
                                     if (showBanner) {
@@ -1520,7 +1181,6 @@ fun main() {
                                                 }
                                             )
                                         }
-                                        // Auto-dismiss after 15 seconds
                                         LaunchedEffect(Unit) {
                                             delay(15_000)
                                             showBanner = false
@@ -1531,8 +1191,6 @@ fun main() {
                                 val instanceLinkStatus = instanceLinkViewModel.connectionStatus.collectAsState().value
                                 val instanceLinkIsControllerConnected =
                                     isControllerConnected(instanceLinkStatus, appSettings.instanceLink.role)
-                                // See shouldUseRemoteContent — the remote-asset fallbacks belong to a
-                                // mirrored schedule, so they are Controlled-only.
                                 val instanceLinkUsesRemoteContent =
                                     shouldUseRemoteContent(instanceLinkStatus, appSettings.instanceLink.role)
                                 MainDesktop(
@@ -1625,11 +1283,6 @@ fun main() {
                                     onVerseSelected = { verses -> presenterManager.setSelectedVerses(verses) },
                                     onSongItemSelected = { section ->
                                         presenterManager.setLyricSection(section)
-                                        // In line mode, sync displayedLyricSection immediately so it updates
-                                        // in the same Compose snapshot as songDisplayLineIndex. Without this,
-                                        // there is an intermediate recomposition where songDisplayLineIndex=0
-                                        // but displayedLyricSection still points to the old verse, causing the
-                                        // first line of the old verse to flash briefly on verse boundaries.
                                         if (isSongLineMode(appSettings.songSettings)) {
                                             presenterManager.setDisplayedLyricSection(section)
                                         }
@@ -1769,13 +1422,11 @@ fun main() {
                                     onSave = { updated ->
                                         appSettings = updated
                                         settingsManager.saveSettings(updated)
-                                        // Re-preload in case bible/song directories changed
                                         companionServer.preloadData(
                                             songStorageDir = updated.songSettings.storageDirectory,
                                             bibleStorageDir = updated.bibleSettings.storageDirectory,
                                             primaryBibleFileName = updated.bibleSettings.primaryBible
                                         )
-                                        // Keep API key enforcement in sync with saved settings
                                         companionServer.updateApiKey(
                                             enabled = updated.serverSettings.apiKeyEnabled,
                                             key = updated.serverSettings.apiKey
@@ -1850,9 +1501,6 @@ fun main() {
                                             link.reconnectDelayMs.toLong()
                                         )
                                     },
-                                    // Persist only — the connection is left exactly as it is, and the
-                                    // reactive settings (role, Bible sync, backgrounds) take effect
-                                    // from appSettings without one.
                                     onSave = { edited ->
                                         appSettings = appSettings.copy(instanceLink = edited)
                                         settingsManager.saveSettings(appSettings)
@@ -1885,8 +1533,6 @@ fun main() {
                                         theme = theme,
                                         outputDir = lottieGenOutputDir,
                                         onClose = { showLottieGenWindow = false },
-                                        // Recorded here rather than inside the generator: it is its
-                                        // own Gradle build and must not depend on the app's classes.
                                         onFileSaved = {
                                             UsageEvents.record(UsageEvent.LOWER_THIRD_GENERATED)
                                             lottieGenOnFileSaved?.invoke()
@@ -1925,7 +1571,6 @@ fun main() {
                                     onDismiss = { pendingUpdateResult = null }
                                 )
 
-                                // ── Remote API event dialog ───────────────────────
                                 val currentRemote = remoteEventQueue.firstOrNull()
                                 val currentClientId = currentRemote?.first?.clientId ?: ""
                                 RemoteEventDialog(
@@ -1942,8 +1587,6 @@ fun main() {
                                         if (remoteEventQueue.isNotEmpty()) remoteEventQueue.removeAt(0)
                                     },
                                     onAllowForSession = {
-                                        // Mark this client as session-allowed, then silently approve
-                                        // the current item AND every other queued item from the same client
                                         if (currentClientId.isNotBlank() && !sessionAllowedClients.contains(
                                                 currentClientId
                                             )
@@ -1958,7 +1601,6 @@ fun main() {
                                         remoteEventQueue.removeAll(toApprove)
                                     },
                                     onAllowPermanently = {
-                                        // Permanently allow and silently approve all queued items from this client
                                         remoteClientManager.allowPermanently(currentClientId)
                                         val clientToAllow = currentClientId
                                         val toApprove = remoteEventQueue.filter {
@@ -1968,7 +1610,6 @@ fun main() {
                                         remoteEventQueue.removeAll(toApprove)
                                     },
                                     onBlockForSession = {
-                                        // Deny all queued items from this client; mark session-blocked
                                         if (currentClientId.isNotBlank() && !sessionBlockedClients.contains(
                                                 currentClientId
                                             )
@@ -1984,7 +1625,6 @@ fun main() {
                                     },
                                     onBlockPermanently = {
                                         remoteClientManager.blockPermanently(currentClientId)
-                                        // Deny all queued items from this client
                                         val clientToBlock = currentClientId
                                         val toRemove = remoteEventQueue.filter {
                                             remoteEventTargetsClient(it.first.clientId, clientToBlock)
@@ -1998,7 +1638,6 @@ fun main() {
                                     }
                                 )
 
-                                // ── Activity toast for auto-approved clients ──────────────
                                 InstanceLinkToastHost(
                                     failures = instanceLinkCommandFailures,
                                     onDismiss = { failure -> instanceLinkCommandFailures.remove(failure) }
@@ -2012,7 +1651,6 @@ fun main() {
                                         val cid = n.clientId
                                         if (cid.isNotBlank() && !sessionBlockedClients.contains(cid)) {
                                             sessionBlockedClients.add(cid)
-                                            // Also remove from session-allowed if present
                                             sessionAllowedClients.remove(cid)
                                         }
                                         remoteActivityNotifications.removeAll { it.clientId == cid }
@@ -2024,7 +1662,6 @@ fun main() {
                 }
             }
 
-            // Auto-clear presenting mode when media finishes playing
             LaunchedEffect(mediaViewModel.mediaFinished) {
                 if (mediaViewModel.mediaFinished) {
                     presenterManager.requestClearDisplay()
@@ -2080,1655 +1717,5 @@ fun main() {
             },
             onDecline = { exitApplication() }
         )
-    }
-}
-
-
-@Composable
-private fun SplashWindow(theme: ThemeMode) {
-    Window(
-        onCloseRequest = {},
-        title = stringResource(Res.string.app_name),
-        icon = painterResource(Res.drawable.ic_app_icon),
-        state = rememberWindowState(
-            width = 400.dp,
-            height = 300.dp,
-            position = WindowPosition(Alignment.Center)
-        ),
-        undecorated = true,
-        resizable = false,
-        alwaysOnTop = true
-    ) {
-        AppThemeWrapper(theme = theme) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Image(
-                        painter = painterResource(Res.drawable.ic_app_icon),
-                        contentDescription = null,
-                        modifier = Modifier.size(96.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(Res.string.app_name),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(32.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 3.dp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(Res.string.loading),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PresenterWindows(
-    screens: Array<GraphicsDevice>,
-    presenterManager: PresenterManager,
-    mediaViewModel: MediaViewModel,
-    appSettings: AppSettings,
-    identifyingScreen: Boolean,
-    serverUrl: String = "",
-    qaDisplayUrl: String = "",
-    sttManager: STTManager,
-) {
-    val showPresenterWindow by presenterManager.showPresenterWindow
-    val presentingMode by presenterManager.presentingMode
-    val screenLocks by presenterManager.screenLocks
-    val selectedVerses by presenterManager.selectedVerses
-    val displayedVerses by presenterManager.displayedVerses
-    val nextVerses by presenterManager.nextVerses
-    val bibleTransitionAlpha by presenterManager.bibleTransitionAlpha
-    val lyricSection by presenterManager.lyricSection
-    val lyricSectionVersion by presenterManager.lyricSectionVersion
-    val displayedLyricSection by presenterManager.displayedLyricSection
-    val songTransitionAlpha by presenterManager.songTransitionAlpha
-    val songDisplayLineIndex by presenterManager.songDisplayLineIndex
-    val allLyricSections by presenterManager.allLyricSections
-    val songDisplaySectionIndex by presenterManager.songDisplaySectionIndex
-    val selectedImagePath by presenterManager.selectedImagePath
-    val displayedImagePath by presenterManager.displayedImagePath
-    val pictureTransitionAlpha by presenterManager.pictureTransitionAlpha
-    val previousDisplayedImagePath by presenterManager.previousDisplayedImagePath
-    val pictureSlideOffset by presenterManager.pictureSlideOffset
-    val selectedSlide by presenterManager.selectedSlide
-    val displayedSlide by presenterManager.displayedSlide
-    val slideFrozen by presenterManager.slideFrozen
-    val presentationFrame by presenterManager.presentationFrame
-    val slideTransitionAlpha by presenterManager.slideTransitionAlpha
-    val previousDisplayedSlide by presenterManager.previousDisplayedSlide
-    val slideSlideOffset by presenterManager.slideSlideOffset
-    val animationType by presenterManager.animationType
-    val transitionDuration by presenterManager.transitionDuration
-    val announcementText by presenterManager.announcementText
-    val displayedAnnouncementText by presenterManager.displayedAnnouncementText
-    val announcementTransitionAlpha by presenterManager.announcementTransitionAlpha
-    val clearAnnouncementOnFinish = {
-        presenterManager.setAnnouncementText("")
-        presenterManager.setDisplayedAnnouncementText("")
-        presenterManager.requestClearDisplay()
-    }
-    val lottieJsonContent by presenterManager.lottieJsonContent
-    val lottiePauseAtFrame by presenterManager.lottiePauseAtFrame
-    val lottiePauseFrame by presenterManager.lottiePauseFrame
-    val lottiePauseDurationMs by presenterManager.lottiePauseDurationMs
-    val lottieTrigger by presenterManager.lottieTrigger
-    val lottieProgress by presenterManager.lottieProgress
-    val lottieFrame by presenterManager.lottieFrame
-    val mediaTransitionAlpha by presenterManager.mediaTransitionAlpha
-    val websiteUrl by presenterManager.websiteUrl
-    val activeScene by presenterManager.activeScene
-    val displayedQuestion by presenterManager.displayedQuestion
-    val qaTransitionAlpha by presenterManager.qaTransitionAlpha
-    val showQRCodeOnDisplay by presenterManager.showQRCodeOnDisplay
-    val displayedDictionaryEntry by presenterManager.displayedDictionaryEntry
-    val presenterNotes by presenterManager.presenterNotes
-
-    val proj = appSettings.projectionSettings
-
-    // Mode-level crossfade duration (shared, per-screen active flag computed inside each window)
-    val modeCrossfadeDuration = modeCrossfadeDuration(appSettings.bibleSettings, appSettings.songSettings)
-
-    // Fade-out before clearing display
-    val clearRequested by presenterManager.clearDisplayRequested
-    LaunchedEffect(clearRequested) {
-        if (!clearRequested) return@LaunchedEffect
-        val mode = presenterManager.presentingMode.value
-        // Don't fade the content alpha if any screen is locked to this mode —
-        // that screen is still showing the content and the alpha must stay at 1.
-        val modeIsLocked = isAnyScreenLockedTo(presenterManager.screenLocks.value, mode)
-        val shouldFade = shouldFadeOnClear(
-            mode, modeIsLocked, appSettings.bibleSettings, appSettings.songSettings,
-        )
-        if (shouldFade) {
-            val duration = fadeOutDuration(mode, appSettings.bibleSettings, appSettings.songSettings)
-            val anim = Animatable(1f)
-            anim.animateTo(0f, tween(durationMillis = duration)) {
-                when (mode) {
-                    Presenting.BIBLE -> presenterManager.setBibleTransitionAlpha(this.value)
-                    Presenting.LYRICS -> presenterManager.setSongTransitionAlpha(this.value)
-                    else -> {}
-                }
-            }
-        }
-        // Set mode to NONE — alphas stay at 0 until next go-live triggers fade-in
-        presenterManager.setPresentingMode(Presenting.NONE)
-    }
-
-    // Centralized Bible transition: one animation drives all windows so they stay in sync
-    // When hold is active, skip updating displayedVerses so the user can browse freely
-    val bibleHold by presenterManager.bibleHold
-    LaunchedEffect(selectedVerses, bibleHold) {
-        if (bibleHold) return@LaunchedEffect
-        val bs = appSettings.bibleSettings
-        // All transitions (crossfade, fade in/out) are handled inside BiblePresenter
-        presenterManager.setDisplayedVerses(selectedVerses)
-        presenterManager.setBibleTransitionAlpha(1f)
-    }
-
-    // Centralized Song transition
-    LaunchedEffect(lyricSection, lyricSectionVersion) {
-        val ss = appSettings.songSettings
-        // Skip animation when section content hasn't changed (e.g. line navigation within same verse)
-        if (lyricSection == presenterManager.displayedLyricSection.value) {
-            presenterManager.setSongTransitionAlpha(1f)
-            return@LaunchedEffect
-        }
-        // Skip fade in line mode — only one line visible, instant swap is cleaner
-        val isLineMode = isSongLineMode(ss)
-        if (isLineMode) {
-            presenterManager.setDisplayedLyricSection(lyricSection)
-            presenterManager.setSongTransitionAlpha(1f)
-            return@LaunchedEffect
-        }
-        // All transitions (crossfade, fade in/out) are handled inside SongPresenter
-        presenterManager.setDisplayedLyricSection(lyricSection)
-        presenterManager.setSongTransitionAlpha(1f)
-    }
-
-    // Centralized Picture transition
-    LaunchedEffect(selectedImagePath) {
-        val current = presenterManager.displayedImagePath.value
-        when {
-            current == null || animationType == AnimationType.NONE -> {
-                presenterManager.setDisplayedImagePath(selectedImagePath)
-                presenterManager.setPictureTransitionAlpha(1f)
-                presenterManager.setPreviousDisplayedImagePath(null)
-            }
-            animationType == AnimationType.FADE -> {
-                val halfDuration = transitionDuration / 2
-                val anim = Animatable(1f)
-                anim.animateTo(0f, tween(halfDuration)) {
-                    presenterManager.setPictureTransitionAlpha(value)
-                }
-                presenterManager.setDisplayedImagePath(selectedImagePath)
-                anim.animateTo(1f, tween(halfDuration)) {
-                    presenterManager.setPictureTransitionAlpha(value)
-                }
-            }
-            animationType == AnimationType.CROSSFADE -> {
-                presenterManager.setPreviousDisplayedImagePath(current)
-                presenterManager.setDisplayedImagePath(selectedImagePath)
-                presenterManager.setPictureTransitionAlpha(0f)
-                val anim = Animatable(0f)
-                anim.animateTo(1f, tween(transitionDuration)) {
-                    presenterManager.setPictureTransitionAlpha(value)
-                }
-                presenterManager.setPreviousDisplayedImagePath(null)
-            }
-            animationType == AnimationType.SLIDE_LEFT || animationType == AnimationType.SLIDE_RIGHT -> {
-                presenterManager.setPreviousDisplayedImagePath(current)
-                presenterManager.setDisplayedImagePath(selectedImagePath)
-                presenterManager.setPictureTransitionAlpha(1f)
-                presenterManager.setPictureSlideOffset(0f)
-                val anim = Animatable(0f)
-                anim.animateTo(1f, tween(transitionDuration)) {
-                    presenterManager.setPictureSlideOffset(value)
-                }
-                presenterManager.setPreviousDisplayedImagePath(null)
-                presenterManager.setPictureSlideOffset(1f)
-            }
-        }
-    }
-
-    // Animated-presentation frame clock: one evaluation per display frame while a build step
-    // animates, published to every output window via presenterManager.presentationFrame.
-    LaunchedEffect(Unit) {
-        presenterManager.runPresentationClock()
-    }
-
-    // Centralized Slide transition
-    LaunchedEffect(selectedSlide) {
-        val current = presenterManager.displayedSlide.value
-        when {
-            current == null || animationType == AnimationType.NONE -> {
-                presenterManager.setDisplayedSlide(selectedSlide)
-                presenterManager.setSlideTransitionAlpha(1f)
-                presenterManager.setPreviousDisplayedSlide(null)
-            }
-            animationType == AnimationType.FADE -> {
-                val halfDuration = transitionDuration / 2
-                val anim = Animatable(1f)
-                anim.animateTo(0f, tween(halfDuration)) {
-                    presenterManager.setSlideTransitionAlpha(value)
-                }
-                presenterManager.setDisplayedSlide(selectedSlide)
-                anim.animateTo(1f, tween(halfDuration)) {
-                    presenterManager.setSlideTransitionAlpha(value)
-                }
-            }
-            animationType == AnimationType.CROSSFADE -> {
-                presenterManager.setPreviousDisplayedSlide(current)
-                presenterManager.setDisplayedSlide(selectedSlide)
-                presenterManager.setSlideTransitionAlpha(0f)
-                val anim = Animatable(0f)
-                anim.animateTo(1f, tween(transitionDuration)) {
-                    presenterManager.setSlideTransitionAlpha(value)
-                }
-                presenterManager.setPreviousDisplayedSlide(null)
-            }
-            animationType == AnimationType.SLIDE_LEFT || animationType == AnimationType.SLIDE_RIGHT -> {
-                presenterManager.setPreviousDisplayedSlide(current)
-                presenterManager.setDisplayedSlide(selectedSlide)
-                presenterManager.setSlideTransitionAlpha(1f)
-                presenterManager.setSlideSlideOffset(0f)
-                val anim = Animatable(0f)
-                anim.animateTo(1f, tween(transitionDuration)) {
-                    presenterManager.setSlideSlideOffset(value)
-                }
-                presenterManager.setPreviousDisplayedSlide(null)
-                presenterManager.setSlideSlideOffset(1f)
-            }
-        }
-    }
-
-    // Centralized Announcements transition
-    LaunchedEffect(announcementText) {
-        val annSettings = appSettings.announcementsSettings
-        val isFade = isFadeAnnouncement(annSettings.animationType)
-        val wasEmpty = presenterManager.displayedAnnouncementText.value.isEmpty()
-        val fadeDuration = 500
-        val sliderSum = 30500L // 500 + 30000, matches AnnouncementsTab speed slider
-        val loopCount = annSettings.loopCount
-
-        if (isSlidingAnnouncement(annSettings.animationType)) {
-            // Directional slides — just swap text, animation handled in AnnouncementsPresenter
-            presenterManager.setDisplayedAnnouncementText(announcementText)
-            presenterManager.setAnnouncementTransitionAlpha(1f)
-        } else if (announcementText.isEmpty()) {
-            // Cleared by user or loop finished — fade out if fade, instant if none
-            if (shouldFadeOutAnnouncement(isFade, wasEmpty)) {
-                val anim = Animatable(1f)
-                anim.animateTo(0f, tween(fadeDuration)) {
-                    presenterManager.setAnnouncementTransitionAlpha(value)
-                }
-            }
-            presenterManager.setDisplayedAnnouncementText("")
-            presenterManager.setAnnouncementTransitionAlpha(1f)
-        } else {
-            // Show text with timed display
-            presenterManager.setDisplayedAnnouncementText(announcementText)
-
-            // Fade in (only for fade animation)
-            if (isFade) {
-                presenterManager.setAnnouncementTransitionAlpha(0f)
-                val anim = Animatable(0f)
-                anim.animateTo(1f, tween(fadeDuration)) {
-                    presenterManager.setAnnouncementTransitionAlpha(value)
-                }
-            } else {
-                presenterManager.setAnnouncementTransitionAlpha(1f)
-            }
-
-            if (isFiniteAnnouncementLoop(loopCount)) {
-                // Finite loops: display for duration × loopCount, then clear
-                delay(announcementDisplayMs(sliderSum, annSettings.animationDuration.toLong(), loopCount))
-
-                // Fade out (only for fade animation)
-                if (isFade) {
-                    val anim = Animatable(1f)
-                    anim.animateTo(0f, tween(fadeDuration)) {
-                        presenterManager.setAnnouncementTransitionAlpha(value)
-                    }
-                }
-                // Clear display and exit presenting mode
-                presenterManager.setAnnouncementText("")
-                presenterManager.setDisplayedAnnouncementText("")
-                presenterManager.requestClearDisplay()
-            }
-            // loopCount == 0: infinite — stay visible until user manually stops
-        }
-    }
-
-    // Centralized Lottie (lower third) animation — one animation drives all windows
-    val lottieComposition by rememberLottieComposition(key = lottieJsonContent) {
-        LottieCompositionSpec.JsonString(lottieJsonContent)
-    }
-    LaunchedEffect(lottieComposition, lottiePauseAtFrame, lottiePauseFrame, lottiePauseDurationMs, lottieTrigger) {
-        // The live Compottie GPU-vector renderer (used below whenever pre-rendered frames aren't
-        // ready yet) can silently render nothing partway through a clip on some GPU/driver
-        // combinations. Pre-rendered raw frames don't share that failure mode (each is a static
-        // bitmap, independently rendered ahead of time). So this loop polls
-        // presenterManager.lottieFrameCount LIVE on every tick (not just once at effect-start) and
-        // switches over to raw-frame playback the instant frames become available — continuing
-        // from the same elapsed-time position, so there's no visible jump — instead of committing
-        // to whichever path was ready first for the whole clip.
-        try {
-            val comp = lottieComposition
-            val initialFrameCount = presenterManager.lottieFrameCount.value
-            val totalDurMs = when {
-                comp != null -> lottieCompositionDurationMs(comp.durationFrames, comp.frameRate)
-                initialFrameCount != null ->
-                    lottiePrerenderDurationMs(initialFrameCount, presenterManager.lottiePrerenderFps.value)
-                else -> return@LaunchedEffect
-            }
-            val hasPause = lottieHasPause(lottiePauseAtFrame, lottiePauseFrame)
-            val pauseAtMs = lottiePauseAtMs(totalDurMs, lottiePauseFrame, hasPause)
-            val grandTotalMs = lottieGrandTotalMs(totalDurMs, hasPause, lottiePauseDurationMs)
-
-            fun progressAt(elapsedMs: Long): Float = lottieProgressAt(
-                elapsedMs, totalDurMs, hasPause, lottiePauseFrame, pauseAtMs, lottiePauseDurationMs,
-            )
-
-            // Vsync-driven clock: elapsed time comes from real frame timestamps, so a missed
-            // display frame self-corrects on the next one instead of accumulating drift the way
-            // a fixed-delay tick would.
-            val startNanos = withFrameNanos { it }
-            var elapsedMs = 0L
-            while (true) {
-                val frameCount = presenterManager.lottieFrameCount.value
-                val progress = progressAt(elapsedMs)
-                if (frameCount != null) {
-                    presenterManager.setLottieCurrentFrameIndex(lottieFrameIndexFor(progress, frameCount))
-                } else {
-                    presenterManager.setLottieProgress(progress)
-                }
-                if (elapsedMs >= grandTotalMs) break
-                val nowNanos = withFrameNanos { it }
-                elapsedMs = ((nowNanos - startNanos) / 1_000_000).coerceAtMost(grandTotalMs)
-            }
-            // Snap to the final state (re-check readiness one last time in case it just became ready).
-            val finalFrameCount = presenterManager.lottieFrameCount.value
-            if (finalFrameCount != null) {
-                presenterManager.setLottieCurrentFrameIndex(finalFrameCount - 1)
-            } else {
-                presenterManager.setLottieProgress(1f)
-            }
-            presenterManager.requestClearDisplay()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            CrashReporter.reportException(e, "Lottie playback LaunchedEffect")
-            throw e
-        }
-    }
-
-    // Shared primary/normal output content — driven by a ScreenAssignment so behavior (crossfade,
-    // lower-third layout, per-type visibility, language mode, backgrounds) is identical whether the
-    // caller is a real per-screen output window or the developer-only windowed test output below.
-    // screenNumber is null when there's no physical screen to label (e.g. the test window).
-    val presenterOutputContent: @Composable (screenAssignment: ScreenAssignment, effectiveMode: Presenting, screenNumber: Int?) -> Unit = { screenAssignment, effectiveMode, screenNumber ->
-        val primaryRole = screenAssignment.primaryOutputRole
-        val showBg = showsOutputBackground(screenAssignment)
-        CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
-            if (screenAssignment.displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR) {
-                // Stage monitor: dedicated presenter-confidence layout
-                StageMonitorScreen(
-                    sm = appSettings.stageMonitorSettings,
-                    presentingMode = presentingMode,
-                    announcementActive = effectiveMode == Presenting.ANNOUNCEMENTS,
-                    currentLyricSection = displayedLyricSection,
-                    allLyricSections = allLyricSections,
-                    songDisplaySectionIndex = songDisplaySectionIndex,
-                    displayedVerses = displayedVerses,
-                    nextVerses = nextVerses,
-                    announcementText = displayedAnnouncementText,
-                    displayedImagePath = displayedImagePath,
-                    displayedSlide = displayedSlide,
-                    presenterNotes = presenterNotes,
-                    activeScene = activeScene,
-                    displayedQuestion = displayedQuestion,
-                    qaSettings = appSettings.qaSettings,
-                    displayedDictionaryEntry = displayedDictionaryEntry,
-                    dictionarySettings = appSettings.dictionarySettings,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                PresenterScreen(
-                    modifier = Modifier.fillMaxSize(),
-                    appSettings = appSettings,
-                    outputRole = primaryRole,
-                    isLowerThird = screenAssignment.isLowerThird,
-                    showBackground = showBg
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .onPreviewKeyEvent { keyEvent ->
-                                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
-                                    mediaViewModel.pause()
-                                    presenterManager.requestClearDisplay()
-                                    true
-                                } else false
-                            }
-                    ) {
-                        var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                        val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                        if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                        Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                            when (mode) {
-                                Presenting.BIBLE ->
-                                    if (screenAssignment.showBible) {
-                                        BiblePresenter(
-                                            selectedVerses = displayedVerses,
-                                            appSettings = appSettings,
-                                            isLowerThird = screenAssignment.isLowerThird,
-                                            isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                            outputRole = primaryRole,
-                                            transitionAlpha = bibleTransitionAlpha,
-                                            showBackground = showBg && screenAssignment.showBibleBackground,
-                                            crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                            bibleTranslations = screenAssignment.bibleTranslations
-                                        )
-                                    }
-
-                                Presenting.LYRICS ->
-                                    if (screenAssignment.showSongs) {
-                                        SongPresenter(
-                                            lyricSection = displayedLyricSection,
-                                            appSettings = appSettings,
-                                            isLowerThird = screenAssignment.isLowerThird,
-                                            isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                            outputRole = primaryRole,
-                                            transitionAlpha = songTransitionAlpha,
-                                            displayLineIndex = songDisplayLineIndex,
-                                            lookAheadEnabled = screenAssignment.songLookAhead,
-                                            allLyricSections = allLyricSections,
-                                            displaySectionIndex = songDisplaySectionIndex,
-                                            showBackground = showBg && screenAssignment.showSongsBackground,
-                                            crossfadeEnabled = appSettings.songSettings.crossfade,
-                                            languageOverride = screenAssignment.songMode
-                                        )
-                                    }
-
-                                Presenting.PICTURES ->
-                                    if (screenAssignment.showPictures)
-                                        PicturePresenter(
-                                            imagePath = displayedImagePath,
-                                            previousImagePath = previousDisplayedImagePath,
-                                            transitionAlpha = pictureTransitionAlpha,
-                                            slideOffset = pictureSlideOffset,
-                                            animationType = animationType
-                                        )
-
-                                Presenting.PRESENTATION ->
-                                    if (screenAssignment.showPictures)
-                                        PresentationPresenter(
-                                            frame = presentationFrame,
-                                            slide = displayedSlide,
-                                            previousSlide = previousDisplayedSlide,
-                                            transitionAlpha = slideTransitionAlpha,
-                                            slideOffset = slideSlideOffset,
-                                            animationType = animationType,
-                                            frozen = slideFrozen
-                                        )
-
-                                Presenting.MEDIA ->
-                                    if (screenAssignment.showMedia) {
-                                        if (mediaViewModel.isAudioFile) {
-                                            // Audio: playback handled by hidden VideoPlayer in MainDesktop
-                                            // Projection shows background only
-                                        } else {
-                                            MediaPresenter(
-                                                modifier = Modifier.fillMaxSize(),
-                                                audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                                transitionAlpha = mediaTransitionAlpha
-                                            )
-                                        }
-                                    }
-
-                                Presenting.LOWER_THIRD ->
-                                    if (screenAssignment.showStreaming)
-                                        LowerThirdPresenter(
-                                            composition = lottieComposition,
-                                            progress = { presenterManager.lottieProgress.value },
-                                            appSettings = appSettings,
-                                            frame = lottieFrame
-                                        )
-
-                                Presenting.ANNOUNCEMENTS ->
-                                    if (screenAssignment.showAnnouncements)
-                                        AnnouncementsPresenter(
-                                            text = displayedAnnouncementText,
-                                            appSettings = appSettings,
-                                            outputRole = primaryRole,
-                                            transitionAlpha = announcementTransitionAlpha,
-                                            onFinished = clearAnnouncementOnFinish,
-                                            showBackground = showBg
-                                        )
-
-                                Presenting.WEBSITE ->
-                                    if (screenAssignment.showWebsite) WebsitePresenter(
-                                        url = websiteUrl,
-                                        modifier = Modifier.fillMaxSize(),
-                                        onSnapshot = { bitmap -> presenterManager.setWebSnapshot(bitmap) },
-                                        onBrowserCreated = { browser -> presenterManager.setLiveBrowser(browser) },
-                                        onUrlChanged = { newUrl -> presenterManager.setWebsiteUrl(newUrl) },
-                                        onTitleChanged = { title -> presenterManager.setWebPageTitle(title) },
-                                        audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId
-                                    )
-
-                                Presenting.CANVAS -> { if (screenAssignment.showCanvas) ScenePresenter(scene = activeScene) }
-
-                                Presenting.QA ->
-                                    if (screenAssignment.showQA) {
-                                        if (showQRCodeOnDisplay) {
-                                            QAQRCodePresenter(
-                                                url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
-                                                qaSettings = appSettings.qaSettings,
-                                                transitionAlpha = qaTransitionAlpha,
-                                            )
-                                        } else {
-                                            QAPresenter(
-                                                question = displayedQuestion,
-                                                qaSettings = appSettings.qaSettings,
-                                                transitionAlpha = qaTransitionAlpha,
-                                            )
-                                        }
-                                    }
-
-                                Presenting.STT ->
-                                    if (screenAssignment.showSTT) {
-                                        STTPresenter(
-                                            segments = sttManager.segments,
-                                            inProgressText = sttManager.inProgressText.value,
-                                            translationSegments = sttManager.translationSegments,
-                                            inProgressTranslation = sttManager.inProgressTranslation.value,
-                                            highlightedWords = sttManager.highlightedWords,
-                                            sttSettings = appSettings.sttSettings,
-                                        )
-                                    }
-                                Presenting.DICTIONARY ->
-                                    if (screenAssignment.showDictionary)
-                                        DictionaryPresenter(
-                                            dictionarySettings = appSettings.dictionarySettings,
-                                            entry = displayedDictionaryEntry,
-                                            outputRole = primaryRole,
-                                            transitionAlpha = 1f
-                                        )
-                                Presenting.NONE -> { /* nothing */
-                                }
-                            }
-                        }
-
-                        // Clear live browser ref when leaving WEBSITE mode
-                        LaunchedEffect(presentingMode) {
-                            if (presentingMode != Presenting.WEBSITE) {
-                                presenterManager.setLiveBrowser(null)
-                            }
-                        }
-
-                        if (screenNumber != null && identifyingScreen) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.75f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = stringResource(Res.string.screen_number, screenNumber),
-                                    color = Color.White,
-                                    fontSize = 96.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Identify the OS primary monitor and build list of non-primary screens
-    val defaultDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
-    val availableScreens = nonPrimaryIndices(screens.toList(), defaultDevice)
-
-    val deckLinkDeviceCount = deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
-    val windowCount = presenterWindowCount(availableScreens.size, deckLinkDeviceCount)
-    // Dev convenience: on a single-monitor dev machine there's no non-primary monitor or DeckLink
-    // device to open a real output window on. Show Output 1 as an ordinary window instead of not
-    // rendering at all, driven by the same "Toggle Presenter Displays" button/state.
-    val devWindowedFallback = isDevWindowedFallback(
-        BuildConfig.IS_RELEASE, DevFlags.forceDevWindow, windowCount,
-    )
-    // On a machine with no real output, open DevFlags.devWindowCount fallback windows (default 1).
-    // A count > 1 simulates several independent outputs on one monitor for developing/testing
-    // per-output features — each window is its own output slot (index, assignment, screen lock).
-    val devFallbackCount = devFallbackWindowCount(devWindowedFallback, proj.devWindowCount)
-    for (i in 0 until (windowCount + devFallbackCount)) {
-        if (isFallbackWindowSlot(devWindowedFallback, i, windowCount)) {
-            val fallbackIndex = fallbackSlotIndex(i, windowCount)
-            val screenAssignment = proj.getAssignment(fallbackIndex)
-            val effectiveMode = effectiveOutputMode(screenLocks, fallbackIndex, presentingMode)
-            // Cascade the windows so multiple dev outputs don't stack exactly on top of each other.
-            val fallbackWindowState = remember(fallbackIndex) {
-                WindowState(
-                    width = 960.dp,
-                    height = 540.dp,
-                    position = WindowPosition(
-                        x = devFallbackWindowOffsetDp(fallbackIndex).dp,
-                        y = devFallbackWindowOffsetDp(fallbackIndex).dp,
-                    ),
-                )
-            }
-            Window(
-                visible = showPresenterWindow,
-                title = stringResource(Res.string.presenter_view_title, fallbackIndex + 1),
-                icon = painterResource(Res.drawable.ic_app_icon),
-                onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-                state = fallbackWindowState,
-                undecorated = false,
-                resizable = true,
-                alwaysOnTop = presenterManager.devWindowAlwaysOnTop.value,
-            ) {
-                presenterOutputContent(screenAssignment, effectiveMode, fallbackIndex + 1)
-            }
-            continue
-        }
-        val screenAssignment = proj.getAssignment(i)
-        val effectiveMode = effectiveOutputMode(screenLocks, i, presentingMode)
-
-        // DeckLink outputs: render via offscreen Window + pixel capture
-        if (isDeckLinkPrimaryOutput(screenAssignment)) {
-            if (showPresenterWindow && screenAssignment.targetDisplay >= 0) {
-                val deckLinkRole = screenAssignment.primaryOutputRole
-                DeckLinkComposeOutput(
-                    deviceIndex = screenAssignment.targetDisplay,
-                    outputRole = deckLinkRole,
-                    appSettings = appSettings,
-                    mediaViewModel = mediaViewModel,
-                    isLowerThird = screenAssignment.isLowerThird,
-                ) {
-                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                    Crossfade(
-                        targetState = effectiveMode,
-                        animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()
-                    ) { mode ->
-                    when (mode) {
-                        Presenting.BIBLE ->
-                            if (screenAssignment.showBible) {
-                                BiblePresenter(
-                                    selectedVerses = displayedVerses,
-                                    appSettings = appSettings,
-                                    isLowerThird = screenAssignment.isLowerThird,
-                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                    outputRole = deckLinkRole,
-                                    transitionAlpha = bibleTransitionAlpha,
-                                    crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    bibleTranslations = screenAssignment.bibleTranslations
-                                )
-                            }
-
-                        Presenting.LYRICS ->
-                            if (screenAssignment.showSongs) {
-                                SongPresenter(
-                                    lyricSection = displayedLyricSection,
-                                    appSettings = appSettings,
-                                    isLowerThird = screenAssignment.isLowerThird,
-                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                    outputRole = deckLinkRole,
-                                    transitionAlpha = songTransitionAlpha,
-                                    displayLineIndex = songDisplayLineIndex,
-                                    lookAheadEnabled = screenAssignment.songLookAhead,
-                                    allLyricSections = allLyricSections,
-                                    displaySectionIndex = songDisplaySectionIndex,
-                                    crossfadeEnabled = appSettings.songSettings.crossfade,
-                                    languageOverride = screenAssignment.songMode
-                                )
-                            }
-
-                        Presenting.PICTURES ->
-                            if (screenAssignment.showPictures)
-                                PicturePresenter(
-                                    imagePath = displayedImagePath,
-                                    previousImagePath = previousDisplayedImagePath,
-                                    transitionAlpha = pictureTransitionAlpha,
-                                    slideOffset = pictureSlideOffset,
-                                    animationType = animationType
-                                )
-
-                        Presenting.PRESENTATION ->
-                            if (screenAssignment.showPictures)
-                                PresentationPresenter(
-                                    frame = presentationFrame,
-                                    slide = displayedSlide,
-                                    previousSlide = previousDisplayedSlide,
-                                    transitionAlpha = slideTransitionAlpha,
-                                    slideOffset = slideSlideOffset,
-                                    animationType = animationType,
-                                    frozen = slideFrozen
-                                )
-
-                        Presenting.MEDIA ->
-                            if (screenAssignment.showMedia) {
-                                if (mediaViewModel.isAudioFile) {
-                                    // Audio: background only
-                                } else {
-                                    MediaPresenter(
-                                        modifier = Modifier.fillMaxSize(),
-                                        audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                        transitionAlpha = mediaTransitionAlpha
-                                    )
-                                }
-                            }
-
-                        Presenting.LOWER_THIRD ->
-                            if (screenAssignment.showStreaming)
-                                LowerThirdPresenter(
-                                    composition = lottieComposition,
-                                    progress = { presenterManager.lottieProgress.value },
-                                    appSettings = appSettings,
-                                    frame = lottieFrame
-                                )
-
-                        Presenting.ANNOUNCEMENTS ->
-                            if (screenAssignment.showAnnouncements)
-                                AnnouncementsPresenter(
-                                    text = displayedAnnouncementText,
-                                    appSettings = appSettings,
-                                    outputRole = deckLinkRole,
-                                    transitionAlpha = announcementTransitionAlpha,
-                                    onFinished = clearAnnouncementOnFinish
-                                )
-
-                        Presenting.WEBSITE ->
-                            if (screenAssignment.showWebsite) WebsitePresenter(
-                                url = websiteUrl,
-                                modifier = Modifier.fillMaxSize(),
-                                onSnapshot = { bitmap -> presenterManager.setWebSnapshot(bitmap) },
-                                onUrlChanged = { newUrl -> presenterManager.setWebsiteUrl(newUrl) },
-                                onTitleChanged = { title -> presenterManager.setWebPageTitle(title) },
-                                audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                outputRole = Constants.OUTPUT_ROLE_KEY
-                            )
-
-                        Presenting.CANVAS -> { if (screenAssignment.showCanvas) ScenePresenter(scene = activeScene) }
-
-                        Presenting.QA ->
-                            if (screenAssignment.showQA) {
-                                if (showQRCodeOnDisplay) {
-                                    QAQRCodePresenter(
-                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
-                                        qaSettings = appSettings.qaSettings,
-                                        transitionAlpha = qaTransitionAlpha,
-                                    )
-                                } else {
-                                    QAPresenter(
-                                        question = displayedQuestion,
-                                        qaSettings = appSettings.qaSettings,
-                                        transitionAlpha = qaTransitionAlpha,
-                                    )
-                                }
-                            }
-
-
-                        Presenting.STT ->
-                            if (screenAssignment.showSTT) {
-                                STTPresenter(
-                                    segments = sttManager.segments,
-                                    inProgressText = sttManager.inProgressText.value,
-                                    translationSegments = sttManager.translationSegments,
-                                    inProgressTranslation = sttManager.inProgressTranslation.value,
-                                    highlightedWords = sttManager.highlightedWords,
-                                    sttSettings = appSettings.sttSettings,
-                                )
-                            }
-                        Presenting.DICTIONARY ->
-                            if (screenAssignment.showDictionary)
-                                DictionaryPresenter(
-                                    dictionarySettings = appSettings.dictionarySettings,
-                                    entry = displayedDictionaryEntry,
-                                    outputRole = deckLinkRole,
-                                    transitionAlpha = 1f
-                                )
-                        Presenting.NONE -> { /* nothing */ }
-                    }
-                    }
-                }
-            }
-
-            // DeckLink key output
-            if (showPresenterWindow && hasDeckLinkKeyOutput(screenAssignment)) {
-                DeckLinkComposeOutput(
-                    deviceIndex = screenAssignment.keyTargetDisplay,
-                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                    appSettings = appSettings,
-                    mediaViewModel = mediaViewModel,
-                    isLowerThird = screenAssignment.isLowerThird,
-                ) {
-                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                    Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    when (mode) {
-                        Presenting.BIBLE ->
-                            if (screenAssignment.showBible) {
-                                BiblePresenter(
-                                    selectedVerses = displayedVerses,
-                                    appSettings = appSettings,
-                                    isLowerThird = screenAssignment.isLowerThird,
-                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = bibleTransitionAlpha,
-                                    crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    bibleTranslations = screenAssignment.bibleTranslations
-                                )
-                            }
-
-                        Presenting.LYRICS ->
-                            if (screenAssignment.showSongs) {
-                                SongPresenter(
-                                    lyricSection = displayedLyricSection,
-                                    appSettings = appSettings,
-                                    isLowerThird = screenAssignment.isLowerThird,
-                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = songTransitionAlpha,
-                                    displayLineIndex = songDisplayLineIndex,
-                                    lookAheadEnabled = screenAssignment.songLookAhead,
-                                    allLyricSections = allLyricSections,
-                                    displaySectionIndex = songDisplaySectionIndex,
-                                    crossfadeEnabled = appSettings.songSettings.crossfade,
-                                    languageOverride = screenAssignment.songMode
-                                )
-                            }
-
-                        Presenting.PICTURES ->
-                            if (screenAssignment.showPictures)
-                                PicturePresenter(
-                                    imagePath = displayedImagePath,
-                                    previousImagePath = previousDisplayedImagePath,
-                                    transitionAlpha = pictureTransitionAlpha,
-                                    slideOffset = pictureSlideOffset,
-                                    animationType = animationType,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY
-                                )
-
-                        Presenting.PRESENTATION ->
-                            if (screenAssignment.showPictures)
-                                PresentationPresenter(
-                                    frame = presentationFrame,
-                                    slide = displayedSlide,
-                                    previousSlide = previousDisplayedSlide,
-                                    transitionAlpha = slideTransitionAlpha,
-                                    slideOffset = slideSlideOffset,
-                                    animationType = animationType,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    frozen = slideFrozen
-                                )
-
-                        Presenting.MEDIA ->
-                            if (screenAssignment.showMedia) {
-                                if (mediaViewModel.isAudioFile) {
-                                    // Audio: background only
-                                } else {
-                                    MediaPresenter(
-                                        modifier = Modifier.fillMaxSize(),
-                                        audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                        transitionAlpha = mediaTransitionAlpha,
-                                        outputRole = Constants.OUTPUT_ROLE_KEY
-                                    )
-                                }
-                            }
-
-                        Presenting.LOWER_THIRD ->
-                            if (screenAssignment.showStreaming)
-                                LowerThirdPresenter(
-                                    composition = lottieComposition,
-                                    progress = { presenterManager.lottieProgress.value },
-                                    appSettings = appSettings,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    frame = lottieFrame
-                                )
-
-                        Presenting.ANNOUNCEMENTS ->
-                            if (screenAssignment.showAnnouncements)
-                                AnnouncementsPresenter(
-                                    text = displayedAnnouncementText,
-                                    appSettings = appSettings,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = announcementTransitionAlpha,
-                                    onFinished = {
-                                        presenterManager.setAnnouncementText("")
-                                        presenterManager.setDisplayedAnnouncementText("")
-                                    }
-                                )
-
-                        Presenting.WEBSITE ->
-                            if (screenAssignment.showWebsite) WebsitePresenter(
-                                url = websiteUrl,
-                                modifier = Modifier.fillMaxSize(),
-                                onSnapshot = { bitmap -> presenterManager.setWebSnapshot(bitmap) },
-                                onUrlChanged = { newUrl -> presenterManager.setWebsiteUrl(newUrl) },
-                                onTitleChanged = { title -> presenterManager.setWebPageTitle(title) },
-                                audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                outputRole = Constants.OUTPUT_ROLE_KEY
-                            )
-
-                        Presenting.CANVAS -> { if (screenAssignment.showCanvas) ScenePresenter(scene = activeScene) }
-
-                        Presenting.QA ->
-                            if (screenAssignment.showQA) {
-                                if (showQRCodeOnDisplay) {
-                                    QAQRCodePresenter(
-                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
-                                        qaSettings = appSettings.qaSettings,
-                                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                                        transitionAlpha = qaTransitionAlpha,
-                                    )
-                                } else {
-                                    QAPresenter(
-                                        question = displayedQuestion,
-                                        qaSettings = appSettings.qaSettings,
-                                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                                        transitionAlpha = qaTransitionAlpha,
-                                    )
-                                }
-                            }
-
-
-                        Presenting.STT ->
-                            if (screenAssignment.showSTT) {
-                                STTPresenter(
-                                    segments = sttManager.segments,
-                                    inProgressText = sttManager.inProgressText.value,
-                                    translationSegments = sttManager.translationSegments,
-                                    inProgressTranslation = sttManager.inProgressTranslation.value,
-                                    highlightedWords = sttManager.highlightedWords,
-                                    sttSettings = appSettings.sttSettings,
-                                )
-                            }
-                        Presenting.DICTIONARY ->
-                            if (screenAssignment.showDictionary)
-                                DictionaryPresenter(
-                                    dictionarySettings = appSettings.dictionarySettings,
-                                    entry = displayedDictionaryEntry,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = 1f
-                                )
-                        Presenting.NONE -> { /* nothing */ }
-                    }
-                    }
-                }
-            }
-
-            // Key output on a regular screen when primary is DeckLink
-            if (showPresenterWindow && hasScreenKeyOutput(screenAssignment)) {
-                val keyScreenIndex = keyOutputScreenIndex(
-                    findScreenIndexByBounds(
-                        screens,
-                        screenAssignment.keyTargetBoundsX,
-                        screenAssignment.keyTargetBoundsY,
-                        screenAssignment.keyTargetBoundsW,
-                        screenAssignment.keyTargetBoundsH
-                    ),
-                    screenAssignment.keyTargetDisplay,
-                )
-                if (isScreenIndexValid(keyScreenIndex, screens.size)) {
-                    val keyWindowState = remember(i, keyScreenIndex) {
-                        val b = screens[keyScreenIndex].defaultConfiguration.bounds
-                        WindowState(
-                            placement = WindowPlacement.Floating,
-                            position = WindowPosition(b.x.dp, b.y.dp),
-                            width = b.width.dp,
-                            height = b.height.dp
-                        )
-                    }
-
-                    Window(
-                        visible = true,
-                        title = "Key Output ${i + 1}",
-                        icon = painterResource(Res.drawable.ic_app_icon),
-                        onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-                        state = keyWindowState,
-                        undecorated = true,
-                        resizable = false,
-                        alwaysOnTop = true,
-                    ) {
-                        CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
-                            PresenterScreen(
-                                modifier = Modifier.fillMaxSize(),
-                                appSettings = appSettings,
-                                outputRole = Constants.OUTPUT_ROLE_KEY
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                                        appSettings.bibleSettings, appSettings.songSettings,
-                                        effectiveMode, prevEffectiveMode,
-                                    )
-                                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                                    Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    when (mode) {
-                                        Presenting.BIBLE ->
-                                            if (screenAssignment.showBible) {
-                                                BiblePresenter(
-                                                    selectedVerses = displayedVerses,
-                                                    appSettings = appSettings,
-                                                    isLowerThird = screenAssignment.isLowerThird,
-                                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                    transitionAlpha = bibleTransitionAlpha,
-                                                    crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                                    bibleTranslations = screenAssignment.bibleTranslations
-                                                )
-                                            }
-
-                                        Presenting.LYRICS ->
-                                            if (screenAssignment.showSongs) {
-                                                SongPresenter(
-                                                    lyricSection = displayedLyricSection,
-                                                    appSettings = appSettings,
-                                                    isLowerThird = screenAssignment.isLowerThird,
-                                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                    transitionAlpha = songTransitionAlpha,
-                                                    displayLineIndex = songDisplayLineIndex,
-                                                    lookAheadEnabled = screenAssignment.songLookAhead,
-                                                    allLyricSections = allLyricSections,
-                                                    displaySectionIndex = songDisplaySectionIndex,
-                                                    crossfadeEnabled = appSettings.songSettings.crossfade,
-                                                    languageOverride = screenAssignment.songMode
-                                                )
-                                            }
-
-                                        Presenting.PICTURES ->
-                                            if (screenAssignment.showPictures)
-                                                PicturePresenter(
-                                                    imagePath = displayedImagePath,
-                                                    previousImagePath = previousDisplayedImagePath,
-                                                    transitionAlpha = pictureTransitionAlpha,
-                                                    slideOffset = pictureSlideOffset,
-                                                    animationType = animationType,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY
-                                                )
-
-                                        Presenting.PRESENTATION ->
-                                            if (screenAssignment.showPictures)
-                                                PresentationPresenter(
-                                    frame = presentationFrame,
-                                    slide = displayedSlide,
-                                    previousSlide = previousDisplayedSlide,
-                                    transitionAlpha = slideTransitionAlpha,
-                                    slideOffset = slideSlideOffset,
-                                    animationType = animationType,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    frozen = slideFrozen
-                                )
-
-                                        Presenting.MEDIA ->
-                                            if (screenAssignment.showMedia) {
-                                                if (mediaViewModel.isAudioFile) {
-                                                    // Audio: background only
-                                                } else {
-                                                    MediaPresenter(
-                                                        modifier = Modifier.fillMaxSize(),
-                                                        audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                                        transitionAlpha = mediaTransitionAlpha,
-                                                        outputRole = Constants.OUTPUT_ROLE_KEY
-                                                    )
-                                                }
-                                            }
-
-                                        Presenting.LOWER_THIRD ->
-                                            if (screenAssignment.showStreaming)
-                                                LowerThirdPresenter(
-                                                    composition = lottieComposition,
-                                                    progress = { presenterManager.lottieProgress.value },
-                                                    appSettings = appSettings,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                    frame = lottieFrame
-                                                )
-
-                                        Presenting.ANNOUNCEMENTS ->
-                                            if (screenAssignment.showAnnouncements)
-                                                AnnouncementsPresenter(
-                                                    text = displayedAnnouncementText,
-                                                    appSettings = appSettings,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                    transitionAlpha = announcementTransitionAlpha,
-                                                    onFinished = {
-                                                        presenterManager.setAnnouncementText("")
-                                                        presenterManager.setDisplayedAnnouncementText("")
-                                                    }
-                                                )
-
-                                        Presenting.WEBSITE ->
-                                            if (screenAssignment.showWebsite) WebsitePresenter(
-                                                url = websiteUrl,
-                                                modifier = Modifier.fillMaxSize(),
-                                                onSnapshot = { bitmap -> presenterManager.setWebSnapshot(bitmap) },
-                                                onUrlChanged = { newUrl -> presenterManager.setWebsiteUrl(newUrl) },
-                                                onTitleChanged = { title -> presenterManager.setWebPageTitle(title) },
-                                                audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY
-                                            )
-
-                                        Presenting.CANVAS -> { if (screenAssignment.showCanvas) ScenePresenter(scene = activeScene) }
-
-                                        Presenting.QA ->
-                                            if (screenAssignment.showQA) {
-                                                if (showQRCodeOnDisplay) {
-                                                    QAQRCodePresenter(
-                                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
-                                                        qaSettings = appSettings.qaSettings,
-                                                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                        transitionAlpha = qaTransitionAlpha,
-                                                    )
-                                                } else {
-                                                    QAPresenter(
-                                                        question = displayedQuestion,
-                                                        qaSettings = appSettings.qaSettings,
-                                                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                        transitionAlpha = qaTransitionAlpha,
-                                                    )
-                                                }
-                                            }
-
-
-                                        Presenting.STT ->
-                                            if (screenAssignment.showSTT) {
-                                                STTPresenter(
-                                                    segments = sttManager.segments,
-                                                    inProgressText = sttManager.inProgressText.value,
-                                                    translationSegments = sttManager.translationSegments,
-                                                    inProgressTranslation = sttManager.inProgressTranslation.value,
-                                                    highlightedWords = sttManager.highlightedWords,
-                                                    sttSettings = appSettings.sttSettings,
-                                                )
-                                            }
-                                        Presenting.DICTIONARY ->
-                                            if (screenAssignment.showDictionary)
-                                                DictionaryPresenter(
-                                                    dictionarySettings = appSettings.dictionarySettings,
-                                                    entry = displayedDictionaryEntry,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                    transitionAlpha = 1f
-                                                )
-                                        Presenting.NONE -> { /* nothing */ }
-                                    }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            continue
-        }
-
-        if (hasNoPrimaryTarget(screenAssignment)) continue
-
-        // Resolve target display
-        val targetScreenIndex = primaryOutputScreenIndex(
-            matchedByBounds = findScreenIndexByBounds(
-                screens,
-                screenAssignment.targetBoundsX,
-                screenAssignment.targetBoundsY,
-                screenAssignment.targetBoundsW,
-                screenAssignment.targetBoundsH
-            ),
-            savedDisplay = screenAssignment.targetDisplay,
-            screenCount = screens.size,
-            positionalFallback = availableScreens.getOrNull(i),
-        ) ?: continue
-
-        // Skip if the target screen doesn't exist
-        if (!isScreenIndexValid(targetScreenIndex, screens.size)) continue
-
-        // Per-output background toggle
-        val showBg = showsOutputBackground(screenAssignment)
-
-        // Derive output role from key target configuration
-        val primaryRole = screenAssignment.primaryOutputRole
-
-        val windowState = remember(i) {
-            val b = screens[targetScreenIndex].defaultConfiguration.bounds
-            WindowState(
-                placement = WindowPlacement.Floating,
-                position = WindowPosition(b.x.dp, b.y.dp),
-                width = b.width.dp,
-                height = b.height.dp
-            )
-        }
-
-        LaunchedEffect(targetScreenIndex) {
-            val b = screens[targetScreenIndex].defaultConfiguration.bounds
-            windowState.position = WindowPosition(b.x.dp, b.y.dp)
-            windowState.size = DpSize(b.width.dp, b.height.dp)
-        }
-
-        // Primary window (fill or normal)
-        val presenterTitle = stringResource(Res.string.presenter_view_title, i + 1)
-        Window(
-            visible = showPresenterWindow,
-            title = presenterTitle,
-            icon = painterResource(Res.drawable.ic_app_icon),
-            onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-            state = windowState,
-            undecorated = true,
-            resizable = false,
-            alwaysOnTop = true,
-        ) {
-            presenterOutputContent(screenAssignment, effectiveMode, i + 1)
-        }
-
-        // Key output window — spawned when a key target is configured
-        if (screenAssignment.hasKeyOutput && !isDeckLinkKeyOutput(screenAssignment)) {
-            val keyScreenIndex = keyOutputScreenIndex(
-                findScreenIndexByBounds(
-                    screens,
-                    screenAssignment.keyTargetBoundsX,
-                    screenAssignment.keyTargetBoundsY,
-                    screenAssignment.keyTargetBoundsW,
-                    screenAssignment.keyTargetBoundsH
-                ),
-                screenAssignment.keyTargetDisplay,
-            )
-            if (isScreenIndexValid(keyScreenIndex, screens.size)) {
-                val keyWindowState = remember(i, keyScreenIndex) {
-                    val b = screens[keyScreenIndex].defaultConfiguration.bounds
-                    WindowState(
-                        placement = WindowPlacement.Floating,
-                        position = WindowPosition(b.x.dp, b.y.dp),
-                        width = b.width.dp,
-                        height = b.height.dp
-                    )
-                }
-
-                val keyOutputTitle = stringResource(Res.string.key_output_title, i + 1)
-                Window(
-                    visible = showPresenterWindow,
-                    title = keyOutputTitle,
-                    icon = painterResource(Res.drawable.ic_app_icon),
-                    onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-                    state = keyWindowState,
-                    undecorated = true,
-                    resizable = false,
-                    alwaysOnTop = true,
-                ) {
-                    CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
-                        PresenterScreen(
-                            modifier = Modifier.fillMaxSize(),
-                            appSettings = appSettings,
-                            outputRole = Constants.OUTPUT_ROLE_KEY
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .onPreviewKeyEvent { keyEvent ->
-                                        if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
-                                            mediaViewModel.pause()
-                                            presenterManager.requestClearDisplay()
-                                            true
-                                        } else false
-                                    }
-                            ) {
-                                var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                                val screenCrossfadeActive = isScreenCrossfadeActive(
-                                    appSettings.bibleSettings, appSettings.songSettings,
-                                    effectiveMode, prevEffectiveMode,
-                                )
-                                if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                                Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    when (mode) {
-                                    Presenting.BIBLE ->
-                                        if (screenAssignment.showBible) {
-                                            BiblePresenter(
-                                                selectedVerses = displayedVerses,
-                                                appSettings = appSettings,
-                                                isLowerThird = screenAssignment.isLowerThird,
-                                                isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                transitionAlpha = bibleTransitionAlpha,
-                                                crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                                bibleTranslations = screenAssignment.bibleTranslations
-                                            )
-                                        }
-
-                                    Presenting.LYRICS ->
-                                        if (screenAssignment.showSongs) {
-                                            SongPresenter(
-                                                lyricSection = displayedLyricSection,
-                                                appSettings = appSettings,
-                                                isLowerThird = screenAssignment.isLowerThird,
-                                                isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                transitionAlpha = songTransitionAlpha,
-                                                displayLineIndex = songDisplayLineIndex,
-                                                lookAheadEnabled = screenAssignment.songLookAhead,
-                                                allLyricSections = allLyricSections,
-                                                displaySectionIndex = songDisplaySectionIndex,
-                                                crossfadeEnabled = appSettings.songSettings.crossfade,
-                                                languageOverride = screenAssignment.songMode
-                                            )
-                                        }
-
-                                    Presenting.PICTURES ->
-                                        if (screenAssignment.showPictures)
-                                            PicturePresenter(
-                                                imagePath = displayedImagePath,
-                                                previousImagePath = previousDisplayedImagePath,
-                                                transitionAlpha = pictureTransitionAlpha,
-                                                slideOffset = pictureSlideOffset,
-                                                animationType = animationType,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY
-                                            )
-
-                                    Presenting.PRESENTATION ->
-                                        if (screenAssignment.showPictures)
-                                            PresentationPresenter(
-                                                frame = presentationFrame,
-                                                slide = displayedSlide,
-                                                previousSlide = previousDisplayedSlide,
-                                                transitionAlpha = slideTransitionAlpha,
-                                                slideOffset = slideSlideOffset,
-                                                animationType = animationType,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY
-                                            )
-
-                                    Presenting.MEDIA ->
-                                        if (screenAssignment.showMedia) {
-                                            if (mediaViewModel.isAudioFile) {
-                                                // Audio: background only
-                                            } else {
-                                                MediaPresenter(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                                    transitionAlpha = mediaTransitionAlpha,
-                                                    outputRole = Constants.OUTPUT_ROLE_KEY
-                                                )
-                                            }
-                                        }
-
-                                    Presenting.LOWER_THIRD ->
-                                        if (screenAssignment.showStreaming)
-                                            LowerThirdPresenter(
-                                                composition = lottieComposition,
-                                                progress = { presenterManager.lottieProgress.value },
-                                                appSettings = appSettings,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                frame = lottieFrame
-                                            )
-
-                                    Presenting.ANNOUNCEMENTS ->
-                                        if (screenAssignment.showAnnouncements)
-                                            AnnouncementsPresenter(
-                                                text = displayedAnnouncementText,
-                                                appSettings = appSettings,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                transitionAlpha = announcementTransitionAlpha,
-                                                onFinished = {
-                                                    presenterManager.setAnnouncementText("")
-                                                    presenterManager.setDisplayedAnnouncementText("")
-                                                }
-                                            )
-
-                                    Presenting.WEBSITE ->
-                                        if (screenAssignment.showWebsite) WebsitePresenter(
-                                            url = websiteUrl,
-                                            modifier = Modifier.fillMaxSize(),
-                                            onSnapshot = { bitmap -> presenterManager.setWebSnapshot(bitmap) },
-                                            onUrlChanged = { newUrl -> presenterManager.setWebsiteUrl(newUrl) },
-                                            onTitleChanged = { title -> presenterManager.setWebPageTitle(title) },
-                                            audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                            outputRole = Constants.OUTPUT_ROLE_KEY
-                                        )
-
-                                    Presenting.CANVAS -> { if (screenAssignment.showCanvas) ScenePresenter(scene = activeScene) }
-
-                                    Presenting.QA ->
-                                        if (screenAssignment.showQA) {
-                                            if (showQRCodeOnDisplay) {
-                                                QAQRCodePresenter(
-                                                    url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
-                                                    qaSettings = appSettings.qaSettings,
-                                                    transitionAlpha = qaTransitionAlpha,
-                                                )
-                                            } else {
-                                                QAPresenter(
-                                                    question = displayedQuestion,
-                                                    qaSettings = appSettings.qaSettings,
-                                                    transitionAlpha = qaTransitionAlpha,
-                                                )
-                                            }
-                                        }
-
-
-                                    Presenting.STT ->
-                                        if (screenAssignment.showSTT) {
-                                            STTPresenter(
-                                                segments = sttManager.segments,
-                                                inProgressText = sttManager.inProgressText.value,
-                                                translationSegments = sttManager.translationSegments,
-                                                inProgressTranslation = sttManager.inProgressTranslation.value,
-                                                highlightedWords = sttManager.highlightedWords,
-                                                sttSettings = appSettings.sttSettings,
-                                            )
-                                        }
-                                    Presenting.DICTIONARY ->
-                                        if (screenAssignment.showDictionary)
-                                            DictionaryPresenter(
-                                                dictionarySettings = appSettings.dictionarySettings,
-                                                entry = displayedDictionaryEntry,
-                                                outputRole = Constants.OUTPUT_ROLE_KEY,
-                                                transitionAlpha = 1f
-                                            )
-                                    Presenting.NONE -> { /* nothing */
-                                    }
-                                }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Key output on DeckLink when primary is a regular screen
-        if (!isDeckLinkPrimaryOutput(screenAssignment) && hasDeckLinkKeyOutput(screenAssignment)) {
-            if (showPresenterWindow) {
-                DeckLinkComposeOutput(
-                    deviceIndex = screenAssignment.keyTargetDisplay,
-                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                    appSettings = appSettings,
-                    mediaViewModel = mediaViewModel,
-                    isLowerThird = screenAssignment.isLowerThird,
-                ) {
-                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                    Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    when (mode) {
-                        Presenting.BIBLE ->
-                            if (screenAssignment.showBible) {
-                                BiblePresenter(
-                                    selectedVerses = displayedVerses,
-                                    appSettings = appSettings,
-                                    isLowerThird = screenAssignment.isLowerThird,
-                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = bibleTransitionAlpha,
-                                    crossfadeEnabled = appSettings.bibleSettings.crossfade,
-                                    bibleTranslations = screenAssignment.bibleTranslations
-                                )
-                            }
-
-                        Presenting.LYRICS ->
-                            if (screenAssignment.showSongs) {
-                                SongPresenter(
-                                    lyricSection = displayedLyricSection,
-                                    appSettings = appSettings,
-                                    isLowerThird = screenAssignment.isLowerThird,
-                                    isLowerThirdVertical = screenAssignment.isLowerThirdVertical,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = songTransitionAlpha,
-                                    displayLineIndex = songDisplayLineIndex,
-                                    lookAheadEnabled = screenAssignment.songLookAhead,
-                                    allLyricSections = allLyricSections,
-                                    displaySectionIndex = songDisplaySectionIndex,
-                                    crossfadeEnabled = appSettings.songSettings.crossfade,
-                                    languageOverride = screenAssignment.songMode
-                                )
-                            }
-
-                        Presenting.PICTURES ->
-                            if (screenAssignment.showPictures)
-                                PicturePresenter(
-                                    imagePath = displayedImagePath,
-                                    previousImagePath = previousDisplayedImagePath,
-                                    transitionAlpha = pictureTransitionAlpha,
-                                    slideOffset = pictureSlideOffset,
-                                    animationType = animationType,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY
-                                )
-
-                        Presenting.PRESENTATION ->
-                            if (screenAssignment.showPictures)
-                                PresentationPresenter(
-                                    frame = presentationFrame,
-                                    slide = displayedSlide,
-                                    previousSlide = previousDisplayedSlide,
-                                    transitionAlpha = slideTransitionAlpha,
-                                    slideOffset = slideSlideOffset,
-                                    animationType = animationType,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    frozen = slideFrozen
-                                )
-
-                        Presenting.MEDIA ->
-                            if (screenAssignment.showMedia) {
-                                if (mediaViewModel.isAudioFile) {
-                                    // Audio: background only
-                                } else {
-                                    MediaPresenter(
-                                        modifier = Modifier.fillMaxSize(),
-                                        audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                        transitionAlpha = mediaTransitionAlpha,
-                                        outputRole = Constants.OUTPUT_ROLE_KEY
-                                    )
-                                }
-                            }
-
-                        Presenting.LOWER_THIRD ->
-                            if (screenAssignment.showStreaming)
-                                LowerThirdPresenter(
-                                    composition = lottieComposition,
-                                    progress = { presenterManager.lottieProgress.value },
-                                    appSettings = appSettings,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    frame = lottieFrame
-                                )
-
-                        Presenting.ANNOUNCEMENTS ->
-                            if (screenAssignment.showAnnouncements)
-                                AnnouncementsPresenter(
-                                    text = displayedAnnouncementText,
-                                    appSettings = appSettings,
-                                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                                    transitionAlpha = announcementTransitionAlpha,
-                                    onFinished = {
-                                        presenterManager.setAnnouncementText("")
-                                        presenterManager.setDisplayedAnnouncementText("")
-                                    }
-                                )
-
-                        Presenting.WEBSITE ->
-                            if (screenAssignment.showWebsite) WebsitePresenter(
-                                url = websiteUrl,
-                                modifier = Modifier.fillMaxSize(),
-                                onSnapshot = { bitmap -> presenterManager.setWebSnapshot(bitmap) },
-                                onUrlChanged = { newUrl -> presenterManager.setWebsiteUrl(newUrl) },
-                                onTitleChanged = { title -> presenterManager.setWebPageTitle(title) },
-                                audioDeviceId = appSettings.projectionSettings.audioOutputDeviceId,
-                                outputRole = Constants.OUTPUT_ROLE_KEY
-                            )
-
-                        Presenting.CANVAS -> { if (screenAssignment.showCanvas) ScenePresenter(scene = activeScene) }
-
-                        Presenting.QA ->
-                            if (screenAssignment.showQA) {
-                                if (showQRCodeOnDisplay) {
-                                    QAQRCodePresenter(
-                                        url = qaQrCodeUrl(qaDisplayUrl, serverUrl),
-                                        qaSettings = appSettings.qaSettings,
-                                        transitionAlpha = qaTransitionAlpha,
-                                    )
-                                } else {
-                                    QAPresenter(
-                                        question = displayedQuestion,
-                                        qaSettings = appSettings.qaSettings,
-                                        transitionAlpha = qaTransitionAlpha,
-                                    )
-                                }
-                            }
-
-
-                        Presenting.STT ->
-                            if (screenAssignment.showSTT) {
-                                STTPresenter(
-                                    segments = sttManager.segments,
-                                    inProgressText = sttManager.inProgressText.value,
-                                    translationSegments = sttManager.translationSegments,
-                                    inProgressTranslation = sttManager.inProgressTranslation.value,
-                                    highlightedWords = sttManager.highlightedWords,
-                                    sttSettings = appSettings.sttSettings,
-                                )
-                            }
-                        Presenting.DICTIONARY ->
-                            if (screenAssignment.showDictionary)
-                                DictionaryPresenter(
-                                    dictionarySettings = appSettings.dictionarySettings,
-                                    entry = displayedDictionaryEntry,
-                                    outputRole = primaryRole,
-                                    transitionAlpha = 1f
-                                )
-                        Presenting.NONE -> { /* nothing */ }
-                    }
-                    }
-                }
-            }
-        }
     }
 }

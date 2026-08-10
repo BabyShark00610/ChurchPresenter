@@ -258,6 +258,18 @@ fun detectScreensFromAwt(): List<DetectedScreen> {
     }
 }
 
+/** One selectable output target: None, a physical display, or a DeckLink device. */
+internal data class DisplayOption(
+    val label: String,
+    val shortLabel: String = label,
+    val targetDisplay: Int,  // -2 = none, 0+ = display/device index
+    val targetType: String,  // "screen" or "decklink"
+    val boundsX: Int = Int.MIN_VALUE,
+    val boundsY: Int = Int.MIN_VALUE,
+    val boundsW: Int = 0,
+    val boundsH: Int = 0
+)
+
 @Composable
 fun ProjectionSettingsTab(
     settings: AppSettings,
@@ -331,17 +343,8 @@ fun ProjectionSettingsTab(
     val numScreens = presenterWindowCount
     val screenAssignments = (0 until numScreens).map { proj.getAssignment(it) }
 
-    // Build display target options: None + non-primary physical displays + DeckLink devices
-    data class DisplayOption(
-        val label: String,
-        val shortLabel: String = label,
-        val targetDisplay: Int,  // -2 = none, 0+ = display/device index
-        val targetType: String,  // "screen" or "decklink"
-        val boundsX: Int = Int.MIN_VALUE,
-        val boundsY: Int = Int.MIN_VALUE,
-        val boundsW: Int = 0,
-        val boundsH: Int = 0
-    )
+    // Display target options are built below; the type is top-level so the extracted
+    // ScreenAssignmentCard can take them as a parameter.
 
     val noneLabel = stringResource(Res.string.key_output_none)
     val displayOptions = remember(screenDevicesAll, noneLabel) {
@@ -383,8 +386,6 @@ fun ProjectionSettingsTab(
 
     // Content-type columns — shared by the per-hardware Screen Assignment grid (Card 1)
     // and the per-output Browser Source checkboxes (Card 1.5).
-    val bibleLabel = stringResource(Res.string.content_bible)
-    val songsLabel = stringResource(Res.string.content_songs)
     val picturesLabel = stringResource(Res.string.content_pictures)
     val mediaLabel = stringResource(Res.string.content_media)
     val streamingLabel = stringResource(Res.string.content_streaming)
@@ -497,12 +498,9 @@ fun ProjectionSettingsTab(
 
     // Shared column widths — used by both the Screen Assignment table (Card 1) and the
     // Browser Source Outputs table (Card 1.5) so their columns line up the same way.
-    val langDropdownWidth = 95.dp
-    val cellWidth = 82.dp
     // Reserves 2 lines of bodySmall (16.sp line height) so single-line labels (Bible, display
     // mode, etc.) sit flush with the bottom of the tallest label (e.g. "Pictures/Presentation",
     // which wraps to 2 lines) — keeping every checkbox/radio button in the row aligned.
-    val contentLabelHeight = 32.dp
 
     Box(
         modifier = Modifier
@@ -516,523 +514,27 @@ fun ProjectionSettingsTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-    // ── Card 1: Screen Assignment ───────────────────────────────────────────
-    SettingsSection(title = stringResource(Res.string.screen_assignment)) {
-
-        // Detected screens info + simulate stepper + Identify button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = stringResource(Res.string.detected_screens, detectedScreens),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(Res.string.presenter_windows_count, presenterWindowCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            // Dev-only: simulate several independent output windows on a single-monitor machine.
-            // Only meaningful in the dev fallback (no real display/DeckLink output exists).
-            if (devWindowedFallback) {
-                NumberSettingsTextField(
-                    label = stringResource(Res.string.projection_simulate_outputs),
-                    initialText = devWindowCount,
-                    range = 1..8,
-                    onValueChange = { count ->
-                        onSettingsChange { s ->
-                            s.copy(projectionSettings = s.projectionSettings.copy(devWindowCount = count))
-                        }
-                    },
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Button(shape = RoundedCornerShape(6.dp), onClick = { onIdentifyScreen() }) {
-                Text(
-                    text = stringResource(Res.string.identify_screen),
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Grid table — screens are rows (left), content types are columns (top)
-        // Wide enough for the longest label ("Dev Window") to stay on a single line
-        val screenLabelWidth = 90.dp
-        val displayDropdownWidth = 100.dp
-
-        // Header row: Screen label + Display + Key Output + Display Mode + Content Outputs.
-        // Every label sits in a fixed-height, bottom-aligned Box so all labels' bottoms line up
-        // right above the divider.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Spacer(modifier = Modifier.width(screenLabelWidth))
-            Box(modifier = Modifier.width(displayDropdownWidth).height(contentLabelHeight), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = stringResource(Res.string.projection_target_display),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Box(modifier = Modifier.width(displayDropdownWidth).height(contentLabelHeight), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = stringResource(Res.string.key_output),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Box(modifier = Modifier.width(langDropdownWidth).height(contentLabelHeight), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = stringResource(Res.string.display_mode),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Box(modifier = Modifier.weight(1f).height(contentLabelHeight), contentAlignment = Alignment.BottomStart) {
-                Text(
-                    text = stringResource(Res.string.content_outputs),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-
-        // One row per screen
-        for (i in 0 until numScreens) {
-            val assignment = screenAssignments[i]
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Screen label — the dev-window fallback always occupies slot 0
-                Text(
-                    text = if (devWindowedFallback && i == 0) {
-                        stringResource(Res.string.dev_window_label)
-                    } else {
-                        stringResource(Res.string.screen_col_label, i + 1)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    modifier = Modifier.width(screenLabelWidth)
-                )
-
-                // Display target dropdown
-                Box(modifier = Modifier.width(displayDropdownWidth), contentAlignment = Alignment.Center) {
-                    var dropdownExpanded by remember { mutableStateOf(false) }
-                    // Match by type+index first for DeckLink (no bounds), then by bounds for screens
-                    val currentOption = displayOptions.find {
-                        it.targetType == assignment.targetType &&
-                        it.targetDisplay == assignment.targetDisplay &&
-                        it.targetType == "decklink"
-                    } ?: displayOptions.find {
-                        it.targetType == assignment.targetType &&
-                        it.boundsX == assignment.targetBoundsX && it.boundsY == assignment.targetBoundsY &&
-                        it.boundsW == assignment.targetBoundsW && it.boundsH == assignment.targetBoundsH
-                    } ?: displayOptions.find {
-                        it.targetDisplay == assignment.targetDisplay && it.targetType == assignment.targetType
-                    } ?: displayOptions.first()
-
-                    val hasInputConflict = currentOption.targetType == "decklink" && currentOption.targetDisplay >= 0 &&
-                        (DeckLinkManager.isInputActive(currentOption.targetDisplay) ||
-                         DeckLinkManager.isInputConfigured(currentOption.targetDisplay, scenes))
-
-                    @OptIn(ExperimentalMaterial3Api::class)
-                    if (hasInputConflict) {
-                        TooltipBox(
-                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-                            tooltip = { PlainTooltip { Text(stringResource(Res.string.projection_decklink_io_conflict_tooltip)) } },
-                            state = rememberTooltipState()
-                        ) {
-                            OutlinedButton(
-                                shape = RoundedCornerShape(6.dp),
-                                onClick = { dropdownExpanded = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                            ) {
-                                Text(
-                                    text = currentOption.shortLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    } else {
-                        OutlinedButton(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = { dropdownExpanded = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = currentOption.shortLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false }
-                    ) {
-                        displayOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label, style = MaterialTheme.typography.bodySmall) },
-                                onClick = {
-                                    dropdownExpanded = false
-                                    val updated = assignment.copy(
-                                        targetDisplay = option.targetDisplay,
-                                        targetType = option.targetType,
-                                        targetBoundsX = option.boundsX,
-                                        targetBoundsY = option.boundsY,
-                                        targetBoundsW = option.boundsW,
-                                        targetBoundsH = option.boundsH
-                                    )
-                                    onSettingsChange { s ->
-                                        var newProj = s.projectionSettings.withAssignment(i, updated)
-                                        if (option.targetDisplay >= 0) {
-                                            val isDeckLink = option.targetType == "decklink"
-                                            for (j in 0 until numScreens) {
-                                                val other = newProj.getAssignment(j)
-                                                // Clear from other primary displays that target the same output
-                                                val primaryMatch = if (isDeckLink) {
-                                                    j != i && other.targetType == "decklink" && other.targetDisplay == option.targetDisplay
-                                                } else {
-                                                    j != i && option.boundsX != Int.MIN_VALUE &&
-                                                    other.targetBoundsX == option.boundsX && other.targetBoundsY == option.boundsY &&
-                                                    other.targetBoundsW == option.boundsW && other.targetBoundsH == option.boundsH
-                                                }
-                                                if (primaryMatch) {
-                                                    newProj = newProj.withAssignment(j, other.copy(
-                                                        targetDisplay = Constants.KEY_TARGET_NONE, targetType = "screen",
-                                                        targetBoundsX = Int.MIN_VALUE, targetBoundsY = Int.MIN_VALUE, targetBoundsW = 0, targetBoundsH = 0
-                                                    ))
-                                                }
-                                                // Clear from key outputs that target the same output
-                                                val otherLatest = newProj.getAssignment(j)
-                                                val keyMatch = if (isDeckLink) {
-                                                    otherLatest.keyTargetType == "decklink" && otherLatest.keyTargetDisplay == option.targetDisplay
-                                                } else {
-                                                    option.boundsX != Int.MIN_VALUE &&
-                                                    otherLatest.keyTargetBoundsX == option.boundsX && otherLatest.keyTargetBoundsY == option.boundsY &&
-                                                    otherLatest.keyTargetBoundsW == option.boundsW && otherLatest.keyTargetBoundsH == option.boundsH
-                                                }
-                                                if (keyMatch) {
-                                                    newProj = newProj.withAssignment(j, otherLatest.copy(
-                                                        keyTargetDisplay = Constants.KEY_TARGET_NONE, keyTargetType = "screen",
-                                                        keyTargetBoundsX = Int.MIN_VALUE, keyTargetBoundsY = Int.MIN_VALUE, keyTargetBoundsW = 0, keyTargetBoundsH = 0
-                                                    ))
-                                                }
-                                            }
-                                        }
-                                        s.copy(projectionSettings = newProj)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Key output target dropdown (None + display options)
-                Box(modifier = Modifier.width(displayDropdownWidth), contentAlignment = Alignment.Center) {
-                    var keyExpanded by remember { mutableStateOf(false) }
-                    val noneLabel = stringResource(Res.string.key_output_none)
-
-                    data class KeyOutputOption(
-                        val label: String,
-                        val shortLabel: String = label,
-                        val targetDisplay: Int,
-                        val targetType: String,
-                        val boundsX: Int = Int.MIN_VALUE,
-                        val boundsY: Int = Int.MIN_VALUE,
-                        val boundsW: Int = 0,
-                        val boundsH: Int = 0
-                    )
-                    val keyOutputOptions = remember(screenDevicesAll, noneLabel) {
-                        val opts = mutableListOf(KeyOutputOption(label = noneLabel, targetDisplay = Constants.KEY_TARGET_NONE, targetType = "screen"))
-                        var keyDisplayNum = 1
-                        for (screen in screenDevicesAll) {
-                            if (screen.isPrimary) continue
-                            opts.add(KeyOutputOption(
-                                label = "Display $keyDisplayNum (${screen.boundsW}x${screen.boundsH} @ ${screen.boundsX},${screen.boundsY})",
-                                shortLabel = "D$keyDisplayNum (${screen.boundsW}x${screen.boundsH})",
-                                targetDisplay = screen.index, targetType = "screen",
-                                boundsX = screen.boundsX, boundsY = screen.boundsY, boundsW = screen.boundsW, boundsH = screen.boundsH
-                            ))
-                            keyDisplayNum++
-                        }
-                        if (DeckLinkManager.isAvailable()) {
-                            DeckLinkManager.listDevices().forEachIndexed { di, device ->
-                                opts.add(KeyOutputOption(
-                                    label = "DeckLink ${di + 1}: ${device.name}",
-                                    shortLabel = "DK${di + 1}: ${device.name}",
-                                    targetDisplay = device.index, targetType = "decklink"
-                                ))
-                            }
-                        }
-                        opts.toList()
-                    }
-
-                    // Match by type+index first for DeckLink (no bounds), then by bounds for screens
-                    val currentKeyOption = keyOutputOptions.find {
-                        it.targetType == assignment.keyTargetType &&
-                        it.targetDisplay == assignment.keyTargetDisplay &&
-                        it.targetType == "decklink"
-                    } ?: keyOutputOptions.find {
-                        it.targetType == assignment.keyTargetType &&
-                        it.boundsX == assignment.keyTargetBoundsX && it.boundsY == assignment.keyTargetBoundsY &&
-                        it.boundsW == assignment.keyTargetBoundsW && it.boundsH == assignment.keyTargetBoundsH
-                    } ?: keyOutputOptions.find {
-                        it.targetDisplay == assignment.keyTargetDisplay && it.targetType == assignment.keyTargetType
-                    } ?: keyOutputOptions.first()
-
-                    val hasKeyInputConflict = currentKeyOption.targetType == "decklink" && currentKeyOption.targetDisplay >= 0 &&
-                        (DeckLinkManager.isInputActive(currentKeyOption.targetDisplay) ||
-                         DeckLinkManager.isInputConfigured(currentKeyOption.targetDisplay, scenes))
-
-                    @OptIn(ExperimentalMaterial3Api::class)
-                    if (hasKeyInputConflict) {
-                        TooltipBox(
-                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-                            tooltip = { PlainTooltip { Text(stringResource(Res.string.projection_decklink_io_conflict_tooltip)) } },
-                            state = rememberTooltipState()
-                        ) {
-                            OutlinedButton(
-                                shape = RoundedCornerShape(6.dp),
-                                onClick = { keyExpanded = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                            ) {
-                                Text(
-                                    text = currentKeyOption.shortLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    } else {
-                        OutlinedButton(
-                            shape = RoundedCornerShape(6.dp),
-                            onClick = { keyExpanded = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = currentKeyOption.shortLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = keyExpanded,
-                        onDismissRequest = { keyExpanded = false }
-                    ) {
-                        keyOutputOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label, style = MaterialTheme.typography.bodySmall) },
-                                onClick = {
-                                    keyExpanded = false
-                                    val updated = assignment.copy(
-                                        keyTargetDisplay = option.targetDisplay,
-                                        keyTargetType = option.targetType,
-                                        keyTargetBoundsX = option.boundsX,
-                                        keyTargetBoundsY = option.boundsY,
-                                        keyTargetBoundsW = option.boundsW,
-                                        keyTargetBoundsH = option.boundsH
-                                    )
-                                    onSettingsChange { s ->
-                                        var newProj = s.projectionSettings.withAssignment(i, updated)
-                                        if (option.targetDisplay >= 0) {
-                                            val isDeckLink = option.targetType == "decklink"
-                                            for (j in 0 until numScreens) {
-                                                val other = newProj.getAssignment(j)
-                                                // Clear from other primary displays that target the same output
-                                                val primaryMatch = if (isDeckLink) {
-                                                    j != i && other.targetType == "decklink" && other.targetDisplay == option.targetDisplay
-                                                } else {
-                                                    j != i && option.boundsX != Int.MIN_VALUE &&
-                                                    other.targetBoundsX == option.boundsX && other.targetBoundsY == option.boundsY &&
-                                                    other.targetBoundsW == option.boundsW && other.targetBoundsH == option.boundsH
-                                                }
-                                                if (primaryMatch) {
-                                                    newProj = newProj.withAssignment(j, other.copy(
-                                                        targetDisplay = Constants.KEY_TARGET_NONE, targetType = "screen",
-                                                        targetBoundsX = Int.MIN_VALUE, targetBoundsY = Int.MIN_VALUE, targetBoundsW = 0, targetBoundsH = 0
-                                                    ))
-                                                }
-                                                // Clear from other key outputs that target the same output
-                                                val otherLatest = newProj.getAssignment(j)
-                                                val keyMatch = if (isDeckLink) {
-                                                    j != i && otherLatest.keyTargetType == "decklink" && otherLatest.keyTargetDisplay == option.targetDisplay
-                                                } else {
-                                                    j != i && option.boundsX != Int.MIN_VALUE &&
-                                                    otherLatest.keyTargetBoundsX == option.boundsX && otherLatest.keyTargetBoundsY == option.boundsY &&
-                                                    otherLatest.keyTargetBoundsW == option.boundsW && otherLatest.keyTargetBoundsH == option.boundsH
-                                                }
-                                                if (keyMatch) {
-                                                    newProj = newProj.withAssignment(j, otherLatest.copy(
-                                                        keyTargetDisplay = Constants.KEY_TARGET_NONE, keyTargetType = "screen",
-                                                        keyTargetBoundsX = Int.MIN_VALUE, keyTargetBoundsY = Int.MIN_VALUE, keyTargetBoundsW = 0, keyTargetBoundsH = 0
-                                                    ))
-                                                }
-                                            }
-                                            // Also clear if same slot's primary display targets the same output
-                                            val self = newProj.getAssignment(i)
-                                            val selfMatch = if (isDeckLink) {
-                                                self.targetType == "decklink" && self.targetDisplay == option.targetDisplay
-                                            } else {
-                                                option.boundsX != Int.MIN_VALUE &&
-                                                self.targetBoundsX == option.boundsX && self.targetBoundsY == option.boundsY &&
-                                                self.targetBoundsW == option.boundsW && self.targetBoundsH == option.boundsH
-                                            }
-                                            if (selfMatch) {
-                                                newProj = newProj.withAssignment(i, self.copy(
-                                                    targetDisplay = Constants.KEY_TARGET_NONE, targetType = "screen",
-                                                    targetBoundsX = Int.MIN_VALUE, targetBoundsY = Int.MIN_VALUE, targetBoundsW = 0, targetBoundsH = 0
-                                                ))
-                                            }
-                                        }
-                                        s.copy(projectionSettings = newProj)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Display mode dropdown (fixed column)
-                @OptIn(ExperimentalMaterial3Api::class)
-                Box(modifier = Modifier.width(langDropdownWidth), contentAlignment = Alignment.Center) {
-                    var displayModeExpanded by remember { mutableStateOf(false) }
-                    OutlinedButton(
-                        shape = RoundedCornerShape(6.dp),
-                        onClick = { displayModeExpanded = true },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = displayModes.find { it.second == assignment.displayMode }?.first ?: fullScreenLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = displayModeExpanded,
-                        onDismissRequest = { displayModeExpanded = false }
-                    ) {
-                        displayModes.forEach { (label, modeValue) ->
-                            DropdownMenuItem(
-                                text = { Text(label, style = MaterialTheme.typography.bodySmall) },
-                                onClick = {
-                                    displayModeExpanded = false
-                                    val updated = assignment.copy(displayMode = modeValue)
-                                    onSettingsChange { s ->
-                                        s.copy(projectionSettings = s.projectionSettings.withAssignment(i, updated))
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Content Outputs — opens a modal listing every content type + background.
-                // Replaces the old horizontally-scrolling checkbox grid.
-                var showContentDialog by remember { mutableStateOf(false) }
-                val enabledCount = contentOutputsEnabledCount(assignment, contentGroup, backgroundGroup)
-                val totalCount = 2 + contentGroup.size + backgroundGroup.size
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    OutlinedButton(
-                        shape = RoundedCornerShape(6.dp),
-                        onClick = { showContentDialog = true },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Filled.Tv, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(Res.string.content_outputs_enabled_short, enabledCount, totalCount),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-                if (showContentDialog) {
-                    val screenLabel = if (devWindowedFallback && i == 0)
-                        stringResource(Res.string.dev_window_label)
-                    else
-                        stringResource(Res.string.screen_col_label, i + 1)
-                    ContentOutputsDialog(
-                        title = stringResource(Res.string.content_outputs_for, screenLabel),
-                        screenLabel = screenLabel,
-                        assignment = assignment,
-                        contentGroup = contentGroup,
-                        backgroundGroup = backgroundGroup,
-                        bibleLabel = bibleLabel,
-                        songsLabel = songsLabel,
-                        translationNames = translationNames,
-                        translationDisplays = translationDisplays,
-                        songLangModes = songLangModes,
-                        webDeckLinkTooltip = stringResource(Res.string.projection_web_decklink_tooltip),
-                        webSnapshotTooltip = stringResource(Res.string.browser_source_website_snapshot_tooltip),
-                        isBrowserSource = false,
-                        onApply = { updated ->
-                            onSettingsChange { s ->
-                                s.copy(projectionSettings = s.projectionSettings.withAssignment(i, updated))
-                            }
-                        },
-                        onDismiss = { showContentDialog = false }
-                    )
-                }
-
-            } // end data Row
-
-            if (i < numScreens - 1) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Lower third height
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(Res.string.lower_third_height),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            NumberSettingsTextField(
-                initialText = proj.lowerThirdHeightPercent,
-                onValueChange = { value ->
-                    onSettingsChange { s ->
-                        s.copy(projectionSettings = s.projectionSettings.copy(lowerThirdHeightPercent = value))
-                    }
-                },
-                range = 10..60
-            )
-        }
-
-    }
+    ScreenAssignmentCard(
+        settings = settings,
+        onSettingsChange = onSettingsChange,
+        onIdentifyScreen = onIdentifyScreen,
+        scenes = scenes,
+        screenDevicesAll = screenDevicesAll,
+        detectedScreens = detectedScreens,
+        devWindowCount = devWindowCount,
+        devWindowedFallback = devWindowedFallback,
+        presenterWindowCount = presenterWindowCount,
+        numScreens = numScreens,
+        screenAssignments = screenAssignments,
+        displayOptions = displayOptions,
+        noneLabel = noneLabel,
+        contentGroup = contentGroup,
+        backgroundGroup = backgroundGroup,
+        displayModes = displayModes,
+        songLangModes = songLangModes,
+        translationDisplays = translationDisplays,
+        translationNames = translationNames,
+    )
 
     BrowserSourceOutputsCard(
         settings = settings,

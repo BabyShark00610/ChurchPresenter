@@ -115,7 +115,6 @@ internal fun Route.qaRoutes(
                     val dtos = approved.map {
                         val dto = it.toDto()
                         val textEsc = dto.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
-                        val nameEsc = dto.submitterName.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
                         val voteDir = qa.getVoteDirection(it.id, clientIp)
                         val votedStr = if (voteDir != null) "\"$voteDir\"" else "null"
                         """{"id":"${dto.id}","text":"$textEsc","voteCount":${dto.voteCount},"voted":$votedStr}"""
