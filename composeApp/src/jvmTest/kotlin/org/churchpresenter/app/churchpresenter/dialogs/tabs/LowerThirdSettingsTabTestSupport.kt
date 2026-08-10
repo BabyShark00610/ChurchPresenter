@@ -90,3 +90,25 @@ internal fun ComposeUiTest.awaitFolderScan() {
             .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
     }
 }
+
+/**
+ * Waits for the lower-third rows that [settings]' folder should produce.
+ *
+ * The server tab loads them off the UI thread too, but unlike the lower-third tab it starts from an
+ * empty list with no "Scanning folder" marker — so [awaitFolderScan] passes vacuously there and an
+ * assertion would run against an empty list. Waiting for the names the folder actually holds is a
+ * positive signal that the read landed, and it stays correct for an empty folder (nothing to wait
+ * for).
+ */
+internal fun ComposeUiTest.awaitLowerThirdRows(settings: AppSettings) {
+    val folder = File(settings.streamingSettings.lowerThirdFolder)
+    val names = folder.listFiles()
+        ?.filter { it.extension.equals("json", ignoreCase = true) && it.readText().contains("\"layers\"") }
+        ?.map { it.nameWithoutExtension }
+        ?: return
+    if (names.isEmpty()) return
+    waitUntil("the lower-third rows loaded") {
+        names.all { onAllNodesWithText(it, substring = true).fetchSemanticsNodes(false).isNotEmpty() }
+    }
+}
+

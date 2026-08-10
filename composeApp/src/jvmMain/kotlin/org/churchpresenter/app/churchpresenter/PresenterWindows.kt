@@ -80,18 +80,6 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * Every audience-facing output window: one per assigned display, plus the DeckLink fill/key
- * surfaces and the dev fallback window.
- *
- * Split out of main.kt (3,719 lines). It takes everything it needs as parameters and closes over
- * nothing in `main`, which is why the move required no other change.
- *
- * NOTE: this file is NOT on the coverage gate's exclusion list, and it is window construction that
- * only runs with a real display attached. `jacocoTestCoverageVerification` therefore fails while it
- * exists as its own file -- see the branch notes. Excluding it was considered and rejected.
- */
-
 @Composable
 internal fun PresenterWindows(
     screens: Array<GraphicsDevice>,
@@ -108,32 +96,13 @@ internal fun PresenterWindows(
     val screenLocks by presenterManager.screenLocks
     val selectedVerses by presenterManager.selectedVerses
     val displayedVerses by presenterManager.displayedVerses
-    val nextVerses by presenterManager.nextVerses
-    val bibleTransitionAlpha by presenterManager.bibleTransitionAlpha
     val lyricSection by presenterManager.lyricSection
     val lyricSectionVersion by presenterManager.lyricSectionVersion
-    val displayedLyricSection by presenterManager.displayedLyricSection
-    val songTransitionAlpha by presenterManager.songTransitionAlpha
-    val songDisplayLineIndex by presenterManager.songDisplayLineIndex
-    val allLyricSections by presenterManager.allLyricSections
-    val songDisplaySectionIndex by presenterManager.songDisplaySectionIndex
     val selectedImagePath by presenterManager.selectedImagePath
-    val displayedImagePath by presenterManager.displayedImagePath
-    val pictureTransitionAlpha by presenterManager.pictureTransitionAlpha
-    val previousDisplayedImagePath by presenterManager.previousDisplayedImagePath
-    val pictureSlideOffset by presenterManager.pictureSlideOffset
     val selectedSlide by presenterManager.selectedSlide
-    val displayedSlide by presenterManager.displayedSlide
-    val slideFrozen by presenterManager.slideFrozen
-    val presentationFrame by presenterManager.presentationFrame
-    val slideTransitionAlpha by presenterManager.slideTransitionAlpha
-    val previousDisplayedSlide by presenterManager.previousDisplayedSlide
-    val slideSlideOffset by presenterManager.slideSlideOffset
     val animationType by presenterManager.animationType
     val transitionDuration by presenterManager.transitionDuration
     val announcementText by presenterManager.announcementText
-    val displayedAnnouncementText by presenterManager.displayedAnnouncementText
-    val announcementTransitionAlpha by presenterManager.announcementTransitionAlpha
     val clearAnnouncementOnFinish = {
         presenterManager.setAnnouncementText("")
         presenterManager.setDisplayedAnnouncementText("")
@@ -144,29 +113,15 @@ internal fun PresenterWindows(
     val lottiePauseFrame by presenterManager.lottiePauseFrame
     val lottiePauseDurationMs by presenterManager.lottiePauseDurationMs
     val lottieTrigger by presenterManager.lottieTrigger
-    val lottieProgress by presenterManager.lottieProgress
-    val lottieFrame by presenterManager.lottieFrame
-    val mediaTransitionAlpha by presenterManager.mediaTransitionAlpha
-    val websiteUrl by presenterManager.websiteUrl
-    val activeScene by presenterManager.activeScene
-    val displayedQuestion by presenterManager.displayedQuestion
-    val qaTransitionAlpha by presenterManager.qaTransitionAlpha
-    val showQRCodeOnDisplay by presenterManager.showQRCodeOnDisplay
-    val displayedDictionaryEntry by presenterManager.displayedDictionaryEntry
-    val presenterNotes by presenterManager.presenterNotes
 
     val proj = appSettings.projectionSettings
 
-    // Mode-level crossfade duration (shared, per-screen active flag computed inside each window)
     val modeCrossfadeDuration = modeCrossfadeDuration(appSettings.bibleSettings, appSettings.songSettings)
 
-    // Fade-out before clearing display
     val clearRequested by presenterManager.clearDisplayRequested
     LaunchedEffect(clearRequested) {
         if (!clearRequested) return@LaunchedEffect
         val mode = presenterManager.presentingMode.value
-        // Don't fade the content alpha if any screen is locked to this mode —
-        // that screen is still showing the content and the alpha must stay at 1.
         val modeIsLocked = isAnyScreenLockedTo(presenterManager.screenLocks.value, mode)
         val shouldFade = shouldFadeOnClear(
             mode, modeIsLocked, appSettings.bibleSettings, appSettings.songSettings,
@@ -182,42 +137,32 @@ internal fun PresenterWindows(
                 }
             }
         }
-        // Set mode to NONE — alphas stay at 0 until next go-live triggers fade-in
         presenterManager.setPresentingMode(Presenting.NONE)
     }
 
-    // Centralized Bible transition: one animation drives all windows so they stay in sync
-    // When hold is active, skip updating displayedVerses so the user can browse freely
     val bibleHold by presenterManager.bibleHold
     LaunchedEffect(selectedVerses, bibleHold) {
         if (bibleHold) return@LaunchedEffect
-        val bs = appSettings.bibleSettings
-        // All transitions (crossfade, fade in/out) are handled inside BiblePresenter
         presenterManager.setDisplayedVerses(selectedVerses)
         presenterManager.setBibleTransitionAlpha(1f)
     }
 
-    // Centralized Song transition
     LaunchedEffect(lyricSection, lyricSectionVersion) {
         val ss = appSettings.songSettings
-        // Skip animation when section content hasn't changed (e.g. line navigation within same verse)
         if (lyricSection == presenterManager.displayedLyricSection.value) {
             presenterManager.setSongTransitionAlpha(1f)
             return@LaunchedEffect
         }
-        // Skip fade in line mode — only one line visible, instant swap is cleaner
         val isLineMode = isSongLineMode(ss)
         if (isLineMode) {
             presenterManager.setDisplayedLyricSection(lyricSection)
             presenterManager.setSongTransitionAlpha(1f)
             return@LaunchedEffect
         }
-        // All transitions (crossfade, fade in/out) are handled inside SongPresenter
         presenterManager.setDisplayedLyricSection(lyricSection)
         presenterManager.setSongTransitionAlpha(1f)
     }
 
-    // Centralized Picture transition
     LaunchedEffect(selectedImagePath) {
         val current = presenterManager.displayedImagePath.value
         when {
@@ -262,13 +207,10 @@ internal fun PresenterWindows(
         }
     }
 
-    // Animated-presentation frame clock: one evaluation per display frame while a build step
-    // animates, published to every output window via presenterManager.presentationFrame.
     LaunchedEffect(Unit) {
         presenterManager.runPresentationClock()
     }
 
-    // Centralized Slide transition
     LaunchedEffect(selectedSlide) {
         val current = presenterManager.displayedSlide.value
         when {
@@ -313,7 +255,6 @@ internal fun PresenterWindows(
         }
     }
 
-    // Centralized Announcements transition
     LaunchedEffect(announcementText) {
         val annSettings = appSettings.announcementsSettings
         val isFade = isFadeAnnouncement(annSettings.animationType)
@@ -323,11 +264,9 @@ internal fun PresenterWindows(
         val loopCount = annSettings.loopCount
 
         if (isSlidingAnnouncement(annSettings.animationType)) {
-            // Directional slides — just swap text, animation handled in AnnouncementsPresenter
             presenterManager.setDisplayedAnnouncementText(announcementText)
             presenterManager.setAnnouncementTransitionAlpha(1f)
         } else if (announcementText.isEmpty()) {
-            // Cleared by user or loop finished — fade out if fade, instant if none
             if (shouldFadeOutAnnouncement(isFade, wasEmpty)) {
                 val anim = Animatable(1f)
                 anim.animateTo(0f, tween(fadeDuration)) {
@@ -337,10 +276,8 @@ internal fun PresenterWindows(
             presenterManager.setDisplayedAnnouncementText("")
             presenterManager.setAnnouncementTransitionAlpha(1f)
         } else {
-            // Show text with timed display
             presenterManager.setDisplayedAnnouncementText(announcementText)
 
-            // Fade in (only for fade animation)
             if (isFade) {
                 presenterManager.setAnnouncementTransitionAlpha(0f)
                 val anim = Animatable(0f)
@@ -352,38 +289,25 @@ internal fun PresenterWindows(
             }
 
             if (isFiniteAnnouncementLoop(loopCount)) {
-                // Finite loops: display for duration × loopCount, then clear
                 delay(announcementDisplayMs(sliderSum, annSettings.animationDuration.toLong(), loopCount))
 
-                // Fade out (only for fade animation)
                 if (isFade) {
                     val anim = Animatable(1f)
                     anim.animateTo(0f, tween(fadeDuration)) {
                         presenterManager.setAnnouncementTransitionAlpha(value)
                     }
                 }
-                // Clear display and exit presenting mode
                 presenterManager.setAnnouncementText("")
                 presenterManager.setDisplayedAnnouncementText("")
                 presenterManager.requestClearDisplay()
             }
-            // loopCount == 0: infinite — stay visible until user manually stops
         }
     }
 
-    // Centralized Lottie (lower third) animation — one animation drives all windows
     val lottieComposition by rememberLottieComposition(key = lottieJsonContent) {
         LottieCompositionSpec.JsonString(lottieJsonContent)
     }
     LaunchedEffect(lottieComposition, lottiePauseAtFrame, lottiePauseFrame, lottiePauseDurationMs, lottieTrigger) {
-        // The live Compottie GPU-vector renderer (used below whenever pre-rendered frames aren't
-        // ready yet) can silently render nothing partway through a clip on some GPU/driver
-        // combinations. Pre-rendered raw frames don't share that failure mode (each is a static
-        // bitmap, independently rendered ahead of time). So this loop polls
-        // presenterManager.lottieFrameCount LIVE on every tick (not just once at effect-start) and
-        // switches over to raw-frame playback the instant frames become available — continuing
-        // from the same elapsed-time position, so there's no visible jump — instead of committing
-        // to whichever path was ready first for the whole clip.
         try {
             val comp = lottieComposition
             val initialFrameCount = presenterManager.lottieFrameCount.value
@@ -401,9 +325,6 @@ internal fun PresenterWindows(
                 elapsedMs, totalDurMs, hasPause, lottiePauseFrame, pauseAtMs, lottiePauseDurationMs,
             )
 
-            // Vsync-driven clock: elapsed time comes from real frame timestamps, so a missed
-            // display frame self-corrects on the next one instead of accumulating drift the way
-            // a fixed-delay tick would.
             val startNanos = withFrameNanos { it }
             var elapsedMs = 0L
             while (true) {
@@ -418,7 +339,6 @@ internal fun PresenterWindows(
                 val nowNanos = withFrameNanos { it }
                 elapsedMs = ((nowNanos - startNanos) / 1_000_000).coerceAtMost(grandTotalMs)
             }
-            // Snap to the final state (re-check readiness one last time in case it just became ready).
             val finalFrameCount = presenterManager.lottieFrameCount.value
             if (finalFrameCount != null) {
                 presenterManager.setLottieCurrentFrameIndex(finalFrameCount - 1)
@@ -434,10 +354,6 @@ internal fun PresenterWindows(
         }
     }
 
-    // Shared primary/normal output content — driven by a ScreenAssignment so behavior (crossfade,
-    // lower-third layout, per-type visibility, language mode, backgrounds) is identical whether the
-    // caller is a real per-screen output window or the developer-only windowed test output below.
-    // screenNumber is null when there's no physical screen to label (e.g. the test window).
     val presenterOutputContent: @Composable (screenAssignment: ScreenAssignment, effectiveMode: Presenting, screenNumber: Int?) -> Unit = { screenAssignment, effectiveMode, screenNumber ->
         PresenterOutputContent(
             screenAssignment, effectiveMode, screenNumber, presenterManager, appSettings,
@@ -446,28 +362,20 @@ internal fun PresenterWindows(
         )
     }
 
-    // Identify the OS primary monitor and build list of non-primary screens
     val defaultDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
     val availableScreens = nonPrimaryIndices(screens.toList(), defaultDevice)
 
     val deckLinkDeviceCount = deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
     val windowCount = presenterWindowCount(availableScreens.size, deckLinkDeviceCount)
-    // Dev convenience: on a single-monitor dev machine there's no non-primary monitor or DeckLink
-    // device to open a real output window on. Show Output 1 as an ordinary window instead of not
-    // rendering at all, driven by the same "Toggle Presenter Displays" button/state.
     val devWindowedFallback = isDevWindowedFallback(
         BuildConfig.IS_RELEASE, DevFlags.forceDevWindow, windowCount,
     )
-    // On a machine with no real output, open DevFlags.devWindowCount fallback windows (default 1).
-    // A count > 1 simulates several independent outputs on one monitor for developing/testing
-    // per-output features — each window is its own output slot (index, assignment, screen lock).
     val devFallbackCount = devFallbackWindowCount(devWindowedFallback, proj.devWindowCount)
     for (i in 0 until (windowCount + devFallbackCount)) {
         if (isFallbackWindowSlot(devWindowedFallback, i, windowCount)) {
             val fallbackIndex = fallbackSlotIndex(i, windowCount)
             val screenAssignment = proj.getAssignment(fallbackIndex)
             val effectiveMode = effectiveOutputMode(screenLocks, fallbackIndex, presentingMode)
-            // Cascade the windows so multiple dev outputs don't stack exactly on top of each other.
             val fallbackWindowState = remember(fallbackIndex) {
                 WindowState(
                     width = 960.dp,
@@ -495,7 +403,6 @@ internal fun PresenterWindows(
         val screenAssignment = proj.getAssignment(i)
         val effectiveMode = effectiveOutputMode(screenLocks, i, presentingMode)
 
-        // DeckLink outputs: render via offscreen Window + pixel capture
         if (isDeckLinkPrimaryOutput(screenAssignment)) {
             if (showPresenterWindow && screenAssignment.targetDisplay >= 0) {
                 val deckLinkRole = screenAssignment.primaryOutputRole
@@ -528,14 +435,12 @@ internal fun PresenterWindows(
                         clearAnnouncementOnFinish = clearAnnouncementOnFinish,
                         outputRole = deckLinkRole,
                         showBg = showsOutputBackground(screenAssignment),
-                        // these outputs omitted showBackground and so took the presenters' true default
                         showBackgroundOverride = true,
                     )
                     }
                 }
             }
 
-            // DeckLink key output
             if (showPresenterWindow && hasDeckLinkKeyOutput(screenAssignment)) {
                 DeckLinkComposeOutput(
                     deviceIndex = screenAssignment.keyTargetDisplay,
@@ -563,14 +468,12 @@ internal fun PresenterWindows(
                         clearAnnouncementOnFinish = clearAnnouncementOnFinish,
                         outputRole = Constants.OUTPUT_ROLE_KEY,
                         showBg = showsOutputBackground(screenAssignment),
-                        // these outputs omitted showBackground and so took the presenters' true default
                         showBackgroundOverride = true,
                     )
                     }
                 }
             }
 
-            // Key output on a regular screen when primary is DeckLink
             if (showPresenterWindow && hasScreenKeyOutput(screenAssignment)) {
                 val keyScreenIndex = keyOutputScreenIndex(
                     findScreenIndexByBounds(
@@ -630,7 +533,6 @@ internal fun PresenterWindows(
                         clearAnnouncementOnFinish = clearAnnouncementOnFinish,
                         outputRole = Constants.OUTPUT_ROLE_KEY,
                         showBg = showsOutputBackground(screenAssignment),
-                        // these outputs omitted showBackground and so took the presenters' true default
                         showBackgroundOverride = true,
                     )
                                     }
@@ -646,7 +548,6 @@ internal fun PresenterWindows(
 
         if (hasNoPrimaryTarget(screenAssignment)) continue
 
-        // Resolve target display
         val targetScreenIndex = primaryOutputScreenIndex(
             matchedByBounds = findScreenIndexByBounds(
                 screens,
@@ -660,13 +561,10 @@ internal fun PresenterWindows(
             positionalFallback = availableScreens.getOrNull(i),
         ) ?: continue
 
-        // Skip if the target screen doesn't exist
         if (!isScreenIndexValid(targetScreenIndex, screens.size)) continue
 
-        // Per-output background toggle
         val showBg = showsOutputBackground(screenAssignment)
 
-        // Derive output role from key target configuration
         val primaryRole = screenAssignment.primaryOutputRole
 
         val windowState = remember(i) {
@@ -685,7 +583,6 @@ internal fun PresenterWindows(
             windowState.size = DpSize(b.width.dp, b.height.dp)
         }
 
-        // Primary window (fill or normal)
         val presenterTitle = stringResource(Res.string.presenter_view_title, i + 1)
         Window(
             visible = showPresenterWindow,
@@ -700,7 +597,6 @@ internal fun PresenterWindows(
             presenterOutputContent(screenAssignment, effectiveMode, i + 1)
         }
 
-        // Key output window — spawned when a key target is configured
         if (screenAssignment.hasKeyOutput && !isDeckLinkKeyOutput(screenAssignment)) {
             val keyScreenIndex = keyOutputScreenIndex(
                 findScreenIndexByBounds(
@@ -771,7 +667,6 @@ internal fun PresenterWindows(
                         clearAnnouncementOnFinish = clearAnnouncementOnFinish,
                         outputRole = Constants.OUTPUT_ROLE_KEY,
                         showBg = showBg,
-                        // these outputs omitted showBackground and so took the presenters' true default
                         showBackgroundOverride = true,
                     )
                                 }
@@ -782,7 +677,6 @@ internal fun PresenterWindows(
             }
         }
 
-        // Key output on DeckLink when primary is a regular screen
         if (!isDeckLinkPrimaryOutput(screenAssignment) && hasDeckLinkKeyOutput(screenAssignment)) {
             if (showPresenterWindow) {
                 DeckLinkComposeOutput(
@@ -811,7 +705,6 @@ internal fun PresenterWindows(
                         clearAnnouncementOnFinish = clearAnnouncementOnFinish,
                         outputRole = primaryRole,
                         showBg = showBg,
-                        // these outputs omitted showBackground and so took the presenters' true default
                         showBackgroundOverride = true,
                     )
                     }

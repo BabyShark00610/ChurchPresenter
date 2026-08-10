@@ -83,37 +83,17 @@ internal fun PresenterOutputContent(
 ) {
     val presentingMode by presenterManager.presentingMode
     val modeCrossfadeDuration = modeCrossfadeDuration(appSettings.bibleSettings, appSettings.songSettings)
-    val selectedVerses by presenterManager.selectedVerses
     val displayedVerses by presenterManager.displayedVerses
     val nextVerses by presenterManager.nextVerses
-    val bibleTransitionAlpha by presenterManager.bibleTransitionAlpha
-    val lyricSection by presenterManager.lyricSection
     val displayedLyricSection by presenterManager.displayedLyricSection
-    val songTransitionAlpha by presenterManager.songTransitionAlpha
-    val songDisplayLineIndex by presenterManager.songDisplayLineIndex
     val allLyricSections by presenterManager.allLyricSections
     val songDisplaySectionIndex by presenterManager.songDisplaySectionIndex
     val displayedImagePath by presenterManager.displayedImagePath
-    val pictureTransitionAlpha by presenterManager.pictureTransitionAlpha
-    val previousDisplayedImagePath by presenterManager.previousDisplayedImagePath
-    val pictureSlideOffset by presenterManager.pictureSlideOffset
     val displayedSlide by presenterManager.displayedSlide
-    val slideFrozen by presenterManager.slideFrozen
-    val presentationFrame by presenterManager.presentationFrame
-    val slideTransitionAlpha by presenterManager.slideTransitionAlpha
-    val previousDisplayedSlide by presenterManager.previousDisplayedSlide
-    val slideSlideOffset by presenterManager.slideSlideOffset
-    val animationType by presenterManager.animationType
     val announcementText by presenterManager.announcementText
     val displayedAnnouncementText by presenterManager.displayedAnnouncementText
-    val announcementTransitionAlpha by presenterManager.announcementTransitionAlpha
-    val lottieFrame by presenterManager.lottieFrame
-    val mediaTransitionAlpha by presenterManager.mediaTransitionAlpha
-    val websiteUrl by presenterManager.websiteUrl
     val activeScene by presenterManager.activeScene
     val displayedQuestion by presenterManager.displayedQuestion
-    val qaTransitionAlpha by presenterManager.qaTransitionAlpha
-    val showQRCodeOnDisplay by presenterManager.showQRCodeOnDisplay
     val displayedDictionaryEntry by presenterManager.displayedDictionaryEntry
     val presenterNotes by presenterManager.presenterNotes
 
