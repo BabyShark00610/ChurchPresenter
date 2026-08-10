@@ -11,9 +11,8 @@ import java.util.Locale
 
 object Utils {
 
-    fun getAvailableSystemFonts(): List<String> {
-        return GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.sortedBy { it.lowercase() }
-    }
+    /** The installed font families — see [SystemFonts], which enumerates them once per process. */
+    fun getAvailableSystemFonts(): List<String> = SystemFonts.families()
 
     /** True if the system's default locale displays time in 24-hour format (no AM/PM). */
     fun isSystemUsing24HourFormat(): Boolean {

@@ -281,24 +281,6 @@ internal fun shouldMirrorFromPrimary(
 ): Boolean = status == InstanceLinkStatus.CONNECTED && role == InstanceLinkRole.CONTROLLED
 
 /**
- * The tab a function-key shortcut jumps to, or null when the key is not one of them.
- *
- * F6–F12 in tab order. These are pressed by feel during a service — the operator is looking at the
- * platform, not the screen — so a key wired to the neighbouring tab is not noticed until the wrong
- * panel is already open.
- */
-internal fun tabForFunctionKey(key: Key): Tabs? = when (key) {
-    Key.F6 -> Tabs.BIBLE
-    Key.F7 -> Tabs.SONGS
-    Key.F8 -> Tabs.PICTURES
-    Key.F9 -> Tabs.PRESENTATION
-    Key.F10 -> Tabs.MEDIA
-    Key.F11 -> Tabs.LOWER_THIRD
-    Key.F12 -> Tabs.ANNOUNCEMENTS
-    else -> null
-}
-
-/**
  * The width a collapsible side panel actually renders at, in pixels.
  *
  * Order matters: the cap is applied to the requested width *before* the collapse fraction scales it.

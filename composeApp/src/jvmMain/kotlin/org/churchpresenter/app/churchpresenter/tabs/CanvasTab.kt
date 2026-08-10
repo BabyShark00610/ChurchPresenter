@@ -102,6 +102,8 @@ import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.SceneCanvas
 import org.churchpresenter.app.churchpresenter.composables.SourcePropertiesPanel
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.assignedDisplayBounds
 import org.churchpresenter.app.churchpresenter.utils.formatAspectRatio
 import org.churchpresenter.app.churchpresenter.models.SceneSource
@@ -216,6 +218,8 @@ fun CanvasTab(
         }
     }
 
+    val shortcuts = LocalShortcuts.current
+
     Row(
         modifier = modifier
             .fillMaxSize()
@@ -223,7 +227,7 @@ fun CanvasTab(
             .focusable()
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.Delete || event.key == Key.Backspace) &&
+                    shortcuts.matches(ShortcutAction.CANVAS_DELETE_SOURCE, event) &&
                     renamingSceneId == null
                 ) {
                     val sourceId = selectedSourceId

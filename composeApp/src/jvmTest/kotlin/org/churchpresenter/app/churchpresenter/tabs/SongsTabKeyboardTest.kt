@@ -9,6 +9,11 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import androidx.compose.ui.test.onNodeWithText
+import org.churchpresenter.app.churchpresenter.data.settings.KeyboardShortcutSettings
+import org.churchpresenter.app.churchpresenter.models.KeyChord
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -240,6 +245,75 @@ class SongsTabKeyboardTest {
 
             assertEquals(song, vm.selectedSongIndex.value)
             assertEquals(section, vm.selectedSectionIndex.value)
+        }
+    }
+
+    // ── Rebound keys ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a rebound next-line key steps the line and the shipped key stops doing so`() {
+        val remapped = ShortcutMap.from(
+            KeyboardShortcutSettings(
+                overrides = mapOf(ShortcutAction.SONGS_NEXT.name to listOf(KeyChord.of(Key.N)))
+            )
+        )
+        songsTab(songSettings = lineMode(), isPresenting = true, shortcuts = remapped) { vm, reports ->
+            selectFirstSong(vm)
+
+            press(Key.N)
+            // Asserted through what reached the presenter, the same way the shipped-key cases above
+            // do — the line index alone can legitimately stay put at the end of a song.
+            assertNotNull(reports.lineIndex, "the rebound key must push a line to the presenter")
+
+            val afterRebound = vm.selectedLineIndex.value
+            press(Key.DirectionRight)
+            assertEquals(afterRebound, vm.selectedLineIndex.value, "the shipped key must stop working")
+        }
+    }
+
+    // ── The on-screen navigation hint ───────────────────────────────────────────
+
+    /**
+     * The hint names the keys that are actually bound.
+     *
+     * It shipped as the literal "Use ← → to navigate lines, ↑ ↓ for verses" and went on saying that
+     * after the keys became rebindable — the defect this suite's hint cases exist for.
+     */
+    @Test
+    fun `the line-mode hint is shown`() {
+        songsTab(songSettings = lineMode()) { _, _ ->
+            onNodeWithText("navigate lines", substring = true).assertExists()
+        }
+    }
+
+    @Test
+    fun `the hint follows a rebind`() {
+        val remapped = ShortcutMap.from(
+            KeyboardShortcutSettings(
+                overrides = mapOf(
+                    ShortcutAction.SONGS_PREVIOUS.name to listOf(KeyChord.of(Key.N)),
+                    ShortcutAction.SONGS_NEXT.name to listOf(KeyChord.of(Key.P)),
+                )
+            )
+        )
+        songsTab(songSettings = lineMode(), shortcuts = remapped) { _, _ ->
+            onNodeWithText("Use N  P to navigate lines", substring = true).assertExists()
+        }
+    }
+
+    @Test
+    fun `the hint disappears when every navigation key is unbound`() {
+        val cleared = ShortcutMap.from(
+            KeyboardShortcutSettings(
+                overrides = listOf(
+                    ShortcutAction.SONGS_PREVIOUS, ShortcutAction.SONGS_NEXT,
+                    ShortcutAction.SONGS_PREVIOUS_SECTION, ShortcutAction.SONGS_NEXT_SECTION,
+                ).associate { it.name to emptyList<KeyChord>() }
+            )
+        )
+        songsTab(songSettings = lineMode(), shortcuts = cleared) { _, _ ->
+            // A sentence with holes where the keys should be is worse than no sentence.
+            onNodeWithText("navigate lines", substring = true).assertDoesNotExist()
         }
     }
 }

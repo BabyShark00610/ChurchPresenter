@@ -184,6 +184,7 @@ import churchpresenter.composeapp.generated.resources.exact_match
 import churchpresenter.composeapp.generated.resources.found_results
 import churchpresenter.composeapp.generated.resources.go_live
 import churchpresenter.composeapp.generated.resources.hold_live
+import churchpresenter.composeapp.generated.resources.hold_live_modifier_hint
 import churchpresenter.composeapp.generated.resources.ic_arrow_down
 import churchpresenter.composeapp.generated.resources.ic_arrow_up
 import churchpresenter.composeapp.generated.resources.ic_close
@@ -240,6 +241,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.swapBibleTranslatio
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
 import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 import org.churchpresenter.app.churchpresenter.utils.highlightRanges
@@ -591,20 +594,22 @@ fun BibleTab(
     }
 
     var searchFieldFocused by remember { mutableStateOf(false) }
+    val shortcuts = LocalShortcuts.current
 
     fun handleKeyEvent(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
         // Don't intercept arrow keys when the search field has focus (cursor navigation)
         if (searchFieldFocused) return false
 
-        // In split mode, Up/Down navigate the live (right) panel
-        if (splitBrowseMode && liveChapterVerses.isNotEmpty() &&
-            (event.key == Key.DirectionUp || event.key == Key.DirectionDown)
-        ) {
+        val movingUp = shortcuts.matches(ShortcutAction.BIBLE_PREVIOUS_VERSE, event)
+        val movingDown = shortcuts.matches(ShortcutAction.BIBLE_NEXT_VERSE, event)
+
+        // In split mode, the prev/next-verse bindings navigate the live (right) panel
+        if (splitBrowseMode && liveChapterVerses.isNotEmpty() && (movingUp || movingDown)) {
             val refVerse = if (liveNavTargetVerse > 0) liveNavTargetVerse
                            else liveVerseNumbers.minOrNull() ?: 1
             val nextVerseNum = nextLiveVerseNumber(
-                liveChapterVerses, refVerse, moveUp = event.key == Key.DirectionUp,
+                liveChapterVerses, refVerse, moveUp = movingUp,
             )
             if (nextVerseNum != null) {
                 liveNavTargetVerse = nextVerseNum
@@ -613,11 +618,11 @@ fun BibleTab(
             return true
         }
 
-        return when (event.key) {
-            Key.DirectionUp    -> viewModel.navigatePreviousVerse()
-            Key.DirectionDown  -> viewModel.navigateNextVerse()
-            Key.DirectionLeft  -> viewModel.navigatePreviousChapter()
-            Key.DirectionRight -> viewModel.navigateNextChapter()
+        return when {
+            movingUp -> viewModel.navigatePreviousVerse()
+            movingDown -> viewModel.navigateNextVerse()
+            shortcuts.matches(ShortcutAction.BIBLE_PREVIOUS_CHAPTER, event) -> viewModel.navigatePreviousChapter()
+            shortcuts.matches(ShortcutAction.BIBLE_NEXT_CHAPTER, event) -> viewModel.navigateNextChapter()
             else -> false
         }
     }
@@ -1552,7 +1557,7 @@ fun BibleTab(
                                     }
                                 )
                                 Text(
-                                    "⌘/Ctrl Shift",
+                                    stringResource(Res.string.hold_live_modifier_hint),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                                     color = when {
                                         holdLiveState -> MaterialTheme.colorScheme.onError
@@ -1608,10 +1613,9 @@ fun BibleTab(
                         )
                     } else if (appSettings.bibleSettings.translationList().size > 2) {
                         val translations = appSettings.bibleSettings.translationList()
-                        // One header read per translation, so it does not belong in a `remember`
-                        // (which runs it during composition) and it certainly does not need a whole
-                        // BibleSettingsViewModel built to reach the helper. Until it lands, the
-                        // options below fall back to file stems on their own.
+                        // One header read per translation, so it does not belong in a `remember`,
+                        // which would run it during composition. Until it lands, the options below
+                        // fall back to file stems on their own.
                         val storageDirectory = appSettings.bibleSettings.storageDirectory
                         val translationDisplayNames by produceState(
                             initialValue = emptyMap<String, String>(),
