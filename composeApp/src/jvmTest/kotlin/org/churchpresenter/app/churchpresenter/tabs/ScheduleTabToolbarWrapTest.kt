@@ -4,6 +4,7 @@ package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,8 +36,13 @@ class ScheduleTabToolbarWrapTest {
         ScheduleLabel.UNDO, ScheduleLabel.REDO, ScheduleLabel.ADD_LABEL,
     )
 
+    // Undo/Redo are addressed by test tag rather than tooltip text — their tooltips name the live
+    // keyboard binding, which renders as "Ctrl+Z" on Windows/Linux and "⌃Z" on macOS.
+    private val taggedButtons = setOf(ScheduleLabel.UNDO, ScheduleLabel.REDO)
+
     private fun ComposeUiTest.rowOf(label: String): Float =
-        onNodeWithContentDescription(label).fetchSemanticsNode().boundsInRoot.top
+        (if (label in taggedButtons) onNodeWithTag(label) else onNodeWithContentDescription(label))
+            .fetchSemanticsNode().boundsInRoot.top
 
     @Test
     fun `a wide panel keeps the whole toolbar on one line`() =

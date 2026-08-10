@@ -84,17 +84,15 @@ import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorSetting
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorStyleZone
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZone
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZoneStyle
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
 
 @Composable
 fun StageMonitorSettingsTab(
     settings: AppSettings,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
 
     val sm = settings.stageMonitorSettings
     fun update(block: StageMonitorSettings.() -> StageMonitorSettings) {

@@ -24,6 +24,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -35,6 +36,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.composables.SCANNING_ROW_TAG
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
@@ -126,7 +128,23 @@ class BibleSettingsTabTest {
                 )
             }
         }
+        awaitFolderScan()
         return harness
+    }
+
+    /**
+     * Waits for the Bible folder scan to land.
+     *
+     * The tab reads the folder on `Dispatchers.IO` — walking it and reading a header out of every
+     * module is what used to freeze the settings dialog on each open — and `waitForIdle` does not
+     * cover that hop, so every assertion about what the pickers offer would otherwise race it. The
+     * scanning row is on screen until the listing arrives and gone afterwards, so this ends on the
+     * scan finishing rather than on a clock; with no folder configured the scan returns at once.
+     */
+    private fun ComposeUiTest.awaitFolderScan() {
+        waitUntil {
+            onAllNodesWithTag(SCANNING_ROW_TAG).fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+        }
     }
 
     private fun ComposeUiTest.showBibleTab(bible: BibleSettings): Harness =
@@ -177,6 +195,19 @@ class BibleSettingsTabTest {
 
         onAllNodesWithText("deleted.spb").onFirst()
             .assertExists("a missing bible reads back as its file name rather than vanishing")
+    }
+
+    @Test
+    fun `a translation is named by the title inside its file once the folder has been read`() = runComposeUiTest {
+        // The title comes from a header read per module, which now happens off the composition
+        // thread — so the picker starts out labelled by file name and sharpens when the scan lands.
+        val dir = bibleFolder("kjv.spb" to "King James Version", "asv.spb" to "American Standard")
+        showBibleTab(BibleSettings(storageDirectory = dir.path, primaryBible = "kjv.spb"))
+
+        onAllNodesWithText("King James Version").onFirst()
+            .assertExists("the configured translation is named by its ##Title:")
+        onNodeWithText("Add translation")
+            .assertExists("and the other module in the folder is offered to add")
     }
 
     @Test

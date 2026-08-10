@@ -173,12 +173,12 @@ import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.presenterAspectRatio
 import org.churchpresenter.app.churchpresenter.utils.presenterScreenBounds
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.viewmodel.AnnouncementsViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -198,9 +198,7 @@ fun AnnouncementsTab(
         viewModel.syncFromSettings(appSettings.announcementsSettings)
     }
 
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
 
     // Screens configured as Stage Monitor — locking them to Announcements shows this content
     // there without disturbing whatever the main projection screen(s) are currently live with.

@@ -45,17 +45,15 @@ import org.churchpresenter.app.churchpresenter.composables.ShadowDetailRow
 import org.churchpresenter.app.churchpresenter.composables.SlimSlider
 import org.churchpresenter.app.churchpresenter.composables.TextStyleButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
 
 @Composable
 fun DictionarySettingsTab(
     settings: AppSettings,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
     val ds = settings.dictionarySettings
 
     Box(

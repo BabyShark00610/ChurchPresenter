@@ -138,7 +138,9 @@ import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.server.followerMediaUrl
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.presenterAspectRatio
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
@@ -290,6 +292,8 @@ fun MediaTab(
         }
     }
 
+    val shortcuts = LocalShortcuts.current
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -298,9 +302,14 @@ fun MediaTab(
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     when {
-                        keyEvent.key == Key.Escape && presenterManager != null -> { viewModel.pause(); presenterManager.requestClearDisplay(); true }
-                        viewModel.isLoaded && keyEvent.key == Key.Spacebar -> { viewModel.togglePlayPause(); true }
-                        viewModel.isLoaded && keyEvent.key == Key.M -> { viewModel.toggleMute(); true }
+                        // Clear Output is a global action, but it is claimed here too so the media
+                        // is paused before the display clears — the root handler pauses via a
+                        // nullable ViewModel reference that this tab already holds directly.
+                        shortcuts.matches(ShortcutAction.CLEAR_OUTPUT, keyEvent) && presenterManager != null -> {
+                            viewModel.pause(); presenterManager.requestClearDisplay(); true
+                        }
+                        viewModel.isLoaded && shortcuts.matches(ShortcutAction.MEDIA_PLAY_PAUSE, keyEvent) -> { viewModel.togglePlayPause(); true }
+                        viewModel.isLoaded && shortcuts.matches(ShortcutAction.MEDIA_MUTE, keyEvent) -> { viewModel.toggleMute(); true }
                         else -> false
                     }
                 } else false

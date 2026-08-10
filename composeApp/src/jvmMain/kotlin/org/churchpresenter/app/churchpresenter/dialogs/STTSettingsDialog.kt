@@ -90,8 +90,8 @@ import org.churchpresenter.app.churchpresenter.composables.StyledTextField
 import org.churchpresenter.app.churchpresenter.composables.TextStyleButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -101,9 +101,7 @@ fun STTSettingsDialog(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
 
     val mainWindowState = LocalMainWindowState.current
     val dialogWidth = 560.dp

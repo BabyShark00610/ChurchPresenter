@@ -12,6 +12,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import org.churchpresenter.app.churchpresenter.composables.finalPassCombinedClickable
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.label
 import org.churchpresenter.app.churchpresenter.composables.initialPassCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,7 +129,9 @@ import churchpresenter.composeapp.generated.resources.tooltip_note
 import churchpresenter.composeapp.generated.resources.tooltip_note_clear
 import churchpresenter.composeapp.generated.resources.tooltip_note_done
 import churchpresenter.composeapp.generated.resources.tooltip_redo
+import churchpresenter.composeapp.generated.resources.tooltip_redo_unbound
 import churchpresenter.composeapp.generated.resources.tooltip_undo
+import churchpresenter.composeapp.generated.resources.tooltip_undo_unbound
 import churchpresenter.composeapp.generated.resources.autosave_restore_confirm
 import churchpresenter.composeapp.generated.resources.autosave_restore_discard
 import churchpresenter.composeapp.generated.resources.autosave_restore_message
@@ -232,6 +237,18 @@ private val DELETE_ZONE_HEIGHT = 56.dp
 
 /** Corner radius shared by every card (section or item) in the list. */
 private val CARD_SHAPE = RoundedCornerShape(9.dp)
+
+/**
+ * Locators for the toolbar buttons whose tooltip names a keyboard shortcut.
+ *
+ * Those tooltips are built from the live binding and render the modifier as `⌃` on macOS and
+ * `Ctrl` elsewhere, so a test that found the button by its tooltip text passed on one platform and
+ * failed on the others. The tag is stable in both.
+ */
+internal object ScheduleToolbarTags {
+    const val UNDO = "schedule_undo"
+    const val REDO = "schedule_redo"
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -899,10 +916,18 @@ private fun ScheduleHeader(
                 // Undo and Redo wrap as a pair: they read as one control, and a line break
                 // between them would put Redo alone at the start of the second row.
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                // The key in the tooltip is the binding actually in force. When the action is
+                // unbound there is no key to name, so the tooltip drops the parenthetical rather
+                // than rendering "Undo ()".
+                val shortcuts = LocalShortcuts.current
+                val undoKeys = shortcuts.label(ShortcutAction.UNDO)
+                val redoKeys = shortcuts.label(ShortcutAction.REDO)
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_undo),
-                    text = stringResource(Res.string.tooltip_undo),
+                    text = if (undoKeys.isEmpty()) stringResource(Res.string.tooltip_undo_unbound)
+                           else stringResource(Res.string.tooltip_undo, undoKeys),
                     onClick = onUndo,
+                    modifier = Modifier.testTag(ScheduleToolbarTags.UNDO),
                     enabled = canUndo,
                     buttonSize = 26.dp,
                     iconSize = 14.dp,
@@ -911,8 +936,10 @@ private fun ScheduleHeader(
                 )
                 TooltipIconButton(
                     painter = painterResource(Res.drawable.ic_redo),
-                    text = stringResource(Res.string.tooltip_redo),
+                    text = if (redoKeys.isEmpty()) stringResource(Res.string.tooltip_redo_unbound)
+                           else stringResource(Res.string.tooltip_redo, redoKeys),
                     onClick = onRedo,
+                    modifier = Modifier.testTag(ScheduleToolbarTags.REDO),
                     enabled = canRedo,
                     buttonSize = 26.dp,
                     iconSize = 14.dp,
