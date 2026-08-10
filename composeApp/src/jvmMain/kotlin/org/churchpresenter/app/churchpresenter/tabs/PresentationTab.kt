@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.foundation.focusable
@@ -170,7 +171,12 @@ import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.models.PresentationLoadError
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
+import org.churchpresenter.app.churchpresenter.utils.label
+import org.churchpresenter.app.churchpresenter.utils.pairLabel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -186,6 +192,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
+
+/**
+ * Whether [event] means "go back a slide" in this tab.
+ *
+ * The tab's own previous binding *or* the global clicker binding: a clicker sends Page Up, which
+ * `MainDesktop` also claims while a presentation is live, but only then — with the tab focused and
+ * nothing presenting, this handler is the one that has to answer it.
+ */
+private fun goesBack(shortcuts: ShortcutMap, event: KeyEvent): Boolean =
+    shortcuts.matches(ShortcutAction.PRESENTATION_PREVIOUS, event) ||
+        shortcuts.matches(ShortcutAction.CLICKER_PREVIOUS, event)
+
+/** The forward counterpart of [goesBack]. */
+private fun goesForward(shortcuts: ShortcutMap, event: KeyEvent): Boolean =
+    shortcuts.matches(ShortcutAction.PRESENTATION_NEXT, event) ||
+        shortcuts.matches(ShortcutAction.CLICKER_NEXT, event)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -257,6 +279,7 @@ fun PresentationTab(
         focusRequester = focusRequester,
         active = viewModel.slideFiles.isNotEmpty(),
     )
+    val shortcuts = LocalShortcuts.current
 
     LaunchedEffect(selectedPresentationItem) {
         selectedPresentationItem?.let { item ->
@@ -392,24 +415,22 @@ fun PresentationTab(
                     // normal case, since Controller mode doesn't mirror the primary's content.
                     val hasInstanceLinkNav = onInstanceLinkSendNextSlide != null || onInstanceLinkSendPreviousSlide != null
                     return@onKeyEvent if (hasInstanceLinkNav) {
-                        when (keyEvent.key) {
-                            Key.DirectionLeft, Key.DirectionUp, Key.PageUp -> { viewModel.previousSlide(onInstanceLinkSendPreviousSlide); true }
-                            Key.DirectionRight, Key.DirectionDown, Key.PageDown -> { viewModel.nextSlide(onInstanceLinkSendNextSlide); true }
+                        when {
+                            goesBack(shortcuts, keyEvent) -> { viewModel.previousSlide(onInstanceLinkSendPreviousSlide); true }
+                            goesForward(shortcuts, keyEvent) -> { viewModel.nextSlide(onInstanceLinkSendNextSlide); true }
                             else -> false
                         }
                     } else false
                 }
-                when (keyEvent.key) {
-                    // Page Down/Up are what presentation clickers send (also handled globally
-                    // in MainDesktop while a presentation is live, for any-tab operation).
-                    Key.DirectionLeft, Key.DirectionUp, Key.PageUp -> { goPrevious(); true }
-                    Key.DirectionRight, Key.DirectionDown, Key.PageDown -> { goNext(); true }
-                    Key.Spacebar -> { viewModel.togglePlayPause(); true }
+                when {
+                    goesBack(shortcuts, keyEvent) -> { goPrevious(); true }
+                    goesForward(shortcuts, keyEvent) -> { goNext(); true }
+                    shortcuts.matches(ShortcutAction.PRESENTATION_PLAY_PAUSE, keyEvent) -> { viewModel.togglePlayPause(); true }
                     // Clicker blank-screen button ('b' or '.' depending on model): toggle the
                     // same Blank Output state as the eye button — a truly blank output
                     // (PowerPoint's own 'B'), NOT Clear Display, which shows the configured
                     // background instead.
-                    Key.B, Key.Period -> {
+                    shortcuts.matches(ShortcutAction.PRESENTATION_BLANK, keyEvent) -> {
                         if (presenterManager?.presentingMode?.value == Presenting.PRESENTATION) {
                             onFreezeToggle()
                             true
@@ -645,7 +666,17 @@ fun PresentationTab(
         // ── Playback controls bar ─────────────────────────────────────
         // Adaptive shortcut hint: inline at the end of the controls bar when it fits on one
         // line there, otherwise on its own full-width row below the bar — never ellipsized.
-        val hintText = stringResource(Res.string.presentation_arrow_key_hint)
+        // Built from the live bindings so a rebind is reflected here. Empty when the user has
+        // unbound all three, which both render sites below treat as "draw no hint at all" —
+        // a hint whose keys do nothing is worse than none.
+        val slideLabel = shortcuts.pairLabel(ShortcutAction.PRESENTATION_PREVIOUS, ShortcutAction.PRESENTATION_NEXT)
+        val playLabel = shortcuts.label(ShortcutAction.PRESENTATION_PLAY_PAUSE)
+        val blankLabel = shortcuts.label(ShortcutAction.PRESENTATION_BLANK)
+        val hintText = if (slideLabel.isEmpty() && playLabel.isEmpty() && blankLabel.isEmpty()) {
+            ""
+        } else {
+            stringResource(Res.string.presentation_arrow_key_hint, slideLabel, playLabel, blankLabel)
+        }
         val hintStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp)
         val hintColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         var hintOnOwnRow by remember { mutableStateOf(false) }
@@ -857,13 +888,13 @@ fun PresentationTab(
                 if (hintSlotWidthPx >= 0) hintOnOwnRow = !fitsInline
             }
             Box(modifier = Modifier.weight(1f).onSizeChanged { hintSlotWidthPx = it.width }) {
-                if (fitsInline) {
+                if (fitsInline && hintText.isNotEmpty()) {
                     Text(text = hintText, style = hintStyle, color = hintColor, maxLines = 1)
                 }
             }
 
         }
-        if (hintOnOwnRow) {
+        if (hintOnOwnRow && hintText.isNotEmpty()) {
             Text(
                 text = hintText,
                 style = hintStyle,

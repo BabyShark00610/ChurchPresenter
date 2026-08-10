@@ -158,8 +158,11 @@ import org.churchpresenter.app.churchpresenter.tabs.TabSection
 import org.churchpresenter.app.churchpresenter.tabs.Tabs
 import org.churchpresenter.app.churchpresenter.tabs.getStringName
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.models.ShortcutScope
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
@@ -968,6 +971,8 @@ fun MainDesktop(
         }
     }
 
+    val shortcuts = LocalShortcuts.current
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -976,15 +981,15 @@ fun MainDesktop(
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
-                    val shortcutTab = tabForFunctionKey(keyEvent.key)
+                    val shortcutTab = shortcuts.actionFor(keyEvent, ShortcutScope.GLOBAL)?.targetTab
                     when {
-                        keyEvent.key == Key.Z && keyEvent.isCtrlPressed && keyEvent.isShiftPressed -> {
+                        shortcuts.matches(ShortcutAction.REDO, keyEvent) -> {
                             scheduleViewModel.redo(); true
                         }
-                        keyEvent.key == Key.Z && keyEvent.isCtrlPressed -> {
+                        shortcuts.matches(ShortcutAction.UNDO, keyEvent) -> {
                             scheduleViewModel.undo(); true
                         }
-                        keyEvent.key == Key.Escape -> {
+                        shortcuts.matches(ShortcutAction.CLEAR_OUTPUT, keyEvent) -> {
                             mediaViewModel?.pause()
                             presenterManager.requestClearDisplay()
                             instanceLinkSendClear?.invoke()
@@ -999,7 +1004,7 @@ fun MainDesktop(
                         // presentation responds no matter which tab or control has focus —
                         // the presenter clicks from the platform while the operator works
                         // elsewhere. Only claimed while a presentation is actually live.
-                        keyEvent.key == Key.PageDown && presentingMode == Presenting.PRESENTATION -> {
+                        shortcuts.matches(ShortcutAction.CLICKER_NEXT, keyEvent) && presentingMode == Presenting.PRESENTATION -> {
                             clickerScope.launch {
                                 val deck = presentationViewModel.deck
                                 val stepped = deck != null && presenterManager
@@ -1011,7 +1016,7 @@ fun MainDesktop(
                             }
                             true
                         }
-                        keyEvent.key == Key.PageUp && presentingMode == Presenting.PRESENTATION -> {
+                        shortcuts.matches(ShortcutAction.CLICKER_PREVIOUS, keyEvent) && presentingMode == Presenting.PRESENTATION -> {
                             clickerScope.launch {
                                 val deck = presentationViewModel.deck
                                 val stepped = deck != null && presenterManager

@@ -341,7 +341,10 @@ internal fun OptionsDialogContent(
                                     viewModel = companionSatelliteViewModel
                                 )
                             }
-                            11 -> CompanionSatelliteSettingsTab(
+                            // Past index 10 the numbering depends on whether the OBS tab is
+                            // present, so this is matched by its computed index rather than by a
+                            // literal that would be right in only one of the two cases.
+                            companionSatelliteTabIndex -> CompanionSatelliteSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)

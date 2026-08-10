@@ -16,6 +16,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.test.runComposeUiTest
@@ -208,8 +209,9 @@ internal fun ScheduleViewModel.seedService() {
 internal object ScheduleLabel {
     const val TITLE = "Schedule"
     const val NEW = "New Schedule"
-    const val UNDO = "Undo (Ctrl+Z)"
-    const val REDO = "Redo (Ctrl+Shift+Z)"
+    // Undo/Redo are located by tag, not by label — see [taggedButton].
+    const val UNDO = ScheduleToolbarTags.UNDO
+    const val REDO = ScheduleToolbarTags.REDO
     const val ADD_LABEL = "Add Label"
     const val CLEAR = "Clear Schedule"
     const val ZOOM_IN = "Zoom In"
@@ -235,6 +237,16 @@ internal object ScheduleLabel {
  * which is its tooltip text, so the label a user would see is also the test's selector.
  */
 internal fun ComposeUiTest.button(label: String) = onNodeWithContentDescription(label)
+
+/**
+ * A toolbar button addressed by test tag rather than by its tooltip.
+ *
+ * Undo and Redo name their keyboard shortcut in the tooltip, and that text is now built from the
+ * live binding — it reads `Ctrl+Z` on Windows and Linux but `⌃Z` on macOS. Addressing those two by
+ * their visible label would make the test pass on whichever platform the constant was written for
+ * and fail on the rest.
+ */
+internal fun ComposeUiTest.taggedButton(tag: String) = onNodeWithTag(tag)
 
 /**
  * The [n]th button with this label, top to bottom.

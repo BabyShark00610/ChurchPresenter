@@ -3,10 +3,11 @@
 package org.churchpresenter.app.churchpresenter.screenshot
 
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import org.churchpresenter.app.churchpresenter.TestSingletons
+import org.churchpresenter.app.churchpresenter.composables.SCANNING_ROW_TAG
 import org.churchpresenter.app.churchpresenter.data.RemoteClientManager
 import org.churchpresenter.app.churchpresenter.data.SettingsManager
 import org.churchpresenter.app.churchpresenter.dialogs.OptionsDialogContent
@@ -37,14 +38,16 @@ class AppPreviewSettingsScreenshotTest {
                     )
                 }
                 waitForIdle()
-                // The System tab scans the song folder in the background: until it finishes it shows
-                // "Scanning folder…", and then replaces it with the songbook tally — which is both
-                // different text and a taller block, so everything under it moves. A capture taken
-                // mid-scan is a different picture every run. The condition starts out true and flips
-                // when the scan ends, so this waits on the scan finishing, not on a clock; on the
+                // Several tabs read something off disk in the background — the song folder on the
+                // System tab, the Bible folder on the Bible tab, VLC's device list on Projection —
+                // and show a ScanningRow until it lands. What replaces it is different text in a
+                // block of a different height, so everything under it moves and a capture taken
+                // mid-scan is a different picture every run. Waiting on the tag rather than on each
+                // label covers all of them at once. The condition starts out true and flips when
+                // the last scan ends, so this waits on the work finishing, not on a clock; on the
                 // tabs that never scan there is nothing to wait for and it returns at once.
                 waitUntil(timeoutMillis = RENDER_TIMEOUT_MS) {
-                    onAllNodesWithText(SCANNING, substring = true)
+                    onAllNodesWithTag(SCANNING_ROW_TAG)
                         .fetchSemanticsNodes(atLeastOneRootRequired = false)
                         .isEmpty()
                 }
@@ -86,8 +89,4 @@ class AppPreviewSettingsScreenshotTest {
     @Test
     fun `companion satellite`() = settingsTab("companion_satellite", 10)
 
-    private companion object {
-        /** Shown while the song folder is being read; gone once the tally replaces it. */
-        const val SCANNING = "Scanning folder"
-    }
 }

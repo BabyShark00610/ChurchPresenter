@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +54,7 @@ import churchpresenter.composeapp.generated.resources.lottie_files
 import churchpresenter.composeapp.generated.resources.lottie_select_preset
 import churchpresenter.composeapp.generated.resources.no_directory_selected
 import churchpresenter.composeapp.generated.resources.no_lottie_files
+import churchpresenter.composeapp.generated.resources.scanning_directory
 import churchpresenter.composeapp.generated.resources.remove_lottie_file
 import churchpresenter.composeapp.generated.resources.right
 import churchpresenter.composeapp.generated.resources.top
@@ -62,13 +64,16 @@ import io.github.alexzhirkevich.compottie.animateLottieCompositionAsState
 import io.github.alexzhirkevich.compottie.rememberLottieComposition
 import io.github.alexzhirkevich.compottie.rememberLottiePainter
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
+import org.churchpresenter.app.churchpresenter.composables.ScanningRow
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.TvScreenBox
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.LottieFonts
 import org.churchpresenter.app.churchpresenter.viewmodel.LowerThirdSettingsViewModel
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LowerThirdSettingsTab(
@@ -86,18 +91,25 @@ fun LowerThirdSettingsTab(
     }
 
     val lottieFolder = viewModel.lottieFolder
-    val lottieFilesInDirectory = remember(lottieFolder, viewModel.refreshTrigger) {
-        viewModel.filesInDirectory()
+    // Null while the folder is being read. Deciding whether a JSON file is a Lottie means reading
+    // the whole of it, so this is the folder's full weight in bytes — it cannot run in composition.
+    val lottieFiles by produceState<List<String>?>(null, lottieFolder, viewModel.refreshTrigger) {
+        value = null
+        value = withContext(Dispatchers.IO) { viewModel.filesInDirectory() }
     }
+    val lottieFilesInDirectory = lottieFiles.orEmpty()
     val selectedFile = viewModel.selectedFile
 
-    // Preview — debounced so we don't re-read on every keystroke
+    // Preview — debounced so we don't re-read on every keystroke, and read off the UI thread
+    // because a lower third's JSON runs to megabytes.
     var debouncedPath by remember { mutableStateOf(viewModel.importSourcePath()) }
     LaunchedEffect(selectedFile, lottieFolder) {
         delay(400)
         debouncedPath = viewModel.importSourcePath()
     }
-    val previewJsonContent = remember(debouncedPath) { viewModel.previewJsonContent() }
+    val previewJsonContent by produceState("", debouncedPath) {
+        value = withContext(Dispatchers.IO) { viewModel.previewJsonContent() }
+    }
 
     val composition by rememberLottieComposition(key = previewJsonContent) {
         LottieCompositionSpec.JsonString(previewJsonContent.ifBlank { "{}" })
@@ -110,6 +122,7 @@ fun LowerThirdSettingsTab(
 
     val noDirectorySelectedStr = stringResource(Res.string.no_directory_selected)
     val noLottieFilesStr = stringResource(Res.string.no_lottie_files)
+    val scanningDirectoryStr = stringResource(Res.string.scanning_directory)
 
     Box(
         modifier = Modifier
@@ -150,7 +163,16 @@ fun LowerThirdSettingsTab(
                         .verticalScroll(rememberScrollState())
                         .background(MaterialTheme.colorScheme.surface)
                 ) {
-                    if (lottieFilesInDirectory.isEmpty()) {
+                    if (lottieFiles == null && lottieFolder.isNotEmpty()) {
+                        // "No Lottie files" is a verdict about the folder; until the read finishes
+                        // it would be an unearned one.
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(250.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ScanningRow(scanningDirectoryStr)
+                        }
+                    } else if (lottieFilesInDirectory.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxWidth().height(250.dp),
                             contentAlignment = Alignment.Center

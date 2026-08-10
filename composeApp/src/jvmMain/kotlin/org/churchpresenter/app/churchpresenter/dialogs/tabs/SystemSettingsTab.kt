@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import org.churchpresenter.app.churchpresenter.composables.ScanningRow
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import androidx.compose.material3.Button
@@ -931,33 +932,6 @@ private fun DetectedFilesList(
                 else MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
         modifier = Modifier.padding(top = 4.dp, start = 2.dp)
     )
-}
-
-/**
- * Spinner plus label, sized to sit inline with the body-small text it replaces.
- *
- * `internal` so it can be composed directly in a test: the state it represents is transient by
- * nature, and `SystemSettingsTab` builds its own `FileManager`, so there is no seam to hold a scan
- * open long enough to catch this on screen without racing it.
- */
-@Composable
-internal fun ScanningRow(scanningText: String) {
-    Row(
-        modifier = Modifier.padding(top = 4.dp, start = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(12.dp),
-            strokeWidth = 1.5.dp,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = scanningText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
 }
 
 private suspend fun copySongSamples(storageDirectory: String): Int {

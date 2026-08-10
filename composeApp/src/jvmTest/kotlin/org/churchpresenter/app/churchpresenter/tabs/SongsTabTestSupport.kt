@@ -4,6 +4,7 @@ package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import androidx.compose.runtime.MutableState
@@ -26,6 +27,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 import java.io.File
 import java.nio.file.Files
@@ -153,6 +156,8 @@ internal fun songsTab(
     scheduleSelectionVersion: MutableState<Int> = mutableStateOf(0),
     /** Null keeps the plain MaterialTheme every other test composes under; set to shoot a theme. */
     themeMode: ThemeMode? = null,
+    /** The bindings the tab resolves its key handler and nav hint through; the shipped set unless overridden. */
+    shortcuts: ShortcutMap = ShortcutMap.DEFAULT,
     block: ComposeUiTest.(vm: SongsViewModel, reports: TabReports) -> Unit,
 ) {
     val dir = Files.createTempDirectory("cp-songs-tab").toFile()
@@ -197,6 +202,7 @@ internal fun songsTab(
         runComposeUiTest {
             setContent {
                 ThemedForTest(themeMode) {
+                  CompositionLocalProvider(LocalShortcuts provides shortcuts) {
                     SongsTab(
                         viewModel = vm,
                         appSettings = settings,
@@ -214,6 +220,7 @@ internal fun songsTab(
                         selectedSongItem = scheduleSelection.value,
                         selectedSongItemVersion = scheduleSelectionVersion.value,
                     )
+                  }
                 }
             }
             block(vm, reports)
