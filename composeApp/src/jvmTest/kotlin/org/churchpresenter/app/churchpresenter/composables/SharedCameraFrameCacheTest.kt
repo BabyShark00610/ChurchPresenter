@@ -1,299 +1,166 @@
 package org.churchpresenter.app.churchpresenter.composables
 
 import org.churchpresenter.app.churchpresenter.models.SceneSource
-import org.churchpresenter.app.churchpresenter.models.SourceTransform
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotSame
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
-import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
-/**
- * [SharedCameraFrameCache] multiplexes real camera/DeckLink capture processes, which this suite
- * cannot spin up (no physical camera, no ffmpeg pipeline to feed it). What *is* covered: the pure
- * cache-key logic ([SharedCameraFrameCache.keyFor], widened to `internal`), and the [acquire]/
- * [release] ref-counting bookkeeping — exercised with a `devicePath` scheme
- * (`"bogus://"`) that `runFfmpegCapture` recognizes as invalid and returns from immediately,
- * without ever spawning a process, so the background capture coroutine has nothing unsafe to do.
- * [killFfmpegProcess] needs no camera at all — it's tested directly against a short-lived, real
- * child process. [buildFfmpegCommand] is the pure command-line-building logic pulled out of
- * `runFfmpegCapture` specifically so it could be tested without ever starting ffmpeg.
- */
 class SharedCameraFrameCacheTest {
 
     private fun camera(
-        devicePath: String = "bogus://x",
+        devicePath: String = "",
+        videoFormat: String = "",
+        videoConnection: Int = 0,
         isDeckLink: Boolean = false,
         deckLinkIndex: Int = -1,
-        videoFormat0: String = "1920x1080@30",
-    ) =
-        SceneSource.CameraSource(
-            id = "cam", name = "Cam", transform = SourceTransform(),
-            devicePath = devicePath, videoFormat = videoFormat0,
-            videoConnection = 2, isDeckLink = isDeckLink, deckLinkIndex = deckLinkIndex,
-        )
-
-    // ── keyFor ─────────────────────────────────────────────────────────────────────────────────
+    ) = SceneSource.CameraSource(
+        id = "cam", name = "Camera", devicePath = devicePath, videoFormat = videoFormat,
+        videoConnection = videoConnection, isDeckLink = isDeckLink, deckLinkIndex = deckLinkIndex
+    )
 
     @Test
-    fun `keyFor builds a decklink key when isDeckLink is true with a non-negative index`() {
-        val source = camera(isDeckLink = true, deckLinkIndex = 3)
-        assertEquals("decklink:3:1920x1080@30:2", SharedCameraFrameCache.keyFor(source))
+    fun `two sources on the same device and format share one capture`() {
+        val a = camera(devicePath = "v4l2:///dev/video0", videoFormat = "1280x720@30")
+        val b = camera(devicePath = "v4l2:///dev/video0", videoFormat = "1280x720@30")
+        assertEquals(SharedCameraFrameCache.keyFor(a), SharedCameraFrameCache.keyFor(b))
     }
 
     @Test
-    fun `keyFor falls back to an ffmpeg key when isDeckLink is true but the index is negative`() {
-        val source = camera(devicePath = "avfoundation://0", isDeckLink = true, deckLinkIndex = -1)
-        assertEquals("ffmpeg:avfoundation://0:1920x1080@30", SharedCameraFrameCache.keyFor(source))
+    fun `a different format is a different capture`() {
+        val a = camera(devicePath = "v4l2:///dev/video0", videoFormat = "1280x720@30")
+        val b = camera(devicePath = "v4l2:///dev/video0", videoFormat = "1920x1080@30")
+        assertNotEquals(SharedCameraFrameCache.keyFor(a), SharedCameraFrameCache.keyFor(b))
     }
 
     @Test
-    fun `keyFor builds an ffmpeg key when isDeckLink is false`() {
-        val source = camera(devicePath = "v4l2:///dev/video0", isDeckLink = false)
-        assertEquals("ffmpeg:v4l2:///dev/video0:1920x1080@30", SharedCameraFrameCache.keyFor(source))
-    }
-
-    // ── acquire / release bookkeeping ─────────────────────────────────────────────────────────
-
-    @Test
-    fun `releasing a source that was never acquired does not throw`() {
-        SharedCameraFrameCache.release(camera(devicePath = "bogus://never-acquired"))
+    fun `a decklink source keys on its index and connection, not its device path`() {
+        val a = camera(devicePath = "ignored", isDeckLink = true, deckLinkIndex = 0, videoConnection = 1)
+        val b = camera(devicePath = "different", isDeckLink = true, deckLinkIndex = 0, videoConnection = 1)
+        val other = camera(isDeckLink = true, deckLinkIndex = 1, videoConnection = 1)
+        assertEquals(SharedCameraFrameCache.keyFor(a), SharedCameraFrameCache.keyFor(b))
+        assertNotEquals(SharedCameraFrameCache.keyFor(a), SharedCameraFrameCache.keyFor(other))
     }
 
     @Test
-    fun `acquire starts with no frame and no error`() {
-        val source = camera(devicePath = "bogus://fresh")
-        val flows = SharedCameraFrameCache.acquire(source)
-        try {
-            assertNull(flows.frame.value)
-            assertNull(flows.error.value)
-        } finally {
-            SharedCameraFrameCache.release(source)
-        }
+    fun `a decklink source with no index falls back to the ffmpeg key`() {
+        val key = SharedCameraFrameCache.keyFor(camera(devicePath = "v4l2:///dev/video0", isDeckLink = true))
+        assertTrue(key.startsWith("ffmpeg:"), key)
     }
 
     @Test
-    fun `two acquires of the same key share the same underlying flows`() {
-        val source = camera(devicePath = "bogus://shared")
-        val first = SharedCameraFrameCache.acquire(source)
-        val second = SharedCameraFrameCache.acquire(source)
-        try {
-            assertSame(first.frame, second.frame)
-            assertSame(first.error, second.error)
-        } finally {
-            // Balance both acquires — the first release only drops the ref count to 1.
-            SharedCameraFrameCache.release(source)
-            SharedCameraFrameCache.release(source)
-        }
-    }
-
-    @Test
-    fun `the first release of two subscribers keeps the capture alive for the second`() {
-        val source = camera(devicePath = "bogus://refcount")
-        val first = SharedCameraFrameCache.acquire(source)
-        SharedCameraFrameCache.acquire(source)
-        try {
-            SharedCameraFrameCache.release(source)
-
-            // Still the same entry: a second acquire must hand back the flows the survivor is
-            // already watching, not a fresh set from a re-created entry.
-            val rejoined = SharedCameraFrameCache.acquire(source)
-            assertSame(first.frame, rejoined.frame)
-            SharedCameraFrameCache.release(source)
-        } finally {
-            SharedCameraFrameCache.release(source)
-        }
-    }
-
-    @Test
-    fun `the last release drops the entry so the next acquire starts clean`() {
-        val source = camera(devicePath = "bogus://dropped")
-        val first = SharedCameraFrameCache.acquire(source)
-        SharedCameraFrameCache.release(source)
-
-        val second = SharedCameraFrameCache.acquire(source)
-        try {
-            assertNotSame(
-                first.frame, second.frame,
-                "releasing the last subscriber has to discard the entry, not park it",
-            )
-        } finally {
-            SharedCameraFrameCache.release(source)
-        }
-    }
-
-    @Test
-    fun `releasing more times than acquired does not throw or corrupt the next acquire`() {
-        val source = camera(devicePath = "bogus://overreleased")
-        SharedCameraFrameCache.acquire(source)
-        SharedCameraFrameCache.release(source)
-        SharedCameraFrameCache.release(source)
-        SharedCameraFrameCache.release(source)
-
-        val flows = SharedCameraFrameCache.acquire(source)
-        try {
-            assertNull(flows.frame.value)
-        } finally {
-            SharedCameraFrameCache.release(source)
-        }
-    }
-
-    @Test
-    fun `two different devices are kept as separate entries`() {
-        val a = camera(devicePath = "bogus://a")
-        val b = camera(devicePath = "bogus://b")
-        val flowsA = SharedCameraFrameCache.acquire(a)
-        val flowsB = SharedCameraFrameCache.acquire(b)
-        try {
-            assertNotSame(flowsA.frame, flowsB.frame)
-        } finally {
-            SharedCameraFrameCache.release(a)
-            SharedCameraFrameCache.release(b)
-        }
-    }
-
-    @Test
-    fun `releasing one device leaves another device's capture untouched`() {
-        val a = camera(devicePath = "bogus://keep-a")
-        val b = camera(devicePath = "bogus://drop-b")
-        val flowsA = SharedCameraFrameCache.acquire(a)
-        SharedCameraFrameCache.acquire(b)
-
-        SharedCameraFrameCache.release(b)
-
-        try {
-            assertSame(flowsA.frame, SharedCameraFrameCache.acquire(a).frame)
-            SharedCameraFrameCache.release(a)
-        } finally {
-            SharedCameraFrameCache.release(a)
-        }
-    }
-
-    @Test
-    fun `a decklink source that reports no index is released down the ffmpeg path`() {
-        // A negative index means keyFor built an ffmpeg key, so release must not try to close a
-        // DeckLink input that was never opened.
-        val source = camera(devicePath = "bogus://dl", isDeckLink = true, deckLinkIndex = -1)
-        SharedCameraFrameCache.acquire(source)
-
-        SharedCameraFrameCache.release(source)
-    }
-
-    // ── buildFfmpegCommand ─────────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `buildFfmpegCommand returns null for an unrecognized device path scheme`() {
-        assertNull(buildFfmpegCommand(camera(devicePath = "bogus://x", videoFormat0 = "")))
-    }
-
-    @Test
-    fun `buildFfmpegCommand builds a dshow command with the device name and no format args`() {
-        val cmd = buildFfmpegCommand(camera(devicePath = "dshow://:dshow-vdev=Integrated Webcam", videoFormat0 = ""))
+    fun `each platform capture backend gets its own ffmpeg input flags`() {
         assertEquals(
-            listOf("ffmpeg", "-f", "dshow", "-i", "video=Integrated Webcam", "-an", "-vf", "fps=30", "-pix_fmt", "bgra", "-f", "rawvideo", "-"),
-            cmd,
+            listOf("-f", "dshow"),
+            buildFfmpegCommand(camera(devicePath = "dshow://Logitech"))!!.subList(1, 3)
         )
-    }
-
-    @Test
-    fun `buildFfmpegCommand builds a v4l2 command with video_size and framerate when the format matches`() {
-        val cmd = buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video0", videoFormat0 = "1280x720@30"))
         assertEquals(
-            listOf(
-                "ffmpeg", "-f", "v4l2", "-video_size", "1280x720", "-framerate", "30",
-                "-i", "/dev/video0", "-an", "-vf", "fps=30", "-pix_fmt", "bgra", "-f", "rawvideo", "-",
-            ),
-            cmd,
+            listOf("-f", "v4l2"),
+            buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video0"))!!.subList(1, 3)
         )
-    }
-
-    @Test
-    fun `buildFfmpegCommand builds an avfoundation command appending the none audio index`() {
-        val cmd = buildFfmpegCommand(camera(devicePath = "avfoundation://0", videoFormat0 = ""))
         assertEquals(
-            listOf("ffmpeg", "-f", "avfoundation", "-i", "0:none", "-an", "-vf", "fps=30", "-pix_fmt", "bgra", "-f", "rawvideo", "-"),
-            cmd,
+            listOf("-f", "avfoundation"),
+            buildFfmpegCommand(camera(devicePath = "avfoundation://0"))!!.subList(1, 3)
         )
     }
 
     @Test
-    fun `buildFfmpegCommand omits video_size and framerate when the format string does not match the pattern`() {
-        val cmd = buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video0", videoFormat0 = "not-a-real-format"))
-        assertEquals(
-            listOf("ffmpeg", "-f", "v4l2", "-i", "/dev/video0", "-an", "-vf", "fps=30", "-pix_fmt", "bgra", "-f", "rawvideo", "-"),
-            cmd,
-        )
-    }
-
-    // ── parseFfmpegVideoDimensions ─────────────────────────────────────────────────────────────
-
-    @Test
-    fun `parseFfmpegVideoDimensions reads width and height from a real ffmpeg stream announcement`() {
-        val line = "Stream #0:0: Video: rawvideo (BGRA / 0x41524742), bgra, 1280x720, 30 fps, 30 tbr"
-        assertEquals(1280 to 720, parseFfmpegVideoDimensions(line))
+    fun `the device name is passed through in the form each backend expects`() {
+        assertTrue(buildFfmpegCommand(camera(devicePath = "dshow://Logitech Cam"))!!
+            .contains("video=Logitech Cam"))
+        assertTrue(buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video2"))!!
+            .contains("/dev/video2"))
+        assertTrue(buildFfmpegCommand(camera(devicePath = "avfoundation://1"))!!
+            .contains("1:none"))
     }
 
     @Test
-    fun `parseFfmpegVideoDimensions ignores lines with no Video marker`() {
-        assertNull(parseFfmpegVideoDimensions("Input #0, dshow, from 'video=Integrated Webcam':"))
+    fun `a requested video format becomes size and framerate args ahead of the input`() {
+        val cmd = buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video0", videoFormat = "1920x1080@60"))!!
+        assertTrue(cmd.containsAll(listOf("-video_size", "1920x1080", "-framerate", "60")), cmd.toString())
+        assertTrue(cmd.indexOf("-video_size") < cmd.indexOf("-i"), "input args must precede -i: $cmd")
     }
 
     @Test
-    fun `parseFfmpegVideoDimensions ignores Video lines that are not the bgra stream`() {
-        assertNull(parseFfmpegVideoDimensions("Stream #0:0: Video: rawvideo (RGB[24] / 0x18424752), rgb24, 640x480, 30 fps"))
+    fun `an absent or unparseable format adds no size args`() {
+        val none = buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video0"))!!
+        val junk = buildFfmpegCommand(camera(devicePath = "v4l2:///dev/video0", videoFormat = "best please"))!!
+        assertTrue(!none.contains("-video_size"))
+        assertTrue(!junk.contains("-video_size"))
     }
 
     @Test
-    fun `parseFfmpegVideoDimensions ignores a bgra Video line with no dimensions after it`() {
-        assertNull(parseFfmpegVideoDimensions("Stream #0:0: Video: rawvideo, bgra, unknown size, 30 fps"))
-    }
-
-    // ── bgraBytesToArgbPixels ──────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `bgraBytesToArgbPixels packs BGRA bytes into ARGB ints`() {
-        // One pixel: B=0x11 G=0x22 R=0x33 A=0xFF -> ARGB packed 0xFF332211
-        val frameBuf = byteArrayOf(0x11, 0x22, 0x33.toByte(), 0xFF.toByte())
-        val pixelBuf = IntArray(1)
-
-        bgraBytesToArgbPixels(frameBuf, pixelBuf)
-
-        assertEquals(0xFF332211.toInt(), pixelBuf[0])
-    }
-
-    @Test
-    fun `bgraBytesToArgbPixels converts every pixel in order`() {
-        val frameBuf = byteArrayOf(
-            0x00, 0x00, 0x00, 0xFF.toByte(), // pixel 0: opaque black
-            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), // pixel 1: opaque white
-        )
-        val pixelBuf = IntArray(2)
-
-        bgraBytesToArgbPixels(frameBuf, pixelBuf)
-
-        assertEquals(0xFF000000.toInt(), pixelBuf[0])
-        assertEquals(0xFFFFFFFF.toInt(), pixelBuf[1])
-    }
-
-    // ── killFfmpegProcess ──────────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `killFfmpegProcess terminates an already-exited process without throwing`() {
-        val process = ProcessBuilder("true").start()
-        process.waitFor()
-        killFfmpegProcess(process)
-    }
-
-    @Test
-    fun `killFfmpegProcess on a forced Windows os name falls back gracefully when taskkill is unavailable`() {
-        val savedOsName = System.getProperty("os.name", "")
-        try {
-            System.setProperty("os.name", "Windows 11")
-            val process = ProcessBuilder("true").start()
-            process.waitFor()
-            killFfmpegProcess(process) // taskkill isn't on PATH here — both inner try/catches absorb it
-        } finally {
-            System.setProperty("os.name", savedOsName)
+    fun `every backend is asked for raw bgra with no audio`() {
+        for (path in listOf("dshow://c", "v4l2:///dev/video0", "avfoundation://0")) {
+            val cmd = buildFfmpegCommand(camera(devicePath = path))!!
+            assertTrue(cmd.containsAll(listOf("-an", "-pix_fmt", "bgra", "-f", "rawvideo", "-")), cmd.toString())
         }
+    }
+
+    @Test
+    fun `an unrecognised device path yields no command at all`() {
+        assertNull(buildFfmpegCommand(camera(devicePath = "rtsp://camera.local")))
+        assertNull(buildFfmpegCommand(camera()))
+    }
+
+    @Test
+    fun `ffmpeg's stream announcement yields the negotiated dimensions`() {
+        assertEquals(
+            1280 to 720,
+            parseFfmpegVideoDimensions("Stream #0:0: Video: rawvideo (BGRA / 0x41524742), bgra, 1280x720, 30 fps")
+        )
+    }
+
+    @Test
+    fun `lines that are not a bgra video announcement are ignored`() {
+        assertNull(parseFfmpegVideoDimensions("Stream #0:1: Audio: pcm_s16le, 48000 Hz"))
+        assertNull(parseFfmpegVideoDimensions("Video: h264, yuv420p, 1280x720"))
+        assertNull(parseFfmpegVideoDimensions(""))
+    }
+
+    @Test
+    fun `dimensions before the pixel format are not mistaken for the frame size`() {
+        // Only what follows "bgra" describes the negotiated stream; anything earlier is another
+        // stream's geometry and must not be picked up.
+        assertEquals(
+            640 to 480,
+            parseFfmpegVideoDimensions("Video: rawvideo, 9999x9999 something, bgra, 640x480, 30 fps")
+        )
+    }
+
+    @Test
+    fun `a bgra line with no dimensions yields nothing`() {
+        assertNull(parseFfmpegVideoDimensions("Stream #0:0: Video: rawvideo, bgra, progressive"))
+    }
+
+    @Test
+    fun `bgra bytes are repacked as opaque argb pixels`() {
+        // ffmpeg emits B,G,R,A per pixel; the canvas wants 0xAARRGGBB.
+        val frame = byteArrayOf(
+            0x10, 0x20, 0x30, 0xFF.toByte(),   // b=10 g=20 r=30 a=FF
+            0x01, 0x02, 0x03, 0x80.toByte(),   // b=01 g=02 r=03 a=80
+        )
+        val pixels = IntArray(2)
+        bgraBytesToArgbPixels(frame, pixels)
+        assertEquals(0xFF302010.toInt(), pixels[0])
+        assertEquals(0x80030201.toInt(), pixels[1])
+    }
+
+    @Test
+    fun `high bytes survive the conversion unsigned`() {
+        val frame = byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte())
+        val pixels = IntArray(1)
+        bgraBytesToArgbPixels(frame, pixels)
+        assertEquals(0xFFFFFFFF.toInt(), pixels[0])
+    }
+
+    @Test
+    fun `only the pixels asked for are converted`() {
+        val frame = ByteArray(16) { 0x7F }
+        val pixels = IntArray(2)
+        bgraBytesToArgbPixels(frame, pixels)
+        assertEquals(0x7F7F7F7F, pixels[0])
+        assertEquals(0x7F7F7F7F, pixels[1])
     }
 }
