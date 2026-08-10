@@ -66,9 +66,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.EncodeDefault
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -109,683 +106,6 @@ import presentation.engine.LoadResult
 import presentation.engine.PresentationLoader
 import presentation.engine.cache.SlideDiskCache
 
-// ── API DTOs ─────────────────────────────────────────────────────────────────
-
-/**
- * A song as the companion API serves it.
- *
- * **Built inline by `CompanionServer.buildCatalog`, deliberately, and there is no
- * `SongItem.toDto()`.** One existed and was deleted as dead code, having never had a caller. It set
- * every field *except* [id], which defaults to 0 — so anything that adopted it would have given
- * every song the same id, and [id] is how a phone asks for one. The catalogue assigns it from the
- * song's position in the list, which a mapper over a single [SongItem] cannot know. Add a mapper
- * only if it takes that position as a parameter.
- */
-@Serializable
-data class SongDto(
-    /** Position in the server's song list; how a client addresses a song. Not stable across reloads. */
-    val id: Int = 0,
-    val number: String,
-    val title: String,
-    val tune: String = "",
-    val author: String = ""
-)
-
-/** One songbook entry — contains its songs inline. */
-@Serializable
-data class SongbookEntry(
-    @kotlinx.serialization.SerialName("book-name")   val bookName: String,
-    @kotlinx.serialization.SerialName("song-total")  val songTotal: Int,
-    val songs: List<SongDto>
-)
-
-/**
- * Top-level response for /api/songs and the WS songs_updated event.
- *
- * {
- *   "song-book": [ { "book-name": "…", "song-total": 100, "songs": […] } ],
- *   "songBooks": 3,
- *   "total": 6255
- * }
- */
-@Serializable
-data class SongCatalogResponse(
-    @kotlinx.serialization.SerialName("song-book") val songBook: List<SongbookEntry>,
-    @kotlinx.serialization.SerialName("songBooks") val songBooks: Int,
-    val total: Int
-)
-
-@Serializable
-data class SongSectionDto(
-    val type: String,           // "verse", "chorus", "other"
-    val lines: List<String>
-)
-
-/**
- * Full song detail returned by GET /api/songs/{number}[?songbook=Name]
- *
- * {
- *   "number": "42",
- *   "title": "Amazing Grace",
- *   "songbook": "Hymns",
- *   "tune": "NEW BRITAIN",
- *   "author": "John Newton",
- *   "composer": "",
- *   "section-total": 4,
- *   "sections": [
- *     { "type": "verse", "lines": ["Amazing grace, how sweet the sound", "…"] },
- *     { "type": "chorus", "lines": ["…"] }
- *   ]
- * }
- */
-@Serializable
-data class SongDetailDto(
-    val number: String,
-    val title: String,
-    val songbook: String,
-    val tune: String,
-    val author: String,
-    val composer: String,
-    @kotlinx.serialization.SerialName("section-total") val sectionTotal: Int,
-    val sections: List<SongSectionDto>
-)
-
-@Serializable
-data class ScheduleSongDto(
-    val id: String,
-    val songNumber: Int,
-    val title: String,
-    val songbook: String
-)
-
-@Serializable
-data class ScheduleItemDto(
-    val id: String,
-    val type: String,           // "song", "bible", "label", "picture", "presentation", "media", "lower_third", "announcement", "website"
-    val displayText: String,
-    // song
-    val songNumber: Int? = null,
-    val title: String? = null,
-    val songbook: String? = null,
-    // bible
-    val bookName: String? = null,
-    val chapter: Int? = null,
-    val verseNumber: Int? = null,
-    /** Non-null for multi-verse items, e.g. "1-3" or "2,4". Null / absent for single verses. */
-    val verseRange: String? = null,
-    // label
-    val text: String? = null,
-    val textColor: String? = null,
-    val backgroundColor: String? = null,
-    // announcement / timer (lets a companion reconstruct the composer from a schedule item)
-    val fontSize: Int? = null,
-    val animationType: String? = null,
-    val animationDuration: Int? = null,
-    val isTimer: Boolean? = null,
-    val timerMode: String? = null,
-    val timerHours: Int? = null,
-    val timerMinutes: Int? = null,
-    val timerSeconds: Int? = null,
-    val timerExpiredText: String? = null,
-    val targetHour: Int? = null,
-    val targetMinute: Int? = null,
-    val liveClockFormat: String? = null,
-    // picture
-    val folderPath: String? = null,
-    val folderName: String? = null,
-    val imageCount: Int? = null,
-    // presentation
-    val filePath: String? = null,
-    val fileName: String? = null,
-    val slideCount: Int? = null,
-    val fileType: String? = null,
-    // media
-    val mediaUrl: String? = null,
-    val mediaTitle: String? = null,
-    val mediaType: String? = null,
-    // lower third
-    val presetId: String? = null,
-    val presetLabel: String? = null,
-    // website
-    val url: String? = null
-)
-
-@Serializable
-data class ScheduleResponse(
-    val items: List<ScheduleItemDto>,
-    val total: Int
-)
-
-/**
- * Snapshot of whatever is currently live, broadcast as [Constants.WS_EVENT_LIVE_STATE_CHANGED].
- * Fills the gap left by the content types that (unlike presentations/songs) have no dedicated
- * "now live" event — used by a following instance ([InstanceLinkClient]) to mirror local output.
- *
- * Presentations are intentionally NOT duplicated here — they already have their own
- * presentation_slide_changed/freeze/live events; [contentType] == "PRESENTATION" just tells a
- * follower to rely on those instead.
- */
-@Serializable
-data class LiveStateDto(
-    val contentType: String, // matches presenter.Presenting enum name
-    // bible verse
-    val bookName: String? = null,
-    val chapter: Int? = null,
-    val verseNumber: Int? = null,
-    val verseRange: String? = null,
-    val verseText: String? = null,
-    // Canonical (numbering-independent) verse code — see Bible.getCodeReference/getVerseDetailsByCode.
-    // Lets a follower in "reference-only" Bible sync mode (InstanceLinkSettings.BibleSyncMode) resolve
-    // the same verse in its own independently-configured (possibly different-language) Bible, instead
-    // of downloading the primary's file. Null when the primary has no bible loaded to compute it from.
-    val verseCodeBook: Int? = null,
-    val verseCodeChapter: Int? = null,
-    val verseCodeVerse: Int? = null,
-    // song section
-    val songTitle: String? = null,
-    val songNumber: Int? = null,
-    val sectionType: String? = null,
-    val lines: List<String>? = null,
-    // Current line/section position within the mirrored section — lets a follower's own
-    // line-by-line display mode track the primary's navigation, not just section changes.
-    val songSectionIndex: Int? = null,
-    val songLineIndex: Int? = null,
-    // picture — resolved against a registered folder catalog when possible
-    val pictureFolderId: String? = null,
-    val pictureIndex: Int? = null,
-    // media
-    val mediaId: String? = null,
-    val mediaUrl: String? = null,
-    val mediaType: String? = null,
-    // announcement
-    val announcementText: String? = null,
-    // website
-    val websiteUrl: String? = null,
-    val websiteTitle: String? = null,
-    // canvas scene
-    val sceneId: String? = null,
-    val sceneName: String? = null,
-    // Q&A
-    val questionId: String? = null,
-    val questionText: String? = null,
-    // Strong's dictionary
-    val dictionaryWord: String? = null,
-    // Full Strong's entry for DICTIONARY mirroring — the primary holds it at broadcast time, and
-    // a follower's own bundled dictionary may be a different language, so carrying the entry beats
-    // a local lookup. Old primaries omit it (null → follower presents word-only); old followers
-    // ignore it (ignoreUnknownKeys).
-    val dictionaryEntry: StrongsEntry? = null,
-    // lower third — resolves to a file via the same lowerThirdFiles() lookup /api/lowerthirds/{name}/json uses
-    val lowerThirdName: String? = null
-)
-
-// ── Bible DTOs ────────────────────────────────────────────────────────────────
-
-@Serializable
-data class BibleChapterDto(
-    val chapter: Int,
-    @kotlinx.serialization.SerialName("verse-total") val verseTotal: Int
-)
-
-@Serializable
-data class BibleBookDto(
-    @kotlinx.serialization.SerialName("book-id")      val bookId: Int,
-    @kotlinx.serialization.SerialName("book-name")    val bookName: String,
-    @kotlinx.serialization.SerialName("chapter-total") val chapterTotal: Int,
-    val chapters: List<BibleChapterDto>
-)
-
-@Serializable
-data class BibleVerseDto(
-    @kotlinx.serialization.SerialName("verse") val verse: Int,
-    @kotlinx.serialization.SerialName("text")  val text: String
-)
-
-/**
- * Response for /api/bible?book={id}&chapter={num} — full chapter with verse text.
- *
- * {
- *   "translation": "KJV",
- *   "book-id": 1,
- *   "book-name": "Genesis",
- *   "chapter": 1,
- *   "verse-total": 31,
- *   "verses": [ { "verse": 1, "text": "In the beginning…" }, … ]
- * }
- */
-@Serializable
-data class BibleChapterResponse(
-    val translation: String,
-    @kotlinx.serialization.SerialName("book-id")    val bookId: Int,
-    @kotlinx.serialization.SerialName("book-name")  val bookName: String,
-    val chapter: Int,
-    @kotlinx.serialization.SerialName("verse-total") val verseTotal: Int,
-    val verses: List<BibleVerseDto>
-)
-
-/**
- * Top-level response for /api/bible
- *
- * {
- *   "translation": "KJV",
- *   "books": [
- *     { "book-id": 1, "book-name": "Genesis", "chapter-total": 50,
- *       "chapters": [ { "chapter": 1, "verse-total": 31 }, … ] }
- *   ],
- *   "book-total": 66,
- *   "verse-total": 31102
- * }
- */
-@Serializable
-data class BibleCatalogResponse(
-    val translation: String,
-    val books: List<BibleBookDto>,
-    @kotlinx.serialization.SerialName("book-total")  val bookTotal: Int,
-    @kotlinx.serialization.SerialName("verse-total") val verseTotal: Int
-)
-
-// ── Presentation DTOs ─────────────────────────────────────────────────────────
-
-/**
- * Metadata for a single slide within a presentation.
- *
- * The slide image can be retrieved via:
- *   GET /api/presentations/{presentation-id}/slides/{slide-index}
- */
-@Serializable
-data class SlideDto(
-    @kotlinx.serialization.SerialName("slide-index") val slideIndex: Int,
-    @kotlinx.serialization.SerialName("thumbnail-url") val thumbnailUrl: String
-)
-
-/**
- * A single presentation entry.
- *
- * {
- *   "id": "uuid",
- *   "file-name": "MySlides.pptx",
- *   "file-type": "pptx",
- *   "slide-total": 5,
- *   "slides": [ { "slide-index": 0, "thumbnail-url": "/api/presentations/uuid/slides/0" }, … ]
- * }
- */
-@Serializable
-data class PresentationDto(
-    val id: String,
-    @kotlinx.serialization.SerialName("file-name")   val fileName: String,
-    @kotlinx.serialization.SerialName("file-type")   val fileType: String,
-    @kotlinx.serialization.SerialName("slide-total") val slideTotal: Int,
-    val slides: List<SlideDto>
-)
-
-/**
- * Top-level response for GET /api/presentations
- *
- * {
- *   "presentations": [ … ],
- *   "total": 1
- * }
- */
-@Serializable
-data class PresentationCatalogResponse(
-    val presentations: List<PresentationDto>,
-    val total: Int
-)
-
-// ── Picture DTOs ──────────────────────────────────────────────────────────────
-
-@Serializable
-data class PictureFileDto(
-    @kotlinx.serialization.SerialName("index")         val index: Int,
-    @kotlinx.serialization.SerialName("file-name")     val fileName: String,
-    @kotlinx.serialization.SerialName("thumbnail-url") val thumbnailUrl: String
-)
-
-/**
- * Top-level response for GET /api/pictures
- *
- * {
- *   "folder-id":   "a1b2c3d4",
- *   "folder-name": "Easter 2026",
- *   "image-total": 12,
- *   "images": [ { "index": 0, "file-name": "img001.jpg", "thumbnail-url": "/api/pictures/a1b2c3d4/images/0" }, … ]
- * }
- */
-@Serializable
-data class PictureFolderResponse(
-    @kotlinx.serialization.SerialName("folder-id")    val folderId: String,
-    @kotlinx.serialization.SerialName("folder-name")  val folderName: String,
-    @kotlinx.serialization.SerialName("folder-path")  val folderPath: String,
-    @kotlinx.serialization.SerialName("image-total")  val imageTotal: Int,
-    val images: List<PictureFileDto>
-)
-
-@Serializable
-data class SelectPictureRequest(
-    @kotlinx.serialization.SerialName("folder-id") val folderId: String,
-    val index: Int = -1,
-    /** When provided, the server looks up the file by name so the correct image is
-     *  displayed regardless of index-ordering differences between clients. */
-    @kotlinx.serialization.SerialName("file-name") val fileName: String? = null,
-)
-
-/**
- * Payload for POST /api/presentations/{id}/select and WS "select_slide".
- * [id] is the presentation ID (file hash or schedule item UUID).
- * [index] is the 0-based slide index to display immediately (no approval).
- */
-@Serializable
-data class SelectSlideRequest(
-    val id: String = "",
-    val index: Int
-)
-
-/**
- * Payload for POST /api/bible/select and WS "select_bible_verse".
- * Instantly displays the given verse on the presentation output with no approval dialog.
- */
-@Serializable
-data class SelectBibleVerseRequest(
-    val bookName: String,
-    val chapter: Int,
-    val verseNumber: Int,
-    val verseText: String = "",
-    val verseRange: String = ""
-)
-
-/**
- * Payload for POST /api/songs/{number}/select and WS "select_song_section".
- * [section] is the 0-based index into the song's section list (as returned by GET /api/songs/{number}).
- */
-@Serializable
-data class SelectSongSectionRequest(
-    val number: String,
-    val section: Int,
-    /** 0-based index of the line within [section] for "one line at a time" display mode, or -1 when
-     *  not applicable (section-level navigation only) — same sentinel PresenterManager.songDisplayLineIndex
-     *  already uses. Defaults to -1 so older clients that omit this field still decode correctly. */
-    val lineIndex: Int = -1
-)
-
-// ── ServerInfoResponse / WebSocketMessage / etc. ──────────────────────────────
-
-@Serializable
-data class ServerInfoResponse(
-    val name: String = Constants.SERVER_APP_NAME,
-    val version: String = Constants.SERVER_VERSION,
-    val port: Int
-)
-
-@Serializable
-data class DevicePermissionsDto(
-    val canPresent: Boolean = true,
-    val canAddToSchedule: Boolean = true,
-    val canUploadFiles: Boolean = true,
-    val maxMediaUploadMb: Int = Constants.DEFAULT_MAX_MEDIA_UPLOAD_MB,
-)
-
-@Serializable
-data class StatusResponse(
-    val appVersion: String = Constants.SERVER_VERSION,
-    val endpoints: List<String> = emptyList(),
-    val bibles: List<String> = emptyList(),
-    val songbooks: List<String> = emptyList(),
-    val permissions: DevicePermissionsDto = DevicePermissionsDto(),
-)
-
-@Serializable
-@OptIn(ExperimentalSerializationApi::class)
-data class WebSocketMessage(
-    val type: String,
-    val payload: String = "",
-    // Correlates a command with its command_ack reply (InstanceLink controller mode). NEVER-encoded
-    // when null: this server's json has encodeDefaults=true, so without the annotation every
-    // existing broadcast would grow a "commandId":null field and change the wire format for all
-    // clients. Old servers ignore it (ignoreUnknownKeys); old clients never send it.
-    @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val commandId: String? = null
-)
-
-/** Reply to a WS command that carried a commandId — see [Constants.WS_EVENT_COMMAND_ACK].
- *  Approval-gated commands ack immediately with ok=true, reason="pending_approval" (the operator's
- *  decision can take minutes; its outcome still arrives via the following schedule_updated). */
-@Serializable
-data class CommandAckPayload(
-    val commandId: String,
-    val ok: Boolean,
-    val reason: String? = null
-)
-
-// ── Flat remote-item DTO (accepts the format mobile apps actually send) ───────
-//
-// Both POST /api/schedule/add and POST /api/project accept the same body:
-//
-//   { "item": { "id":"1", "songNumber":42, "title":"Amazing Grace", "songbook":"Hymns" } }
-//
-// The "type" discriminator required by kotlinx.serialization is NOT needed —
-// the server infers the item type from which fields are present.
-
-@Serializable
-data class RemoteItemDto(
-    val id: String = "",
-    /** Item type discriminator sent by the companion app ("song", "presentation", "image", etc.). */
-    val type: String? = null,
-    // song
-    val songNumber: Int? = null,
-    val title: String? = null,
-    val songbook: String? = null,
-    // bible
-    val bookName: String? = null,
-    val chapter: Int? = null,
-    val verseNumber: Int? = null,
-    val verseText: String? = null,
-    /** Optional multi-verse range, e.g. "1-3" or "2,4". When present the schedule item groups all those verses. */
-    val verseRange: String? = null,
-    // picture (companion app uses folder-id/image-index; desktop uses folderPath)
-    @kotlinx.serialization.SerialName("folder-id") val folderId: String? = null,
-    @kotlinx.serialization.SerialName("image-index") val imageIndex: Int? = null,
-    val folderPath: String? = null,
-    val folderName: String? = null,
-    val imageCount: Int? = null,
-    // presentation
-    val filePath: String? = null,
-    val fileName: String? = null,
-    val slideCount: Int? = null,
-    val fileType: String? = null,
-    // media
-    val mediaUrl: String? = null,
-    val mediaTitle: String? = null,
-    val mediaType: String? = null,
-    // dictionary (Strong's) — strongsNumber is the discriminator; word carried in `title`
-    val strongsNumber: String? = null,
-    val transliteration: String? = null,
-    val definition: String? = null,
-    // announcement / timer — announcementText is the discriminator ("" for a pure timer)
-    val announcementText: String? = null,
-    val textColor: String? = null,
-    val backgroundColor: String? = null,
-    val fontSize: Int? = null,
-    val animationType: String? = null,
-    val animationDuration: Int? = null,
-    val isTimer: Boolean? = null,
-    val timerHours: Int? = null,
-    val timerMinutes: Int? = null,
-    val timerSeconds: Int? = null,
-    val timerTextColor: String? = null,
-    val timerExpiredText: String? = null,
-    val timerMode: String? = null,
-    val targetHour: Int? = null,
-    val targetMinute: Int? = null,
-    val targetSecond: Int? = null,
-    val liveClockFormat: String? = null,
-    // website — url is the discriminator
-    val url: String? = null,
-    val websiteTitle: String? = null,
-    // display text (optional, ignored during parsing)
-    val displayText: String? = null
-)
-
-@Serializable
-data class RemoteItemRequest(val item: RemoteItemDto)
-
-/**
- * Batch variant of [RemoteItemRequest] — used by POST /api/schedule/add-batch
- * and the [Constants.WS_CMD_ADD_BATCH_TO_SCHEDULE] WebSocket command.
- *
- * {
- *   "items": [
- *     { "bookName": "John",  "chapter": 3, "verseNumber": 16, "verseText": "For God so loved…" },
- *     { "bookName": "John",  "chapter": 3, "verseNumber": 17, "verseText": "For God did not send…" }
- *   ]
- * }
- */
-@Serializable
-data class RemoteItemsRequest(val items: List<RemoteItemDto>)
-
-/**
- * Infer a [ScheduleItem] from the flat [RemoteItemDto] by detecting which fields are present.
- * Returns null if the dto doesn't match any known item type.
- */
-fun RemoteItemDto.toScheduleItem(): ScheduleItem? {
-    val safeId = id.ifBlank { java.util.UUID.randomUUID().toString() }
-    return when {
-        // Song — must have songNumber
-        songNumber != null ->
-            ScheduleItem.SongItem(
-                id         = safeId,
-                songNumber = songNumber,
-                title      = title ?: "",
-                songbook   = songbook ?: ""
-            )
-        // Bible verse — must have bookName + chapter + verseNumber
-        bookName != null && chapter != null && verseNumber != null ->
-            ScheduleItem.BibleVerseItem(
-                id          = safeId,
-                bookName    = bookName,
-                chapter     = chapter,
-                verseNumber = verseNumber,
-                verseText   = verseText ?: "",
-                verseRange  = verseRange ?: ""
-            )
-        // Picture folder — must have folderPath
-        folderPath != null ->
-            ScheduleItem.PictureItem(
-                id         = safeId,
-                folderPath = folderPath,
-                folderName = folderName ?: folderPath,
-                imageCount = imageCount ?: 0
-            )
-        // Presentation — must have filePath
-        filePath != null ->
-            ScheduleItem.PresentationItem(
-                id         = safeId,
-                filePath   = filePath,
-                fileName   = fileName ?: filePath,
-                slideCount = slideCount ?: 0,
-                fileType   = fileType ?: ""
-            )
-        // Media — must have mediaUrl
-        mediaUrl != null ->
-            ScheduleItem.MediaItem(
-                id         = safeId,
-                mediaUrl   = mediaUrl,
-                mediaTitle = mediaTitle ?: mediaUrl,
-                mediaType  = mediaType ?: "local"
-            )
-        // Dictionary (Strong's) — must have strongsNumber
-        strongsNumber != null ->
-            ScheduleItem.DictionaryItem(
-                id              = safeId,
-                number          = strongsNumber,
-                word            = title ?: "",
-                transliteration = transliteration ?: "",
-                definition      = definition ?: ""
-            )
-        // Announcement / timer — must have announcementText (may be "")
-        announcementText != null ->
-            ScheduleItem.AnnouncementItem(
-                id                = safeId,
-                text              = announcementText,
-                textColor         = textColor ?: "#FFFFFF",
-                backgroundColor   = backgroundColor ?: "#000000",
-                fontSize          = fontSize ?: 48,
-                animationType     = animationType ?: "SLIDE_FROM_BOTTOM",
-                animationDuration = animationDuration ?: 500,
-                isTimer           = isTimer ?: false,
-                timerHours        = timerHours ?: 0,
-                timerMinutes      = timerMinutes ?: 0,
-                timerSeconds      = timerSeconds ?: 0,
-                timerTextColor    = timerTextColor ?: (textColor ?: "#FFFFFF"),
-                timerExpiredText  = timerExpiredText ?: "",
-                timerMode         = timerMode ?: Constants.TIMER_MODE_DURATION,
-                targetHour        = targetHour ?: 0,
-                targetMinute      = targetMinute ?: 0,
-                targetSecond      = targetSecond ?: 0,
-                liveClockFormat   = liveClockFormat ?: "HH:mm:ss"
-            )
-        // Website — must have url
-        url != null ->
-            ScheduleItem.WebsiteItem(
-                id    = safeId,
-                url   = url,
-                title = websiteTitle ?: url
-            )
-        else -> null
-    }
-}
-
-// Keep old wrappers for WS payloads that still use the sealed class discriminator
-@Serializable
-data class AddToScheduleRequest(val item: ScheduleItem)
-
-@Serializable
-data class ProjectRequest(val item: ScheduleItem)
-
-/** Payload for WS "remove_from_schedule" — removes the schedule item with this id, subject to the
- *  same approval flow as add_to_schedule/project. */
-@Serializable
-data class RemoveFromScheduleRequest(val id: String)
-
-/**
- * Wraps an incoming remote request with a [CompletableDeferred] that the UI
- * resolves once the user clicks Allow (true) or Deny/Block (false).
- * The HTTP endpoint suspends on [decision] before sending a response, so the
- * calling device receives the correct status code.
- */
-data class PendingRemoteRequest(
-    val item: ScheduleItem,
-    val clientId: String = "",
-    val decision: kotlinx.coroutines.CompletableDeferred<Boolean> = kotlinx.coroutines.CompletableDeferred()
-)
-
-/**
- * Same as [PendingRemoteRequest] but carries multiple items — used by the
- * batch add endpoint so the user approves or denies the whole group at once.
- */
-data class PendingBatchRequest(
-    val items: List<ScheduleItem>,
-    val clientId: String = "",
-    val decision: kotlinx.coroutines.CompletableDeferred<Boolean> = kotlinx.coroutines.CompletableDeferred()
-)
-
-/** Same shape as [PendingRemoteRequest] but for a remove request — carries just the target id and a
- *  human-readable label (resolved from the current schedule, if still present) for the approval UI. */
-data class PendingRemoveRequest(
-    val id: String,
-    val label: String,
-    val clientId: String = "",
-    val decision: kotlinx.coroutines.CompletableDeferred<Boolean> = kotlinx.coroutines.CompletableDeferred()
-)
-
-/**
- * Emitted when a device authenticates against the presentation remote for the first time
- * this session, so the desktop operator can approve/deny it like any other remote action.
- */
-data class PendingConnectionRequest(
-    val clientId: String = "",
-    val decision: kotlinx.coroutines.CompletableDeferred<Boolean> = kotlinx.coroutines.CompletableDeferred()
-)
-
 // ── CompanionServer ───────────────────────────────────────────────────────────
 
 /**
@@ -799,14 +119,6 @@ data class PendingConnectionRequest(
 class CompanionServer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Serializes background presentation renders for the companion API. A schedule with several
-     * presentations would otherwise render every deck concurrently (one IO coroutine each), and
-     * each deck holds a full POI [SlideShow] plus a 1920px frame buffer — a few heavy decks at
-     * once exhaust the heap (OutOfMemoryError). Rendering one deck at a time caps peak memory to a
-     * single deck's footprint; the renders just queue.
-     */
-    private val presentationRenderMutex = Mutex()
 
     private var _qaEventJob: kotlinx.coroutines.Job? = null
     var qaManager: QAManager? = null
@@ -834,14 +146,17 @@ class CompanionServer {
     @Volatile var presentationRemotePassword: String = ""
 
     // Current presentation state (updated from desktop, read by remote clients)
-    @Volatile private var _currentPresentationId: String = ""
-    @Volatile private var _currentSlideIndex: Int = 0
-    @Volatile private var _currentSlideTotalCount: Int = 0
-    @Volatile private var _presentationFrozen: Boolean = false
-    @Volatile private var _presentationIsPlaying: Boolean = false
-    @Volatile private var _presentationIsLive: Boolean = false
-    @Volatile private var _autoScrollInterval: Int = 5
-    @Volatile private var _presentationIsLooping: Boolean = true
+    // `internal` rather than private: these are mutable and must be read (and some written)
+    // per request by the extracted route groups, so unlike the immutable state they cannot be
+    // passed in as parameters.
+    @Volatile internal var _currentPresentationId: String = ""
+    @Volatile internal var _currentSlideIndex: Int = 0
+    @Volatile internal var _currentSlideTotalCount: Int = 0
+    @Volatile internal var _presentationFrozen: Boolean = false
+    @Volatile internal var _presentationIsPlaying: Boolean = false
+    @Volatile internal var _presentationIsLive: Boolean = false
+    @Volatile internal var _autoScrollInterval: Int = 5
+    @Volatile internal var _presentationIsLooping: Boolean = true
 
     fun updatePresentationRemoteSettings(settings: PresentationRemoteSettings, apiKey: String) {
         val wasEnabled = presentationRemoteEnabled
@@ -898,7 +213,7 @@ class CompanionServer {
         _currentSlideIndex = index
         _currentSlideTotalCount = total
         _presentationIsPlaying = isPlaying
-        val note = _presentationNotes[id]?.getOrNull(index) ?: ""
+        val note = presentations._presentationNotes[id]?.getOrNull(index) ?: ""
         broadcast(WebSocketMessage(
             type = Constants.WS_EVENT_PRESENTATION_SLIDE_CHANGED,
             payload = """{"id":"$id","index":$index,"total":$total,"isPlaying":$isPlaying,"isLive":$_presentationIsLive,"notes":"${jsonEscape(note)}"}"""
@@ -968,17 +283,8 @@ class CompanionServer {
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
 
-    // ATEM + lower-third folder config for the Companion lower-third sequencer
-    @Volatile private var _atemSettings: AtemSettings? = null
-    @Volatile private var _lowerThirdFolder: String = ""
-
     fun updateAtemConfig(atem: AtemSettings, lowerThirdFolder: String) {
-        val prev = _atemSettings
-        if (prev == null || prev.host != atem.host || prev.port != atem.port) {
-            AtemConnectionManager.invalidate()
-        }
-        _atemSettings = atem
-        _lowerThirdFolder = lowerThirdFolder
+        this.atem.updateConfig(atem, lowerThirdFolder)
         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "state_updated", mapOf("type" to "atem_config"))
     }
 
@@ -992,58 +298,9 @@ class CompanionServer {
     // outright with "Load failed" for this exact indefinitely-long streaming response pattern,
     // even on localhost. WebSocket is what the rest of this server already uses for real-time
     // push, and has none of that legacy baggage.)
-    @Volatile private var _browserSourceOutputs: List<ScreenAssignment> = emptyList()
-    private val _browserSourceFrameFlows = ConcurrentHashMap<Int, SharedFlow<BrowserSourceFrame>>()
 
-    // Live WebSocket sessions per output index, so a renderer replacement can close them —
-    // a session holds the flow it captured at connect time, and after re-registration that
-    // old flow never emits again while the heartbeat keeps re-sending its stale last frame.
-    // Closing forces the overlay page to reconnect (2s backoff) and reseed at the new stream.
-    private val _browserSourceSessions = ConcurrentHashMap<Int, MutableSet<DefaultWebSocketServerSession>>()
 
-    fun updateBrowserSourceOutputs(outputs: List<ScreenAssignment>) {
-        _browserSourceOutputs = outputs
-        InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "state_updated", mapOf("type" to "browser_source_outputs", "count" to outputs.size))
-    }
 
-    fun browserSourceOutput(index: Int): ScreenAssignment? = _browserSourceOutputs.getOrNull(index)
-
-    /**
-     * Registers (or replaces) the frame delta flow a given output's renderer produces.
-     * Replacing an existing flow (renderer restarted, e.g. after a resolution/fps change)
-     * closes that output's connected sessions so clients reconnect to the new stream.
-     */
-    fun registerBrowserSourceFrames(index: Int, frames: SharedFlow<BrowserSourceFrame>) {
-        val previous = _browserSourceFrameFlows.put(index, frames)
-        if (previous != null && previous !== frames) {
-            val stranded = _browserSourceSessions.remove(index) ?: return
-            scope.launch {
-                stranded.forEach { session ->
-                    try {
-                        session.close(CloseReason(CloseReason.Codes.SERVICE_RESTART, "Renderer restarted"))
-                    } catch (_: Exception) {
-                        // already gone
-                    }
-                }
-            }
-        }
-    }
-
-    /** Pure check for the given output's independent Browser Source API-key requirement (separate from [_apiKeyEnabled]) — no response side effects, usable from both HTTP and WebSocket routes. */
-    private fun browserSourceApiKeyValid(call: ApplicationCall, output: ScreenAssignment): Boolean {
-        if (!output.browserSourceApiKeyRequired || _apiKey.value.isEmpty()) return true
-        val provided = call.request.headers[Constants.HEADER_API_KEY]
-            ?: call.request.queryParameters[Constants.QUERY_PARAM_API_KEY]
-            ?: ""
-        return MessageDigest.isEqual(provided.toByteArray(), _apiKey.value.toByteArray())
-    }
-
-    /** Same check as [browserSourceApiKeyValid], but responds 401 on an HTTP route when invalid. */
-    private suspend fun checkBrowserSourceApiKey(call: ApplicationCall, output: ScreenAssignment): Boolean {
-        if (browserSourceApiKeyValid(call, output)) return true
-        call.respond(HttpStatusCode.Unauthorized, "Invalid API key")
-        return false
-    }
 
     /**
      * Packs one [BrowserSourceFrame] into a single WebSocket binary message: a fixed 24-byte
@@ -1055,174 +312,40 @@ class CompanionServer {
      * handled natively by the WebSocket protocol — no manual buffer/boundary parsing needed on
      * either side, and no dependence on a legacy MIME type with inconsistent engine support.
      */
-    internal fun encodeBrowserSourceFrameMessage(frame: BrowserSourceFrame): ByteArray {
-        val buf = java.nio.ByteBuffer.allocate(24 + frame.png.size)
-        buf.putInt(frame.x)
-        buf.putInt(frame.y)
-        buf.putInt(frame.rectWidth)
-        buf.putInt(frame.rectHeight)
-        buf.putInt(frame.fullWidth)
-        buf.putInt(frame.fullHeight)
-        buf.put(frame.png)
-        return buf.array()
-    }
-
-    /** Lottie files in the configured lower-third folder. */
-    private fun lowerThirdFiles(): List<File> =
-        File(_lowerThirdFolder).takeIf { _lowerThirdFolder.isNotEmpty() && it.isDirectory }
-            ?.listFiles { f -> f.extension.lowercase() == "json" && isLottieFile(f) }
-            ?.sortedBy { it.nameWithoutExtension.lowercase() } ?: emptyList()
-
-    private fun jsonStr(s: String): String =
-        json.encodeToString(kotlinx.serialization.serializer<String>(), s)
-
-    /** Shared body of the run/show endpoints. */
-    private suspend fun handleLowerThirdTrigger(
-        call: ApplicationCall,
-        autoEnd: Boolean
-    ) {
-        val rawName = call.parameters["name"] ?: ""
-        val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
-        if (file == null) {
-            call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
-            return
-        }
-        val ltJson = try { file.readText() } catch (_: Exception) {
-            call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
-            return
-        }
-        val durationMs = LottieRenderCache.lottieDurationMs(ltJson)
-        if (durationMs == null) {
-            call.respond(HttpStatusCode.UnprocessableEntity, """{"error":"lottie has no timing information"}""")
-            return
-        }
-        val atem = _atemSettings ?: AtemSettings()
-
-        // Key target: USK (M/E + keyer) or DSK (?keytype / setting) from settings;
-        // ?me=N&key=M (1-based) override; ?key=0 skips. For DSK ?key overrides the DSK index.
-        val useDsk = resolveUseDsk(call, atem)
-        val meParam = call.request.queryParameters["me"]?.toIntOrNull()
-        val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
-        val mixEffect: Int?
-        val keyer: Int?
-        if (keyParam == 0) {
-            mixEffect = null; keyer = null
-        } else {
-            mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
-            keyer = if (keyParam != null) keyParam - 1
-                else if (useDsk) atem.dskIndex else atem.keyIndex
-            validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-                call.respond(HttpStatusCode.BadRequest, """{"error":${jsonStr(it)}}""")
-                return
-            }
-        }
-
-        val pause = call.request.queryParameters["pause"]?.toBooleanStrictOrNull() ?: false
-        val pauseDurationMs = call.request.queryParameters["pauseDurationMs"]?.toLongOrNull() ?: 2000L
-
-        val keyError = LowerThirdSequencer.run(
-            name = file.nameWithoutExtension,
-            json = ltJson,
-            durationMs = durationMs,
-            pauseAtFrame = pause,
-            pauseDurationMs = pauseDurationMs,
-            mixEffect = mixEffect,
-            keyer = keyer,
-            atem = atem,
-            useDownstreamKey = useDsk,
-            autoEnd = autoEnd
-        )
-        val totalMs = atem.keyPreRollMs + durationMs +
-            (if (pause) pauseDurationMs else 0L) + atem.keyPostRollMs
-        call.respondText(
-            """{"status":"started","name":${jsonStr(file.nameWithoutExtension)},"durationMs":$durationMs,""" +
-                """"totalMs":${if (autoEnd) totalMs else -1},"keyError":${keyError?.let { jsonStr(it) } ?: "null"}}""",
-            ContentType.Application.Json
-        )
-    }
-
     /**
-     * Standalone upstream-key on/off (POST /api/atem/key/on|off). Reuses the shared
-     * keepalive connection when free; falls back to a short-lived connection when an
-     * upload holds it, so a key cut never waits behind an upload. Synchronous 200/502.
+     * The Browser Source overlay page for [index]. The page itself is
+     * [browserSourceOverlayPage] in BrowserSourcePage.kt; this reads the API-key state it
+     * needs so callers do not have to.
      */
-    private suspend fun handleKeyToggle(call: ApplicationCall, onAir: Boolean) {
-        val atem = _atemSettings
-        if (atem == null || atem.host.isBlank()) {
-            call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"ATEM not configured"}""")
-            return
-        }
-        val useDsk = resolveUseDsk(call, atem)
-        val meParam = call.request.queryParameters["me"]?.toIntOrNull()
-        val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
-        val mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
-        val keyer = if (keyParam != null) keyParam - 1
-            else if (useDsk) atem.dskIndex else atem.keyIndex
-        validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-            call.respond(HttpStatusCode.BadRequest, """{"error":${jsonStr(it)}}""")
-            return
-        }
-        try {
-            val ran = AtemConnectionManager.tryRun(atem.host, atem.port) { client ->
-                client.setKeyOnAir(useDsk, mixEffect, keyer, onAir)
-            }
-            if (!ran) AtemClient.cutKey(atem.host, atem.port, useDsk, mixEffect, keyer, onAir)
-            val target = if (useDsk) """"dsk":${keyer + 1}""" else """"me":${mixEffect + 1},"key":${keyer + 1}"""
-            call.respondText(
-                """{"status":"${if (onAir) "on" else "off"}",$target}""",
-                ContentType.Application.Json
-            )
-        } catch (e: Exception) {
-            call.respond(
-                HttpStatusCode.BadGateway,
-                """{"error":${jsonStr(e.message ?: "ATEM command failed")}}"""
-            )
-        }
-    }
+    internal fun browserSourceOverlayPageHtml(
+        index: Int,
+        output: ScreenAssignment,
+        bgOverride: String? = null,
+    ): String = browserSourceOverlayPage(
+        index, output, _apiKeyEnabled.value, _apiKey.value, bgOverride
+    )
 
-    /**
-     * Validate a 0-based key target against the detected topology. Null = OK.
-     * For a downstream key [keyer] is the DSK index and [mixEffect] is ignored.
-     */
-    private fun validateKeyTarget(atem: AtemSettings, useDsk: Boolean, mixEffect: Int, keyer: Int): String? {
-        if (useDsk) {
-            if (atem.detectedDownstreamKeyers > 0 && keyer !in 0 until atem.detectedDownstreamKeyers)
-                return "DSK ${keyer + 1} does not exist (available: 1-${atem.detectedDownstreamKeyers})"
-            return null
-        }
-        if (atem.detectedMixEffects > 0 && mixEffect !in 0 until atem.detectedMixEffects)
-            return "M/E ${mixEffect + 1} does not exist (available: 1-${atem.detectedMixEffects})"
-        val keyers = atem.detectedKeyersPerMe.getOrNull(mixEffect)
-        if (keyers != null && keyers > 0 && keyer !in 0 until keyers)
-            return "Key ${keyer + 1} does not exist on M/E ${mixEffect + 1} (available: 1-$keyers)"
-        return null
-    }
 
-    /**
-     * Resolves whether a request should drive a downstream key: `?keytype=dsk|usk` (or
-     * `downstream|upstream`) overrides; otherwise the persisted [AtemSettings.useDownstreamKey].
-     */
-    private fun resolveUseDsk(call: ApplicationCall, atem: AtemSettings): Boolean =
-        when (call.request.queryParameters["keytype"]?.lowercase()) {
-            "dsk", "downstream" -> true
-            "usk", "upstream" -> false
-            else -> atem.useDownstreamKey
-        }
+
+
+
+
+
 
     // Current data — thread-safe StateFlows
     // All songs flat list
     // Current catalog — rebuilt whenever songs are updated
     private val _catalog = MutableStateFlow(SongCatalogResponse(emptyList(), 0, 0))
     /** Raw song list kept in sync with _catalog for per-number detail lookups */
-    @Volatile private var _songs: List<SongItem> = emptyList()
+    @Volatile internal var _songs: List<SongItem> = emptyList()
     private val _bibleCatalog = MutableStateFlow<BibleCatalogResponse?>(null)
     private val _bible = MutableStateFlow<Bible?>(null)
     /** Absolute path to the primary bible's .spb file — serves GET /api/bible/file for InstanceLink followers. */
-    @Volatile private var _bibleFilePath: String = ""
+    @Volatile internal var _bibleFilePath: String = ""
     /** Same as [_bibleFilePath] but for the secondary bible — serves GET /api/bible/file/secondary,
      *  only used when a follower opts in to mirroring the secondary too (most don't). */
-    @Volatile private var _secondaryBibleFilePath: String = ""
-    @Volatile private var _bibleFilePaths: List<String> = emptyList()
+    @Volatile internal var _secondaryBibleFilePath: String = ""
+    @Volatile internal var _bibleFilePaths: List<String> = emptyList()
     /** Current background settings — serves GET /api/backgrounds for a follower that opted in to
      *  mirroring backgrounds. The image/video fields are still local file paths on this machine;
      *  GET /api/backgrounds/asset/{slot} resolves the current path for a given slot on demand. */
@@ -1254,58 +377,13 @@ class CompanionServer {
     /** schedule item UUID → absolute local media file path — populated by updateSchedule, serves /api/media/stream */
     private val _scheduleItemToMediaPath = ConcurrentHashMap<String, String>()
 
-    // Presentation catalog — metadata only; raw JPEG bytes stored per-slide in _slideBytes
-    private val _presentationCatalog = MutableStateFlow(PresentationCatalogResponse(emptyList(), 0))
-    /** presentationId → list of JPEG-encoded slide bytes (index = slide number). Max 5 cached. */
-    private val _slideBytes = ConcurrentHashMap<String, List<ByteArray>>()
-    private val _slideBytesOrder = java.util.concurrent.ConcurrentLinkedDeque<String>()
-    private val MAX_CACHED_PRESENTATIONS = 5
-    /** presentationId (file hash) → PresentationDto — covers tab-loaded and background-rendered items */
-    private val _presentationCatalogs = ConcurrentHashMap<String, PresentationDto>()
-    /** presentationId (file hash) → absolute file path — populated by updatePresentation and updateSchedule */
-    private val _presentationFilePaths = ConcurrentHashMap<String, String>()
-    /** presentationId (file hash) → per-slide presenter notes (index = slide number) */
-    private val _presentationNotes = ConcurrentHashMap<String, List<String>>()
-    /** schedule item UUID → presentation file hash — populated when schedule is updated */
-    private val _scheduleItemToPresentationId = ConcurrentHashMap<String, String>()
-    /** Set of presentation IDs currently being background-rendered (avoids duplicate renders) */
-    private val _renderingPresentations = ConcurrentHashMap<String, Unit>()
-    /** Cancels previous updatePresentation encode job when a new presentation is loaded */
-    private var _activeUpdateJob: Job? = null
-    /** Shared slide disk cache — same directory PresentationViewModel renders into (one render, both consumers). */
-    private val slideDiskCache = SlideDiskCache()
 
-    private fun cacheSlideBytes(id: String, slides: List<ByteArray>) {
-        _slideBytes[id] = slides
-        _slideBytesOrder.remove(id)
-        _slideBytesOrder.addFirst(id)
-        while (_slideBytesOrder.size > MAX_CACHED_PRESENTATIONS) {
-            val evicted = _slideBytesOrder.pollLast()
-            if (evicted != null) {
-                _slideBytes.remove(evicted)
-                _presentationNotes.remove(evicted)
-            }
-        }
-    }
 
     /** Stable folder ID used for all device-uploaded photos (accumulates across sessions). */
-    private val DEVICE_UPLOADS_FOLDER_ID = "device_uploads"
 
-    /**
-     * ID of the most recently device-uploaded presentation file.
-     * Cleared from [_presentationCatalogs], [_slideBytes], and [_presentationFilePaths] when a new
-     * upload replaces it, so the mobile's presentation list never accumulates stale entries.
-     */
-    @Volatile private var _lastDeviceUploadedPresentationId: String? = null
 
-    // Picture catalog — metadata + file references stored per folder
-    private val _pictureCatalog = MutableStateFlow<PictureFolderResponse?>(null)
-    /** folderId → ordered list of image Files (index = image order) */
-    private val _pictureFiles = ConcurrentHashMap<String, List<File>>()
-    /** folderId → catalog metadata (covers both the active folder and all schedule picture items) */
-    private val _pictureCatalogs = ConcurrentHashMap<String, PictureFolderResponse>()
-    /** Recognised image extensions — matches PicturesViewModel */
-    private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif")
+    /** Everything the API can serve as a picture — see [PictureLibrary]. */
+    internal val pictures = PictureLibrary()
 
     // API key config (updated from settings without restart)
     private val _apiKeyEnabled = MutableStateFlow(false)
@@ -1490,7 +568,7 @@ class CompanionServer {
 
 
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
-    private var currentPort: Int = Constants.SERVER_DEFAULT_PORT
+    internal var currentPort: Int = Constants.SERVER_DEFAULT_PORT
 
     private val json = Json {
         prettyPrint = false
@@ -1501,6 +579,44 @@ class CompanionServer {
         // "field doesn't exist" — it needs every field present to apply real styling.
         encodeDefaults = true
     }
+
+    /** ATEM hardware and the lower-third folder — see [AtemBridge]. */
+    internal val atem = AtemBridge(json)
+
+    /** Presentation catalogue, slide cache and background renders — see [PresentationStore]. */
+    internal val presentations = PresentationStore(json, scope, ::broadcast)
+
+    /**
+     * Publishes a presentation and its slides to connected companions.
+     * The work is [PresentationStore]'s; this is the API main.kt calls.
+     */
+    fun updatePresentation(
+        id: String,
+        filePath: String,
+        fileName: String,
+        fileType: String,
+        slideFiles: List<File>,
+        slideNotes: List<String> = emptyList()
+    ) = presentations.updatePresentation(id, filePath, fileName, fileType, slideFiles, slideNotes)
+
+    /** OBS/vMix Browser Source outputs and their frame streams — see [BrowserSourceHub]. */
+    internal val browserSource = BrowserSourceHub(scope, _apiKey)
+
+    /** Publishes the configured Browser Source outputs. Called from main.kt. */
+    fun updateBrowserSourceOutputs(outputs: List<ScreenAssignment>) {
+        browserSource.updateBrowserSourceOutputs(outputs)
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.PRIMARY, "state_updated",
+            mapOf("type" to "browser_source_outputs", "count" to outputs.size)
+        )
+    }
+
+    /** The output configured at [index], or null. */
+    fun browserSourceOutput(index: Int): ScreenAssignment? = browserSource.browserSourceOutput(index)
+
+    /** Registers the frame flow an output's renderer produces. Called from main.kt. */
+    fun registerBrowserSourceFrames(index: Int, frames: SharedFlow<BrowserSourceFrame>) =
+        browserSource.registerBrowserSourceFrames(index, frames)
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -1637,53 +753,10 @@ class CompanionServer {
         broadcast(WebSocketMessage(type = Constants.WS_EVENT_BACKGROUNDS_UPDATED, payload = ""))
     }
 
-    /**
-     * Feed a loaded presentation (id, fileName, fileType and already-encoded JPEG slide files).
-     * Reads bytes from disk on the IO thread; no re-encoding needed since files are already JPEG.
-     */
-    fun updatePresentation(
-        id: String,
-        filePath: String,
-        fileName: String,
-        fileType: String,
-        slideFiles: List<File>,
-        slideNotes: List<String> = emptyList()
-    ) {
-        if (filePath.isNotBlank()) {
-            _presentationFilePaths[id] = filePath
-        }
-        _presentationNotes[id] = slideNotes
-        _activeUpdateJob?.cancel()
-        _activeUpdateJob = scope.launch {
-            // slideFiles can be deleted out from under this coroutine (e.g. removePresentation()
-            // invalidating the shared disk cache) while it's queued on Dispatchers.IO — treat a
-            // vanished cache the same way renderPresentationForServer does: skip, don't crash.
-            try {
-                val jpegSlides = slideFiles.map { it.readBytes() }
-                cacheSlideBytes(id, jpegSlides)
-
-                val catalog = buildPresentationCatalog(id, fileName, fileType, jpegSlides.size)
-                _presentationCatalogs[id] = catalog.presentations.first()
-                _presentationCatalog.value = catalog
-                broadcast(WebSocketMessage(
-                    type = Constants.WS_EVENT_PRESENTATION_UPDATED,
-                    payload = json.encodeToString(PresentationCatalogResponse.serializer(), catalog)
-                ))
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
 
     /**
-     * Feed the current picture folder — stores file references and broadcasts
-     * [Constants.WS_EVENT_PICTURES_UPDATED]. Image bytes are read from disk on-demand
-     * when a remote client requests [Constants.ENDPOINT_PICTURES]/{id}/images/{index}.
-     *
-     * [folderId] is a stable ID derived from the folder path (e.g. hex hash).
-     * [folderName] is the display name shown to remote clients.
-     * [folderPath] is the absolute filesystem path.
-     * [imageFiles] is the ordered list of image Files in the folder.
+     * Publishes a picture folder to connected companions and tells them it changed.
+     * The catalogue itself is built by [PictureLibrary].
      */
     fun updatePictures(
         folderId: String,
@@ -1691,24 +764,7 @@ class CompanionServer {
         folderPath: String,
         imageFiles: List<File>
     ) {
-        // Store file references — bytes are read on-demand when a client requests an image
-        _pictureFiles[folderId] = imageFiles.toList()
-
-        val catalog = PictureFolderResponse(
-            folderId = folderId,
-            folderName = folderName,
-            folderPath = folderPath,
-            imageTotal = imageFiles.size,
-            images = imageFiles.mapIndexed { index, file ->
-                PictureFileDto(
-                    index = index,
-                    fileName = file.name,
-                    thumbnailUrl = "${Constants.ENDPOINT_PICTURES}/$folderId/images/$index"
-                )
-            }
-        )
-        _pictureCatalog.value = catalog
-        _pictureCatalogs[folderId] = catalog
+        val catalog = pictures.update(folderId, folderName, folderPath, imageFiles)
         broadcast(WebSocketMessage(
             type = Constants.WS_EVENT_PICTURES_UPDATED,
             payload = json.encodeToString(PictureFolderResponse.serializer(), catalog)
@@ -1716,240 +772,70 @@ class CompanionServer {
     }
 
     /**
-     * Returns the [File] for a specific image by folder ID and zero-based index, or null if not
-     * found.  Used by the remote-select handler in MainDesktop so the correct file is presented
-     * even when the requested folder differs from the currently loaded folder in the Pictures tab
-     * (e.g. when the mobile sends a `device_uploads` selection).
+     * The [File] for a specific image by folder ID and zero-based index, or null if not found.
+     * Used by the remote-select handler in MainDesktop so the correct file is presented even when
+     * the requested folder differs from the one open in the Pictures tab (e.g. a `device_uploads`
+     * selection).
      */
-    fun getImageFile(folderId: String, index: Int): File? =
-        _pictureFiles[folderId]?.getOrNull(index)
+    fun getImageFile(folderId: String, index: Int): File? = pictures.imageFile(folderId, index)
 
     /**
      * The folder-id of the currently active picture folder pushed to mobile companions via
      * GET /api/pictures.  Null until a folder has been loaded in the Pictures tab.
      */
-    val activeFolderId: String? get() = _pictureCatalog.value?.folderId
+    val activeFolderId: String? get() = pictures.activeFolderId
 
-    /**
-     * Scans [folderPath] for image files, then caches them in [_pictureFiles] and [_pictureCatalogs]
-     * under [id] (the schedule item's UUID).  Skipped if [id] is already registered.
-     * Must be called on an IO thread.
-     */
-    private fun registerPictureItem(id: String, folderPath: String, folderName: String) {
-        if (_pictureFiles.containsKey(id)) return          // already cached
-        val folder = File(folderPath)
-        if (!folder.exists() || !folder.isDirectory) return
-        val imageFiles = folder.listFiles()
-            ?.filter { it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS }
-            ?.sortedBy { it.name }
-            ?: return
-        if (imageFiles.isEmpty()) return
-        _pictureFiles[id] = imageFiles
-        _pictureCatalogs[id] = PictureFolderResponse(
-            folderId   = id,
-            folderName = folderName,
-            folderPath = folderPath,
-            imageTotal = imageFiles.size,
-            images     = imageFiles.mapIndexed { index, file ->
-                PictureFileDto(
-                    index        = index,
-                    fileName     = file.name,
-                    thumbnailUrl = "${Constants.ENDPOINT_PICTURES}/$id/images/$index"
-                )
-            }
-        )
-    }
 
-    /**
-     * Clears the device_uploads directory tree on server startup so that device photos
-     * are session-only — they disappear when the server is restarted.
-     * Deletes all dated subdirectories (e.g. device_uploads/2026-04-13/) and resets
-     * every in-memory catalog entry whose folder-id starts with [DEVICE_UPLOADS_FOLDER_ID].
-     */
-    private fun clearDeviceUploads() {
-        val baseDir = File(System.getProperty("user.home"), ".churchpresenter/device_uploads")
-        baseDir.deleteRecursively()   // removes dated subdirs and all files inside them
-        // Purge every device_uploads_* entry (handles any date or legacy flat entries)
-        _pictureFiles.keys
-            .filter { it == DEVICE_UPLOADS_FOLDER_ID || it.startsWith("${DEVICE_UPLOADS_FOLDER_ID}_") }
-            .forEach { id -> _pictureFiles.remove(id); _pictureCatalogs.remove(id) }
-    }
 
-    /**
-     * Renders a schedule presentation for the mobile companion API using the shared presentation
-     * engine. When the Presentation tab already rendered this file into the shared disk cache the
-     * JPEGs are reused directly (any resolution); otherwise the deck is rendered here — into the
-     * same shared cache, so a later tab open at the default width hits it too.
-     */
-    private fun renderPresentationForServer(presentationId: String, filePath: String) {
-        val file = File(filePath)
-        if (!file.exists()) return
-        try {
-            val jpegSlides: List<ByteArray>
-            val notes: List<String>
-            val cached = slideDiskCache.lookup(file, renderWidthPx = null)
-            if (cached != null) {
-                jpegSlides = cached.slideFiles.map { it.readBytes() }
-                notes = cached.notes
-            } else {
-                val deck = when (val result = PresentationLoader.load(file)) {
-                    is LoadResult.Failure -> {
-                        CrashReporter.reportWarning(
-                            "Presentation: No slides extracted from ${file.extension.lowercase()} file (server)",
-                            tags = mapOf(
-                                "subsystem" to "presentation",
-                                "file.type" to file.extension.lowercase(),
-                                "failure.reason" to result.error.name.lowercase()
-                            )
-                        )
-                        return
-                    }
-                    is LoadResult.Success -> result.deck
-                }
-                notes = deck.slides.map { it.notes }
-                val writer = slideDiskCache.beginWrite(file, deck.format, DeckRasterizer.DEFAULT_TARGET_WIDTH_PX)
-                var committed = false
-                try {
-                    jpegSlides = CrashReporter.trace("server.render", "Server render presentation") {
-                        DeckRasterizer(deck).use { rasterizer ->
-                            deck.slides.map { slide ->
-                                val slideFile = writer.putSlide(
-                                    index = slide.index,
-                                    image = rasterizer.renderFinalFrame(slide.index),
-                                    note = slide.notes,
-                                    fidelity = slide.fidelity,
-                                    hasTimeline = slide.timeline != null
-                                )
-                                slideFile.readBytes()
-                            }
-                        }
-                    }
-                    writer.commit()
-                    committed = true
-                } finally {
-                    if (!committed) writer.abort()
-                }
-            }
-            if (jpegSlides.isEmpty()) return
-            cacheSlideBytes(presentationId, jpegSlides)
-            _presentationFilePaths[presentationId] = filePath
-            _presentationNotes[presentationId] = notes
-            val slideDtos = jpegSlides.indices.map { i ->
-                SlideDto(slideIndex = i, thumbnailUrl = "${Constants.ENDPOINT_PRESENTATIONS}/$presentationId/slides/$i")
-            }
-            _presentationCatalogs[presentationId] = PresentationDto(
-                id         = presentationId,
-                fileName   = file.nameWithoutExtension,
-                fileType   = file.extension.lowercase(),
-                slideTotal = jpegSlides.size,
-                slides     = slideDtos
-            )
-        } catch (oom: OutOfMemoryError) {
-            // A background companion-API render must never take down the live app. OOM is an
-            // Error, not an Exception, so the catch below wouldn't stop it escaping the coroutine
-            // as an uncaught crash. Degrade to a warning and drop this presentation's render — the
-            // client falls back to the 404-retry path (rendering still pending) just as it would
-            // for any other render failure.
-            CrashReporter.reportWarning(
-                "Presentation: Out of memory rendering ${file.extension.lowercase()} for companion API (server)",
-                tags = mapOf(
-                    "subsystem" to "presentation",
-                    "file.type" to file.extension.lowercase()
-                )
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
+
 
     fun updateSchedule(items: List<ScheduleItem>) {
-        val dtos = items.map { item ->
-            when (item) {
-                is ScheduleItem.SongItem -> ScheduleItemDto(
-                    id = item.id, type = "song", displayText = item.displayText,
-                    songNumber = item.songNumber, title = item.title, songbook = item.songbook
-                )
-                is ScheduleItem.BibleVerseItem -> ScheduleItemDto(
-                    id = item.id, type = "bible", displayText = item.displayText,
-                    bookName = item.bookName, chapter = item.chapter, verseNumber = item.verseNumber,
-                    verseRange = item.verseRange.ifEmpty { null },
-                    text = item.verseText
-                )
-                is ScheduleItem.LabelItem -> ScheduleItemDto(
-                    id = item.id, type = "label", displayText = item.displayText,
-                    text = item.text, textColor = item.textColor, backgroundColor = item.backgroundColor
-                )
-                is ScheduleItem.PictureItem -> {
-                    scope.launch(Dispatchers.IO) {
-                        registerPictureItem(item.id, item.folderPath, item.folderName)
-                    }
-                    ScheduleItemDto(
-                        id = item.id, type = "picture", displayText = item.displayText,
-                        folderPath = item.folderPath, folderName = item.folderName, imageCount = item.imageCount
-                    )
-                }
-                is ScheduleItem.PresentationItem -> {
-                    val presentationId = item.filePath.hashCode().toUInt().toString(16)
-                    _scheduleItemToPresentationId[item.id] = presentationId
-                    _presentationFilePaths[presentationId] = item.filePath
-                    if (!_slideBytes.containsKey(presentationId) &&
-                        _renderingPresentations.putIfAbsent(presentationId, Unit) == null) {
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                // One render at a time — see presentationRenderMutex.
-                                presentationRenderMutex.withLock {
-                                    renderPresentationForServer(presentationId, item.filePath)
-                                }
-                            } finally {
-                                _renderingPresentations.remove(presentationId)
-                            }
-                        }
-                    }
-                    ScheduleItemDto(
-                        id = item.id, type = "presentation", displayText = item.displayText,
-                        filePath = item.filePath, fileName = item.fileName,
-                        slideCount = item.slideCount, fileType = item.fileType
-                    )
-                }
-                is ScheduleItem.MediaItem -> {
-                    if (item.mediaType == "local") _scheduleItemToMediaPath[item.id] = item.mediaUrl
-                    ScheduleItemDto(
-                        id = item.id, type = "media", displayText = item.displayText,
-                        mediaUrl = item.mediaUrl, mediaTitle = item.mediaTitle, mediaType = item.mediaType
-                    )
-                }
-                is ScheduleItem.LowerThirdItem -> ScheduleItemDto(
-                    id = item.id, type = "lower_third", displayText = item.displayText,
-                    presetId = item.presetId, presetLabel = item.presetLabel
-                )
-                is ScheduleItem.AnnouncementItem -> ScheduleItemDto(
-                    id = item.id, type = "announcement", displayText = item.displayText,
-                    text = item.text, textColor = item.textColor, backgroundColor = item.backgroundColor,
-                    fontSize = item.fontSize, animationType = item.animationType,
-                    animationDuration = item.animationDuration, isTimer = item.isTimer,
-                    timerMode = item.timerMode, timerHours = item.timerHours,
-                    timerMinutes = item.timerMinutes, timerSeconds = item.timerSeconds,
-                    timerExpiredText = item.timerExpiredText, targetHour = item.targetHour,
-                    targetMinute = item.targetMinute, liveClockFormat = item.liveClockFormat
-                )
-                is ScheduleItem.WebsiteItem -> ScheduleItemDto(
-                    id = item.id, type = "website", displayText = item.displayText,
-                    url = item.url, title = item.title
-                )
-                is ScheduleItem.SceneItem -> ScheduleItemDto(
-                    id = item.id, type = "scene", displayText = item.displayText
-                )
-                is ScheduleItem.DictionaryItem -> ScheduleItemDto(
-                    id = item.id, type = "dictionary", displayText = item.displayText,
-                    text = "${item.word} (${item.transliteration}): ${item.definition}"
-                )
-            }
-        }
+        items.forEach(::registerScheduleItemResources)
+        val dtos = items.map { it.toDto() }
         _schedule.value = dtos
         broadcast(WebSocketMessage(
             type = Constants.WS_EVENT_SCHEDULE_UPDATED,
             payload = json.encodeToString(ScheduleResponse.serializer(), ScheduleResponse(dtos, dtos.size))
         ))
+    }
+
+    /**
+     * Server-side resources a schedule item needs before clients can ask for it: picture folders
+     * are catalogued, presentations start rendering in the background, and local media paths are
+     * recorded so the media endpoint can serve them. Item types with nothing to register fall
+     * through.
+     *
+     * Split out of [updateSchedule]'s mapping loop so [toDto] stays a pure function of the item.
+     * Runs for every item before any is mapped; the DTOs don't read anything this writes, so the
+     * published schedule is identical either way.
+     */
+    private fun registerScheduleItemResources(item: ScheduleItem) {
+        when (item) {
+            is ScheduleItem.PictureItem -> scope.launch(Dispatchers.IO) {
+                pictures.registerScheduleFolder(item.id, item.folderPath, item.folderName)
+            }
+            is ScheduleItem.PresentationItem -> {
+                val presentationId = item.filePath.hashCode().toUInt().toString(16)
+                presentations._scheduleItemToPresentationId[item.id] = presentationId
+                presentations._presentationFilePaths[presentationId] = item.filePath
+                if (!presentations._slideBytes.containsKey(presentationId) &&
+                    presentations._renderingPresentations.putIfAbsent(presentationId, Unit) == null) {
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            // One render at a time — see presentations.presentationRenderMutex.
+                            presentations.presentationRenderMutex.withLock {
+                                presentations.renderPresentationForServer(presentationId, item.filePath)
+                            }
+                        } finally {
+                            presentations._renderingPresentations.remove(presentationId)
+                        }
+                    }
+                }
+            }
+            is ScheduleItem.MediaItem ->
+                if (item.mediaType == "local") _scheduleItemToMediaPath[item.id] = item.mediaUrl
+            else -> Unit
+        }
     }
 
     /**
@@ -1982,7 +868,7 @@ class CompanionServer {
         songSectionIndex: Int? = null,
         songLineIndex: Int? = null
     ) {
-        val (pictureFolderId, pictureIndex) = resolvePictureLocation(pictureImagePath)
+        val (pictureFolderId, pictureIndex) = pictures.locate(pictureImagePath)
         val mediaId = mediaUrl?.let { url -> _scheduleItemToMediaPath.entries.find { it.value == url }?.key }
         val dto = LiveStateDto(
             contentType = mode,
@@ -2027,97 +913,7 @@ class CompanionServer {
         ))
     }
 
-    /** Finds which registered picture folder (if any) contains [path], for [updateLiveState]. */
-    private fun resolvePictureLocation(path: String?): Pair<String?, Int?> {
-        if (path.isNullOrEmpty()) return null to null
-        for ((folderId, files) in _pictureFiles) {
-            val idx = files.indexOfFirst { it.absolutePath == path }
-            if (idx >= 0) return folderId to idx
-        }
-        return null to null
-    }
 
-    private fun buildSongDetail(song: SongItem): SongDetailDto {
-        val sections = mutableListOf<SongSectionDto>()
-        var currentType = Constants.SECTION_TYPE_VERSE
-        var currentLines = mutableListOf<String>()
-        for (line in song.lyrics) {
-            val trimmed = line.trim()
-            val isSectionHeader = isHeaderLine(trimmed)
-            val isChorus = isChorusHeader(trimmed)
-            if (isSectionHeader) {
-                if (currentLines.isNotEmpty()) {
-                    sections.add(SongSectionDto(type = currentType, lines = currentLines.toList()))
-                    currentLines = mutableListOf()
-                }
-                currentType = if (isChorus) Constants.SECTION_TYPE_CHORUS else Constants.SECTION_TYPE_VERSE
-            } else if (trimmed.isNotEmpty()) {
-                currentLines.add(line)
-            }
-        }
-        if (currentLines.isNotEmpty()) {
-            sections.add(SongSectionDto(type = currentType, lines = currentLines.toList()))
-        }
-        return SongDetailDto(
-            number       = song.number,
-            title        = song.title,
-            songbook     = song.songbook,
-            tune         = song.tune,
-            author       = song.author,
-            composer     = song.composer,
-            sectionTotal = sections.size,
-            sections     = sections
-        )
-    }
-
-    private fun buildCatalog(songs: List<SongItem>): SongCatalogResponse {
-        // Build an index map so each SongDto gets a unique id (position in _songs)
-        val indexMap = songs.withIndex().associate { (i, s) -> s to i }
-        val entries = songs
-            .groupBy { it.songbook }
-            .entries
-            .sortedBy { it.key }
-            .map { (bookName, bookSongs) ->
-                SongbookEntry(
-                    bookName = bookName,
-                    songTotal = bookSongs.size,
-                    songs = bookSongs.map { s ->
-                        SongDto(id = indexMap[s] ?: 0, number = s.number, title = s.title, tune = s.tune, author = s.author)
-                    }
-                )
-            }
-        return SongCatalogResponse(songBook = entries, songBooks = entries.size, total = songs.size)
-    }
-
-    private fun buildBibleCatalog(bible: Bible, translation: String): BibleCatalogResponse {
-        val bookNames = bible.getBooks()
-        val bookDtos = mutableListOf<BibleBookDto>()
-        var totalVerses = 0
-        bookNames.forEachIndexed { bookIndex, bookName ->
-            val bookId = bible.getBookId(bookIndex)
-            val chapterCount = bible.getChapterCount(bookIndex)
-            val chapterDtos = (1..chapterCount).map { chapterNum ->
-                val verseCount = bible.getVerseCountForChapter(bookId, chapterNum)
-                totalVerses += verseCount
-                BibleChapterDto(chapter = chapterNum, verseTotal = verseCount)
-            }
-            bookDtos.add(BibleBookDto(bookId = bookId, bookName = bookName,
-                chapterTotal = chapterCount, chapters = chapterDtos))
-        }
-        return BibleCatalogResponse(translation = translation, books = bookDtos,
-            bookTotal = bookDtos.size, verseTotal = totalVerses)
-    }
-
-    private fun buildPresentationCatalog(id: String, fileName: String, fileType: String,
-                                         slideCount: Int): PresentationCatalogResponse {
-        val slides = (0 until slideCount).map { index ->
-            SlideDto(slideIndex = index,
-                thumbnailUrl = "${Constants.ENDPOINT_PRESENTATIONS}/$id/slides/$index")
-        }
-        val dto = PresentationDto(id = id, fileName = fileName, fileType = fileType,
-            slideTotal = slideCount, slides = slides)
-        return PresentationCatalogResponse(presentations = listOf(dto), total = 1)
-    }
 
     /**
      * Starts the companion server on [port].
@@ -2153,7 +949,7 @@ class CompanionServer {
             _isRunning.value = true
             _serverUrl.value = "http://$displayHost:$port"
             CrashReporter.breadcrumb("Server started on port $port", category = "server")
-            scope.launch { clearDeviceUploads() }
+            scope.launch { pictures.clearDeviceUploads() }
         } catch (_: java.net.BindException) {
             server = null
         } catch (_: Exception) {
@@ -2207,2259 +1003,53 @@ class CompanionServer {
                 }
             }
             routing {
+                // Outside the API key check — devices must be able to fetch the CA cert first.
                 certificateRoutes()
-                infoAndSongRoutes()
-                scheduleRoutes()
-                bibleAndDictionaryRoutes()
-                presentationRoutes()
-                presentationRemoteRoutes()
-                mediaAndAssetRoutes()
-                webSocketRoute()
-                lowerThirdAndAtemRoutes()
-                browserSourceRoutes()
-                qaRoutes()
+
+                // ── API endpoints (require API key when enabled) ────────────────────────────
+                infoAndSongRoutes(
+                    this@CompanionServer, _bibleCatalog, _catalog, _fileUploadEnabled,
+                    _maxMediaUploadMb, json, scope
+                )
+                scheduleRoutes(this@CompanionServer, _schedule, json, scope)
+                bibleAndDictionaryRoutes(
+                    this@CompanionServer, _bible, _bibleCatalog, presentations._presentationCatalog, json, scope
+                )
+                presentationRoutes(
+                    this@CompanionServer, _fileUploadEnabled, _maxMediaUploadMb, presentations._presentationCatalog,
+                    presentations._presentationCatalogs, presentations._presentationFilePaths, presentations._scheduleItemToPresentationId,
+                    presentations._slideBytes, json, scope
+                )
+                presentationRemoteRoutes(this@CompanionServer, presentations._presentationNotes, scope)
+                mediaAndAssetRoutes(
+                    this@CompanionServer, PictureLibrary.DEVICE_UPLOADS_FOLDER_ID, _backgroundSettings,
+                    _fileUploadEnabled, pictures.catalog, pictures.catalogs, pictures.files,
+                    _scheduleItemToMediaPath, json, scope
+                )
+                webSocketRoute(
+                    this@CompanionServer, _apiKey, _apiKeyEnabled, _bibleCatalog, _catalog,
+                    _connectedInstanceLinkFollowers, _liveState, pictures.catalog, pictures.catalogs,
+                    presentations._presentationCatalog, presentations._presentationCatalogs, _schedule,
+                    presentations._scheduleItemToPresentationId, json, scope
+                )
+                lowerThirdAndAtemRoutes(this@CompanionServer, json, scope)
+                browserSourceRoutes(
+                    this@CompanionServer, browserSource._browserSourceFrameFlows,
+                    browserSource._browserSourceSessions, scope
+                )
+                qaRoutes(this@CompanionServer, json, scope)
             }
     }
 
-    /** Routes for the CA certificate downloads, deliberately outside the API key check. */
-    private fun Route.certificateRoutes() {
 
-                // ── CA certificate download (no API key required) ──────────────────────────
-                //
-                // Mobile devices need to download and install the CA certificate BEFORE they
-                // can make authenticated API calls. These two endpoints must therefore be
-                // accessible without an API key.
-                //
-                // Trust-on-first-use flow:
-                //  1. The companion app (or the user's browser) fetches GET /ca.crt.
-                //     iOS: opening the URL in Safari triggers a "Download certificate profile"
-                //           dialog; the user then goes to Settings ▸ VPN & Device Management.
-                //     Android: the companion app installs the cert via the system
-                //           Certificate Installer API or includes it in NetworkSecurityConfig.
-                //  2. The user verifies the SHA-256 fingerprint shown in ChurchPresenter's UI.
-                //  3. After one-time installation all HTTPS API calls succeed transparently.
 
-                /**
-                 * GET /ca.crt
-                 * DER-encoded CA certificate (binary X.509).
-                 * The MIME type `application/x-x509-ca-cert` causes iOS Safari / Chrome to
-                 * present the system "Install Profile" dialog automatically.
-                 */
-                get("/ca.crt") {
-                    val bytes = SslCertificateManager.getCaCertBytes()
-                    if (bytes == null) {
-                        call.respond(
-                            HttpStatusCode.NotFound,
-                            "CA certificate is not available (server may be running in plain-HTTP fallback mode)"
-                        )
-                        return@get
-                    }
-                    call.response.headers.append(
-                        HttpHeaders.ContentDisposition,
-                        """attachment; filename="ChurchPresenter-CA.crt""""
-                    )
-                    call.respondBytes(bytes, ContentType("application", "x-x509-ca-cert"))
-                }
 
-                /**
-                 * GET /ca.pem
-                 * PEM-encoded CA certificate (Base64 text).
-                 * Used by:
-                 *  • Android NetworkSecurityConfig — embed in `res/raw/ca.pem` and reference
-                 *    via `<certificates src="@raw/ca"/>` in `network_security_config.xml`.
-                 *  • OpenSSL / curl verification:  `curl --cacert ca.pem https://…`
-                 *  • Any tool that expects PEM rather than DER format.
-                 */
-                get("/ca.pem") {
-                    val pem = SslCertificateManager.getCaCertPem()
-                    if (pem == null) {
-                        call.respond(
-                            HttpStatusCode.NotFound,
-                            "CA certificate is not available (server may be running in plain-HTTP fallback mode)"
-                        )
-                        return@get
-                    }
-                    call.response.headers.append(
-                        HttpHeaders.ContentDisposition,
-                        """attachment; filename="ChurchPresenter-CA.pem""""
-                    )
-                    call.respondText(pem, ContentType("application", "x-pem-file"))
-                }
 
-                // ── API endpoints (require API key when enabled) ────────────────────────────
 
-    }
 
-    /** Routes for server info, status, and the song catalogue. */
-    private fun Route.infoAndSongRoutes() {
-                get(Constants.ENDPOINT_INFO) {
-                    if (!checkApiKey(call)) return@get
-                    call.respond(ServerInfoResponse(port = currentPort))
-                }
 
-                get(Constants.ENDPOINT_STATUS) {
-                    if (!checkApiKey(call)) return@get
-                    val bibleNames = _bibleCatalog.value?.translation?.let { listOf(it) } ?: emptyList()
-                    val songbookNames = _catalog.value.songBook.map { it.bookName }
-                    val exposedEndpoints = listOf(
-                        "songs", "bible", "schedule", "presentations", "pictures", "status"
-                    )
-                    call.response.headers.append(Constants.HEADER_SERVER_VERSION, BuildConfig.APP_VERSION)
-                    call.respond(
-                        StatusResponse(
-                            appVersion  = BuildConfig.APP_VERSION,
-                            endpoints   = exposedEndpoints,
-                            bibles      = bibleNames,
-                            songbooks   = songbookNames,
-                            permissions = DevicePermissionsDto(
-                                canPresent       = true,
-                                canAddToSchedule = true,
-                                canUploadFiles   = _fileUploadEnabled.value,
-                                maxMediaUploadMb = _maxMediaUploadMb.value,
-                            ),
-                        )
-                    )
-                }
 
-                get(Constants.ENDPOINT_SONGS) {
-                    if (!checkApiKey(call)) return@get
-                    val filter = call.request.queryParameters[Constants.QUERY_PARAM_SONGBOOK]
-                    val catalog = _catalog.value
-                    if (filter.isNullOrBlank()) {
-                        call.respond(catalog)
-                    } else {
-                        val filtered = catalog.songBook.filter { it.bookName == filter }
-                        call.respond(SongCatalogResponse(
-                            songBook = filtered,
-                            songBooks = filtered.size,
-                            total = filtered.sumOf { it.songTotal }
-                        ))
-                    }
-                }
 
-                /**
-                 * GET /api/songs/{number}[?songbook=Name]
-                 * Returns full song details including all lyric sections.
-                 * Use ?songbook= to disambiguate when the same number exists in multiple songbooks.
-                 */
-                get("${Constants.ENDPOINT_SONGS}/{identifier}") {
-                    if (!checkApiKey(call)) return@get
-                    val identifier = call.parameters["identifier"] ?: run {
-                        logRest("/api/songs/{identifier}", 400, "missing_identifier")
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing identifier"}""")
-                        return@get
-                    }
-                    val songbookFilter = call.request.queryParameters[Constants.QUERY_PARAM_SONGBOOK]
-                    val titleFilter = call.request.queryParameters["title"]
-                    // Try index-based lookup first (id=N query param)
-                    val idParam = call.request.queryParameters["id"]?.toIntOrNull()
-                    val song = if (idParam != null) {
-                        _songs.getOrNull(idParam)
-                    } else {
-                        // Fall back to number + songbook match; treat "_" as empty number
-                        val lookupNumber = if (identifier == "_") "" else identifier
-                        _songs.firstOrNull { s ->
-                            val matchesSongbook = songbookFilter.isNullOrBlank() || s.songbook.equals(songbookFilter, ignoreCase = true)
-                            val matchesNumber = s.number == lookupNumber
-                            val matchesTitle = !titleFilter.isNullOrBlank() && s.title.equals(titleFilter, ignoreCase = true)
-                            matchesSongbook && (matchesNumber || matchesTitle)
-                        }
-                    }
-                    if (song == null) {
-                        logRest("/api/songs/{identifier}", 404, "song_not_found")
-                        call.respond(HttpStatusCode.NotFound, """{"error":"song not found"}""")
-                        return@get
-                    }
-                    logRest("/api/songs/{identifier}", 200)
-                    call.respond(buildSongDetail(song))
-                }
-
-                /**
-                 * POST /api/songs/{number}/select
-                 * Body: { "section": 2 }   — OR —   ?section=2 as query param
-                 *
-                 * Navigates the live presenter to section [section] (0-based) of the currently
-                 * projected song.  No approval required — fires instantly.
-                 *
-                 * Response: {"ok":true}
-                 */
-                post("${Constants.ENDPOINT_SONGS}/{number}/select") {
-                    if (!checkApiKey(call)) return@post
-                    val number = call.parameters["number"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing number"}""")
-                        return@post
-                    }
-                    // Accept section from query param OR JSON body
-                    val sectionIndex = call.request.queryParameters["section"]?.toIntOrNull()
-                        ?: runCatching {
-                            json.decodeFromString(SelectSongSectionRequest.serializer(), call.receiveText()).section
-                        }.getOrNull()
-                    if (sectionIndex == null || sectionIndex < 0) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing or invalid section index"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    scope.launch { onSelectSongSection.emit(SelectSongSectionRequest(number, sectionIndex)) }
-                    scope.launch { onInstantAction.emit(RemoteInstantAction(
-                        actionType = "present",
-                        title = "Song $number",
-                        detail = "Section $sectionIndex",
-                        clientId = clientId
-                    )) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-    }
-
-    /** Routes for reading the schedule and the approval-gated writes to it. */
-    private fun Route.scheduleRoutes() {
-                get(Constants.ENDPOINT_SCHEDULE) {
-                    if (!checkApiKey(call)) return@get
-                    val schedule = _schedule.value
-                    call.respond(ScheduleResponse(schedule, schedule.size))
-                }
-
-                /**
-                 * POST /api/schedule/add
-                 * Suspends until the user approves or denies the request in the UI.
-                 * Returns {"ok":true} on Allow, {"ok":false,"reason":"denied"} on Deny,
-                 * or {"ok":false,"reason":"blocked"} if the session is blocked.
-                 */
-                post(Constants.ENDPOINT_SCHEDULE_ADD) {
-                    if (!checkApiKey(call)) return@post
-                    val body = call.receiveText()
-                    val item = parseRemoteItem(body)
-                    if (item == null) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request body"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingRemoteRequest(item, clientId)
-                    scope.launch { onAddToSchedule.emit(pending) }
-                    val allowed = pending.decision.await()
-                    if (allowed) {
-                        call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    } else {
-                        call.respond(HttpStatusCode.Forbidden,
-                            """{"ok":false,"reason":"${pending.decision.let { "denied" }}"}""")
-                    }
-                }
-
-                /**
-                 * POST /api/schedule/add-batch
-                 * Adds multiple items in a single call.  Suspends until the user approves or denies
-                 * the whole batch.  On Allow every valid item is added; on Deny nothing is added.
-                 *
-                 * Request body:
-                 * {
-                 *   "items": [
-                 *     { "bookName": "John",  "chapter": 3, "verseNumber": 16, "verseText": "For God so loved…" },
-                 *     { "bookName": "John",  "chapter": 3, "verseNumber": 17, "verseText": "For God did not send…" }
-                 *   ]
-                 * }
-                 *
-                 * Success:  {"ok":true,"added":2}
-                 * Denied:   HTTP 403  {"ok":false,"reason":"denied"}
-                 * Bad body: HTTP 400  {"error":"…"}
-                 */
-                post(Constants.ENDPOINT_SCHEDULE_ADD_BATCH) {
-                    if (!checkApiKey(call)) return@post
-                    val body = call.receiveText()
-                    val items = try {
-                        json.decodeFromString(RemoteItemsRequest.serializer(), body)
-                            .items.mapNotNull { it.toScheduleItem() }
-                    } catch (_: Exception) { null }
-                    if (items.isNullOrEmpty()) {
-                        call.respond(HttpStatusCode.BadRequest,
-                            """{"error":"invalid request body or no recognisable items"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingBatchRequest(items, clientId)
-                    scope.launch { onAddBatchToSchedule.emit(pending) }
-                    val allowed = pending.decision.await()
-                    if (allowed) {
-                        call.respondText("""{"ok":true,"added":${items.size}}""", ContentType.Application.Json)
-                    } else {
-                        call.respond(HttpStatusCode.Forbidden,
-                            """{"ok":false,"reason":"denied"}""")
-                    }
-                }
-
-                /**
-                 * POST /api/project
-                 * Same suspend-until-approved behaviour as /api/schedule/add.
-                 */
-                post(Constants.ENDPOINT_PROJECT) {
-                    if (!checkApiKey(call)) return@post
-                    val body = call.receiveText()
-                    val item = parseRemoteItem(body)
-                    if (item == null) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request body"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingRemoteRequest(item, clientId)
-                    scope.launch { onProject.emit(pending) }
-                    val allowed = pending.decision.await()
-                    if (allowed) {
-                        call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    } else {
-                        call.respond(HttpStatusCode.Forbidden,
-                            """{"ok":false,"reason":"denied"}""")
-                    }
-                }
-
-                /**
-                 * POST /api/clear
-                 * Instantly switches the presenter to display-none (Presenting.NONE).
-                 * No request body or approval needed.
-                 * Response: {"ok":true}
-                 */
-                post(Constants.ENDPOINT_CLEAR) {
-                    if (!checkApiKey(call)) return@post
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    scope.launch { onClear.emit(Unit) }
-                    scope.launch { onInstantAction.emit(RemoteInstantAction(
-                        actionType = "clear",
-                        title = "Clear Display",
-                        clientId = clientId
-                    )) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-    }
-
-    /** Routes for scripture lookup, Strong's entries, and going live with a verse. */
-    private fun Route.bibleAndDictionaryRoutes() {
-                get(Constants.ENDPOINT_BIBLE) {
-                    if (!checkApiKey(call)) return@get
-                    val catalog = _bibleCatalog.value
-                    if (catalog == null) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, "Bible not loaded")
-                        return@get
-                    }
-                    val bookParam     = call.request.queryParameters[Constants.QUERY_PARAM_BOOK]
-                    val chapterFilter = call.request.queryParameters[Constants.QUERY_PARAM_CHAPTER]?.toIntOrNull()
-
-                    // ── Numeric book id + chapter → return full chapter with verse text ──
-                    val bookIdParam = bookParam?.toIntOrNull()
-                    if (bookIdParam != null && chapterFilter != null) {
-                        val bible = _bible.value
-                        if (bible == null) {
-                            call.respond(HttpStatusCode.ServiceUnavailable, "Bible not loaded")
-                            return@get
-                        }
-                        val rawVerses = bible.getChapterVerses(bookIdParam, chapterFilter)
-                        if (rawVerses.isEmpty()) {
-                            call.respond(HttpStatusCode.NotFound, "Chapter not found")
-                            return@get
-                        }
-                        val bookName = bible.getBookName(bookIdParam) ?: "Book $bookIdParam"
-                        val verseDtos = rawVerses.map { BibleVerseDto(verse = it.verseNumber, text = it.verseText) }
-                        call.respond(BibleChapterResponse(
-                            translation = catalog.translation,
-                            bookId = bookIdParam,
-                            bookName = bookName,
-                            chapter = chapterFilter,
-                            verseTotal = verseDtos.size,
-                            verses = verseDtos
-                        ))
-                        return@get
-                    }
-
-                    if (bookParam.isNullOrBlank()) {
-                        call.respond(catalog)
-                    } else {
-                        val filteredBooks = catalog.books.filter {
-                            it.bookName.equals(bookParam, ignoreCase = true)
-                        }.map { book ->
-                            if (chapterFilter != null) {
-                                book.copy(chapters = book.chapters.filter { it.chapter == chapterFilter })
-                            } else book
-                        }
-                        call.respond(catalog.copy(
-                            books = filteredBooks,
-                            bookTotal = filteredBooks.size,
-                            verseTotal = filteredBooks.sumOf { b -> b.chapters.sumOf { it.verseTotal } }
-                        ))
-                    }
-                }
-
-                // ── Strong's dictionary endpoints ─────────────────────────────
-
-                /**
-                 * GET /api/dictionary?q=&lang=en|ru&filter=all|hebrew|greek&limit=100
-                 *        [&book=1[&chapter=1[&verse=1]]]
-                 * Returns a JSON array of matching [StrongsEntry] objects.
-                 *
-                 * The optional book/chapter/verse params (canonical KJV numbering,
-                 * Genesis=1 … Revelation=66 — same as /api/bible book-id) restrict
-                 * results to the Strong's numbers occurring in that reference,
-                 * narrowing progressively as chapter and verse are added.
-                 */
-                get(Constants.ENDPOINT_DICTIONARY) {
-                    if (!checkApiKey(call)) return@get
-                    val q       = call.request.queryParameters["q"] ?: ""
-                    val lang    = call.request.queryParameters["lang"]
-                    val filter  = call.request.queryParameters["filter"] ?: "all"
-                    val limit   = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
-                    val book    = call.request.queryParameters["book"]?.toIntOrNull()
-                    val chapter = call.request.queryParameters["chapter"]?.toIntOrNull()
-                    val verse   = call.request.queryParameters["verse"]?.toIntOrNull()
-                    val results = try {
-                        StrongsDictionaryRepository.search(q, lang, filter, limit, book, chapter, verse)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"dictionary unavailable"}""")
-                        return@get
-                    }
-                    call.respondText(
-                        json.encodeToString(ListSerializer(StrongsEntryDto.serializer()), results),
-                        ContentType.Application.Json
-                    )
-                }
-
-                /**
-                 * GET /api/dictionary/{number}?lang=en|ru
-                 * Returns a single [StrongsEntry] (e.g. /api/dictionary/H430), or 404.
-                 */
-                get(Constants.ENDPOINT_DICTIONARY_ENTRY) {
-                    if (!checkApiKey(call)) return@get
-                    val number = call.parameters["number"]
-                    if (number.isNullOrBlank()) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing number"}""")
-                        return@get
-                    }
-                    val lang = call.request.queryParameters["lang"]
-                    val entry = try {
-                        StrongsDictionaryRepository.lookup(number, lang)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"dictionary unavailable"}""")
-                        return@get
-                    }
-                    if (entry == null) {
-                        call.respond(HttpStatusCode.NotFound, """{"error":"entry not found"}""")
-                        return@get
-                    }
-                    call.respondText(
-                        json.encodeToString(StrongsEntryDto.serializer(), entry),
-                        ContentType.Application.Json
-                    )
-                }
-
-                /**
-                 * GET /api/dictionary/{number}/verses?limit=25[&book=1[&chapter=1[&verse=1]]]
-                 * Returns the verses (reference + translation text) in which the
-                 * Strong's number appears, for the entry sheet's "Appears in" list.
-                 *
-                 * Optional book/chapter/verse (canonical KJV numbering) order the
-                 * references in that scope first, so the verse being filtered leads.
-                 */
-                get(Constants.ENDPOINT_DICTIONARY_VERSES) {
-                    if (!checkApiKey(call)) return@get
-                    val number = call.parameters["number"]
-                    if (number.isNullOrBlank()) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing number"}""")
-                        return@get
-                    }
-                    val limit   = call.request.queryParameters["limit"]?.toIntOrNull() ?: 25
-                    val book    = call.request.queryParameters["book"]?.toIntOrNull()
-                    val chapter = call.request.queryParameters["chapter"]?.toIntOrNull()
-                    val verse   = call.request.queryParameters["verse"]?.toIntOrNull()
-                    val bible = _bible.value
-                    if (bible == null) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"bible not loaded"}""")
-                        return@get
-                    }
-                    val (total, refs) = try {
-                        StrongsDictionaryRepository.versesFor(number, limit, book, chapter, verse)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"dictionary unavailable"}""")
-                        return@get
-                    }
-                    val verses = refs.map { ref ->
-                        val bId = ref.substring(0, 3).toInt()
-                        val ch  = ref.substring(3, 6).toInt()
-                        val vs  = ref.substring(6, 9).toInt()
-                        val bookName = bible.getBookName(bId) ?: "Book $bId"
-                        val text = bible.getChapterVerses(bId, ch)
-                            .firstOrNull { it.verseNumber == vs }?.verseText ?: ""
-                        DictionaryVerseDto(
-                            bookName = bookName, chapter = ch, verse = vs,
-                            reference = "$bookName $ch:$vs", text = text
-                        )
-                    }
-                    call.respondText(
-                        json.encodeToString(
-                            DictionaryVersesResponse.serializer(),
-                            DictionaryVersesResponse(number = number, total = total, verses = verses)
-                        ),
-                        ContentType.Application.Json
-                    )
-                }
-
-                // ── Presentation endpoints ────────────────────────────────────
-
-                /**
-                 * POST /api/bible/select
-                 * Body: { "bookName": "John", "chapter": 3, "verseNumber": 16,
-                 *         "verseText": "For God so loved…", "verseRange": "" }
-                 *
-                 * Instantly displays the given verse on the presentation output.
-                 * No approval dialog — fires immediately like select_picture / select_song_section.
-                 * Response: {"ok":true}
-                 */
-                post(Constants.ENDPOINT_BIBLE_SELECT) {
-                    if (!checkApiKey(call)) return@post
-                    val body = call.receiveText()
-                    val req = try {
-                        json.decodeFromString(SelectBibleVerseRequest.serializer(), body)
-                    } catch (_: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request body"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    scope.launch { onSelectBibleVerse.emit(req) }
-                    val verseRef = if (req.verseRange.isNotEmpty()) "${req.bookName} ${req.chapter}:${req.verseRange}"
-                                   else "${req.bookName} ${req.chapter}:${req.verseNumber}"
-                    scope.launch { onInstantAction.emit(RemoteInstantAction(
-                        actionType = "present",
-                        title = verseRef,
-                        detail = req.verseText.take(60),
-                        clientId = clientId
-                    )) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                // ── Presentation endpoints ────────────────────────────────────
-
-                /**
-                 * GET /api/presentations
-                 *
-                 * Returns only the presentation that is currently loaded in the desktop
-                 * Presentations tab ([_presentationCatalog]).  The mobile list should
-                 * mirror what the desktop shows — not accumulate every file that has ever
-                 * been opened.  Schedule-driven navigation uses
-                 * GET /api/presentations/{id} directly via [navigateTo], so individual
-                 * schedule items are still accessible without polluting this list.
-                 */
-    }
-
-    /** Routes for the deck catalogue, slide rendering, and deck/media upload. */
-    private fun Route.presentationRoutes() {
-                get(Constants.ENDPOINT_PRESENTATIONS) {
-                    if (!checkApiKey(call)) return@get
-                    call.respond(_presentationCatalog.value)
-                }
-
-                /**
-                 * GET /api/presentations/{id}
-                 * Returns metadata for a specific presentation by its ID.
-                 *
-                 * The {id} is either:
-                 *  - the schedule item UUID from GET /api/schedule (works for every presentation
-                 *    item as soon as the schedule is received — slides are rendered in the background), or
-                 *  - the presentation file hash returned by GET /api/presentations.
-                 *
-                 * Returns 404 while background rendering is still in progress — retry after a moment.
-                 */
-                get("${Constants.ENDPOINT_PRESENTATIONS}/{id}") {
-                    if (!checkApiKey(call)) return@get
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, "Missing id")
-                        return@get
-                    }
-                    val resolvedId = _scheduleItemToPresentationId[id] ?: id
-                    val dto = _presentationCatalogs[resolvedId]
-                    if (dto == null) {
-                        logRest("/api/presentations/{id}", 404, "not_found_or_not_yet_rendered")
-                        call.respond(HttpStatusCode.NotFound, "Presentation not found or not yet rendered")
-                        return@get
-                    }
-                    logRest("/api/presentations/{id}", 200)
-                    call.respond(dto)
-                }
-
-                /**
-                 * GET /api/presentations/{id}/slides/{index}
-                 * Returns the slide at {index} as a JPEG image for the presentation with {id}.
-                 */
-                get("${Constants.ENDPOINT_PRESENTATIONS}/{id}/slides/{index}") {
-                    if (!checkApiKey(call)) return@get
-                    val id    = call.parameters["id"]    ?: run { call.respond(HttpStatusCode.BadRequest, "Missing id"); return@get }
-                    val index = call.parameters["index"]?.toIntOrNull() ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid index"); return@get }
-                    val resolvedId = _scheduleItemToPresentationId[id] ?: id
-                    val slides = _slideBytes[resolvedId]
-                    if (slides == null) {
-                        logRest("/api/presentations/{id}/slides/{index}", 404, "presentation_not_found")
-                        call.respond(HttpStatusCode.NotFound, "Presentation not found")
-                        return@get
-                    }
-                    if (index < 0 || index >= slides.size) {
-                        logRest("/api/presentations/{id}/slides/{index}", 404, "slide_index_out_of_range")
-                        call.respond(HttpStatusCode.NotFound, "Slide index out of range")
-                        return@get
-                    }
-                    logRest("/api/presentations/{id}/slides/{index}", 200)
-                    call.respondBytes(slides[index], ContentType.Image.JPEG)
-                }
-
-                /**
-                 * POST /api/presentations/{id}/select
-                 * Body: { "index": 2 }
-                 *
-                 * Instantly navigates the live presentation to slide [index] (0-based).
-                 * No approval dialog — fires immediately like select_picture.
-                 * The {id} is the presentation file hash or schedule item UUID.
-                 * Response: {"ok":true}
-                 */
-                post("${Constants.ENDPOINT_PRESENTATIONS}/{id}/select") {
-                    if (!checkApiKey(call)) return@post
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@post
-                    }
-                    val index = call.request.queryParameters["index"]?.toIntOrNull()
-                        ?: runCatching {
-                            json.decodeFromString(SelectSlideRequest.serializer(), call.receiveText()).index
-                        }.getOrNull()
-                    if (index == null || index < 0) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing or invalid index"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    scope.launch { onSelectSlide.emit(SelectSlideRequest(id = id, index = index)) }
-                    val presentationName = _presentationCatalogs[_scheduleItemToPresentationId[id] ?: id]?.fileName ?: id
-                    scope.launch { onInstantAction.emit(RemoteInstantAction(
-                        actionType = "present",
-                        title = presentationName,
-                        detail = "Slide ${index + 1}",
-                        clientId = clientId
-                    )) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /**
-                 * POST /api/presentations/upload
-                 * Body: { "name": "slides.pdf", "data": "data:application/pdf;base64,…" }
-                 *
-                 * Decodes the base64 data-URI, saves the file to
-                 * ~/.churchpresenter/device_presentations/, and emits [onPresentationUploaded]
-                 * so the desktop can load it into PresentationViewModel.
-                 *
-                 * Response: { "ok": true, "id": "<hex-hash>", "name": "<fileName>" }
-                 */
-                post("${Constants.ENDPOINT_PRESENTATIONS}/upload") {
-                    if (!checkApiKey(call)) return@post
-                    if (!_fileUploadEnabled.value) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"file upload is disabled"}""")
-                        return@post
-                    }
-                    try {
-                        val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
-                        if (contentLength > 200 * 1024 * 1024) { // 200 MB limit
-                            call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max 200 MB)"}""")
-                            return@post
-                        }
-                        val body   = call.receiveText()
-                        val parsed = json.parseToJsonElement(body) as? JsonObject
-                        val name   = (parsed?.get("name") as? JsonPrimitive)?.content
-                        val data   = (parsed?.get("data") as? JsonPrimitive)?.content
-                        if (name.isNullOrBlank() || data.isNullOrBlank()) {
-                            call.respond(HttpStatusCode.BadRequest, """{"error":"name and data are required"}""")
-                            return@post
-                        }
-                        val safeName = File(name).name.ifBlank { "upload.pdf" }
-                        val ext = safeName.substringAfterLast('.', "").lowercase()
-                        if (ext !in setOf("pdf", "ppt", "pptx", "key")) {
-                            call.respond(HttpStatusCode.UnsupportedMediaType, """{"error":"unsupported file type: $ext"}""")
-                            return@post
-                        }
-                        val base64Match = Regex("^data:[^;]+;base64,(.+)$").find(data)
-                        if (base64Match == null) {
-                            call.respond(HttpStatusCode.BadRequest, """{"error":"data must be a base64 data URI"}""")
-                            return@post
-                        }
-                        val fileBytes = Base64.getDecoder().decode(base64Match.groupValues[1])
-                        val uploadDir = File(System.getProperty("user.home"), ".churchpresenter/device_presentations").also { it.mkdirs() }
-                        val uniqueName = if (File(uploadDir, safeName).exists()) {
-                            val ts   = System.currentTimeMillis()
-                            val base = safeName.substringBeforeLast('.', safeName)
-                            "${base}_$ts.$ext"
-                        } else safeName
-                        val file = File(uploadDir, uniqueName)
-                        file.writeBytes(fileBytes)
-                        val id = file.absolutePath.hashCode().toUInt().toString(16)
-                        // Evict the previous device-uploaded presentation so the mobile list
-                        // never accumulates stale entries — only the latest upload is shown.
-                        _lastDeviceUploadedPresentationId?.let { oldId ->
-                            _presentationCatalogs.remove(oldId)
-                            _slideBytes.remove(oldId)
-                            _presentationFilePaths.remove(oldId)
-                        }
-                        _lastDeviceUploadedPresentationId = id
-                        val uploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                        scope.launch { onPresentationUploaded.emit(file) }
-                        scope.launch { onInstantAction.emit(RemoteInstantAction(
-                            actionType = "upload",
-                            title = file.name,
-                            detail = "${fileBytes.size / 1024} KB",
-                            clientId = uploadClientId
-                        )) }
-                        call.respondText(
-                            """{"ok":true,"id":"$id","name":"${file.nameWithoutExtension.replace("\"", "\\\"")}"}""",
-                            ContentType.Application.Json
-                        )
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, """{"error":"upload failed: ${e.message?.replace("\"", "\\\"")}"}""")
-                    }
-                }
-
-                /**
-                 * POST /api/media/upload?name=clip.mp4
-                 * Body: the raw file bytes (application/octet-stream), streamed straight to disk.
-                 *
-                 * Streaming (rather than a base64 JSON body) keeps memory flat on both ends so
-                 * large video files don't OOM the phone or the desktop. Saves to
-                 * ~/.churchpresenter/device_media/ and returns the absolute path so the companion
-                 * can Go Live / Add to Schedule a local MediaItem pointing at it.
-                 *
-                 * Response: { "ok": true, "path": "<abs path>", "name": "<title>", "mediaType": "local|audio" }
-                 */
-                post(Constants.ENDPOINT_MEDIA_UPLOAD) {
-                    if (!checkApiKey(call)) return@post
-                    if (!_fileUploadEnabled.value) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"file upload is disabled"}""")
-                        return@post
-                    }
-                    try {
-                        val maxBytes = _maxMediaUploadMb.value.toLong() * 1024 * 1024
-                        val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
-                        if (contentLength > maxBytes) {
-                            call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max ${_maxMediaUploadMb.value} MB)"}""")
-                            return@post
-                        }
-                        val rawName = call.request.queryParameters["name"]
-                        if (rawName.isNullOrBlank()) {
-                            call.respond(HttpStatusCode.BadRequest, """{"error":"name query parameter is required"}""")
-                            return@post
-                        }
-                        val safeName = File(rawName).name.ifBlank { "upload.mp4" }
-                        val ext = safeName.substringAfterLast('.', "").lowercase()
-                        // Accept exactly what the desktop media player (VLC) can play.
-                        if (ext !in Constants.VIDEO_EXTENSIONS && ext !in Constants.AUDIO_EXTENSIONS) {
-                            call.respond(HttpStatusCode.UnsupportedMediaType, """{"error":"unsupported file type: $ext"}""")
-                            return@post
-                        }
-                        val uploadDir = File(System.getProperty("user.home"), ".churchpresenter/device_media").also { it.mkdirs() }
-                        val uniqueName = if (File(uploadDir, safeName).exists()) {
-                            val ts   = System.currentTimeMillis()
-                            val base = safeName.substringBeforeLast('.', safeName)
-                            "${base}_$ts.$ext"
-                        } else safeName
-                        val file = File(uploadDir, uniqueName)
-                        // Stream the request body to disk with a fixed buffer (constant memory).
-                        val written = withContext(Dispatchers.IO) {
-                            call.receiveStream().use { input ->
-                                file.outputStream().use { out -> input.copyTo(out, bufferSize = 1 shl 20) }
-                            }
-                        }
-                        val mediaType = if (ext in Constants.AUDIO_EXTENSIONS) Constants.MEDIA_TYPE_AUDIO else Constants.MEDIA_TYPE_LOCAL
-                        val uploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                        scope.launch { onInstantAction.emit(RemoteInstantAction(
-                            actionType = "upload",
-                            title = file.name,
-                            detail = "${written / 1024} KB",
-                            clientId = uploadClientId
-                        )) }
-                        val escapedPath = file.absolutePath.replace("\\", "\\\\").replace("\"", "\\\"")
-                        call.respondText(
-                            """{"ok":true,"path":"$escapedPath","name":"${file.nameWithoutExtension.replace("\"", "\\\"")}","mediaType":"$mediaType"}""",
-                            ContentType.Application.Json
-                        )
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, """{"error":"upload failed: ${e.message?.replace("\"", "\\\"")}"}""")
-                    }
-                }
-
-                // ── Presentation remote control endpoints ─────────────────────
-
-                /** GET /presentation-remote — mobile remote control web page */
-    }
-
-    /** Routes for the phone-held presentation remote and its password gate. */
-    private fun Route.presentationRemoteRoutes() {
-                get("/presentation-remote") {
-                    call.respondText(presentationRemotePageHtml(), ContentType.Text.Html)
-                }
-
-                /** GET /api/presentation-remote/status — current presentation state (no auth needed) */
-                get("/api/presentation-remote/status") {
-                    val note = _presentationNotes[_currentPresentationId]?.getOrNull(_currentSlideIndex) ?: ""
-                    call.respondText(
-                        """{"enabled":$presentationRemoteEnabled,"id":"$_currentPresentationId","index":$_currentSlideIndex,"total":$_currentSlideTotalCount,"frozen":$_presentationFrozen,"isPlaying":$_presentationIsPlaying,"isLive":$_presentationIsLive,"autoScrollInterval":$_autoScrollInterval,"looping":$_presentationIsLooping,"passwordRequired":${presentationRemotePassword.isNotEmpty()},"notes":"${jsonEscape(note)}"}""",
-                        ContentType.Application.Json
-                    )
-                }
-
-                /** POST /api/presentation-remote/auth — verify password, then ask the operator to approve the device */
-                post("/api/presentation-remote/auth") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    if (!checkPresentationRemoteConnect(call)) return@post
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/next */
-                post("/api/presentation-remote/next") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    val next = (_currentSlideIndex + 1).coerceAtMost(_currentSlideTotalCount - 1)
-                    scope.launch { onPresentationGoto.emit(next) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/previous */
-                post("/api/presentation-remote/previous") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    val prev = (_currentSlideIndex - 1).coerceAtLeast(0)
-                    scope.launch { onPresentationGoto.emit(prev) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/goto/{index} */
-                post("/api/presentation-remote/goto/{index}") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    val index = call.parameters["index"]?.toIntOrNull()
-                        ?: run { call.respond(HttpStatusCode.BadRequest, """{"error":"missing index"}"""); return@post }
-                    val clamped = index.coerceIn(0, (_currentSlideTotalCount - 1).coerceAtLeast(0))
-                    scope.launch { onPresentationGoto.emit(clamped) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/freeze — toggle blank/unblank */
-                post("/api/presentation-remote/freeze") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    scope.launch { onPresentationFreezeToggle.emit(Unit) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/play-pause */
-                post("/api/presentation-remote/play-pause") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    scope.launch { onPresentationPlayPause.emit(Unit) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/loop — toggle slide looping */
-                post("/api/presentation-remote/loop") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    scope.launch { onPresentationLoopToggle.emit(Unit) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/go-live — send presentation to presenter screen */
-                post("/api/presentation-remote/go-live") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    scope.launch { onPresentationGoLive.emit(Unit) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                /** POST /api/presentation-remote/upload — base64 file upload from remote page */
-                post("/api/presentation-remote/upload") {
-                    if (!checkPresentationRemoteAuth(call)) return@post
-                    handlePresentationFileUpload(call)
-                }
-
-                // ── Picture endpoints ─────────────────────────────────────────
-
-                /**
-                 * GET /api/pictures
-                 * Returns the currently loaded picture folder metadata with per-image thumbnail URLs.
-                 */
-    }
-
-    /** Routes for pictures, media streaming, bible files and background assets. */
-    private fun Route.mediaAndAssetRoutes() {
-                get(Constants.ENDPOINT_PICTURES) {
-                    if (!checkApiKey(call)) return@get
-                    val catalog = _pictureCatalog.value
-                    if (catalog == null) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, "No picture folder loaded")
-                        return@get
-                    }
-                    call.respond(catalog)
-                }
-
-                /**
-                 * GET /api/pictures/{id}
-                 * Returns catalog metadata for the picture folder with {id}.
-                 * Works for any schedule picture item (by its schedule UUID) as well as the
-                 * currently active folder loaded via the Pictures tab.
-                 */
-                get("${Constants.ENDPOINT_PICTURES}/{id}") {
-                    if (!checkApiKey(call)) return@get
-                    val id = call.parameters["id"] ?: run { call.respond(HttpStatusCode.BadRequest, "Missing id"); return@get }
-                    val catalog = _pictureCatalogs[id]
-                    if (catalog == null) {
-                        logRest("/api/pictures/{id}", 404, "folder_not_found")
-                        call.respond(HttpStatusCode.NotFound, "Picture folder not found")
-                        return@get
-                    }
-                    logRest("/api/pictures/{id}", 200)
-                    call.respond(catalog)
-                }
-
-                /**
-                 * GET /api/pictures/{id}/images/{index}
-                 * Returns the image at {index} as a JPEG for the folder with {id}.
-                 */
-                get("${Constants.ENDPOINT_PICTURES}/{id}/images/{index}") {
-                    if (!checkApiKey(call)) return@get
-                    val id    = call.parameters["id"]    ?: run { call.respond(HttpStatusCode.BadRequest, "Missing id"); return@get }
-                    val index = call.parameters["index"]?.toIntOrNull() ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid index"); return@get }
-                    val files = _pictureFiles[id]
-                    if (files == null) {
-                        logRest("/api/pictures/{id}/images/{index}", 404, "folder_not_found")
-                        call.respond(HttpStatusCode.NotFound, "Picture folder not found")
-                        return@get
-                    }
-                    if (index < 0 || index >= files.size) {
-                        logRest("/api/pictures/{id}/images/{index}", 404, "index_out_of_range")
-                        call.respond(HttpStatusCode.NotFound, "Image index out of range")
-                        return@get
-                    }
-                    val file = files[index]
-                    if (!file.exists()) {
-                        logRest("/api/pictures/{id}/images/{index}", 404, "file_not_found_on_disk")
-                        call.respond(HttpStatusCode.NotFound, "Image file not found on disk")
-                        return@get
-                    }
-                    // HEIC/HEIF are not displayable by browsers — convert to JPEG first
-                    val ext = file.extension.lowercase()
-                    if (ext == "heic" || ext == "heif") {
-                        val jpegBytes = HeicDecoder.toJpegBytes(file)
-                        if (jpegBytes != null) {
-                            logRest("/api/pictures/{id}/images/{index}", 200)
-                            call.respondBytes(jpegBytes, ContentType.Image.JPEG)
-                        } else {
-                            logRest("/api/pictures/{id}/images/{index}", 500, "heic_conversion_failed")
-                            call.respond(HttpStatusCode.InternalServerError, "Failed to convert HEIC image")
-                        }
-                    } else {
-                        logRest("/api/pictures/{id}/images/{index}", 200)
-                        call.respondBytes(file.readBytes(), contentTypeForExtension(ext))
-                    }
-                }
-
-                /**
-                 * GET /api/media/stream/{id} — streams a local media file's raw bytes for a schedule
-                 * item registered via [updateSchedule] (mediaType == "local"). Range requests are
-                 * handled by the PartialContent plugin so seeking works, letting an InstanceLink
-                 * follower play the file over HTTP without needing a local copy.
-                 */
-                get("${Constants.ENDPOINT_MEDIA_STREAM}/{id}") {
-                    if (!checkApiKey(call)) return@get
-                    val id = call.parameters["id"] ?: run { call.respond(HttpStatusCode.BadRequest, "Missing id"); return@get }
-                    val path = _scheduleItemToMediaPath[id]
-                    if (path == null) {
-                        logRest("/api/media/stream/{id}", 404, "media_item_not_found")
-                        call.respond(HttpStatusCode.NotFound, "Media item not found")
-                        return@get
-                    }
-                    val file = File(path)
-                    if (!file.exists()) {
-                        logRest("/api/media/stream/{id}", 404, "file_not_found_on_disk")
-                        call.respond(HttpStatusCode.NotFound, "Media file not found on disk")
-                        return@get
-                    }
-                    logRest("/api/media/stream/{id}", 200)
-                    call.respondFile(file)
-                }
-
-                /**
-                 * GET /api/bible/file — streams the primary bible's raw .spb file bytes so an
-                 * InstanceLink follower can cache and load it through the same Bible.loadFromSpb()
-                 * engine used locally (search/cross-reference/numbering all work unchanged), instead
-                 * of reimplementing that engine against the API. Range requests are handled by the
-                 * PartialContent plugin. The mobile companion API only ever exposed the primary bible;
-                 * GET /api/bible/file/secondary below extends that scope for InstanceLink only.
-                 */
-                get(Constants.ENDPOINT_BIBLE_FILE) {
-                    if (!checkApiKey(call)) return@get
-                    val path = _bibleFilePath
-                    if (path.isEmpty()) {
-                        logRest("/api/bible/file", 404, "no_bible_loaded")
-                        call.respond(HttpStatusCode.NotFound, "No bible loaded")
-                        return@get
-                    }
-                    val file = File(path)
-                    if (!file.exists()) {
-                        logRest("/api/bible/file", 404, "file_not_found_on_disk")
-                        call.respond(HttpStatusCode.NotFound, "Bible file not found on disk")
-                        return@get
-                    }
-                    logRest("/api/bible/file", 200)
-                    call.respondFile(file)
-                }
-
-                /** GET /api/bible/file/secondary — same as above, for a follower that opted in to
-                 *  mirroring the primary's secondary bible instead of keeping its own. */
-                get("${Constants.ENDPOINT_BIBLE_FILE}/secondary") {
-                    if (!checkApiKey(call)) return@get
-                    val path = _secondaryBibleFilePath
-                    if (path.isEmpty()) {
-                        logRest("/api/bible/file/secondary", 404, "no_secondary_bible_loaded")
-                        call.respond(HttpStatusCode.NotFound, "No secondary bible loaded")
-                        return@get
-                    }
-                    val file = File(path)
-                    if (!file.exists()) {
-                        logRest("/api/bible/file/secondary", 404, "file_not_found_on_disk")
-                        call.respond(HttpStatusCode.NotFound, "Secondary bible file not found on disk")
-                        return@get
-                    }
-                    logRest("/api/bible/file/secondary", 200)
-                    call.respondFile(file)
-                }
-
-                /** Ordered Bible module names available to an Instance Link follower. */
-                get("${Constants.ENDPOINT_BIBLE_FILE}/translations") {
-                    if (!checkApiKey(call)) return@get
-                    call.respond(_bibleFilePaths.map { File(it).name })
-                }
-
-                /** Downloads one Bible module by its stable position in the ordered manifest. */
-                get("${Constants.ENDPOINT_BIBLE_FILE}/translation/{index}") {
-                    if (!checkApiKey(call)) return@get
-                    val index = call.parameters["index"]?.toIntOrNull()
-                    val path = index?.let { _bibleFilePaths.getOrNull(it) }
-                    if (path == null || !File(path).exists()) {
-                        call.respond(HttpStatusCode.NotFound, "Bible translation not found")
-                        return@get
-                    }
-                    call.respondFile(File(path))
-                }
-
-                /** GET /api/backgrounds — current BackgroundSettings as JSON. Image/video fields are
-                 *  still local file paths on this machine; a follower resolves the actual bytes via
-                 *  GET /api/backgrounds/asset/{slot} below, keyed by slot rather than raw path. */
-                get(Constants.ENDPOINT_BACKGROUNDS) {
-                    if (!checkApiKey(call)) return@get
-                    logRest("/api/backgrounds", 200)
-                    call.respond(_backgroundSettings.value)
-                }
-
-                /**
-                 * GET /api/backgrounds/asset/{slot}?type=image|video — streams the background
-                 * image/video file currently configured for one slot (default, defaultLowerThird,
-                 * bible, bibleLowerThird, song, songLowerThird). Keyed by slot name rather than a raw
-                 * path, same reasoning as the lower-third-by-name endpoint above. Range requests are
-                 * handled by the PartialContent plugin via respondFile.
-                 */
-                get("${Constants.ENDPOINT_BACKGROUNDS}/asset/{slot}") {
-                    if (!checkApiKey(call)) return@get
-                    val slot = call.parameters["slot"] ?: ""
-                    val isVideo = call.request.queryParameters["type"] == "video"
-                    val settings = _backgroundSettings.value
-                    val path = when (slot) {
-                        Constants.BACKGROUND_SLOT_DEFAULT ->
-                            if (isVideo) settings.defaultBackgroundVideo else settings.defaultBackgroundImage
-                        Constants.BACKGROUND_SLOT_DEFAULT_LOWER_THIRD ->
-                            if (isVideo) settings.defaultLowerThirdBackgroundVideo else settings.defaultLowerThirdBackgroundImage
-                        Constants.BACKGROUND_SLOT_BIBLE ->
-                            if (isVideo) settings.bibleBackground.backgroundVideo else settings.bibleBackground.backgroundImage
-                        Constants.BACKGROUND_SLOT_BIBLE_LOWER_THIRD ->
-                            if (isVideo) settings.bibleLowerThirdBackground.backgroundVideo else settings.bibleLowerThirdBackground.backgroundImage
-                        Constants.BACKGROUND_SLOT_SONG ->
-                            if (isVideo) settings.songBackground.backgroundVideo else settings.songBackground.backgroundImage
-                        Constants.BACKGROUND_SLOT_SONG_LOWER_THIRD ->
-                            if (isVideo) settings.songLowerThirdBackground.backgroundVideo else settings.songLowerThirdBackground.backgroundImage
-                        else -> ""
-                    }
-                    if (path.isBlank()) {
-                        logRest("/api/backgrounds/asset/{slot}", 404, "no_asset_configured_for_slot")
-                        call.respond(HttpStatusCode.NotFound, "No asset configured for slot")
-                        return@get
-                    }
-                    val file = File(path)
-                    if (!file.exists()) {
-                        logRest("/api/backgrounds/asset/{slot}", 404, "file_not_found_on_disk")
-                        call.respond(HttpStatusCode.NotFound, "Background asset not found on disk")
-                        return@get
-                    }
-                    logRest("/api/backgrounds/asset/{slot}", 200)
-                    call.respondFile(file)
-                }
-
-                /**
-                 * POST /api/pictures/select
-                 * Body: { "folder-id": "…", "index": 3, "file-name": "photo.jpg" }
-                 * When "file-name" is provided the index is resolved by name so the correct
-                 * image is displayed regardless of sort-order differences between clients.
-                 */
-                post("${Constants.ENDPOINT_PICTURES}/select") {
-                    if (!checkApiKey(call)) return@post
-                    try {
-                        val req = json.decodeFromString(SelectPictureRequest.serializer(), call.receiveText())
-                        // Resolve index by filename when provided — immune to sort-order mismatch
-                        val resolvedIndex = req.fileName
-                            ?.let { name -> _pictureFiles[req.folderId]?.indexOfFirst { it.name == name }?.takeIf { it >= 0 } }
-                            ?: req.index
-                        val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                        scope.launch { onSelectPicture.emit(req.copy(index = resolvedIndex)) }
-                        val folderName = _pictureCatalogs[req.folderId]?.folderName ?: req.folderId
-                        val imageLabel = req.fileName ?: "Image $resolvedIndex"
-                        scope.launch { onInstantAction.emit(RemoteInstantAction(
-                            actionType = "present",
-                            title = folderName,
-                            detail = imageLabel,
-                            clientId = clientId
-                        )) }
-                        call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    } catch (_: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request body"}""")
-                    }
-                }
-
-                /**
-                 * POST /api/pictures/upload
-                 * Body: { "name": "photo.jpg", "data": "data:image/jpeg;base64,…" }
-                 *
-                 * Saves the uploaded image to ~/.churchpresenter/device_uploads/,
-                 * registers it as a single-image folder so the other pictures endpoints
-                 * serve it, and returns { "ok": true, "folder-id": "…", "image-index": 0 }.
-                 */
-                post("${Constants.ENDPOINT_PICTURES}/upload") {
-                    if (!checkApiKey(call)) return@post
-                    if (!_fileUploadEnabled.value) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"file upload is disabled"}""")
-                        return@post
-                    }
-                    try {
-                        val body = call.receiveText()
-                        val parsed = json.parseToJsonElement(body) as? JsonObject
-                        val name = (parsed?.get("name") as? JsonPrimitive)?.content
-                        val data = (parsed?.get("data") as? JsonPrimitive)?.content
-                        if (name.isNullOrBlank() || data.isNullOrBlank()) {
-                            call.respond(HttpStatusCode.BadRequest, """{"error":"name and data are required"}""")
-                            return@post
-                        }
-                        val safeName = File(name).name.ifBlank { "upload.jpg" }
-                        val base64Match = Regex("^data:[^;]+;base64,(.+)$").find(data)
-                        if (base64Match == null) {
-                            call.respond(HttpStatusCode.BadRequest, """{"error":"data must be a base64 data URI"}""")
-                            return@post
-                        }
-                        val imageBytes = Base64.getDecoder().decode(base64Match.groupValues[1])
-                        // Save to ~/.churchpresenter/device_uploads/yyyy-MM-dd/
-                        // Each calendar day gets its own subfolder; the folderId includes the
-                        // date so uploads from different days are catalogued separately.
-                        val dateStr = java.time.LocalDate.now().toString()   // "yyyy-MM-dd"
-                        val dateFolderId = "${DEVICE_UPLOADS_FOLDER_ID}_$dateStr"
-                        val uploadDir = File(System.getProperty("user.home"), ".churchpresenter/device_uploads/$dateStr").also { it.mkdirs() }
-                        // Ensure the file name is unique by appending a timestamp if needed
-                        val uniqueName = if (File(uploadDir, safeName).exists()) {
-                            val ts = System.currentTimeMillis()
-                            val ext = safeName.substringAfterLast('.', "jpg")
-                            val base = safeName.substringBeforeLast('.', safeName)
-                            "${base}_$ts.$ext"
-                        } else safeName
-                        val file = File(uploadDir, uniqueName)
-                        file.writeBytes(imageBytes)
-                        // Accumulate into today's dated "Device Photos" folder.
-                        // Sort by filename so the catalog index order matches the desktop's
-                        // PicturesViewModel.loadImagesFromFolder which also sorts by name.
-                        // Without this, upload order ≠ filename order, so index N on mobile
-                        // points to a different photo than index N on the desktop.
-                        val existingFiles = (_pictureFiles[dateFolderId] ?: emptyList()).toMutableList()
-                        existingFiles.add(file)
-                        existingFiles.sortBy { it.name }          // ← match desktop sort order
-                        val newIndex = existingFiles.indexOf(file) // recalculate after sort
-                        _pictureFiles[dateFolderId] = existingFiles
-                        val catalog = PictureFolderResponse(
-                            folderId   = dateFolderId,
-                            folderName = "Device Photos ($dateStr)",
-                            folderPath = uploadDir.absolutePath,
-                            imageTotal = existingFiles.size,
-                            images     = existingFiles.mapIndexed { idx, f ->
-                                PictureFileDto(
-                                    index        = idx,
-                                    fileName     = f.name,
-                                    thumbnailUrl = "${Constants.ENDPOINT_PICTURES}/$dateFolderId/images/$idx"
-                                )
-                            }
-                        )
-                        _pictureCatalogs[dateFolderId] = catalog
-                        // Do NOT update _pictureCatalog here — that would replace the desktop's
-                        // active folder with device_uploads, making GET /api/pictures return the
-                        // wrong folder to the mobile companion app.
-                        broadcast(WebSocketMessage(
-                            type    = Constants.WS_EVENT_PICTURES_UPDATED,
-                            payload = json.encodeToString(PictureFolderResponse.serializer(), catalog)
-                        ))
-                        val picUploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                        scope.launch { onInstantAction.emit(RemoteInstantAction(
-                            actionType = "upload",
-                            title = file.name,
-                            detail = catalog.folderName,
-                            clientId = picUploadClientId
-                        )) }
-                        call.respondText(
-                            """{"ok":true,"folder-id":"$dateFolderId","image-index":$newIndex,"file-name":"${file.name}"}""",
-                            ContentType.Application.Json
-                        )
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, """{"error":"upload failed: ${e.message?.replace("\"","\\\"")}"}""")
-                    }
-                }
-
-    }
-
-    /** Routes for the live WebSocket: connect snapshot, broadcasts and commands. */
-    private fun Route.webSocketRoute() {
-                webSocket(Constants.ENDPOINT_WS) {
-                    val queryKey = call.request.queryParameters[Constants.QUERY_PARAM_API_KEY]
-                    val headerKey = call.request.headers[Constants.HEADER_API_KEY]
-                    if (_apiKeyEnabled.value && _apiKey.value.isNotEmpty()) {
-                        val provided = queryKey ?: headerKey ?: ""
-                        if (provided != _apiKey.value) {
-                            InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "follower_unauthorized", mapOf("reason" to "bad_api_key"))
-                            send(Frame.Text("{\"error\":\"Unauthorized\"}"))
-                            return@webSocket
-                        }
-                    }
-                    val wsClientId = call.request.headers[Constants.HEADER_DEVICE_ID]
-                        ?: call.request.queryParameters[Constants.HEADER_DEVICE_ID]
-                        ?: ""
-                    // A blocked device gets no session at all: no live feed to watch, and no socket
-                    // to send commands down. Checked before the follower registration below so a
-                    // blocked instance never appears in the connected-followers count either.
-                    if (isClientBlocked(wsClientId)) {
-                        InstanceLinkLogger.log(
-                            InstanceLinkLogSide.PRIMARY, "follower_unauthorized",
-                            mapOf("reason" to "blocked", "deviceId" to wsClientId)
-                        )
-                        send(Frame.Text("{\"error\":\"Blocked\"}"))
-                        return@webSocket
-                    }
-                    val isInstanceLinkFollower = call.request.headers[Constants.HEADER_CLIENT_ROLE] ==
-                        Constants.CLIENT_ROLE_INSTANCE_LINK
-                    // A follower instance is another desktop, not a phone, so only the remaining
-                    // sessions count as the mobile app being used.
-                    if (!isInstanceLinkFollower) UsageEvents.recordOncePerRun(UsageEvent.MOBILE_APP_CONNECTED)
-                    if (isInstanceLinkFollower && wsClientId.isNotEmpty()) {
-                        _connectedInstanceLinkFollowers.value = _connectedInstanceLinkFollowers.value + wsClientId
-                        InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "follower_connected", mapOf("deviceId" to wsClientId))
-                    }
-
-                    // Subscribed to the broadcast flow BEFORE the connect snapshot is written, and
-                    // released only once it has been: broadcastChannel has no replay, so a change
-                    // emitted while the snapshot was still being sent used to land on a flow this
-                    // session had not subscribed to yet and was lost outright -- the client then
-                    // showed stale content until its next reconnect. Broadcasts that arrive during
-                    // the snapshot queue in the flow's own buffer instead, so the whole snapshot
-                    // still reaches the client ahead of any of them.
-                    val snapshotSent = CompletableDeferred<Unit>()
-                    val subscribed = CompletableDeferred<Unit>()
-                    val broadcastJob = scope.launch {
-                        broadcastChannel
-                            .onSubscription { subscribed.complete(Unit) }
-                            .collect { message ->
-                                snapshotSent.await()
-                                send(Frame.Text(message))
-                            }
-                    }
-                    // A scope already cancelled (server stopping) never runs the block above, so the
-                    // wait is released by the job ending too rather than hanging the handler; the
-                    // fallback is exactly the old behaviour, a snapshot and no broadcasts.
-                    broadcastJob.invokeOnCompletion { subscribed.complete(Unit) }
-                    // Tied to this session rather than only to the `finally` below, because the
-                    // snapshot sends between here and there are outside it: a client that vanishes
-                    // mid-snapshot throws out of the handler before that `try` is ever entered, and
-                    // the collector -- launched on the server-lifetime scope, not this session's --
-                    // would be left parked on snapshotSent.await() for as long as the server runs,
-                    // holding this session with it. One leaked coroutine per aborted connect, in
-                    // exactly the reconnect churn this whole change is about.
-                    coroutineContext.job.invokeOnCompletion { broadcastJob.cancel() }
-                    subscribed.await()
-
-                    val catalog = _catalog.value
-                    val schedule = _schedule.value
-                    send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                        WebSocketMessage(Constants.WS_EVENT_SONGS_UPDATED,
-                            json.encodeToString(SongCatalogResponse.serializer(), catalog)))))
-                    _bibleCatalog.value?.let { bibleCatalog ->
-                        send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                            WebSocketMessage(Constants.WS_EVENT_BIBLE_UPDATED,
-                                json.encodeToString(BibleCatalogResponse.serializer(), bibleCatalog)))))
-                    }
-                    send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                        WebSocketMessage(Constants.WS_EVENT_SCHEDULE_UPDATED,
-                            json.encodeToString(ScheduleResponse.serializer(), ScheduleResponse(schedule, schedule.size))))))
-                    val presentationCatalog = _presentationCatalog.value
-                    if (presentationCatalog.presentations.isNotEmpty()) {
-                        send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                            WebSocketMessage(Constants.WS_EVENT_PRESENTATION_UPDATED,
-                                json.encodeToString(PresentationCatalogResponse.serializer(), presentationCatalog)))))
-                    }
-                    _pictureCatalog.value?.let { pictureCatalog ->
-                        send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                            WebSocketMessage(Constants.WS_EVENT_PICTURES_UPDATED,
-                                json.encodeToString(PictureFolderResponse.serializer(), pictureCatalog)))))
-                    }
-                    // Resent on every (re)connect so a follower mirroring backgrounds
-                    // (InstanceLinkSettings.mirrorBackgrounds) always invalidates its local asset
-                    // cache once per connection — same reasoning as bible/pictures above. Without
-                    // this, a follower that reconnects (app restart, network blip, the automatic
-                    // backoff reconnect) keeps serving whatever it cached last session even if the
-                    // primary's background changed while it was disconnected.
-                    send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                        WebSocketMessage(Constants.WS_EVENT_BACKGROUNDS_UPDATED, payload = ""))))
-                    // The secondary bible needs exactly the same treatment, and for exactly the same
-                    // reason: it is an invalidation signal with an empty payload, so a follower that
-                    // reconnects without it keeps serving the .spb it cached last session even if the
-                    // primary changed translation while it was away.
-                    send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                        WebSocketMessage(Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED, payload = ""))))
-                    send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                        WebSocketMessage(
-                            type = Constants.WS_EVENT_PRESENTATION_SLIDE_CHANGED,
-                            payload = """{"id":"$_currentPresentationId","index":$_currentSlideIndex,"total":$_currentSlideTotalCount,"isPlaying":$_presentationIsPlaying,"isLive":$_presentationIsLive}"""
-                        ))))
-                    _liveState.value?.let { state ->
-                        send(Frame.Text(json.encodeToString(WebSocketMessage.serializer(),
-                            WebSocketMessage(Constants.WS_EVENT_LIVE_STATE_CHANGED,
-                                json.encodeToString(LiveStateDto.serializer(), state)))))
-                    }
-
-                    // The snapshot is complete; anything the collector queued during it now flows.
-                    snapshotSent.complete(Unit)
-
-                    // Ack for commands that carried a commandId (InstanceLink controller mode) —
-                    // no-op for clients that don't send one, so mobile behavior is unchanged.
-                    suspend fun sendCommandAck(commandId: String?, ok: Boolean, reason: String? = null) {
-                        if (commandId == null) return
-                        try {
-                            send(Frame.Text(json.encodeToString(
-                                WebSocketMessage.serializer(),
-                                WebSocketMessage(
-                                    type = Constants.WS_EVENT_COMMAND_ACK,
-                                    payload = json.encodeToString(
-                                        CommandAckPayload.serializer(),
-                                        CommandAckPayload(commandId, ok, reason)
-                                    )
-                                )
-                            )))
-                        } catch (_: Exception) {
-                            // session already closing — the follower's timeout covers this
-                        }
-                        InstanceLinkLogger.log(
-                            InstanceLinkLogSide.PRIMARY, "command_ack",
-                            mapOf("commandId" to commandId, "ok" to ok, "reason" to reason)
-                        )
-                    }
-
-                    try {
-                    for (frame in incoming) {
-                        if (frame is Frame.Text) {
-                            try {
-                                val msg = json.decodeFromString(WebSocketMessage.serializer(), frame.readText())
-                                InstanceLinkLogger.log(
-                                    InstanceLinkLogSide.PRIMARY, "ws_command_received",
-                                    mapOf("type" to msg.type, "deviceId" to wsClientId)
-                                )
-                                // Blocked *during* this session — the handshake check above cannot
-                                // see a decision the operator makes while the socket is already open.
-                                if (isClientBlocked(wsClientId)) {
-                                    InstanceLinkLogger.log(
-                                        InstanceLinkLogSide.PRIMARY, "ws_command_refused",
-                                        mapOf("type" to msg.type, "deviceId" to wsClientId, "reason" to "blocked")
-                                    )
-                                    sendCommandAck(msg.commandId, ok = false, reason = "blocked")
-                                    continue
-                                }
-                                when (msg.type) {
-                                    Constants.WS_CMD_SELECT_SONG -> {
-                                        val song = json.decodeFromString(ScheduleSongDto.serializer(), msg.payload)
-                                        scope.launch { onSongSelected.emit(song) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_SELECT_PICTURE -> {
-                                        val req = json.decodeFromString(SelectPictureRequest.serializer(), msg.payload)
-                                        scope.launch { onSelectPicture.emit(req) }
-                                        val folderName = _pictureCatalogs[req.folderId]?.folderName ?: req.folderId
-                                        val imageLabel = req.fileName ?: "Image ${req.index}"
-                                        scope.launch { onInstantAction.emit(RemoteInstantAction("present", folderName, imageLabel, wsClientId)) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_SELECT_SONG_SECTION -> {
-                                        val req = json.decodeFromString(SelectSongSectionRequest.serializer(), msg.payload)
-                                        scope.launch { onSelectSongSection.emit(req) }
-                                        scope.launch { onInstantAction.emit(RemoteInstantAction("present", "Song ${req.number}", "Section ${req.section}", wsClientId)) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_SELECT_SLIDE -> {
-                                        val req = json.decodeFromString(SelectSlideRequest.serializer(), msg.payload)
-                                        scope.launch { onSelectSlide.emit(req) }
-                                        val presName = _presentationCatalogs[_scheduleItemToPresentationId[req.id] ?: req.id]?.fileName ?: req.id
-                                        scope.launch { onInstantAction.emit(RemoteInstantAction("present", presName, "Slide ${req.index + 1}", wsClientId)) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_SELECT_BIBLE_VERSE -> {
-                                        val req = json.decodeFromString(SelectBibleVerseRequest.serializer(), msg.payload)
-                                        scope.launch { onSelectBibleVerse.emit(req) }
-                                        val ref = if (req.verseRange.isNotEmpty()) "${req.bookName} ${req.chapter}:${req.verseRange}"
-                                                  else "${req.bookName} ${req.chapter}:${req.verseNumber}"
-                                        scope.launch { onInstantAction.emit(RemoteInstantAction("present", ref, req.verseText.take(60), wsClientId)) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_CLEAR -> {
-                                        scope.launch { onClear.emit(Unit) }
-                                        scope.launch { onInstantAction.emit(RemoteInstantAction("clear", "Clear Display", clientId = wsClientId)) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_BIBLE_HOLD -> {
-                                        val hold = try {
-                                            json.parseToJsonElement(msg.payload)
-                                                .jsonObject["hold"]?.toString()?.toBooleanStrictOrNull() ?: true
-                                        } catch (_: Exception) { true }
-                                        scope.launch { onBibleHold.emit(hold) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_NEXT_PICTURE -> {
-                                        scope.launch { onNextPicture.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_PREVIOUS_PICTURE -> {
-                                        scope.launch { onPreviousPicture.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_NEXT_SLIDE -> {
-                                        scope.launch { onNextSlide.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_PREVIOUS_SLIDE -> {
-                                        scope.launch { onPreviousSlide.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_MEDIA_PLAY_PAUSE -> {
-                                        scope.launch { onMediaPlayPause.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_MEDIA_STOP -> {
-                                        scope.launch { onMediaStop.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_MEDIA_SEEK_FORWARD -> {
-                                        scope.launch { onMediaSeekForward.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_MEDIA_SEEK_BACKWARD -> {
-                                        scope.launch { onMediaSeekBackward.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_MEDIA_SEEK_TO -> {
-                                        val ms = msg.payload.trim().toLongOrNull()
-                                        if (ms != null) {
-                                            scope.launch { onMediaSeekTo.emit(ms) }
-                                            sendCommandAck(msg.commandId, ok = true)
-                                        } else sendCommandAck(msg.commandId, ok = false, reason = "invalid_payload")
-                                    }
-                                    Constants.WS_CMD_MEDIA_SET_VOLUME -> {
-                                        val v = msg.payload.trim().toFloatOrNull()
-                                        if (v != null) {
-                                            scope.launch { onMediaSetVolume.emit(v) }
-                                            sendCommandAck(msg.commandId, ok = true)
-                                        } else sendCommandAck(msg.commandId, ok = false, reason = "invalid_payload")
-                                    }
-                                    Constants.WS_CMD_MEDIA_MUTE_TOGGLE -> {
-                                        scope.launch { onMediaMuteToggle.emit(Unit) }
-                                        sendCommandAck(msg.commandId, ok = true)
-                                    }
-                                    Constants.WS_CMD_ADD_TO_SCHEDULE -> {
-                                        val item = parseRemoteItem(msg.payload)
-                                            ?: json.decodeFromString(AddToScheduleRequest.serializer(), msg.payload).item
-                                        val pending = PendingRemoteRequest(item, wsClientId)
-                                        scope.launch {
-                                            onAddToSchedule.emit(pending)
-                                            val allowed = try { pending.decision.await() } catch (_: Exception) { false }
-                                            val response = if (allowed) """{"ok":true}""" else """{"ok":false,"reason":"denied"}"""
-                                            try { send(Frame.Text(response)) } catch (_: Exception) { }
-                                        }
-                                        // Ack "queued" immediately — the operator's approval can take
-                                        // minutes, and its outcome still arrives via schedule_updated
-                                        // (plus the legacy raw {"ok":...} reply above for mobile).
-                                        sendCommandAck(msg.commandId, ok = true, reason = "pending_approval")
-                                    }
-                                    Constants.WS_CMD_ADD_BATCH_TO_SCHEDULE -> {
-                                        val items = try {
-                                            json.decodeFromString(RemoteItemsRequest.serializer(), msg.payload)
-                                                .items.mapNotNull { it.toScheduleItem() }
-                                        } catch (_: Exception) { emptyList() }
-                                        if (items.isNotEmpty()) {
-                                            val pending = PendingBatchRequest(items, wsClientId)
-                                            scope.launch {
-                                                onAddBatchToSchedule.emit(pending)
-                                                val allowed = try { pending.decision.await() } catch (_: Exception) { false }
-                                                val response = if (allowed) """{"ok":true}""" else """{"ok":false,"reason":"denied"}"""
-                                                try { send(Frame.Text(response)) } catch (_: Exception) { }
-                                            }
-                                            sendCommandAck(msg.commandId, ok = true, reason = "pending_approval")
-                                        } else {
-                                            sendCommandAck(msg.commandId, ok = false, reason = "invalid_payload")
-                                        }
-                                    }
-                                    Constants.WS_CMD_PROJECT -> {
-                                        val item = parseRemoteItem(msg.payload)
-                                            ?: json.decodeFromString(ProjectRequest.serializer(), msg.payload).item
-                                        val pending = PendingRemoteRequest(item, wsClientId)
-                                        scope.launch {
-                                            onProject.emit(pending)
-                                            val allowed = try { pending.decision.await() } catch (_: Exception) { false }
-                                            val response = if (allowed) """{"ok":true}""" else """{"ok":false,"reason":"denied"}"""
-                                            try { send(Frame.Text(response)) } catch (_: Exception) { }
-                                        }
-                                        sendCommandAck(msg.commandId, ok = true, reason = "pending_approval")
-                                    }
-                                    Constants.WS_CMD_REMOVE_FROM_SCHEDULE -> {
-                                        val req = json.decodeFromString(RemoveFromScheduleRequest.serializer(), msg.payload)
-                                        val label = _schedule.value.firstOrNull { it.id == req.id }?.displayText ?: req.id
-                                        val pending = PendingRemoveRequest(req.id, label, wsClientId)
-                                        scope.launch {
-                                            onRemoveFromSchedule.emit(pending)
-                                            val allowed = try { pending.decision.await() } catch (_: Exception) { false }
-                                            val response = if (allowed) """{"ok":true}""" else """{"ok":false,"reason":"denied"}"""
-                                            try { send(Frame.Text(response)) } catch (_: Exception) { }
-                                        }
-                                        sendCommandAck(msg.commandId, ok = true, reason = "pending_approval")
-                                    }
-                                    else -> sendCommandAck(msg.commandId, ok = false, reason = "unknown_command")
-                                }
-                            } catch (e: Exception) {
-                                InstanceLinkLogger.log(
-                                    InstanceLinkLogSide.PRIMARY, "ws_frame_malformed",
-                                    mapOf("deviceId" to wsClientId, "reason" to e.message)
-                                )
-                            }
-                        }
-                    }
-                    } finally {
-                        broadcastJob.cancel()
-                        if (isInstanceLinkFollower && wsClientId.isNotEmpty()) {
-                            _connectedInstanceLinkFollowers.value = _connectedInstanceLinkFollowers.value - wsClientId
-                            InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "follower_disconnected", mapOf("deviceId" to wsClientId))
-                        }
-                    }
-                }
-
-                // ── Lower Third Sequencer (Bitfocus Companion) ───────────────────
-                // One HTTP call runs the whole timed sequence: ATEM key on → play
-                // the lower third → key off when the animation ends.
-
-    }
-
-    /** Routes for lower-third playback and the ATEM still/clip/key endpoints. */
-    private fun Route.lowerThirdAndAtemRoutes() {
-                get("/api/lowerthirds") {
-                    if (!checkApiKey(call)) return@get
-                    val items = lowerThirdFiles().map { f ->
-                        val dur = try { LottieRenderCache.lottieDurationMs(f.readText()) ?: 0L } catch (_: Exception) { 0L }
-                        val nameJson = json.encodeToString(kotlinx.serialization.serializer<String>(), f.nameWithoutExtension)
-                        """{"name":$nameJson,"durationMs":$dur}"""
-                    }
-                    call.respondText("[${items.joinToString(",")}]", ContentType.Application.Json)
-                }
-
-                /**
-                 * GET /api/lowerthirds/{name}/json — returns the raw Lottie JSON for a preset by
-                 * name, so an InstanceLink follower can play the exact same animation via
-                 * PresenterManager.setLottieContent() instead of only switching presenting mode.
-                 * Reuses the same by-name file lookup as the run/show/hide endpoints above.
-                 */
-                get("/api/lowerthirds/{name}/json") {
-                    if (!checkApiKey(call)) return@get
-                    val rawName = call.parameters["name"] ?: ""
-                    val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
-                    if (file == null) {
-                        logRest("/api/lowerthirds/{name}/json", 404, "lower_third_not_found")
-                        call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
-                        return@get
-                    }
-                    val ltJson = try { file.readText() } catch (_: Exception) {
-                        logRest("/api/lowerthirds/{name}/json", 500, "could_not_read_lottie_file")
-                        call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
-                        return@get
-                    }
-                    logRest("/api/lowerthirds/{name}/json", 200)
-                    call.respondText(ltJson, ContentType.Application.Json)
-                }
-
-                post("/api/lowerthirds/{name}/run") {
-                    if (!checkApiKey(call)) return@post
-                    handleLowerThirdTrigger(call, autoEnd = true)
-                }
-
-                post("/api/lowerthirds/{name}/show") {
-                    if (!checkApiKey(call)) return@post
-                    handleLowerThirdTrigger(call, autoEnd = false)
-                }
-
-                post("/api/lowerthirds/hide") {
-                    if (!checkApiKey(call)) return@post
-                    LowerThirdSequencer.stop()
-                    call.respondText("""{"status":"stopped"}""", ContentType.Application.Json)
-                }
-
-                // ── ATEM Media Upload Endpoints ────────────────────────────────────
-
-                // POST /api/atem/still/{name}?slot=N&me=E&key=M
-                // Renders the named lower third as a single still frame and uploads it
-                // to ATEM still slot N (1-based; defaults to atemSettings.defaultStillSlot).
-                // If ?key=M (M > 0) is provided, turns upstream key M on M/E E on after upload.
-                // Responds immediately; upload runs in background.
-                post("/api/atem/still/{name}") {
-                    if (!checkApiKey(call)) return@post
-                    val name = call.parameters["name"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"name required"}""")
-                        return@post
-                    }
-                    val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
-                    if (file == null) {
-                        call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
-                        return@post
-                    }
-                    val atem = _atemSettings
-                    if (atem == null || atem.host.isBlank()) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"ATEM not configured"}""")
-                        return@post
-                    }
-                    val slotParam = call.request.queryParameters["slot"]?.toIntOrNull()
-                    val slot = if (slotParam != null) slotParam - 1 else atem.defaultStillSlot
-                    // Optional key-on after upload: present key>0 ⇒ key it; absent/0 ⇒ upload only
-                    val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
-                    val meParam = call.request.queryParameters["me"]?.toIntOrNull()
-                    val keyOn = keyParam != null && keyParam > 0
-                    val useDsk = resolveUseDsk(call, atem)
-                    val mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
-                    val keyer = if (keyParam != null && keyParam > 0) keyParam - 1
-                        else if (useDsk) atem.dskIndex else atem.keyIndex
-                    if (keyOn) validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":${jsonStr(it)}}""")
-                        return@post
-                    }
-                    scope.launch {
-                        val uploadId = AtemUploadStatus.begin(file.nameWithoutExtension, clip = false, slot = slot + 1)
-                        try {
-                            val lottieJson = file.readText()
-                            val variant = LottieRenderCache.atemVariant(lottieJson, atem, clip = false)
-                            val cached = LottieRenderCache.prepare(lottieJson, variant).await()
-                            AtemConnectionManager.use(atem.host, atem.port, needsState = true) { client ->
-                                LottieRenderCache.Reader(cached).use { reader ->
-                                    client.uploadStillEncoded(
-                                        slot, reader.nextAtemFrame(atem.renderWidth, atem.renderHeight),
-                                        file.nameWithoutExtension
-                                    ) { p ->
-                                        AtemUploadStatus.progress(uploadId, p)
-                                    }
-                                }
-                                if (keyOn) client.setKeyOnAir(useDsk, mixEffect, keyer, true)
-                            }
-                            AtemUploadStatus.complete(uploadId)
-                            kotlinx.coroutines.delay(800)
-                            AtemUploadStatus.clear(uploadId)
-                        } catch (e: Exception) {
-                            System.err.println("[CompanionServer] ATEM still upload failed for '$name': ${e.message}")
-                            CrashReporter.reportWarning(
-                                "ATEM still upload failed: $name",
-                                throwable = e,
-                                tags = mapOf("subsystem" to "atem")
-                            )
-                            AtemUploadStatus.fail(uploadId, e.message)
-                        }
-                    }
-                    val keyInfo = when {
-                        !keyOn -> ""
-                        useDsk -> ""","dsk":${keyer + 1}"""
-                        else -> ""","me":${mixEffect + 1},"key":${keyer + 1}"""
-                    }
-                    call.respondText(
-                        """{"status":"uploading","type":"still","name":${jsonStr(name)},"slot":${slot + 1}$keyInfo}""",
-                        ContentType.Application.Json
-                    )
-                }
-
-                // POST /api/atem/clip/{name}?slot=N&me=E&key=M
-                // Renders the named lower third as a full animated clip and uploads it
-                // to ATEM clip slot N (1-based; defaults to atemSettings.defaultClipSlot).
-                // If ?key=M (M > 0) is provided, turns upstream key M on M/E E on after upload,
-                // then off after the clip duration. Responds immediately; upload runs in background.
-                post("/api/atem/clip/{name}") {
-                    if (!checkApiKey(call)) return@post
-                    val name = call.parameters["name"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"name required"}""")
-                        return@post
-                    }
-                    val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
-                    if (file == null) {
-                        call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
-                        return@post
-                    }
-                    val atem = _atemSettings
-                    if (atem == null || atem.host.isBlank()) {
-                        call.respond(HttpStatusCode.ServiceUnavailable, """{"error":"ATEM not configured"}""")
-                        return@post
-                    }
-                    val slotParam = call.request.queryParameters["slot"]?.toIntOrNull()
-                    val slot = if (slotParam != null) slotParam - 1 else atem.defaultClipSlot
-                    val keyParam = call.request.queryParameters["key"]?.toIntOrNull()
-                    val meParam = call.request.queryParameters["me"]?.toIntOrNull()
-                    val keyOn = keyParam != null && keyParam > 0
-                    val useDsk = resolveUseDsk(call, atem)
-                    val mixEffect = if (useDsk) 0 else (if (meParam != null) meParam - 1 else atem.keyMixEffect)
-                    val keyer = if (keyParam != null && keyParam > 0) keyParam - 1
-                        else if (useDsk) atem.dskIndex else atem.keyIndex
-                    if (keyOn) validateKeyTarget(atem, useDsk, mixEffect, keyer)?.let {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":${jsonStr(it)}}""")
-                        return@post
-                    }
-                    val lottieJson = file.readText()
-                    val fps = atem.clipFps
-                    val frameCount = LottieRenderCache.clipFrameCount(lottieJson, fps) ?: 1
-                    // Capacity pre-flight (mirrors the Lower Third UI): block a clip that can't
-                    // fit the slot before responding "uploading", so the caller gets a real error.
-                    val clipCapacity = atem.detectedClipMaxFrames.getOrNull(slot)
-                    if (clipCapacity != null && frameCount > clipCapacity) {
-                        val secs = String.format(java.util.Locale.US, "%.1f", clipCapacity / fps)
-                        call.respond(
-                            HttpStatusCode.UnprocessableEntity,
-                            """{"error":${jsonStr("Clip is $frameCount frames but slot ${slot + 1} holds at most $clipCapacity frames (≈$secs s); use a shorter clip or lower fps")}}"""
-                        )
-                        return@post
-                    }
-                    scope.launch {
-                        val uploadId = AtemUploadStatus.begin(file.nameWithoutExtension, clip = true, slot = slot + 1)
-                        try {
-                            val variant = LottieRenderCache.atemVariant(lottieJson, atem, clip = true, fps = fps)
-                            val cached = LottieRenderCache.prepare(lottieJson, variant).await()
-                            AtemConnectionManager.use(atem.host, atem.port, needsState = true) { client ->
-                                LottieRenderCache.Reader(cached).use { reader ->
-                                    client.uploadClipEncoded(slot, reader.frameCount, file.nameWithoutExtension,
-                                        nextFrame = { reader.nextAtemFrame(atem.renderWidth, atem.renderHeight) }
-                                    ) { p -> AtemUploadStatus.progress(uploadId, p) }
-                                }
-                                // Wait for the ATEM to finish ingesting the clip before keying, so
-                                // the key never fires over a half-processed clip. Best-effort: key
-                                // anyway if the device never reports ready within the timeout.
-                                AtemUploadStatus.startProcessing(uploadId)
-                                client.awaitClipReady(slot, frameCount) { p -> AtemUploadStatus.progress(uploadId, p) }
-                                if (keyOn) client.setKeyOnAir(useDsk, mixEffect, keyer, true)
-                            }
-                            AtemUploadStatus.complete(uploadId)
-                            kotlinx.coroutines.delay(800)
-                            AtemUploadStatus.clear(uploadId)
-                            // Wait for the clip to finish playing, then turn the key off automatically.
-                            // Mutex is released between the two use() calls so other operations can proceed.
-                            if (keyOn) {
-                                val clipDurationMs = (frameCount.toLong() * 1000L) / fps.toLong()
-                                kotlinx.coroutines.delay(clipDurationMs)
-                                AtemConnectionManager.use(atem.host, atem.port, needsState = false) { client ->
-                                    client.setKeyOnAir(useDsk, mixEffect, keyer, false)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            System.err.println("[CompanionServer] ATEM clip upload failed for '$name': ${e.message}")
-                            CrashReporter.reportWarning(
-                                "ATEM clip upload failed: $name",
-                                throwable = e,
-                                tags = mapOf("subsystem" to "atem")
-                            )
-                            AtemUploadStatus.fail(uploadId, e.message)
-                        }
-                    }
-                    val keyInfoClip = when {
-                        !keyOn -> ""
-                        useDsk -> ""","dsk":${keyer + 1}"""
-                        else -> ""","me":${mixEffect + 1},"key":${keyer + 1}"""
-                    }
-                    call.respondText(
-                        """{"status":"uploading","type":"clip","name":${jsonStr(name)},"slot":${slot + 1}$keyInfoClip}""",
-                        ContentType.Application.Json
-                    )
-                }
-
-                // POST /api/atem/key/on?me=E&key=M  — turn upstream key M on M/E E on air (standalone)
-                post("/api/atem/key/on") {
-                    if (!checkApiKey(call)) return@post
-                    handleKeyToggle(call, onAir = true)
-                }
-
-                // POST /api/atem/key/off?me=E&key=M  — turn upstream key M on M/E E off air (standalone)
-                post("/api/atem/key/off") {
-                    if (!checkApiKey(call)) return@post
-                    handleKeyToggle(call, onAir = false)
-                }
-
-                // ── Browser Source Endpoints (OBS/vMix overlay) ────────────────────
-
-    }
-
-    /** Routes for the OBS browser-source overlay page and its frame stream. */
-    private fun Route.browserSourceRoutes() {
-                get("${Constants.ENDPOINT_BROWSER_SOURCE}/{index}") {
-                    // Path segment is the 1-based number shown in Projection Settings
-                    // (e.g. "Browser Source 1" -> /browser-source/1); convert to the
-                    // 0-based array index for lookups.
-                    val displayIndex = call.parameters["index"]?.toIntOrNull()
-                    val index = displayIndex?.minus(1)
-                    val output = index?.let { browserSourceOutput(it) }
-                    if (displayIndex == null || output == null) {
-                        call.respond(HttpStatusCode.NotFound, "Unknown browser source output")
-                        return@get
-                    }
-                    if (!output.browserSourceEnabled) {
-                        call.respond(HttpStatusCode.NotFound, "Browser source output is disabled")
-                        return@get
-                    }
-                    if (!checkBrowserSourceApiKey(call, output)) return@get
-                    val bgOverride = call.request.queryParameters["bg"]
-                    // OBS/browsers cache this page aggressively and won't refetch it on their own
-                    // (OBS requires an explicit "Refresh cache of current page"). no-store ensures
-                    // a client always gets JS that matches this server's current wire protocol,
-                    // rather than silently running stale JS against a since-changed stream format.
-                    call.response.headers.append(HttpHeaders.CacheControl, "no-store")
-                    call.respondText(browserSourceOverlayPageHtml(displayIndex, output, bgOverride), ContentType.Text.Html)
-                }
-
-                // WebSocket delta stream of this output's off-screen-rendered content — see
-                // BrowserSourceVideoRenderer in main.kt. A frame is only pushed when its pixels
-                // actually changed since the previous tick, so a static slide costs one frame,
-                // not continuous encoding. Each message is usually just the changed sub-rectangle,
-                // not the full frame — see encodeBrowserSourceFrameMessage for the binary layout.
-                // The client composites deltas onto an offscreen full-frame canvas (see
-                // browserSourceOverlayPageHtml below). Previously HTTP multipart/x-mixed-replace;
-                // see the comment above _browserSourceFrameFlows for why that was replaced.
-                webSocket("/api${Constants.ENDPOINT_BROWSER_SOURCE}/{index}/ws") {
-                    // Same 1-based -> 0-based conversion as the overlay page route above, since
-                    // this URL is embedded inside that page using the same display index. A
-                    // WebSocket route is already past the handshake by the time this block runs,
-                    // so invalid requests are rejected via close(CloseReason(...)) rather than an
-                    // HTTP status code — the client reads the close reason to show a diagnostic.
-                    val displayIndex = call.parameters["index"]?.toIntOrNull()
-                    val index = displayIndex?.minus(1)
-                    val output = index?.let { browserSourceOutput(it) }
-                    if (displayIndex == null || output == null) {
-                        close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Unknown browser source output"))
-                        return@webSocket
-                    }
-                    if (!output.browserSourceEnabled) {
-                        close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Browser source output is disabled"))
-                        return@webSocket
-                    }
-                    if (!browserSourceApiKeyValid(call, output)) {
-                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid API key"))
-                        return@webSocket
-                    }
-                    val frames = _browserSourceFrameFlows[index]
-                    if (frames == null) {
-                        close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "Renderer not ready"))
-                        return@webSocket
-                    }
-                    // Track the session so registerBrowserSourceFrames can close it if this
-                    // output's renderer is replaced (the captured `frames` flow goes dead then).
-                    val sessions = _browserSourceSessions.computeIfAbsent(index) {
-                        ConcurrentHashMap.newKeySet()
-                    }
-                    sessions.add(this)
-                    // A frame is only ever emitted on a real content change, so a static slide
-                    // can leave this connection completely silent for minutes. Safari (and
-                    // plenty of consumer routers doing NAT connection tracking) have been
-                    // observed killing an idle streaming connection after roughly 30-60s of no
-                    // data. Re-sending the last known frame on a timer keeps it alive; the client
-                    // draws it identically to before since it's the exact same bytes/rect.
-                    // Sends are Mutex-serialized: the frame collector and the heartbeat run in
-                    // separate coroutines, and a WebSocket session does not allow concurrent send.
-                    val lastFrame = AtomicReference<BrowserSourceFrame?>(null)
-                    val sendMutex = Mutex()
-                    suspend fun sendFrame(frame: BrowserSourceFrame) {
-                        sendMutex.withLock {
-                            send(Frame.Binary(true, encodeBrowserSourceFrameMessage(frame)))
-                        }
-                    }
-                    // Launched in the session scope (not the server scope) so they can never
-                    // outlive this connection; the finally-cancel below is belt-and-braces.
-                    val frameJob = launch {
-                        frames.collect { frame ->
-                            lastFrame.set(frame)
-                            sendFrame(frame)
-                        }
-                    }
-                    val heartbeatJob = launch {
-                        while (true) {
-                            delay(15_000)
-                            lastFrame.get()?.let { sendFrame(it) }
-                        }
-                    }
-                    try {
-                        for (frame in incoming) {
-                            // One-way server push — inbound frames (pings/pongs aside, handled by
-                            // the engine) aren't meaningful here; just keep the session open until
-                            // the client disconnects.
-                        }
-                    } catch (_: Exception) {
-                        // client disconnected
-                    } finally {
-                        sessions.remove(this)
-                        frameJob.cancel()
-                        heartbeatJob.cancel()
-                    }
-                }
-
-                // ── Q&A Endpoints ─────────────────────────────────────────────────
-
-                // Public: submission page
-    }
-
-    /** Routes for the Q&A submission, voting and moderation endpoints. */
-    private fun Route.qaRoutes() {
-                get("/qa") {
-                    call.respondText(qaSubmissionPageHtml(), ContentType.Text.Html)
-                }
-
-                // Public: admin page
-                get("/qa/admin") {
-                    call.respondText(qaAdminPageHtml(), ContentType.Text.Html)
-                }
-
-                // Public: session status
-                get("/api/qa/status") {
-                    val qa = qaManager
-                    call.respondText(
-                        """{"sessionActive":${qa?.sessionActive ?: false},"cooldownSeconds":$qaCooldownSeconds,"displayedQuestionId":"${qa?.displayedQuestion?.id ?: ""}","votingEnabled":$qaVotingEnabled}""",
-                        ContentType.Application.Json
-                    )
-                }
-
-                // Public: submit a question (no API key)
-                post("/api/qa/submit") {
-                    val qa = qaManager
-                    if (qa == null || !qa.sessionActive) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"Q&A session is not active"}""")
-                        return@post
-                    }
-                    val body = call.receiveText()
-                    val request = try {
-                        json.decodeFromString(SubmitQuestionRequest.serializer(), body)
-                    } catch (_: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request"}""")
-                        return@post
-                    }
-                    if (request.text.isBlank()) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"question text is required"}""")
-                        return@post
-                    }
-                    val clientIp = call.request.headers["CF-Connecting-IP"]
-                        ?: call.request.headers["X-Forwarded-For"]?.split(",")?.first()?.trim()
-                        ?: call.request.local.remoteAddress
-                    val deviceId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val question = qa.submitQuestion(request.text, request.name, clientIp, qaCooldownSeconds, deviceId)
-                    if (question != null) {
-                        call.respondText(
-                            json.encodeToString(QuestionDto.serializer(), question.toDto()),
-                            ContentType.Application.Json
-                        )
-                    } else {
-                        if (qa.isRateLimited(clientIp, qaCooldownSeconds)) {
-                            call.respond(HttpStatusCode.TooManyRequests, """{"error":"Too many questions. Please wait a moment."}""")
-                        } else {
-                            call.respond(HttpStatusCode.Forbidden, """{"error":"submission failed"}""")
-                        }
-                    }
-                }
-
-                // Public: voting page
-                get("/qa/vote") {
-                    call.respondText(qaVotingPageHtml(), ContentType.Text.Html)
-                }
-
-                // Public: list approved questions (for voting)
-                get("/api/qa/approved") {
-                    if (!qaVotingEnabled) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"Voting is not enabled"}""")
-                        return@get
-                    }
-                    val qa = qaManager
-                    if (qa == null || !qa.sessionActive) {
-                        call.respondText("[]", ContentType.Application.Json)
-                        return@get
-                    }
-                    val approved = qa.getApprovedQuestions()
-                    val clientIp = call.request.headers["CF-Connecting-IP"]
-                        ?: call.request.headers["X-Forwarded-For"]?.split(",")?.first()?.trim()
-                        ?: call.request.local.remoteAddress
-                    val dtos = approved.map {
-                        val dto = it.toDto()
-                        val textEsc = dto.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
-                        val nameEsc = dto.submitterName.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
-                        val voteDir = qa.getVoteDirection(it.id, clientIp)
-                        val votedStr = if (voteDir != null) "\"$voteDir\"" else "null"
-                        """{"id":"${dto.id}","text":"$textEsc","voteCount":${dto.voteCount},"voted":$votedStr}"""
-                    }
-                    call.respondText("[${dtos.joinToString(",")}]", ContentType.Application.Json)
-                }
-
-                // Public: vote for a question
-                post("/api/qa/vote") {
-                    if (!qaVotingEnabled) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"Voting is not enabled"}""")
-                        return@post
-                    }
-                    val qa = qaManager
-                    if (qa == null || !qa.sessionActive) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"Q&A session is not active"}""")
-                        return@post
-                    }
-                    val body = call.receiveText()
-                    val request = try {
-                        json.decodeFromString(VoteRequest.serializer(), body)
-                    } catch (_: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request"}""")
-                        return@post
-                    }
-                    val question = qa.findQuestion(request.questionId)
-                    if (question == null) {
-                        call.respond(HttpStatusCode.NotFound, """{"error":"question not found"}""")
-                        return@post
-                    }
-                    if (question.status != QuestionStatus.APPROVED) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"question is not available for voting"}""")
-                        return@post
-                    }
-                    val clientIp = call.request.headers["CF-Connecting-IP"]
-                        ?: call.request.headers["X-Forwarded-For"]?.split(",")?.first()?.trim()
-                        ?: call.request.local.remoteAddress
-                    val direction = if (request.direction == "down") "down" else "up"
-                    qa.voteForQuestion(request.questionId, clientIp, direction)
-                    val currentDir = qa.getVoteDirection(request.questionId, clientIp)
-                    val voted = if (currentDir != null) "\"$currentDir\"" else "null"
-                    call.respondText("""{"ok":true,"voted":$voted}""", ContentType.Application.Json)
-                }
-
-                // Admin: check password
-                post("/api/qa/auth") {
-                    if (!checkQaAdmin(call)) return@post
-                    if (!checkQaAdminConnect(call)) return@post
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                // Admin: list questions
-                get("/api/qa/questions") {
-                    if (!checkQaAdmin(call)) return@get
-                    val qa = qaManager ?: run {
-                        call.respondText("[]", ContentType.Application.Json)
-                        return@get
-                    }
-                    val statusFilter = call.request.queryParameters["status"]
-                    val filtered = if (statusFilter != null) {
-                        val s = try { QuestionStatus.valueOf(statusFilter.uppercase()) } catch (_: Exception) { null }
-                        if (s != null) qa.questions.filter { it.status == s } else qa.questions
-                    } else qa.questions
-                    val dtos = filtered.map { it.toDto() }
-                    call.respondText(
-                        json.encodeToString(ListSerializer(QuestionDto.serializer()), dtos),
-                        ContentType.Application.Json
-                    )
-                }
-
-                // Admin: approve question
-                post("/api/qa/questions/{id}/approve") {
-                    if (!checkQaAdmin(call)) return@post
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@post
-                    }
-                    val question = qaManager?.findQuestion(id)
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(action = "approve", questionId = id, text = question?.text ?: "", clientId = clientId)
-                    onQAAdminRequest.emit(pending)
-                    if (!pending.decision.await()) { call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}"""); return@post }
-                    val ok = qaManager?.approveQuestion(id) ?: false
-                    if (ok) call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    else call.respond(HttpStatusCode.NotFound, """{"error":"question not found"}""")
-                }
-
-                // Admin: edit question text
-                post("/api/qa/questions/{id}/edit") {
-                    if (!checkQaAdmin(call)) return@post
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@post
-                    }
-                    val body = call.receiveText()
-                    val request = try {
-                        json.decodeFromString(SubmitQuestionRequest.serializer(), body)
-                    } catch (_: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(
-                        action = "edit",
-                        questionId = id,
-                        text = request.text,
-                        clientId = clientId
-                    )
-                    onQAAdminRequest.emit(pending)
-                    val allowed = pending.decision.await()
-                    if (!allowed) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}""")
-                        return@post
-                    }
-                    val ok = qaManager?.editQuestion(id, request.text) ?: false
-                    if (ok) call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    else call.respond(HttpStatusCode.NotFound, """{"error":"question not found"}""")
-                }
-
-                // Admin: deny question
-                post("/api/qa/questions/{id}/deny") {
-                    if (!checkQaAdmin(call)) return@post
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@post
-                    }
-                    val question = qaManager?.findQuestion(id)
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(action = "deny", questionId = id, text = question?.text ?: "", clientId = clientId)
-                    onQAAdminRequest.emit(pending)
-                    if (!pending.decision.await()) { call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}"""); return@post }
-                    val ok = qaManager?.denyQuestion(id) ?: false
-                    if (ok) {
-                        if (qaManager?.displayedQuestion == null) scope.launch { onQADisplay.emit(null) }
-                        call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    }
-                    else call.respond(HttpStatusCode.NotFound, """{"error":"question not found"}""")
-                }
-
-                // Admin: mark question as done
-                post("/api/qa/questions/{id}/done") {
-                    if (!checkQaAdmin(call)) return@post
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@post
-                    }
-                    val question = qaManager?.findQuestion(id)
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(action = "done", questionId = id, text = question?.text ?: "", clientId = clientId)
-                    onQAAdminRequest.emit(pending)
-                    if (!pending.decision.await()) { call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}"""); return@post }
-                    val ok = qaManager?.markDone(id) ?: false
-                    if (ok) {
-                        if (qaManager?.displayedQuestion == null) scope.launch { onQADisplay.emit(null) }
-                        call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    }
-                    else call.respond(HttpStatusCode.NotFound, """{"error":"question not found"}""")
-                }
-
-                // Admin: display question on projection
-                post("/api/qa/questions/{id}/display") {
-                    if (!checkQaAdmin(call)) return@post
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@post
-                    }
-                    val question = qaManager?.findQuestion(id)
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(action = "display", questionId = id, text = question?.text ?: "", clientId = clientId)
-                    onQAAdminRequest.emit(pending)
-                    if (!pending.decision.await()) { call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}"""); return@post }
-                    val qa = qaManager
-                    val ok = qa?.displayQuestion(id) ?: false
-                    if (ok) {
-                        scope.launch { onQADisplay.emit(qa.displayedQuestion) }
-                        call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    }
-                    else call.respond(HttpStatusCode.NotFound, """{"error":"question not found or not approved"}""")
-                }
-
-                // Admin: delete question
-                delete("/api/qa/questions/{id}") {
-                    if (!checkQaAdmin(call)) return@delete
-                    val id = call.parameters["id"] ?: run {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"missing id"}""")
-                        return@delete
-                    }
-                    val question = qaManager?.findQuestion(id)
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(
-                        action = "delete",
-                        questionId = id,
-                        text = question?.text ?: "",
-                        clientId = clientId
-                    )
-                    onQAAdminRequest.emit(pending)
-                    val allowed = pending.decision.await()
-                    if (!allowed) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}""")
-                        return@delete
-                    }
-                    val ok = qaManager?.deleteQuestion(id) ?: false
-                    if (ok) call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                    else call.respond(HttpStatusCode.NotFound, """{"error":"question not found"}""")
-                }
-
-                // Admin: add question (admin-created)
-                post("/api/qa/add") {
-                    if (!checkQaAdmin(call)) return@post
-                    val body = call.receiveText()
-                    val request = try {
-                        json.decodeFromString(SubmitQuestionRequest.serializer(), body)
-                    } catch (_: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"invalid request"}""")
-                        return@post
-                    }
-                    val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
-                    val pending = PendingQAAdminRequest(
-                        action = "add",
-                        text = request.text,
-                        clientId = clientId
-                    )
-                    onQAAdminRequest.emit(pending)
-                    val allowed = pending.decision.await()
-                    if (!allowed) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"denied by operator"}""")
-                        return@post
-                    }
-                    val question = qaManager?.addQuestion(request.text)
-                    if (question != null) {
-                        call.respondText(
-                            json.encodeToString(QuestionDto.serializer(), question.toDto()),
-                            ContentType.Application.Json
-                        )
-                    } else {
-                        call.respond(HttpStatusCode.BadRequest, """{"error":"failed to add question"}""")
-                    }
-                }
-
-                // Admin: clear display
-                post("/api/qa/clear-display") {
-                    if (!checkQaAdmin(call)) return@post
-                    val clientId = call.request.headers["X-Device-Id"] ?: ""
-                    val pending = PendingQAAdminRequest(action = "clear-display", clientId = clientId)
-                    onQAAdminRequest.emit(pending)
-                    if (!pending.decision.await()) {
-                        call.respond(HttpStatusCode.Forbidden, """{"error":"denied"}""")
-                        return@post
-                    }
-                    qaManager?.clearDisplay()
-                    scope.launch { onQADisplay.emit(null) }
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-
-                // Admin: clear all questions
-                post("/api/qa/clear-all") {
-                    if (!checkQaAdmin(call)) return@post
-                    qaManager?.clearAll()
-                    call.respondText("""{"ok":true}""", ContentType.Application.Json)
-                }
-    }
 
     fun stop() {
         tunnelManager.stop()
@@ -4472,12 +1062,16 @@ class CompanionServer {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    //
+    // Several of these are `internal` rather than private because the route groups now live in
+    // their own files (ScheduleRoutes.kt, QaRoutes.kt, …) and call back into them. Immutable state
+    // is handed to those groups as parameters instead, so only behaviour is widened, not data.
 
     /**
      * Try to parse a [ScheduleItem] from raw JSON using the flat [RemoteItemRequest] format first,
      * then fall back to the legacy sealed-class [AddToScheduleRequest] format.
      */
-    private fun parseRemoteItem(body: String): ScheduleItem? {
+    internal fun parseRemoteItem(body: String): ScheduleItem? {
         // 1. Try flat format: {"item":{"songNumber":42,"title":"…","songbook":"…"}}
         try {
             val req = json.decodeFromString(RemoteItemRequest.serializer(), body)
@@ -4485,7 +1079,7 @@ class CompanionServer {
             // Handle picture identified by folder-id (companion app format).
             // folderPath is null in this case — resolve via the cached catalog.
             if (dto.folderId != null && dto.folderPath == null) {
-                val catalog = _pictureCatalogs[dto.folderId]
+                val catalog = pictures.catalogs[dto.folderId]
                 if (catalog != null) {
                     val safeId = dto.id.ifBlank { java.util.UUID.randomUUID().toString() }
                     return ScheduleItem.PictureItem(
@@ -4497,13 +1091,13 @@ class CompanionServer {
                 }
             }
             // Handle presentation identified by id/fileHash (companion app format).
-            // filePath is not sent — resolve via _presentationFilePaths (populated by
+            // filePath is not sent — resolve via presentations._presentationFilePaths (populated by
             // updatePresentation and updateSchedule) then fall back to _schedule scan.
             // NOTE: mobile may omit the "type" field when it equals the default ("presentation"),
-            // so also accept type==null as long as the id resolves in _presentationFilePaths.
+            // so also accept type==null as long as the id resolves in presentations._presentationFilePaths.
             if (dto.filePath == null && dto.folderId == null && dto.id.isNotBlank() &&
                 (dto.type == "presentation" || dto.type == null)) {
-                val filePath = _presentationFilePaths[dto.id]
+                val filePath = presentations._presentationFilePaths[dto.id]
                     ?: _schedule.value.firstOrNull { s ->
                         s.type == "presentation" && (
                             s.id == dto.id ||
@@ -4511,7 +1105,7 @@ class CompanionServer {
                         )
                     }?.filePath
                 if (filePath != null) {
-                    val catalog = _presentationCatalogs[dto.id]
+                    val catalog = presentations._presentationCatalogs[dto.id]
                     return ScheduleItem.PresentationItem(
                         id         = java.util.UUID.randomUUID().toString(),
                         filePath   = filePath,
@@ -4535,31 +1129,7 @@ class CompanionServer {
         return null
     }
 
-    private fun jsonEscape(s: String): String = buildString {
-        for (c in s) {
-            when {
-                c == '\\' -> append("\\\\")
-                c == '"' -> append("\\\"")
-                c == '\n' -> append("\\n")
-                c == '\r' -> append("\\r")
-                c == '\t' -> append("\\t")
-                c.code < 0x20 -> append("\\u%04x".format(c.code))
-                else -> append(c)
-            }
-        }
-    }
-
-    private fun contentTypeForExtension(ext: String): ContentType = when (ext.lowercase()) {
-        "jpg", "jpeg" -> ContentType.Image.JPEG
-        "png"         -> ContentType.Image.PNG
-        "gif"         -> ContentType.Image.GIF
-        "webp"        -> ContentType.parse("image/webp")
-        "bmp"         -> ContentType.parse("image/bmp")
-        "heic", "heif"-> ContentType.parse("image/heic")
-        else          -> ContentType.Image.JPEG
-    }
-
-    private suspend fun checkApiKey(call: ApplicationCall): Boolean {
+    internal suspend fun checkApiKey(call: ApplicationCall): Boolean {
         if (!_apiKeyEnabled.value || _apiKey.value.isEmpty()) return true
         val provided = call.request.headers[Constants.HEADER_API_KEY]
             ?: call.request.queryParameters[Constants.QUERY_PARAM_API_KEY]
@@ -4572,7 +1142,7 @@ class CompanionServer {
         }
     }
 
-    private suspend fun checkPresentationRemoteAuth(call: ApplicationCall): Boolean {
+    internal suspend fun checkPresentationRemoteAuth(call: ApplicationCall): Boolean {
         if (!presentationRemoteEnabled) {
             call.respond(HttpStatusCode.Forbidden, """{"error":"remote control is disabled"}""")
             return false
@@ -4595,7 +1165,7 @@ class CompanionServer {
      * Only called from the initial /auth handshake — not on every subsequent action —
      * so an approved or session-approved device is never re-prompted mid-session.
      */
-    private suspend fun checkPresentationRemoteConnect(call: ApplicationCall): Boolean {
+    internal suspend fun checkPresentationRemoteConnect(call: ApplicationCall): Boolean {
         val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
         val pending = PendingConnectionRequest(clientId)
         onPresentationRemoteConnect.emit(pending)
@@ -4606,7 +1176,7 @@ class CompanionServer {
         return approved
     }
 
-    private suspend fun handlePresentationFileUpload(call: ApplicationCall) {
+    internal suspend fun handlePresentationFileUpload(call: ApplicationCall) {
         try {
             val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
             if (contentLength > 200 * 1024 * 1024) {
@@ -4642,12 +1212,12 @@ class CompanionServer {
             val file = File(uploadDir, uniqueName)
             file.writeBytes(fileBytes)
             val id = file.absolutePath.hashCode().toUInt().toString(16)
-            _lastDeviceUploadedPresentationId?.let { oldId ->
-                _presentationCatalogs.remove(oldId)
-                _slideBytes.remove(oldId)
-                _presentationFilePaths.remove(oldId)
+            presentations._lastDeviceUploadedPresentationId?.let { oldId ->
+                presentations._presentationCatalogs.remove(oldId)
+                presentations._slideBytes.remove(oldId)
+                presentations._presentationFilePaths.remove(oldId)
             }
-            _lastDeviceUploadedPresentationId = id
+            presentations._lastDeviceUploadedPresentationId = id
             val uploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
             scope.launch { onPresentationUploaded.emit(file) }
             scope.launch { onInstantAction.emit(RemoteInstantAction(
@@ -4665,7 +1235,8 @@ class CompanionServer {
         }
     }
 
-    private suspend fun checkQaAdmin(call: ApplicationCall): Boolean {
+    /** `internal` rather than private so the extracted [qaRoutes] group can call it. */
+    internal suspend fun checkQaAdmin(call: ApplicationCall): Boolean {
         val pw = qaAdminPassword
         if (pw.isEmpty()) return true
         val provided = call.request.headers["X-QA-Password"]
@@ -4685,7 +1256,8 @@ class CompanionServer {
      * Only called from the initial /api/qa/auth handshake — not on every subsequent action —
      * so an approved or session-approved device is never re-prompted mid-session.
      */
-    private suspend fun checkQaAdminConnect(call: ApplicationCall): Boolean {
+    /** `internal` rather than private so the extracted [qaRoutes] group can call it. */
+    internal suspend fun checkQaAdminConnect(call: ApplicationCall): Boolean {
         val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
         val pending = PendingConnectionRequest(clientId)
         onQaAdminConnect.emit(pending)
@@ -4697,7 +1269,7 @@ class CompanionServer {
     }
 
 
-    private fun broadcast(msg: WebSocketMessage) {
+    internal fun broadcast(msg: WebSocketMessage) {
         InstanceLinkLogger.log(InstanceLinkLogSide.PRIMARY, "broadcast", mapOf("type" to msg.type))
         scope.launch {
             broadcastChannel.emit(json.encodeToString(WebSocketMessage.serializer(), msg))
@@ -4707,7 +1279,7 @@ class CompanionServer {
     /** Logs one REST hit on an Instance-Link-relevant endpoint — success and failure alike, so the
      *  primary's own log shows exactly what it served without needing to infer it from a follower's
      *  fetch_result. [status] is the HTTP status code actually sent. */
-    private fun logRest(endpoint: String, status: Int, reason: String? = null) {
+    internal fun logRest(endpoint: String, status: Int, reason: String? = null) {
         InstanceLinkLogger.log(
             InstanceLinkLogSide.PRIMARY, "rest_request",
             mapOf("endpoint" to endpoint, "status" to status, "reason" to reason)
@@ -4724,243 +1296,6 @@ class CompanionServer {
         broadcast(WebSocketMessage(type = Constants.WS_EVENT_SONG_SECTION_SELECTED, payload = sectionIndex.toString()))
     }
 
-    /**
-     * Returns the best local IPv4 address for display in the Server URL.
-     *
-     * Preference order (most-stable first):
-     *   1. Wired Ethernet  — eth*, en0 (macOS primary)
-     *   2. Other en* interfaces (macOS: en1 = WiFi, etc.)
-     *   3. wlan* / wifi*
-     *   4. Everything else (non-loopback, non-virtual, non-VPN)
-     *
-     * Configure a static IP or use [start]'s hostOverride parameter to bypass
-     * this entirely and always display a fixed address.
-     */
-    private fun localIpAddress(): String {
-        return try {
-            NetworkInterface.getNetworkInterfaces().asSequence()
-                .filter { iface -> iface.isUp && !iface.isLoopback && !iface.isVirtual }
-                .sortedWith(compareBy { iface ->
-                    val name = iface.name.lowercase()
-                    when {
-                        name.startsWith("eth")  -> 0   // Linux wired
-                        name == "en0"           -> 1   // macOS primary (usually wired on desktops)
-                        name.startsWith("en")   -> 2   // macOS secondary (WiFi is typically en1+)
-                        name.startsWith("wlan") -> 3   // Linux WiFi
-                        name.startsWith("wifi") -> 3
-                        else                    -> 10  // VPNs, bridges, docker, etc.
-                    }
-                })
-                .flatMap { iface -> iface.inetAddresses.asSequence() }
-                .firstOrNull { addr -> !addr.isLoopbackAddress && addr.hostAddress.contains('.') }
-                ?.hostAddress ?: "localhost"
-        } catch (_: Exception) {
-            "localhost"
-        }
-    }
 
-    // ── Q&A HTML Pages ────────────────────────────────────────────────────────
-
-    /**
-     * Self-contained HTML page for an OBS/vMix Browser Source input. The actual content is
-     * rendered off-screen in main.kt (BrowserSourceVideoRenderer,
-     * using the same BiblePresenter/SongPresenter/AnnouncementsPresenter/PicturePresenter/
-     * StageMonitorScreen composables as everywhere else) and streamed as binary-framed PNG
-     * deltas over a WebSocket — so styling is pixel-identical to the native output by
-     * construction, not reimplemented in CSS/JS. WebSocket was chosen after HTTP
-     * multipart/x-mixed-replace proved unreliable in both directions: Chromium's `<img>` support
-     * for that MIME type is legacy/inconsistent (historically JPEG-only), and Safari's
-     * `fetch()`/`ReadableStream` failed outright with "TypeError: Load failed" for this exact
-     * indefinitely-long streaming response pattern — reproduced even on localhost, so it wasn't
-     * a network issue. WebSocket message boundaries are handled natively by the browser, so
-     * there's no manual buffer/boundary parsing on either side anymore. Each delta is usually
-     * just the sub-rectangle that changed (not the full frame), composited onto a persistent
-     * offscreen canvas at the stream's native resolution; that offscreen canvas is what's
-     * actually drawn, scaled+centered, into the visible window-sized `<canvas>`. Served with
-     * `Cache-Control: no-store` since OBS/browsers cache a Browser Source page aggressively and
-     * otherwise won't refetch it after this wire protocol changes — a stale cached copy of this
-     * page's JS would silently misinterpret messages from a newer server. If this protocol
-     * changes again, any already-open OBS Browser Source still needs a manual "Refresh cache of
-     * current page" (OBS won't do this on its own even with no-store, since it doesn't re-request
-     * an already loaded page) — no-store only guarantees a *fresh* page load gets current JS.
-     */
-    private fun browserSourceOverlayPageHtml(index: Int, output: ScreenAssignment, bgOverride: String? = null): String {
-        val needsKey = output.browserSourceApiKeyRequired || (_apiKeyEnabled.value && _apiKey.value.isNotEmpty())
-        val keyParam = if (needsKey) "?${Constants.QUERY_PARAM_API_KEY}=" + java.net.URLEncoder.encode(_apiKey.value, "UTF-8") else ""
-        // ?bg= is a per-request debug override (e.g. for viewing outside OBS, where a page
-        // background left transparent just renders as opaque white in a plain browser tab) —
-        // it's purely a page-preview convenience, unrelated to whether the rendered frame itself
-        // has a background (that's screenAssignment.showFullscreenBackground/showLowerThirdBackground,
-        // read by BrowserSourceVideoRenderer, same fields native output uses).
-        val bodyBg = when (bgOverride?.lowercase()) {
-            "black" -> "#000"
-            else -> "transparent"
-        }
-        val wsPath = "/api${Constants.ENDPOINT_BROWSER_SOURCE}/$index/ws$keyParam"
-        return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>ChurchPresenter Browser Source</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;height:100%;background:$bodyBg;overflow:hidden}
-#stage{position:fixed;inset:0}
-#frame{width:100%;height:100%;display:block}
-#diag{position:fixed;bottom:8px;left:8px;max-width:90%;padding:6px 10px;
-  background:rgba(200,0,0,0.85);color:#fff;font:12px/1.4 monospace;
-  border-radius:4px;display:none;z-index:9999;white-space:pre-wrap}
-</style>
-</head>
-<body>
-<div id="stage"><canvas id="frame"></canvas></div>
-<div id="diag"></div>
-<script>
-const wsUrl=(location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'$wsPath';
-const canvas=document.getElementById('frame');
-const ctx=canvas.getContext('2d');
-
-// Surfaces failures directly on the page instead of only in devtools — this page is normally
-// only ever looked at through OBS/vMix's embedded browser, where nobody opens a console, so a
-// silently-swallowed error here previously meant "shows nothing" with zero way to diagnose why.
-const diagEl=document.getElementById('diag');
-function showDiag(msg){
-  if(!diagEl)return;
-  diagEl.textContent=msg;
-  diagEl.style.display='block';
 }
-function clearDiag(){
-  if(diagEl)diagEl.style.display='none';
-}
-if(typeof OffscreenCanvas==='undefined'){
-  showDiag('Browser Source error: this browser/OBS version does not support OffscreenCanvas. Update your browser or OBS.');
-}
-
-// The offscreen canvas is the authoritative "current full frame" at the stream's native
-// resolution. Incoming deltas (full-frame or a changed sub-rectangle) are composited onto it;
-// the visible, window-sized canvas is then repainted scaled+centered from it. This is also why
-// a window resize with no new delta doesn't go blank — resizeCanvas() just repaints from the
-// same offscreen content at the new size.
-let offscreen=null, offscreenCtx=null, hasFullFrame=false;
-
-function paintBitmap(){
-  if(!offscreen)return;
-  const scale=Math.min(canvas.width/offscreen.width, canvas.height/offscreen.height);
-  const w=offscreen.width*scale, h=offscreen.height*scale;
-  const x=(canvas.width-w)/2, y=(canvas.height-h)/2;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.drawImage(offscreen,x,y,w,h);
-}
-function resizeCanvas(){
-  canvas.width=window.innerWidth;
-  canvas.height=window.innerHeight;
-  paintBitmap();
-}
-window.addEventListener('resize',resizeCanvas);
-resizeCanvas();
-
-async function drawFrame(pngBytes,rx,ry,rw,rh,fullW,fullH){
-  const isFullFrame = rx===0 && ry===0 && rw===fullW && rh===fullH;
-  // A newly-connected/reconnected client has nothing to apply a partial rect onto yet — discard
-  // any delta until the first full frame arrives, so it never shows a corrupt/torn draw.
-  if(!hasFullFrame && !isFullFrame)return;
-  try{
-    // Payload is PNG (transparency) or JPEG (fully opaque frames) — sniff the first byte.
-    const mime = pngBytes[0]===0xFF ? 'image/jpeg' : 'image/png';
-    const blob=new Blob([pngBytes],{type:mime});
-    const bitmap=await createImageBitmap(blob);
-    if(isFullFrame){
-      if(!offscreen || offscreen.width!==fullW || offscreen.height!==fullH){
-        offscreen=new OffscreenCanvas(fullW,fullH);
-        offscreenCtx=offscreen.getContext('2d');
-      }
-      offscreenCtx.clearRect(0,0,fullW,fullH);
-      offscreenCtx.drawImage(bitmap,0,0);
-      hasFullFrame=true;
-    }else{
-      // Replace, don't blend: frames carry real alpha, and source-over compositing a delta
-      // whose pixels became MORE transparent (e.g. a fade-out) would ghost over stale pixels.
-      offscreenCtx.clearRect(rx,ry,rw,rh);
-      offscreenCtx.drawImage(bitmap,rx,ry);
-    }
-    bitmap.close();
-    paintBitmap();
-    clearDiag();
-  }catch(e){
-    console.error('[BrowserSource] drawFrame failed',e);
-    showDiag('Browser Source error (rendering frame): '+e);
-  }
-}
-// Each WebSocket message is exactly one frame delta — a fixed 24-byte big-endian header (six
-// Int32s: x, y, rectWidth, rectHeight, fullWidth, fullHeight) followed by the raw PNG bytes. No
-// manual buffer/boundary parsing needed: the browser's WebSocket implementation already delivers
-// complete messages, unlike the old fetch()+ReadableStream+multipart approach this replaced.
-// drawFrame is async (createImageBitmap) — during a burst of large frames (e.g. a full-screen
-// crossfade) decode+draw can take longer than the ~33ms tick interval frames arrive at. Chaining
-// every message unconditionally would grow an ever-longer backlog and make the display fall
-// further and further behind real time. Instead, coalesce to the latest: if a new message arrives
-// while one is still being processed, only the newest is kept — any skipped intermediate partial
-// delta leaves the offscreen canvas briefly wrong in that region, but the server's periodic
-// full-frame reseed (~every 5s, see FULL_FRAME_RESEED_MS in BrowserSourceVideoRenderer.kt)
-// self-heals that within a bounded window, which is a better trade than unbounded latency growth.
-let isProcessingFrame=false;
-let pendingFrame=null;
-async function processPendingFrame(){
-  if(isProcessingFrame)return;
-  const frame=pendingFrame;
-  if(!frame)return;
-  pendingFrame=null;
-  isProcessingFrame=true;
-  await drawFrame(frame.pngBytes,frame.x,frame.y,frame.w,frame.h,frame.fullW,frame.fullH);
-  isProcessingFrame=false;
-  if(pendingFrame)processPendingFrame();
-}
-function onSocketMessage(event){
-  const buf=event.data;
-  const view=new DataView(buf);
-  const x=view.getInt32(0);
-  const y=view.getInt32(4);
-  const w=view.getInt32(8);
-  const h=view.getInt32(12);
-  const fullW=view.getInt32(16);
-  const fullH=view.getInt32(20);
-  const pngBytes=new Uint8Array(buf,24);
-  pendingFrame={pngBytes,x,y,w,h,fullW,fullH};
-  processPendingFrame();
-}
-function connect(){
-  // A fresh connection may follow a stale/dropped one — never composite a partial delta onto
-  // whatever the offscreen canvas last held until this connection's own full frame arrives.
-  hasFullFrame=false;
-  const ws=new WebSocket(wsUrl);
-  ws.binaryType='arraybuffer';
-  ws.onmessage=onSocketMessage;
-  ws.onopen=()=>clearDiag();
-  ws.onerror=(e)=>{
-    console.error('[BrowserSource] websocket error',e);
-  };
-  ws.onclose=(event)=>{
-    // A disabled/unknown output or bad API key closes with an explicit reason (see the
-    // /ws route in CompanionServer.kt) — surface it directly instead of silently retrying
-    // forever with no clue why nothing is showing up.
-    if(event.reason){
-      showDiag('Browser Source error: '+event.reason);
-    }else if(!event.wasClean){
-      showDiag('Browser Source error: connection lost, retrying...');
-    }
-    setTimeout(connect,2000);
-  };
-}
-connect();
-</script>
-</body>
-</html>
-""".trimIndent()
-    }
-
-    /** Shared CSS injected into every Q&A page: semantic color tokens + screen-reader-only utility. */
-}
-
-// ── Extension mappers ─────────────────────────────────────────────────────────
 

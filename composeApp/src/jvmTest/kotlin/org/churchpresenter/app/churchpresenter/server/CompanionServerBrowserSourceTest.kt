@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
  * no OBS/Chromium/ATEM needed: the route only needs a [ScreenAssignment] to exist at that index.
  *
  * The WebSocket delta stream and its binary frame encoding are separate concerns: no fake browser
- * renders anything here, so only [CompanionServer.encodeBrowserSourceFrameMessage]'s own header
+ * renders anything here, so only [BrowserSourceHub.encodeBrowserSourceFrameMessage]'s own header
  * packing (widened to `internal`) is pinned directly, byte for byte.
  */
 class CompanionServerBrowserSourceTest {
@@ -131,7 +131,7 @@ class CompanionServerBrowserSourceTest {
     @Test
     fun `encodeBrowserSourceFrameMessage packs a 24-byte big-endian header followed by the raw PNG bytes`() {
         val frame = BrowserSourceFrame(x = 10, y = 20, rectWidth = 30, rectHeight = 40, fullWidth = 1920, fullHeight = 1080, png = byteArrayOf(1, 2, 3))
-        val encoded = server.encodeBrowserSourceFrameMessage(frame)
+        val encoded = server.browserSource.encodeBrowserSourceFrameMessage(frame)
 
         assertEquals(24 + 3, encoded.size)
         val buf = ByteBuffer.wrap(encoded)
@@ -149,7 +149,7 @@ class CompanionServerBrowserSourceTest {
     @Test
     fun `encodeBrowserSourceFrameMessage with an empty PNG payload is just the header`() {
         val frame = BrowserSourceFrame(0, 0, 0, 0, 0, 0, png = ByteArray(0))
-        assertEquals(24, server.encodeBrowserSourceFrameMessage(frame).size)
+        assertEquals(24, server.browserSource.encodeBrowserSourceFrameMessage(frame).size)
     }
 
     // ── WebSocket delta stream ───────────────────────────────────────────────
@@ -200,7 +200,7 @@ class CompanionServerBrowserSourceTest {
         val frames = MutableSharedFlow<BrowserSourceFrame>(extraBufferCapacity = 4)
         server.registerBrowserSourceFrames(0, frames)
         val frame = BrowserSourceFrame(x = 1, y = 2, rectWidth = 3, rectHeight = 4, fullWidth = 5, fullHeight = 6, png = byteArrayOf(9, 8, 7))
-        val expected = server.encodeBrowserSourceFrameMessage(frame)
+        val expected = server.browserSource.encodeBrowserSourceFrameMessage(frame)
 
         var received: Frame? = null
         withTimeoutOrNull(10_000) {
