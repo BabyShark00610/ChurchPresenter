@@ -169,6 +169,33 @@ class BibleViewModelNavigationTest {
     }
 
     @Test
+    fun `a canonical reference can be scheduled without moving the selection`() {
+        val book = vm.selectedBookIndex.value
+        val chapter = vm.selectedChapter.value
+        val verse = vm.selectedVerseIndex.value
+
+        val added = mutableListOf<String>()
+        assertTrue(
+            vm.addCanonicalRefToSchedule(43, 3, 16) { name, ch, num, text, range, id ->
+                added += "$name $ch:$num|$text|$range|$id"
+            }
+        )
+
+        assertEquals(listOf("John 3:16|John three verse 16 text about light and truth.||43"), added)
+        assertEquals(book, vm.selectedBookIndex.value, "queueing is not navigating")
+        assertEquals(chapter, vm.selectedChapter.value)
+        assertEquals(verse, vm.selectedVerseIndex.value)
+    }
+
+    @Test
+    fun `scheduling a reference this module lacks reports failure and adds nothing`() {
+        val added = mutableListOf<String>()
+        assertFalse(vm.addCanonicalRefToSchedule(35, 3, 2) { _, _, _, _, _, _ -> added += "x" })
+        assertFalse(vm.addCanonicalRefToSchedule(43, 3, 999) { _, _, _, _, _, _ -> added += "x" })
+        assertTrue(added.isEmpty())
+    }
+
+    @Test
     fun `verse matching distinguishes 3 from 13 and 23`() {
         // The reason the implementation matches on "N. " with a trailing space.
         for (target in listOf(3, 13, 23)) {

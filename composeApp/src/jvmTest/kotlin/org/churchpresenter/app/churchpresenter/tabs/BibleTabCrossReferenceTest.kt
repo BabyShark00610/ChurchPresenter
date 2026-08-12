@@ -93,28 +93,23 @@ class BibleTabCrossReferenceTest {
     private fun withPanel(settings: AppSettings) =
         settings.copy(bibleSettings = settings.bibleSettings.copy(crossReferencesPanel = true))
 
-    /**
-     * The column's row for [reference].
-     *
-     * A row is one text node holding the reference *and* the start of its verse, so it cannot be
-     * matched exactly — but a plain substring match is too loose: the search field's placeholder
-     * reads "Reference or text — e.g. John 3:16, mat 1, or a word" and would match too. So this
-     * anchors on the row's own shape: the reference alone, or the reference followed by the
-     * two-space separator the preview sits behind.
-     */
     private fun ComposeUiTest.crossRefRow(reference: String) = onNode(
         SemanticsMatcher("cross-reference row for $reference") { node ->
-            val text = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
-            text == reference || text?.startsWith("$reference  ") == true
+            node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } == reference
         }
     )
+
+    private fun ComposeUiTest.showsCrossRef(reference: String, verseFragment: String): Boolean =
+        showsExactly(reference) && showsContainingText(verseFragment)
+
+    private fun ComposeUiTest.panelIsDocked() = hasActionButton(BibleLabel.CROSS_REFS_CLOSE)
 
     // ── Showing and hiding ────────────────────────────────────────────────────
 
     @Test
     fun `the column is absent until the setting is on`() =
         bibleTab(crossReferences = references()) { _, _ ->
-            assertFalse(showsExactly(BibleLabel.CROSS_REFS), "off by default")
+            assertFalse(panelIsDocked(), "off by default")
         }
 
     /**
@@ -129,7 +124,7 @@ class BibleTabCrossReferenceTest {
     @Test
     fun `the column is filled in for the verse the tab opens on`() =
         bibleTab(settings = ::withPanel, crossReferences = references()) { _, _ ->
-            assertTrue(showsContainingText("John 3:16  For God so loved the world."))
+            assertTrue(showsCrossRef("John 3:16", "For God so loved the world."))
         }
 
     @Test
@@ -138,11 +133,11 @@ class BibleTabCrossReferenceTest {
             onNodeWithText("1. In the beginning God created the heaven and the earth.").performClick()
             waitForIdle()
 
-            assertTrue(showsExactly(BibleLabel.CROSS_REFS), "the column header is drawn")
+            assertTrue(panelIsDocked(), "the column header is drawn")
             // "John"/"Psa" are what the module's own book names shorten to — not the app's
             // abbreviation resources, which would follow the UI language instead of the module's.
-            assertTrue(showsContainingText("John 3:16  For God so loved the world."))
-            assertTrue(showsContainingText("Psa 23:1  The LORD is my shepherd"))
+            assertTrue(showsCrossRef("John 3:16", "For God so loved the world."))
+            assertTrue(showsCrossRef("Psa 23:1", "The LORD is my shepherd"))
         }
 
     @Test
@@ -151,8 +146,8 @@ class BibleTabCrossReferenceTest {
             onNodeWithText("2. And the earth was without form, and void.").performClick()
             waitForIdle()
 
-            // The preview is the range's first verse — the one the label starts at.
-            assertTrue(showsContainingText("Psa 23:1-3  The LORD is my shepherd"))
+            // The verse shown is the range's first — the one the label starts at.
+            assertTrue(showsCrossRef("Psa 23:1-3", "The LORD is my shepherd"))
         }
 
     @Test
@@ -162,7 +157,7 @@ class BibleTabCrossReferenceTest {
             waitForIdle()
 
             assertTrue(showsExactly(BibleLabel.CROSS_REFS_EMPTY))
-            assertTrue(showsExactly(BibleLabel.CROSS_REFS), "the column keeps its place in the layout")
+            assertTrue(panelIsDocked(), "the column keeps its place in the layout")
         }
 
     // ── Following the loaded module ───────────────────────────────────────────
@@ -192,7 +187,7 @@ class BibleTabCrossReferenceTest {
         ) { _, _ ->
             onNodeWithText("1. In the beginning God created the heaven and the earth.").performClick()
             waitForIdle()
-            assertTrue(showsContainingText("John 3:16  For God so loved the world."))
+            assertTrue(showsCrossRef("John 3:16", "For God so loved the world."))
 
             actionButton(BibleLabel.SWAP).performClick()
             waitForIdle()
@@ -203,8 +198,8 @@ class BibleTabCrossReferenceTest {
             // book list — which is equal across both phases — so the half-resolved rows stayed up
             // until something else happened to re-key it.
             assertTrue(
-                showsContainingText("John 3:16  For God had such love for the world."),
-                "the preview follows the module that is now loaded",
+                showsCrossRef("John 3:16", "For God had such love for the world."),
+                "the verse follows the module that is now loaded",
             )
         }
 
@@ -252,7 +247,7 @@ class BibleTabCrossReferenceTest {
 
             assertEquals(2, vm.selectedBookIndex.value, "it navigated")
             assertTrue(
-                showsContainingText("Psa 23:1  "),
+                showsExactly("Psa 23:1"),
                 "the column still describes Genesis 1:1, so the other reference is still reachable",
             )
 
@@ -386,7 +381,7 @@ class BibleTabCrossReferenceTest {
             onNodeWithText("3. And God said, Let there be light.").performClick()
             waitForIdle()
             assertFalse(showsContainingText("Passage"))
-            assertTrue(showsContainingText("Psa 23:3  He restoreth my soul."), "verse 3's own reference")
+            assertTrue(showsCrossRef("Psa 23:3", "He restoreth my soul."), "verse 3's own reference")
 
             // ...and taking it live continues the passage rather than starting over.
             actionButton(BibleLabel.GO_LIVE).performClick()
@@ -449,7 +444,7 @@ class BibleTabCrossReferenceTest {
 
             assertTrue(showsExactly(BibleLabel.OFTEN_NEXT), "the learned rows are labelled")
             // Psalm 23:1 is both learned and a bundled reference; it appears once, as the habit.
-            assertEquals(1, renderedText().count { it.startsWith("Psa 23:1  ") }, "no duplicate row")
+            assertEquals(1, renderedText().count { it == "Psa 23:1" }, "no duplicate row")
         }
     }
 
@@ -460,7 +455,7 @@ class BibleTabCrossReferenceTest {
             waitForIdle()
 
             assertFalse(showsExactly(BibleLabel.OFTEN_NEXT), "a fresh install shows only references")
-            assertTrue(showsContainingText("John 3:16  "))
+            assertTrue(showsExactly("John 3:16"))
         }
 
     @Test
