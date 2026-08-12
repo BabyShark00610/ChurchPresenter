@@ -96,6 +96,16 @@ internal val bibleFixture = SpbFixture.buildContent(
 /** File name of the optional second module — see `bibleTab`'s `secondContent`. */
 internal const val SECOND_MODULE = "second.spb"
 
+/**
+ * A repository that knows nothing, which is what a test not about cross references should see.
+ *
+ * The tab now reads the dataset for every chapter it opens, to number the link chip at the end of
+ * each verse — so leaving `crossReferences` unset would put the real 3 MB file behind every Bible
+ * test, cost the parse once per JVM, and paint chips whose counts are whatever TSK says about
+ * Genesis 1 today. `bibleTab` substitutes this instead.
+ */
+internal fun noCrossReferences() = CrossReferenceRepository { """{"v":1,"r":{}}""".toByteArray() }
+
 // ── Harness ─────────────────────────────────────────────────────────────────────────────────────
 
 /** What the tab reported back, so a test asserts on the choice rather than on a stub. */
@@ -175,11 +185,11 @@ internal fun bibleTab(
      */
     sequenceLog: VerseSequenceLog? = null,
     /**
-     * Passed as the tab's [CrossReferenceRepository] when non-null.
+     * Passed as the tab's [CrossReferenceRepository].
      *
-     * Left null the tab falls back to the shared instance over the real 3 MB dataset, which would
-     * make a test depend on what TSK happens to say about a verse. Cross-reference tests build
-     * their own over a fixture instead.
+     * Null substitutes [noCrossReferences] rather than letting the tab fall back to the shared
+     * instance over the real 3 MB dataset — that would make every Bible test depend on what TSK
+     * happens to say about Genesis 1. Cross-reference tests pass their own fixture.
      */
     crossReferences: CrossReferenceRepository? = null,
     /** Instance Link Controller mode: non-null makes the tab mirror every go-live to the primary. */
@@ -250,7 +260,7 @@ internal fun bibleTab(
                         presenterManager = presenter,
                         statisticsManager = statistics,
                         verseSequenceLog = sequenceLog,
-                        crossReferences = crossReferences,
+                        crossReferences = crossReferences ?: noCrossReferences(),
                         onInstanceLinkSendVerse = onInstanceLinkSendVerse?.let { send ->
                             { book, chapter, verseNumber, verseText, verseRange ->
                                 send(
@@ -289,6 +299,18 @@ internal object BibleLabel {
     const val HISTORY = "History"
     const val CROSS_REFS = "Refs"
     const val CROSS_REFS_EMPTY = "No cross references"
+
+    /**
+     * The docked panel's close button.
+     *
+     * What tells a test the panel is docked: [CROSS_REFS] is now also the header toggle's own
+     * label, so it is on screen whether the panel is open or not.
+     */
+    const val CROSS_REFS_CLOSE = "Close panel"
+    const val CROSS_REFS_KEEP_OPEN = "Keep open"
+
+    /** The header dock toggle, addressed by the name its icon carries rather than its "Refs" label. */
+    const val CROSS_REFS_TOGGLE = "Cross References"
     const val OFTEN_NEXT = "Often next"
     const val CLEAR_HISTORY = "Clear"
     const val ENTIRE_BIBLE = "Entire Bible"

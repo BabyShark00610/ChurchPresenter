@@ -1883,7 +1883,7 @@ fun BibleTab(
                         ) {
                             Icon(
                                 painter = painterResource(Res.drawable.ic_link),
-                                contentDescription = null,
+                                contentDescription = stringResource(Res.string.bible_cross_references),
                                 modifier = Modifier.size(12.dp),
                                 tint = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -2891,11 +2891,13 @@ private fun CrossReferencePopover(
             shadowElevation = 16.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            Column(
-                modifier = Modifier
-                    .width(CROSS_REF_POPOVER_WIDTH)
-                    .heightIn(max = CROSS_REF_POPOVER_MAX_HEIGHT),
-            ) {
+            // The popover is exactly as tall as it needs to be, and two ordinary ways of building
+            // a scrolling list stop that: a `weight` makes its Column consume the whole height
+            // offered to it whatever `fill` says, and a `VerticalScrollbar` sized to its parent
+            // does the same from the inside. So the list is a plain scrolling Column with a max
+            // height and no scrollbar — a verse has at most sixteen references, and holding a
+            // popover open at full height for three of them is worse than losing the scrollbar.
+            Column(modifier = Modifier.width(CROSS_REF_POPOVER_WIDTH)) {
                 CrossReferenceHeader(
                     title = title,
                     onClose = onDismiss,
@@ -2907,27 +2909,28 @@ private fun CrossReferencePopover(
                 if (rows.isEmpty()) {
                     CrossReferenceEmptyState(modifier = Modifier.fillMaxWidth().height(110.dp))
                 } else {
-                    val listState = rememberLazyListState()
-                    Box(modifier = Modifier.weight(1f, fill = false)) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
-                        ) {
-                            itemsIndexed(rows) { idx, row ->
-                                CrossReferenceCard(
-                                    row = row,
-                                    selected = false,
-                                    striped = idx % 2 == 1,
-                                    onClick = { onOpen(row) },
-                                    onDoubleClick = { onGoLive(row) },
-                                    onAddToSchedule = { onAddToSchedule(row) },
-                                )
-                            }
+                    // A plain scrolling Column, not a LazyColumn: a lazy list fills whatever
+                    // height it is offered, which would hold the popover open at its maximum
+                    // however few references it has. TSK gives a verse at most sixteen, so there
+                    // is nothing to virtualise anyway. The scrollbar uses `matchParentSize` for
+                    // the same reason — it must not be what decides the height.
+                    val scrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = CROSS_REF_POPOVER_MAX_HEIGHT)
+                            .verticalScroll(scrollState)
+                            .padding(vertical = 4.dp),
+                    ) {
+                        rows.forEachIndexed { idx, row ->
+                            CrossReferenceCard(
+                                row = row,
+                                selected = false,
+                                striped = idx % 2 == 1,
+                                onClick = { onOpen(row) },
+                                onDoubleClick = { onGoLive(row) },
+                                onAddToSchedule = { onAddToSchedule(row) },
+                            )
                         }
-                        VerticalScrollbar(
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            adapter = rememberScrollbarAdapter(scrollState = listState),
-                        )
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -2947,7 +2950,7 @@ private fun CrossReferencePopover(
  * below — so a chip near the bottom of the verse list still opens a list that is fully on screen
  * rather than one clipped by the window edge.
  */
-private object CrossRefPopoverPosition : PopupPositionProvider {
+internal object CrossRefPopoverPosition : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
@@ -3015,7 +3018,7 @@ private fun CrossRefChip(
         ) {
             Icon(
                 painter = painterResource(Res.drawable.ic_link),
-                contentDescription = null,
+                contentDescription = tooltipText,
                 modifier = Modifier.size(9.dp),
                 tint = accent,
             )
