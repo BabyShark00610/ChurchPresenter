@@ -66,31 +66,12 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSet
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * Choosing the order several translations are shown in.
- *
- * Two translations keep the one-tap swap button in the header; three or more need to express an
- * order rather than a flip, which is what this dropdown and its reorder arrows are for.
- */
-
-/** Row height for [TranslationOrderPanel], including its vertical padding — drag distance is measured in row-heights. */
 private val TRANSLATION_ORDER_ROW_HEIGHT = 46.dp
 
-/**
- * [bibleDisplayNames] appends "  (file or folder)" to a title when another translation shares it,
- * so a flat picker list can still tell the two apart. The translation-order trigger and rows show
- * the file name on their own line already, so that suffix would just repeat it — stripped here.
- */
 private fun translationTitle(displayNames: Map<String, String>, translation: BibleTranslationSettings): String =
     (displayNames[translation.fileName] ?: translation.fileName.substringBeforeLast('.'))
         .substringBefore("  (")
 
-/**
- * Trigger button + dropdown panel for reordering the multi-translation stack (3+ translations).
- * The trigger shows the current first/primary translation; the panel lists every translation with
- * a drag handle and up/down buttons to reorder. [onMove] mirrors [BibleSettings.moveTranslation]:
- * moving [index] by [offset] positions (not just ±1 — a drag can jump straight to a target row).
- */
 @Composable
 internal fun TranslationOrderSelector(
     label: String,
@@ -193,11 +174,6 @@ private fun TranslationOrderPanel(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // The reorder commits once, on drop — not per row-height crossed during the drag. Calling
-        // onMove mid-gesture would reshuffle `translations`, changing which file sits in the
-        // dragged row's slot; since that file name is this row's pointerInput key, the live-swap
-        // version cancelled its own gesture the moment it moved anything, freezing the row until
-        // the whole panel recomposed from scratch (closing and reopening it).
         val density = LocalDensity.current
         val rowHeightPx = with(density) { TRANSLATION_ORDER_ROW_HEIGHT.toPx() }
         val translationsState = rememberUpdatedState(translations)

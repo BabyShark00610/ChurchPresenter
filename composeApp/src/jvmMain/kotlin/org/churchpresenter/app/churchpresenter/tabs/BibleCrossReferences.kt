@@ -86,45 +86,27 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The cross references beside a verse: the link chip that counts them, the popover it opens, and
- * the panel that popover docks into.
- *
- * Split out of `BibleTab.kt`, which owns the state these render. Nothing here resolves a
- * reference — rows arrive already translated into the loaded module's own naming and numbering.
- */
-
-/** The floating popover a verse's link chip opens. Wide enough for a verse to read as prose. */
 private val CROSS_REF_POPOVER_WIDTH = 380.dp
 
-/** Past this the popover would cover the whole verse list rather than sit beside it. */
 private val CROSS_REF_POPOVER_MAX_HEIGHT = 420.dp
 
-/** One row of the cross-reference column, resolved against the loaded module. */
 internal data class CrossRefRow(
     val bookId: Int,
     val chapter: Int,
     val verse: Int,
     val endVerse: Int?,
-    /** True for "often next" — drawn from the operator's own go-lives rather than from TSK. */
+
     val learned: Boolean,
-    /** The reference as this module writes it, e.g. "Rom 5:8". */
+
     val label: String,
-    /** The start of the verse, or empty when the module does not have it. */
+
     val preview: String,
-    /** False when the module has no such verse: the row is shown, but greyed and inert. */
+
     val available: Boolean,
-    /** In passage mode, how many of the read verses point here. 0 for a single-verse row. */
+
     val count: Int = 0,
 )
 
-/**
- * Builds one row, translating the canonical reference into the loaded module's own words.
- *
- * A module that lacks the book still gets a row — labelled from the app's own abbreviations and
- * marked unavailable — because silently dropping it would leave the operator wondering why a
- * passage they know is cross-referenced shows nothing.
- */
 internal fun crossRefRow(
     viewModel: BibleViewModel,
     fallbackAbbreviations: List<String>,
@@ -144,8 +126,7 @@ internal fun crossRefRow(
         verse = verse,
         endVerse = endVerse,
         learned = learned,
-        // The module's own numbering where it has an opinion: a Synodal psalm is labelled with the
-        // number its operator will find in it, not the KJV number the dataset stores.
+
         label = formatCrossRefLabel(
             abbreviation,
             moduleRef?.chapter ?: chapter,
@@ -158,23 +139,6 @@ internal fun crossRefRow(
     )
 }
 
-/**
- * One reference, as both the docked panel and the popover draw it.
- *
- * A card rather than a line: the reference heads it, its verse follows underneath **in full**, and
- * queueing it sits on the reference line where it can be hit without first navigating there.
- * Truncating the verse to one line, which is what the column did before, meant the panel could tell
- * you a reference existed but never what it said, so every candidate had to be opened to be judged.
- *
- * Going live is deliberately **not** a button here — it stays on the double-click, as it is
- * everywhere else in this tab. A one-tap "on screen now" sitting next to eight other references, at
- * 22dp, in a list that moves as the reading does, is the wrong thing to be able to hit by accident
- * during a service.
- *
- * The clickable is on the text column rather than the whole card, and the button is its sibling:
- * [initialPassCombinedClickable] handles the Initial pass, which is delivered parent-first, so a
- * button nested *inside* it never sees the click at all.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CrossReferenceCard(
@@ -184,7 +148,7 @@ private fun CrossReferenceCard(
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onAddToSchedule: () -> Unit,
-    /** Shown for the operator's own habits, hidden for the bundled dataset. */
+
     showLearnedDot: Boolean = row.learned,
 ) {
     val background = when {
@@ -206,9 +170,7 @@ private fun CrossReferenceCard(
         Column(
             modifier = Modifier
                 .weight(1f)
-                // An unavailable row is inert: clicking it could only fail, and a row that responds
-                // to nothing reads as a broken app rather than as a reference this translation
-                // happens not to carry.
+
                 .then(
                     if (row.available) Modifier.initialPassCombinedClickable(
                         onClick = onClick,
@@ -255,8 +217,7 @@ private fun CrossReferenceCard(
             }
         }
         if (row.available) {
-            // Named with the reference, not just the action: a panel of these is a column of
-            // otherwise identical buttons, and which one is which is the whole point.
+
             val addStr = stringResource(Res.string.add_to_schedule)
             Box(modifier = Modifier.padding(top = 5.dp, end = 5.dp)) {
                 CrossRefActionButton(
@@ -271,7 +232,6 @@ private fun CrossReferenceCard(
     }
 }
 
-/** The small, quiet icon button on a cross-reference card. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CrossRefActionButton(
@@ -280,7 +240,7 @@ private fun CrossRefActionButton(
     onClick: () -> Unit,
     icon: ImageVector? = null,
     painter: Painter? = null,
-    /** Defaults to the tooltip; pass a longer one where several of these sit in a list. */
+
     contentDescription: String = tooltipText,
 ) {
     TooltipArea(
@@ -299,8 +259,7 @@ private fun CrossRefActionButton(
         Box(
             modifier = Modifier.size(22.dp)
                 .clip(RoundedCornerShape(6.dp))
-                // The initial pass, so the card's own click handler underneath does not also fire
-                // and navigate away from the reference that was just queued.
+
                 .initialPassClickable(onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -313,18 +272,6 @@ private fun CrossRefActionButton(
     }
 }
 
-/**
- * The docked column of references beside the verse list.
- *
- * Two kinds of suggestion share one scrolling list rather than two panels: what the passage points
- * at (TSK) and what this operator usually shows next (their own go-lives). They are separated by a
- * label and distinguished by a leading dot, so it still reads as one list — during a service the eye
- * should find the reference, not navigate a layout.
- *
- * Each row carries a reference and its verse, both already resolved against the loaded module — so
- * they read in the module's language and its own numbering, and this composable renders rather than
- * resolves.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun CrossReferencePanel(
@@ -334,7 +281,7 @@ internal fun CrossReferencePanel(
     onDoubleClick: (Int) -> Unit,
     onAddToSchedule: (Int) -> Unit,
     onClose: () -> Unit,
-    /** The span of the passage being read, e.g. "1:1-10", or null when describing one verse. */
+
     passageSpan: String?,
     modifier: Modifier = Modifier,
 ) {
@@ -343,8 +290,7 @@ internal fun CrossReferencePanel(
 
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surface)) {
         CrossReferenceHeader(
-            // Naming the span makes it unambiguous which verses produced the list, which matters
-            // precisely because the list changes shape as a reading goes on.
+
             title = passageSpan?.let { stringResource(Res.string.bible_cross_references_passage, it) }
                 ?: stringResource(Res.string.bible_cross_references_title),
             onClose = onClose,
@@ -389,7 +335,6 @@ internal fun CrossReferencePanel(
     }
 }
 
-/** The chain-link title bar both the docked panel and the popover wear, so they read as one thing. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CrossReferenceHeader(
@@ -436,7 +381,6 @@ private fun CrossReferenceHeader(
     }
 }
 
-/** Says the verse has no references, rather than leaving the panel looking like it failed to load. */
 @Composable
 private fun CrossReferenceEmptyState(modifier: Modifier = Modifier) {
     Column(
@@ -459,13 +403,6 @@ private fun CrossReferenceEmptyState(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The floating list a verse's link chip opens, anchored to that chip.
- *
- * It overlays the verse list rather than taking a column of it: looking up what a verse points at is
- * a question asked in passing, and answering it should not reflow the passage being read. Keep-open
- * promotes it to the docked panel for an operator who wants it there for the rest of the service.
- */
 @Composable
 internal fun CrossReferencePopover(
     title: String,
@@ -488,12 +425,7 @@ internal fun CrossReferencePopover(
             shadowElevation = 16.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            // The popover is exactly as tall as it needs to be, and two ordinary ways of building
-            // a scrolling list stop that: a `weight` makes its Column consume the whole height
-            // offered to it whatever `fill` says, and a `VerticalScrollbar` sized to its parent
-            // does the same from the inside. So the list is a plain scrolling Column with a max
-            // height and no scrollbar — a verse has at most sixteen references, and holding a
-            // popover open at full height for three of them is worse than losing the scrollbar.
+
             Column(modifier = Modifier.width(CROSS_REF_POPOVER_WIDTH)) {
                 CrossReferenceHeader(
                     title = title,
@@ -506,11 +438,7 @@ internal fun CrossReferencePopover(
                 if (rows.isEmpty()) {
                     CrossReferenceEmptyState(modifier = Modifier.fillMaxWidth().height(110.dp))
                 } else {
-                    // A plain scrolling Column, not a LazyColumn: a lazy list fills whatever
-                    // height it is offered, which would hold the popover open at its maximum
-                    // however few references it has. TSK gives a verse at most sixteen, so there
-                    // is nothing to virtualise anyway. The scrollbar uses `matchParentSize` for
-                    // the same reason — it must not be what decides the height.
+
                     val scrollState = rememberScrollState()
                     Column(
                         modifier = Modifier
@@ -542,11 +470,6 @@ internal fun CrossReferencePopover(
     }
 }
 
-/**
- * Hangs the popover under its chip, right edges aligned, and flips it above when there is no room
- * below — so a chip near the bottom of the verse list still opens a list that is fully on screen
- * rather than one clipped by the window edge.
- */
 internal object CrossRefPopoverPosition : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -565,12 +488,6 @@ internal object CrossRefPopoverPosition : PopupPositionProvider {
     }
 }
 
-/**
- * The chain-link chip at the end of a verse: how many references it has, and the way into them.
- *
- * It costs the verse a little width and only appears on verses that have something behind it, so an
- * operator can see at a glance which verses in a chapter are worth asking about.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun CrossRefChip(
@@ -606,8 +523,7 @@ internal fun CrossRefChip(
                     if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                     RoundedCornerShape(10.dp),
                 )
-                // The initial pass, so the verse row's own press handler underneath does not also
-                // fire and count this as a plain selection — or, twice in a row, as a go-live.
+
                 .initialPassClickable(onClick)
                 .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,

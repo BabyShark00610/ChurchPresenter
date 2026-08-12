@@ -55,12 +55,6 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The passages already put on screen this service, newest first.
- *
- * Collapsed to its header until asked for: during a service it is a way back to something already
- * read, not something to be watched.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BibleHistoryPanel(
