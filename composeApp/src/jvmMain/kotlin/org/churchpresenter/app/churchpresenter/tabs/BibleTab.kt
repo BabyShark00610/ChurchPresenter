@@ -92,6 +92,19 @@ import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
 import org.churchpresenter.app.churchpresenter.viewmodel.verseSpan
 import org.churchpresenter.app.churchpresenter.viewmodel.verseTextOf
 import org.jetbrains.compose.resources.stringResource
+import org.churchpresenter.app.churchpresenter.viewmodel.applyDetectedReference
+import org.churchpresenter.app.churchpresenter.viewmodel.canonicalRefForBookName
+import org.churchpresenter.app.churchpresenter.viewmodel.canonicalRefForDisplay
+import org.churchpresenter.app.churchpresenter.viewmodel.clearDetectedReferences
+import org.churchpresenter.app.churchpresenter.viewmodel.displayIndexForBookName
+import org.churchpresenter.app.churchpresenter.viewmodel.getSelectedVerses
+import org.churchpresenter.app.churchpresenter.viewmodel.logGoLiveCorrection
+import org.churchpresenter.app.churchpresenter.viewmodel.logLiveReference
+import org.churchpresenter.app.churchpresenter.viewmodel.logOperatorFlag
+import org.churchpresenter.app.churchpresenter.viewmodel.onSmartQueryChanged
+import org.churchpresenter.app.churchpresenter.viewmodel.selectSearchResult
+import org.churchpresenter.app.churchpresenter.viewmodel.submitSmartQuery
+import org.churchpresenter.app.churchpresenter.viewmodel.updateSettings
 
 internal val CROSS_REF_MIN_WIDTH = 200.dp
 
