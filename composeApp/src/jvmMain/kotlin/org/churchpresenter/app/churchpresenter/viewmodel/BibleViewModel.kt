@@ -1531,6 +1531,29 @@ class BibleViewModel(
         return true
     }
 
+    /**
+     * Adds a canonical reference to the schedule **without moving the browse selection**.
+     *
+     * [addCurrentVerseToSchedule] can only add what is selected, so using it from a cross-reference
+     * row would mean navigating there first — which throws away the passage the operator was
+     * reading just to queue something for later. The reference is resolved in the loaded module's
+     * own naming and numbering, exactly as [moduleRefFor] resolves it for display.
+     *
+     * @return false when the module has no such verse, the same condition
+     * [selectVerseByCanonicalRef] refuses on.
+     */
+    fun addCanonicalRefToSchedule(
+        bookId: Int,
+        chapter: Int,
+        verse: Int,
+        onAdd: (bookName: String, chapter: Int, verseNumber: Int, verseText: String, verseRange: String, bookId: Int) -> Unit,
+    ): Boolean {
+        val bible = _primaryBible.value ?: return false
+        val details = bible.getVerseDetailsByCode(bookId, chapter, verse) ?: return false
+        onAdd(details.bookName, details.displayChapter, details.displayVerse, details.verseText, "", bookId)
+        return true
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }

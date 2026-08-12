@@ -80,6 +80,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -116,13 +117,26 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.zIndex
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.add_to_schedule
 import churchpresenter.composeapp.generated.resources.bible_history
+import churchpresenter.composeapp.generated.resources.bible_cross_references
+import churchpresenter.composeapp.generated.resources.bible_cross_references_close
+import churchpresenter.composeapp.generated.resources.bible_cross_references_count
+import churchpresenter.composeapp.generated.resources.bible_cross_references_dismiss_hint
+import churchpresenter.composeapp.generated.resources.bible_cross_references_keep_open
 import churchpresenter.composeapp.generated.resources.bible_cross_references_none
+import churchpresenter.composeapp.generated.resources.bible_cross_references_popover_title
 import churchpresenter.composeapp.generated.resources.bible_cross_references_often_next
 import churchpresenter.composeapp.generated.resources.bible_cross_references_passage
 import churchpresenter.composeapp.generated.resources.bible_cross_references_source_count
@@ -185,6 +199,7 @@ import churchpresenter.composeapp.generated.resources.bible_load_failed_title
 import churchpresenter.composeapp.generated.resources.bible_verse_selection_hint
 import churchpresenter.composeapp.generated.resources.book
 import churchpresenter.composeapp.generated.resources.chapter
+import churchpresenter.composeapp.generated.resources.close
 import churchpresenter.composeapp.generated.resources.clear
 import churchpresenter.composeapp.generated.resources.contains_phrase
 import churchpresenter.composeapp.generated.resources.copy_verse
@@ -202,6 +217,7 @@ import churchpresenter.composeapp.generated.resources.ic_close
 import churchpresenter.composeapp.generated.resources.ic_copy
 import churchpresenter.composeapp.generated.resources.ic_delete
 import churchpresenter.composeapp.generated.resources.ic_drag_dots
+import churchpresenter.composeapp.generated.resources.ic_link
 import churchpresenter.composeapp.generated.resources.ic_pause
 import churchpresenter.composeapp.generated.resources.ic_playlist_add
 import churchpresenter.composeapp.generated.resources.ic_search
@@ -291,11 +307,17 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/** Narrowest useful cross-reference column: a reference and the first word or two of its verse. */
-private val CROSS_REF_MIN_WIDTH = 120.dp
+/** Narrowest useful docked cross-reference panel: a reference and a readable line of its verse. */
+private val CROSS_REF_MIN_WIDTH = 200.dp
 
-/** Widest: past this the column is taking space from the verse text it exists to support. */
+/** Widest: past this the panel is taking space from the verse text it exists to support. */
 private val CROSS_REF_MAX_WIDTH = 500.dp
+
+/** The floating popover a verse's link chip opens. Wide enough for a verse to read as prose. */
+private val CROSS_REF_POPOVER_WIDTH = 380.dp
+
+/** Past this the popover would cover the whole verse list rather than sit beside it. */
+private val CROSS_REF_POPOVER_MAX_HEIGHT = 420.dp
 
 /** How many verses of a multi-verse selection contribute cross-references. */
 private const val CROSS_REF_RANGE_ANCHORS = 3
@@ -314,6 +336,16 @@ internal fun withBibleSplitPanelWidth(settings: AppSettings, isMaximized: Boolea
 internal fun withBibleCrossRefPanelWidth(settings: AppSettings, isMaximized: Boolean, widthDp: Int): AppSettings =
     if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(bibleColWidthCrossRef = widthDp))
     else settings.copy(windowedLayout = settings.windowedLayout.copy(bibleColWidthCrossRef = widthDp))
+
+/**
+ * Docks or undocks the cross-reference panel.
+ *
+ * The panel is a live layout decision — taken from the header beside Hold Live, and from the
+ * popover's keep-open button — rather than something buried in settings, but it is still persisted
+ * so a booth that works with it open finds it open next service.
+ */
+internal fun withBibleCrossReferencePanel(settings: AppSettings, docked: Boolean): AppSettings =
+    settings.copy(bibleSettings = settings.bibleSettings.copy(crossReferencesPanel = docked))
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -425,11 +457,27 @@ fun BibleTab(
     // Split view is always visible when splitBrowseMode is ON (panel just has no content until live)
     val isSplitActive = splitBrowseMode
 
-    // Cross-reference column state
+    // Cross-reference state. `crossRefsEnabled` is the docked panel; the per-verse link chips and
+    // the popover they open are always available, because the chip is how a verse's references are
+    // found in the first place.
     val crossRefsEnabled = appSettings.bibleSettings.crossReferencesPanel
     val crossRefRepository = crossReferences ?: sharedCrossReferences
     var crossRefRows by remember { mutableStateOf<List<CrossRefRow>>(emptyList()) }
     var selectedCrossRefIdx by remember { mutableStateOf(-1) }
+    /**
+     * How many references each verse of the open chapter has, by its number in this module.
+     *
+     * Drives the link chip at the end of a verse: a verse absent from this map has nothing to
+     * offer and gets no chip, which is a normal answer — TSK has nothing to say about parts of the
+     * genealogies.
+     */
+    var crossRefCounts by remember { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    /** Which row of [filteredVerses] has its popover open, or -1. */
+    var crossRefPopoverIndex by remember { mutableStateOf(-1) }
+    /** That row's canonical reference, and the label the popover heads itself with. */
+    var crossRefPopoverAnchor by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
+    var crossRefPopoverLabel by remember { mutableStateOf("") }
+    var crossRefPopoverRows by remember { mutableStateOf<List<CrossRefRow>>(emptyList()) }
     /**
      * Where a click in this column has just sent the selection.
      *
@@ -582,6 +630,68 @@ fun BibleTab(
         val learnedKeys = learned.map { Triple(it.bookId, it.chapter, it.verse) }.toSet()
         crossRefRows = learned + references.filter { Triple(it.bookId, it.chapter, it.verse) !in learnedKeys }
         selectedCrossRefIdx = -1
+    }
+
+    // How many references each verse of the open chapter carries. One indexed lookup per verse of
+    // one chapter, redone only when the chapter or the module changes — cheap enough to run for
+    // every chapter that is opened, which is what lets the chip say how much is there before
+    // anything is clicked.
+    LaunchedEffect(selectedBookIndex, selectedChapter, verses, loadedModule, crossRefRepository) {
+        crossRefRepository.ensureLoaded()
+        crossRefCounts = buildMap {
+            verses.forEach { line ->
+                val number = verseNumberOf(line) ?: return@forEach
+                val canonical = viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, number)
+                val verse = canonical?.third ?: return@forEach
+                val count = crossRefRepository.forVerse(canonical.first, canonical.second, verse).size
+                if (count > 0) put(number, count)
+            }
+        }
+    }
+
+    // The popover's own list. Separate from the column's because it describes the one verse whose
+    // chip was clicked — never a passage, never what was learned — and because opening it must not
+    // disturb the column's anchor.
+    LaunchedEffect(crossRefPopoverAnchor, loadedModule, fallbackAbbreviations) {
+        val anchor = crossRefPopoverAnchor
+        if (anchor == null) {
+            crossRefPopoverRows = emptyList()
+            return@LaunchedEffect
+        }
+        crossRefRepository.ensureLoaded()
+        crossRefPopoverRows = crossRefRepository.forVerse(anchor.first, anchor.second, anchor.third)
+            .map { crossRefRow(viewModel, fallbackAbbreviations, it.bookId, it.chapter, it.verse, it.endVerse, learned = false) }
+    }
+
+    val crossRefCountStr = stringResource(Res.string.bible_cross_references_count)
+    val crossRefPopoverTitleStr = stringResource(Res.string.bible_cross_references_popover_title)
+
+    // What a cross-reference row's three actions do, shared by the docked panel and the popover so
+    // a reference behaves the same whichever of the two it was reached from.
+    // Following a reference leaves the verse the popover was opened from, so the popover goes with
+    // it — otherwise its index would land on whatever verse now sits at that row of the new chapter.
+    fun openCrossRef(row: CrossRefRow) {
+        crossRefNavigatedTo = Triple(row.bookId, row.chapter, row.verse)
+        crossRefPopoverIndex = -1
+        crossRefPopoverAnchor = null
+        viewModel.selectVerseByCanonicalRef(row.bookId, row.chapter, row.verse)
+        focusRequester.requestFocus()
+    }
+
+    fun goLiveCrossRef(row: CrossRefRow) {
+        crossRefNavigatedTo = Triple(row.bookId, row.chapter, row.verse)
+        crossRefPopoverIndex = -1
+        crossRefPopoverAnchor = null
+        viewModel.selectVerseByCanonicalRef(row.bookId, row.chapter, row.verse, goLiveSource = "crossref")
+        focusRequester.requestFocus()
+    }
+
+    fun scheduleCrossRef(row: CrossRefRow) {
+        viewModel.addCanonicalRefToSchedule(row.bookId, row.chapter, row.verse) {
+                bookName, chapter, verseNumber, verseText, verseRange, bookId ->
+            onAddToSchedule?.invoke(bookName, chapter, verseNumber, verseText, verseRange, bookId)
+        }
+        focusRequester.requestFocus()
     }
 
     // Live chapter state for split view (right panel)
@@ -1725,6 +1835,67 @@ fun BibleTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                     Spacer(Modifier.weight(1f))
+                    // Refs dock toggle — beside Hold Live because it is the same kind of decision:
+                    // how this verse pane behaves right now, taken during a service rather than in
+                    // a settings dialog.
+                    val crossRefsLabel = stringResource(Res.string.bible_cross_references_title)
+                    TooltipArea(
+                        tooltip = {
+                            Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall) {
+                                Text(
+                                    stringResource(Res.string.bible_cross_references),
+                                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        },
+                        tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp)),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .height(27.dp)
+                                .background(
+                                    if (crossRefsEnabled) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .border(
+                                    1.dp,
+                                    if (crossRefsEnabled) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant,
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                ) {
+                                    onSettingsChange { s -> withBibleCrossReferencePanel(s, !crossRefsEnabled) }
+                                    // Docked and floating are the same information twice, so opening
+                                    // one closes the other.
+                                    crossRefPopoverIndex = -1
+                                    crossRefPopoverAnchor = null
+                                    focusRequester.requestFocus()
+                                }
+                                .padding(horizontal = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(Res.drawable.ic_link),
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                            Text(
+                                crossRefsLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                color = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                        }
+                    }
                     // Combined hold + kbd hint pill
                     val holdPillActive = presenterManager != null && !splitBrowseMode
                     val holdLiveState = presenterManager?.bibleHold?.value ?: false
@@ -1993,7 +2164,68 @@ fun BibleTab(
                                         // very verse it just sent us to.
                                         crossRefNavigatedTo = null
                                         crossRefAnchorEpoch++
+                                        // A popover describes the verse it was opened from, so
+                                        // moving off that verse retires it rather than leaving a
+                                        // panel up that no longer answers to anything on screen.
+                                        crossRefPopoverIndex = -1
+                                        crossRefPopoverAnchor = null
                                         focusRequester.requestFocus()
+                                    },
+                                    refCountFor = { index ->
+                                        filteredVerses.getOrNull(index)
+                                            ?.let(::verseNumberOf)
+                                            ?.let { crossRefCounts[it] } ?: 0
+                                    },
+                                    refCountTooltip = { count ->
+                                        crossRefCountStr.format(count)
+                                    },
+                                    openRefIndex = if (crossRefsEnabled) -1 else crossRefPopoverIndex,
+                                    onRefsClicked = { index ->
+                                        val verseText = filteredVerses.getOrNull(index)
+                                        val realIndex = verseText?.let { verses.indexOf(it) } ?: -1
+                                        if (realIndex >= 0) viewModel.selectVerse(realIndex)
+                                        crossRefNavigatedTo = null
+                                        crossRefAnchorEpoch++
+                                        val number = verseText?.let(::verseNumberOf)
+                                        val canonical = number?.let {
+                                            viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, it)
+                                        }?.let { (book, chapter, verse) -> verse?.let { Triple(book, chapter, it) } }
+                                        // While the panel is docked it is already showing this
+                                        // verse, so the chip only moves the selection there.
+                                        if (crossRefsEnabled || canonical == null || crossRefPopoverIndex == index) {
+                                            crossRefPopoverIndex = -1
+                                            crossRefPopoverAnchor = null
+                                        } else {
+                                            crossRefPopoverIndex = index
+                                            crossRefPopoverAnchor = canonical
+                                            crossRefPopoverLabel = viewModel
+                                                .moduleRefFor(canonical.first, canonical.second, canonical.third)
+                                                ?.let { formatCrossRefLabel(it.abbreviation, it.chapter, it.verse, null) }
+                                                ?: ""
+                                        }
+                                        focusRequester.requestFocus()
+                                    },
+                                    refPopover = {
+                                        CrossReferencePopover(
+                                            title = crossRefPopoverTitleStr.format(
+                                                crossRefPopoverLabel, crossRefPopoverRows.size,
+                                            ),
+                                            rows = crossRefPopoverRows,
+                                            onDismiss = {
+                                                crossRefPopoverIndex = -1
+                                                crossRefPopoverAnchor = null
+                                                focusRequester.requestFocus()
+                                            },
+                                            onDock = {
+                                                onSettingsChange { s -> withBibleCrossReferencePanel(s, true) }
+                                                crossRefPopoverIndex = -1
+                                                crossRefPopoverAnchor = null
+                                                focusRequester.requestFocus()
+                                            },
+                                            onOpen = ::openCrossRef,
+                                            onGoLive = ::goLiveCrossRef,
+                                            onAddToSchedule = ::scheduleCrossRef,
+                                        )
                                     },
                                     onItemDoubleClicked = { _ -> goLiveWithHistory() },
                                     onItemCtrlClicked = { index ->
@@ -2072,20 +2304,15 @@ fun BibleTab(
                                 selectedIndex = selectedCrossRefIdx,
                                 onClick = { idx ->
                                     selectedCrossRefIdx = idx
-                                    crossRefRows.getOrNull(idx)?.let { row ->
-                                        crossRefNavigatedTo = Triple(row.bookId, row.chapter, row.verse)
-                                        viewModel.selectVerseByCanonicalRef(row.bookId, row.chapter, row.verse)
-                                    }
-                                    focusRequester.requestFocus()
+                                    crossRefRows.getOrNull(idx)?.let(::openCrossRef)
                                 },
                                 onDoubleClick = { idx ->
                                     selectedCrossRefIdx = idx
-                                    crossRefRows.getOrNull(idx)?.let { row ->
-                                        crossRefNavigatedTo = Triple(row.bookId, row.chapter, row.verse)
-                                        viewModel.selectVerseByCanonicalRef(
-                                            row.bookId, row.chapter, row.verse, goLiveSource = "crossref",
-                                        )
-                                    }
+                                    crossRefRows.getOrNull(idx)?.let(::goLiveCrossRef)
+                                },
+                                onAddToSchedule = { idx -> crossRefRows.getOrNull(idx)?.let(::scheduleCrossRef) },
+                                onClose = {
+                                    onSettingsChange { s -> withBibleCrossReferencePanel(s, false) }
                                     focusRequester.requestFocus()
                                 },
                                 passageSpan = if (crossRefPassageMode) {
@@ -2335,16 +2562,171 @@ private fun BibleLoadErrorBanner(errors: List<BibleLoadError>, modifier: Modifie
 }
 
 /**
- * The narrow column of references beside the verse list.
+ * One reference, as both the docked panel and the popover draw it.
+ *
+ * A card rather than a line: the reference heads it, its verse follows underneath **in full**, and
+ * queueing it sits on the reference line where it can be hit without first navigating there.
+ * Truncating the verse to one line, which is what the column did before, meant the panel could tell
+ * you a reference existed but never what it said, so every candidate had to be opened to be judged.
+ *
+ * Going live is deliberately **not** a button here — it stays on the double-click, as it is
+ * everywhere else in this tab. A one-tap "on screen now" sitting next to eight other references, at
+ * 22dp, in a list that moves as the reading does, is the wrong thing to be able to hit by accident
+ * during a service.
+ *
+ * The clickable is on the text column rather than the whole card, and the button is its sibling:
+ * [initialPassCombinedClickable] handles the Initial pass, which is delivered parent-first, so a
+ * button nested *inside* it never sees the click at all.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CrossReferenceCard(
+    row: CrossRefRow,
+    selected: Boolean,
+    striped: Boolean,
+    onClick: () -> Unit,
+    onDoubleClick: () -> Unit,
+    onAddToSchedule: () -> Unit,
+    /** Shown for the operator's own habits, hidden for the bundled dataset. */
+    showLearnedDot: Boolean = row.learned,
+) {
+    val background = when {
+        selected -> MaterialTheme.colorScheme.surfaceVariant
+        striped -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        else -> Color.Transparent
+    }
+    val markerColor = MaterialTheme.semantic.marker
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .background(background, RoundedCornerShape(9.dp))
+            .drawBehind {
+                if (selected) drawRect(color = markerColor, size = Size(4f, size.height))
+            },
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                // An unavailable row is inert: clicking it could only fail, and a row that responds
+                // to nothing reads as a broken app rather than as a reference this translation
+                // happens not to carry.
+                .then(
+                    if (row.available) Modifier.initialPassCombinedClickable(
+                        onClick = onClick,
+                        onDoubleClick = onDoubleClick,
+                    ) else Modifier
+                )
+                .padding(start = 9.dp, top = 7.dp, bottom = 7.dp, end = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (showLearnedDot) {
+                    Box(
+                        modifier = Modifier.size(4.dp)
+                            .background(MaterialTheme.colorScheme.secondary, CircleShape)
+                    )
+                }
+                Text(
+                    text = row.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (row.available) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (row.count > 0) {
+                    Text(
+                        text = stringResource(Res.string.bible_cross_references_source_count, row.count),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+            if (row.preview.isNotEmpty()) {
+                Text(
+                    text = row.preview,
+                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 12.sp * 1.55f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (row.available) {
+            // Named with the reference, not just the action: a panel of these is a column of
+            // otherwise identical buttons, and which one is which is the whole point.
+            val addStr = stringResource(Res.string.add_to_schedule)
+            Box(modifier = Modifier.padding(top = 5.dp, end = 5.dp)) {
+                CrossRefActionButton(
+                    painter = painterResource(Res.drawable.ic_playlist_add),
+                    tooltipText = addStr,
+                    contentDescription = "$addStr ${row.label}",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    onClick = onAddToSchedule,
+                )
+            }
+        }
+    }
+}
+
+/** The small, quiet icon button on a cross-reference card. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CrossRefActionButton(
+    tooltipText: String,
+    tint: Color,
+    onClick: () -> Unit,
+    icon: ImageVector? = null,
+    painter: Painter? = null,
+    /** Defaults to the tooltip; pass a longer one where several of these sit in a list. */
+    contentDescription: String = tooltipText,
+) {
+    TooltipArea(
+        tooltip = {
+            Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall) {
+                Text(
+                    tooltipText,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp)),
+    ) {
+        Box(
+            modifier = Modifier.size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                // The initial pass, so the card's own click handler underneath does not also fire
+                // and navigate away from the reference that was just queued.
+                .initialPassClickable(onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(13.dp), tint = tint)
+            } else if (painter != null) {
+                Icon(painter, contentDescription = contentDescription, modifier = Modifier.size(13.dp), tint = tint)
+            }
+        }
+    }
+}
+
+/**
+ * The docked column of references beside the verse list.
  *
  * Two kinds of suggestion share one scrolling list rather than two panels: what the passage points
  * at (TSK) and what this operator usually shows next (their own go-lives). They are separated by a
- * label and a divider and distinguished by a leading dot, so it still reads as one list — during a
- * service the eye should find the reference, not navigate a layout.
+ * label and distinguished by a leading dot, so it still reads as one list — during a service the eye
+ * should find the reference, not navigate a layout.
  *
- * Each row carries an abbreviated reference and the start of the verse, both already resolved
- * against the loaded module — so they read in the module's language and its own numbering, and
- * this composable renders rather than resolves.
+ * Each row carries a reference and its verse, both already resolved against the loaded module — so
+ * they read in the module's language and its own numbering, and this composable renders rather than
+ * resolves.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -2353,122 +2735,295 @@ private fun CrossReferencePanel(
     selectedIndex: Int,
     onClick: (Int) -> Unit,
     onDoubleClick: (Int) -> Unit,
+    onAddToSchedule: (Int) -> Unit,
+    onClose: () -> Unit,
     /** The span of the passage being read, e.g. "1:1-10", or null when describing one verse. */
     passageSpan: String?,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    val markerColor = MaterialTheme.semantic.marker
     val firstLearned = rows.indexOfFirst { it.learned }
 
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surface)) {
-        // Naming the span makes it unambiguous which verses produced the list, which matters
-        // precisely because the list changes shape as a reading goes on.
-        Text(
-            text = passageSpan?.let { stringResource(Res.string.bible_cross_references_passage, it) }
+        CrossReferenceHeader(
+            // Naming the span makes it unambiguous which verses produced the list, which matters
+            // precisely because the list changes shape as a reading goes on.
+            title = passageSpan?.let { stringResource(Res.string.bible_cross_references_passage, it) }
                 ?: stringResource(Res.string.bible_cross_references_title),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            onClose = onClose,
+            closeTooltip = stringResource(Res.string.bible_cross_references_close),
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         if (rows.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(Res.string.bible_cross_references_none),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-            }
+            CrossReferenceEmptyState(modifier = Modifier.fillMaxSize())
             return@Column
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(end = 8.dp)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
+            ) {
                 itemsIndexed(rows) { idx, row ->
                     if (idx == firstLearned) {
                         Text(
                             text = stringResource(Res.string.bible_cross_references_often_next),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+                            modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
                         )
                     }
-                    // The one boundary between the two kinds, drawn only when both are present.
-                    if (!row.learned && idx > 0 && rows[idx - 1].learned) {
-                        HorizontalDivider(
-                            thickness = Dp.Hairline,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                            .background(
-                                if (idx == selectedIndex) MaterialTheme.colorScheme.surfaceVariant
-                                else if (idx % 2 == 0) MaterialTheme.colorScheme.surface
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
-                            .drawBehind {
-                                if (idx == selectedIndex) drawRect(color = markerColor, size = Size(4f, size.height))
-                            }
-                            // An unavailable row is inert: clicking it could only fail, and a row
-                            // that responds to nothing reads as a broken app rather than as a
-                            // reference this translation happens not to carry.
-                            .then(
-                                if (row.available) Modifier.initialPassCombinedClickable(
-                                    onClick = { onClick(idx) },
-                                    onDoubleClick = { onDoubleClick(idx) },
-                                ) else Modifier
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        if (row.learned) {
-                            Box(
-                                modifier = Modifier.padding(end = 4.dp).size(4.dp)
-                                    .background(MaterialTheme.colorScheme.secondary, CircleShape)
-                            )
-                        }
-                        val referenceColor =
-                            if (row.available) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        Text(
-                            text = buildAnnotatedString {
-                                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = referenceColor)) {
-                                    append(row.label)
-                                }
-                                if (row.preview.isNotEmpty()) append("  ${row.preview}")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            // Takes the row less whatever the count needs, so the preview uses
-                            // every remaining pixel rather than splitting the row down the middle.
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (row.count > 0) {
-                            // Its own Text rather than part of the label, so it holds its place at
-                            // the end of the row while the reference and preview truncate.
-                            Text(
-                                text = stringResource(Res.string.bible_cross_references_source_count, row.count),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                modifier = Modifier.padding(start = 4.dp),
-                            )
-                        }
-                    }
+                    CrossReferenceCard(
+                        row = row,
+                        selected = idx == selectedIndex,
+                        striped = idx % 2 == 1,
+                        onClick = { onClick(idx) },
+                        onDoubleClick = { onDoubleClick(idx) },
+                        onAddToSchedule = { onAddToSchedule(idx) },
+                    )
                 }
             }
             VerticalScrollbar(
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                 adapter = rememberScrollbarAdapter(scrollState = listState),
+            )
+        }
+    }
+}
+
+/** The chain-link title bar both the docked panel and the popover wear, so they read as one thing. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CrossReferenceHeader(
+    title: String,
+    onClose: () -> Unit,
+    closeTooltip: String,
+    onDock: (() -> Unit)? = null,
+    dockTooltip: String = "",
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Icon(
+            painter = painterResource(Res.drawable.ic_link),
+            contentDescription = null,
+            modifier = Modifier.size(13.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (onDock != null) {
+            CrossRefActionButton(
+                painter = painterResource(Res.drawable.ic_link),
+                tooltipText = dockTooltip,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onDock,
+            )
+        }
+        CrossRefActionButton(
+            painter = painterResource(Res.drawable.ic_close),
+            tooltipText = closeTooltip,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            onClick = onClose,
+        )
+    }
+}
+
+/** Says the verse has no references, rather than leaving the panel looking like it failed to load. */
+@Composable
+private fun CrossReferenceEmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(9.dp, Alignment.CenterVertically),
+    ) {
+        Icon(
+            painter = painterResource(Res.drawable.ic_link),
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+        )
+        Text(
+            text = stringResource(Res.string.bible_cross_references_none),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * The floating list a verse's link chip opens, anchored to that chip.
+ *
+ * It overlays the verse list rather than taking a column of it: looking up what a verse points at is
+ * a question asked in passing, and answering it should not reflow the passage being read. Keep-open
+ * promotes it to the docked panel for an operator who wants it there for the rest of the service.
+ */
+@Composable
+private fun CrossReferencePopover(
+    title: String,
+    rows: List<CrossRefRow>,
+    onDismiss: () -> Unit,
+    onDock: () -> Unit,
+    onOpen: (CrossRefRow) -> Unit,
+    onGoLive: (CrossRefRow) -> Unit,
+    onAddToSchedule: (CrossRefRow) -> Unit,
+) {
+    Popup(
+        popupPositionProvider = remember { CrossRefPopoverPosition },
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 16.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(CROSS_REF_POPOVER_WIDTH)
+                    .heightIn(max = CROSS_REF_POPOVER_MAX_HEIGHT),
+            ) {
+                CrossReferenceHeader(
+                    title = title,
+                    onClose = onDismiss,
+                    closeTooltip = stringResource(Res.string.close),
+                    onDock = onDock,
+                    dockTooltip = stringResource(Res.string.bible_cross_references_keep_open),
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (rows.isEmpty()) {
+                    CrossReferenceEmptyState(modifier = Modifier.fillMaxWidth().height(110.dp))
+                } else {
+                    val listState = rememberLazyListState()
+                    Box(modifier = Modifier.weight(1f, fill = false)) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
+                        ) {
+                            itemsIndexed(rows) { idx, row ->
+                                CrossReferenceCard(
+                                    row = row,
+                                    selected = false,
+                                    striped = idx % 2 == 1,
+                                    onClick = { onOpen(row) },
+                                    onDoubleClick = { onGoLive(row) },
+                                    onAddToSchedule = { onAddToSchedule(row) },
+                                )
+                            }
+                        }
+                        VerticalScrollbar(
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            adapter = rememberScrollbarAdapter(scrollState = listState),
+                        )
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    text = stringResource(Res.string.bible_cross_references_dismiss_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Hangs the popover under its chip, right edges aligned, and flips it above when there is no room
+ * below — so a chip near the bottom of the verse list still opens a list that is fully on screen
+ * rather than one clipped by the window edge.
+ */
+private object CrossRefPopoverPosition : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val gap = 6
+        val x = (anchorBounds.right - popupContentSize.width)
+            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+        val below = anchorBounds.bottom + gap
+        val y = if (below + popupContentSize.height <= windowSize.height) below
+        else (anchorBounds.top - gap - popupContentSize.height)
+            .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0))
+        return IntOffset(x, y)
+    }
+}
+
+/**
+ * The chain-link chip at the end of a verse: how many references it has, and the way into them.
+ *
+ * It costs the verse a little width and only appears on verses that have something behind it, so an
+ * operator can see at a glance which verses in a chapter are worth asking about.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CrossRefChip(
+    count: Int,
+    active: Boolean,
+    tooltipText: String,
+    onClick: () -> Unit,
+) {
+    val accent = if (active) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    TooltipArea(
+        tooltip = {
+            Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall) {
+                Text(
+                    tooltipText,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp)),
+    ) {
+        Row(
+            modifier = Modifier
+                .height(19.dp)
+                .background(
+                    if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    RoundedCornerShape(10.dp),
+                )
+                .border(
+                    1.dp,
+                    if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                    RoundedCornerShape(10.dp),
+                )
+                // The initial pass, so the verse row's own press handler underneath does not also
+                // fire and count this as a plain selection — or, twice in a row, as a go-live.
+                .initialPassClickable(onClick)
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_link),
+                contentDescription = null,
+                modifier = Modifier.size(9.dp),
+                tint = accent,
+            )
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                color = accent,
+                maxLines = 1,
             )
         }
     }
@@ -3074,7 +3629,16 @@ private fun BibleVerseColumn(
     onItemDoubleClicked: (Int) -> Unit = {},
     onItemCtrlClicked: (Int) -> Unit = {},
     onItemShiftClicked: (Int) -> Unit = {},
-    onRightClicked: (Int) -> Unit = {}
+    onRightClicked: (Int) -> Unit = {},
+    /** How many cross references this verse has; 0 draws no chip. */
+    refCountFor: (Int) -> Int = { 0 },
+    /** That count, worded — resolved by the caller because this column holds no string resources. */
+    refCountTooltip: (Int) -> String = { "" },
+    /** Which row's chip is showing its popover, or -1. */
+    openRefIndex: Int = -1,
+    onRefsClicked: (Int) -> Unit = {},
+    /** Drawn anchored to the open chip. A slot, so this column stays ignorant of cross references. */
+    refPopover: @Composable () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(verses) {
@@ -3109,47 +3673,65 @@ private fun BibleVerseColumn(
         ) {
             itemsIndexed(verses) { index, verseStr ->
                 val isSelected = index == selectedIndex || (selectedIndices != null && index in selectedIndices)
-                Text(
-                    text = verseStr,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.5.sp,
-                        lineHeight = 13.5.sp * 1.6f,
-                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
-                    ),
-                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                val refCount = refCountFor(index)
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
                             if (isSelected) MaterialTheme.colorScheme.surfaceVariant
                             else MaterialTheme.colorScheme.surface
-                        )
-                        .pointerInput(index) {
-                            var lastClickTime = 0L
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Main)
-                                    if (event.type == PointerEventType.Press) {
-                                        val isRight = event.button?.isSecondary == true
-                                        val mods = event.keyboardModifiers
-                                        val isCtrl = mods.isCtrlPressed || mods.isMetaPressed
-                                        val isShift = mods.isShiftPressed
-                                        when {
-                                            isRight -> onRightClicked(index)
-                                            isCtrl -> onItemCtrlClicked(index)
-                                            isShift -> onItemShiftClicked(index)
-                                            else -> {
-                                                val now = System.currentTimeMillis()
-                                                val isDouble = now - lastClickTime < 300L
-                                                lastClickTime = now
-                                                if (isDouble) onItemDoubleClicked(index) else onItemSelected(index)
+                        ),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        text = verseStr,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 13.5.sp,
+                            lineHeight = 13.5.sp * 1.6f,
+                            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+                        ),
+                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .pointerInput(index) {
+                                var lastClickTime = 0L
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Main)
+                                        if (event.type == PointerEventType.Press) {
+                                            val isRight = event.button?.isSecondary == true
+                                            val mods = event.keyboardModifiers
+                                            val isCtrl = mods.isCtrlPressed || mods.isMetaPressed
+                                            val isShift = mods.isShiftPressed
+                                            when {
+                                                isRight -> onRightClicked(index)
+                                                isCtrl -> onItemCtrlClicked(index)
+                                                isShift -> onItemShiftClicked(index)
+                                                else -> {
+                                                    val now = System.currentTimeMillis()
+                                                    val isDouble = now - lastClickTime < 300L
+                                                    lastClickTime = now
+                                                    if (isDouble) onItemDoubleClicked(index) else onItemSelected(index)
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+                            .padding(6.dp)
+                    )
+                    if (refCount > 0) {
+                        Box(modifier = Modifier.padding(top = 6.dp, end = 2.dp)) {
+                            CrossRefChip(
+                                count = refCount,
+                                active = index == openRefIndex,
+                                tooltipText = refCountTooltip(refCount),
+                                onClick = { onRefsClicked(index) },
+                            )
+                            if (index == openRefIndex) refPopover()
                         }
-                        .padding(6.dp)
-                )
+                    }
+                }
             }
         }
         VerticalScrollbar(

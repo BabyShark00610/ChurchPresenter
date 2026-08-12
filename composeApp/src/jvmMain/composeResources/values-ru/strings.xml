@@ -59,6 +59,16 @@
     <string name="shadow_opacity">Интенсивность (%)</string>
     <string name="hold_live">Удержать эфир</string>
     <string name="bible_split_browse_mode">Режим раздельного просмотра</string>
+    <string name="bible_cross_references">Перекрёстные ссылки</string>
+    <string name="bible_cross_references_title">Ссылки</string>
+    <string name="bible_cross_references_none">Нет перекрёстных ссылок</string>
+    <string name="bible_cross_references_often_next">Часто далее</string>
+    <string name="bible_cross_references_passage">Отрывок %1$s</string>
+    <string name="bible_cross_references_count">Перекрёстных ссылок: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · перекрёстных ссылок: %2$d</string>
+    <string name="bible_cross_references_keep_open">Закрепить</string>
+    <string name="bible_cross_references_close">Закрыть панель</string>
+    <string name="bible_cross_references_dismiss_hint">Esc — закрыть</string>
     <string name="bible_live_view">Эфир</string>
     <string name="copy_verse">Копировать стих</string>
     <string name="fade_in">Плавное появление</string>
