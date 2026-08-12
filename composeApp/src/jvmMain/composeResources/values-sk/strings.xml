@@ -1719,6 +1719,16 @@
     <string name="copy_verse">Kopírovať verš</string>
     <string name="style">Štýl</string>
     <string name="bible_split_browse_mode">Rozdelený režim prehliadania</string>
+    <string name="bible_cross_references">Krížové odkazy</string>
+    <string name="bible_cross_references_title">Odkazy</string>
+    <string name="bible_cross_references_none">Žiadne krížové odkazy</string>
+    <string name="bible_cross_references_often_next">Často nasleduje</string>
+    <string name="bible_cross_references_passage">Pasáž %1$s</string>
+    <string name="bible_cross_references_count">Krížové odkazy: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · krížové odkazy: %2$d</string>
+    <string name="bible_cross_references_keep_open">Pripnúť</string>
+    <string name="bible_cross_references_close">Zavrieť panel</string>
+    <string name="bible_cross_references_dismiss_hint">Esc — zavrieť</string>
     <string name="bible_live_view">Naživo</string>
     <string name="clear_recents">Vymazať posledné</string>
     <string name="recent">Posledné:</string>
