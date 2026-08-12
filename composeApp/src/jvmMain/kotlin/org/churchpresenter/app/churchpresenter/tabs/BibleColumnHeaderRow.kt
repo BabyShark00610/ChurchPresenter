@@ -69,14 +69,6 @@ import org.churchpresenter.app.churchpresenter.data.bibleDisplayNames
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The row of column captions above the browser, and the controls that live at the end of it.
- *
- * Everything here decides how the verse pane behaves right now — hold live, whether the cross
- * references are docked, which translation leads — so it sits where the operator is already
- * looking rather than in a settings dialog. Takes values and typed callbacks: no view model
- * crosses into it.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BibleColumnHeaderRow(
@@ -141,9 +133,7 @@ internal fun BibleColumnHeaderRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                     Spacer(Modifier.weight(1f))
-                    // Refs dock toggle — beside Hold Live because it is the same kind of decision:
-                    // how this verse pane behaves right now, taken during a service rather than in
-                    // a settings dialog.
+
                     val crossRefsLabel = stringResource(Res.string.bible_cross_references_title)
                     TooltipArea(
                         tooltip = {
@@ -197,7 +187,7 @@ internal fun BibleColumnHeaderRow(
                             )
                         }
                     }
-                    // Combined hold + kbd hint pill
+
                     val holdPillActive = holdAvailable
                     val holdLiveState = holdLive
                     TooltipArea(
@@ -270,7 +260,7 @@ internal fun BibleColumnHeaderRow(
                             }
                         }
                     }
-                    // STT mic button — visible once a successful connection has been made to the current URL
+
                     if (sttToggleVisible) {
                         val sttActionStr = if (sttConnected) stringResource(Res.string.stt_disconnect) else stringResource(Res.string.stt_connect)
                         ActionIconButton(
@@ -283,8 +273,7 @@ internal fun BibleColumnHeaderRow(
                             contentColor = if (sttConnected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    // Two bibles is the bilingual case and keeps its one-tap swap. Three or more
-                    // needs to express an order rather than a flip, so it gets the reorder menu.
+
                     if (translations.size == 2) {
                         ActionIconButton(
                             onClick = {
@@ -309,10 +298,7 @@ internal fun BibleColumnHeaderRow(
                             }
                         )
                     } else if (translations.size > 2) {
-                        // One header read per translation, so it does not belong in a `remember`,
-                        // which would run it during composition. Until it lands, the options below
-                        // fall back to file stems on their own.
-                    
+
                         val translationDisplayNames by produceState(
                             initialValue = emptyMap<String, String>(),
                             storageDirectory,
@@ -333,14 +319,14 @@ internal fun BibleColumnHeaderRow(
                                 .widthIn(min = 127.dp, max = 174.dp),
                         )
                     }
-                    // Add to Schedule (teal)
+
                     AddToScheduleButton(
                         onClick = {
                             onAddToSchedule()
                         },
                         tooltipText = addScheduleStr
                     )
-                    // Go Live (amber)
+
                     GoLiveButton(
                         onClick = onGoLive,
                         tooltipText = goLiveStr

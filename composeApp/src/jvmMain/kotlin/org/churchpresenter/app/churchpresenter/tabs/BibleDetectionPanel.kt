@@ -121,19 +121,6 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The scripture-detection strip under the search row, shown while the Bible Lookup Engine listens,
- * and the flag pills it offers in help/dev mode.
- */
-
-/**
- * The Bible-engine strip: what the engine is hearing, the controls that shape it, and the
- * references it has detected.
- *
- * Drawn only while the engine is enabled and STT is connected — at first launch the Bible tab stays
- * clean, with just navigation and verse display. Takes plain state and typed callbacks rather than
- * the view model, so every state it can be in is one a caller can hand it directly.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BibleDetectionPanel(
@@ -144,9 +131,9 @@ internal fun BibleDetectionPanel(
     continuationSpeed: ContinuationSpeed,
     detections: List<DetectedReference>,
     selectedIndex: Int,
-    /** The training-log flag pills, which only help/dev mode offers. */
+
     showFlagButtons: Boolean,
-    /** False with nothing on screen: the live flags describe what went out, so they mean nothing. */
+
     canFlagLive: Boolean,
     onAutoFollowChange: (Boolean) -> Unit,
     onTextMatchLevelChange: (TextMatchLevel) -> Unit,
@@ -163,7 +150,7 @@ internal fun BibleDetectionPanel(
                 TextMatchLevel.BALANCED -> stringResource(Res.string.bible_stt_level_balanced)
                 TextMatchLevel.AGGRESSIVE -> stringResource(Res.string.bible_stt_level_aggressive)
             }
-            // ── Controls row: status + auto-follow + reverse-lookup level + clear ──
+
             val statusText = when (status) {
                 BibleSttStatus.ENGINE_UNAVAILABLE -> stringResource(Res.string.bible_stt_engine_unavailable)
                 BibleSttStatus.NO_BIBLE -> stringResource(Res.string.bible_stt_no_bible)
@@ -200,7 +187,7 @@ internal fun BibleDetectionPanel(
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                     )
                 }
-                // Auto-follow flat button
+
                 TooltipArea(tooltip = {
                     Surface(shadowElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceVariant) {
                         Text(
@@ -256,7 +243,7 @@ internal fun BibleDetectionPanel(
                         }
                     }
                 }
-                // Text match flat button (cycles Off → Conservative → Balanced → Aggressive)
+
                 TooltipArea(tooltip = {
                     Surface(shadowElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceVariant) {
                         Text(
@@ -313,8 +300,7 @@ internal fun BibleDetectionPanel(
                     }
                 }
                 }
-                // Verse speed flat button (cycles Balanced → Fast) — only affects how fast the
-                // engine confirms a verse while reading straight through several in a row.
+
                 val verseSpeedName = when (continuationSpeed) {
                     ContinuationSpeed.BALANCED -> stringResource(Res.string.bible_next_verse_speed_balanced)
                     ContinuationSpeed.FAST -> stringResource(Res.string.bible_next_verse_speed_fast)
@@ -385,8 +371,7 @@ internal fun BibleDetectionPanel(
                         label = stringResource(Res.string.bible_stt_flag_wrong),
                         tooltip = stringResource(Res.string.bible_stt_flag_wrong_hint),
                         tint = MaterialTheme.colorScheme.error,
-                        // Both of these describe what went LIVE, so they mean nothing with an empty
-                        // output — and they used to swallow the click silently in that state.
+
                         enabled = canFlagLive,
                         disabledTooltip = stringResource(Res.string.bible_stt_flag_needs_live),
                         onClick = { onFlag("wrong_passage") }
@@ -404,7 +389,7 @@ internal fun BibleDetectionPanel(
                         icon = Icons.Filled.SearchOff,
                         label = stringResource(Res.string.bible_stt_flag_missed),
                         tooltip = stringResource(Res.string.bible_stt_flag_missed_hint),
-                        // Reports that the engine found nothing, so it needs nothing on screen.
+
                         tint = MaterialTheme.colorScheme.secondary,
                         onClick = { onFlag("missed_passage") }
                     )
@@ -424,10 +409,9 @@ internal fun BibleDetectionPanel(
                 }
             }
 
-            // ── Detected references — at most 4 rows tall, scrolls beyond ──
             val detRowHeight = 24.dp
             val detMaxVisibleRows = 4
-            // Hoisted: drawBehind is not composable, so the theme colour is read here and captured.
+
             val markerColor = MaterialTheme.semantic.marker
             if (detections.isNotEmpty()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -456,8 +440,7 @@ internal fun BibleDetectionPanel(
                         )
                         .padding(start = 12.dp, top = 4.dp, end = 6.dp, bottom = 4.dp)
                 ) {
-                    // Fixed-width icon column (source markers + transcription/translation markers) so
-                    // every reference + verse text lines up vertically, regardless of marker count.
+
                     Row(
                         modifier = Modifier.width(96.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -503,8 +486,7 @@ internal fun BibleDetectionPanel(
                             }
                             Spacer(Modifier.width(3.dp))
                         }
-                        // Track markers (mic = transcription, globe = translation) grouped with the
-                        // source markers, before the reference; shown only when that track corroborated.
+
                         listOf(
                             Triple(DetectionTrack.TRANSCRIPTION, Icons.Filled.Mic, Res.string.bible_stt_track_transcription),
                             Triple(DetectionTrack.TRANSLATION, Icons.Filled.Public, Res.string.bible_stt_track_translation),
@@ -543,12 +525,7 @@ internal fun BibleDetectionPanel(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    // The translation the speaker appears to be READING, when the engine could tell.
-                    // Kept to the right, past the verse text, for two reasons: it arrives later than
-                    // the row (the engine needs a verse or two of reading to decide, then backfills),
-                    // and it is usually NOT one of the loaded Bibles — so it must not sit next to the
-                    // reference where it would read as the source of the text shown. The verse text
-                    // simply truncates a little earlier to make room.
+
                     ref.detectedVersion?.let { version ->
                         Spacer(Modifier.width(6.dp))
                         TooltipArea(tooltip = {
@@ -582,17 +559,6 @@ internal fun BibleDetectionPanel(
     }
 }
 
-/**
- * Small flat pill button matching the auto-follow/text-match pills in the status row above.
- *
- * Coloured rather than muted, and it flashes when pressed, because pressing one has no other visible
- * effect at all — it appends a line to a training log. Drawn in the muted palette with no press
- * feedback, a working button was indistinguishable from a dead one, and an operator logged the same
- * flag seven times in under two seconds trying to make it respond.
- *
- * [enabled] false keeps that muted look, drops the click, and lets the tooltip explain why — so grey
- * means "not available right now" instead of being how every one of these buttons looks.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FlagPillButton(
@@ -604,8 +570,7 @@ private fun FlagPillButton(
     enabled: Boolean = true,
     disabledTooltip: String? = null,
 ) {
-    // Cleared by the LaunchedEffect below; a plain flag rather than a timestamp so nothing here
-    // depends on the wall clock.
+
     var flashing by remember { mutableStateOf(false) }
     LaunchedEffect(flashing) {
         if (flashing) {
@@ -672,5 +637,4 @@ private fun FlagPillButton(
     }
 }
 
-/** How long a flag pill stays filled after a click — long enough to notice, short enough not to nag. */
 private const val FLAG_FLASH_MS = 600L

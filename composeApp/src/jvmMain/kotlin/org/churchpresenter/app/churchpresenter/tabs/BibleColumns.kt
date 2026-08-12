@@ -75,21 +75,6 @@ import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The scrolling columns the browser is built from — books, chapters, verses, the live chapter
- * beside them — and the search field above.
- *
- * Presentation only: each takes the list it draws and reports the index that was picked.
- */
-
-/**
- * Says, above the book list, that a translation could not be read.
- *
- * A module that will not parse otherwise arrives as a Bible with no books in it, which looks
- * exactly like a Bible folder that has not been set up yet — so the one thing this has to do is
- * name the file and give the reason, and say where the rest of the detail went. A partial read
- * gets its own wording: what is on screen is real, it just stops early.
- */
 @Composable
 internal fun BibleLoadErrorBanner(errors: List<BibleLoadError>, modifier: Modifier = Modifier) {
     Surface(
@@ -268,8 +253,7 @@ internal fun BibleSearchField(
         if (value.isNotEmpty()) {
             IconButton(
                 onClick = onClear,
-                // Tagged as well as labelled: this tab has other content descriptions in play, and
-                // the tag keeps the existing test selector exact.
+
                 modifier = Modifier.size(30.dp).testTag("bible_searchClear")
             ) {
                 Icon(painter = painterResource(Res.drawable.ic_close), contentDescription = stringResource(Res.string.search_clear), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -339,14 +323,14 @@ internal fun BibleVerseColumn(
     onItemCtrlClicked: (Int) -> Unit = {},
     onItemShiftClicked: (Int) -> Unit = {},
     onRightClicked: (Int) -> Unit = {},
-    /** How many cross references this verse has; 0 draws no chip. */
+
     refCountFor: (Int) -> Int = { 0 },
-    /** That count, worded — resolved by the caller because this column holds no string resources. */
+
     refCountTooltip: (Int) -> String = { "" },
-    /** Which row's chip is showing its popover, or -1. */
+
     openRefIndex: Int = -1,
     onRefsClicked: (Int) -> Unit = {},
-    /** Drawn anchored to the open chip. A slot, so this column stays ignorant of cross references. */
+
     refPopover: @Composable () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
