@@ -180,6 +180,13 @@ import org.churchpresenter.app.churchpresenter.viewmodel.ScheduleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 
 import java.io.File
+import org.churchpresenter.app.churchpresenter.viewmodel.clearDetectedReferences
+import org.churchpresenter.app.churchpresenter.viewmodel.getSelectedVerses
+import org.churchpresenter.app.churchpresenter.viewmodel.invalidateInstanceLinkBibleCache
+import org.churchpresenter.app.churchpresenter.viewmodel.logLiveReference
+import org.churchpresenter.app.churchpresenter.viewmodel.onEngineScripture
+import org.churchpresenter.app.churchpresenter.viewmodel.onEngineVersion
+import org.churchpresenter.app.churchpresenter.viewmodel.setInstanceLinkSource
 
 // Kept for NavigationTopBar / menu — wraps ScheduleTabActions
 data class ScheduleActions(
