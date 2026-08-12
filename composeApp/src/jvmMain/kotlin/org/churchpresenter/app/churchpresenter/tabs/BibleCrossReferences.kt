@@ -108,7 +108,7 @@ internal data class CrossRefRow(
 )
 
 internal fun crossRefRow(
-    viewModel: BibleViewModel,
+    moduleRefFor: (bookId: Int, chapter: Int, verse: Int) -> BibleViewModel.ModuleRef?,
     fallbackAbbreviations: List<String>,
     bookId: Int,
     chapter: Int,
@@ -117,7 +117,7 @@ internal fun crossRefRow(
     learned: Boolean,
     count: Int = 0,
 ): CrossRefRow {
-    val moduleRef = viewModel.moduleRefFor(bookId, chapter, verse)
+    val moduleRef = moduleRefFor(bookId, chapter, verse)
     val abbreviation = moduleRef?.abbreviation
         ?: fallbackAbbreviations.getOrNull(bookId - 1).orEmpty()
     return CrossRefRow(

@@ -1,41 +1,16 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,77 +30,41 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.isSecondary
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.WindowPlacement
 import churchpresenter.composeapp.generated.resources.Res
-import churchpresenter.composeapp.generated.resources.add_to_schedule
 import churchpresenter.composeapp.generated.resources.bible_cross_references_count
 import churchpresenter.composeapp.generated.resources.bible_cross_references_popover_title
 import churchpresenter.composeapp.generated.resources.bible_no_primary_hint
 import churchpresenter.composeapp.generated.resources.bible_no_primary_step1
 import churchpresenter.composeapp.generated.resources.bible_no_primary_step2
 import churchpresenter.composeapp.generated.resources.bible_no_primary_title
-import churchpresenter.composeapp.generated.resources.bible_search_mode_auto
-import churchpresenter.composeapp.generated.resources.bible_search_mode_reference
-import churchpresenter.composeapp.generated.resources.bible_search_mode_text
-import churchpresenter.composeapp.generated.resources.bible_search_mode_tooltip
 import churchpresenter.composeapp.generated.resources.bible_smart_search_hint
-import churchpresenter.composeapp.generated.resources.bible_translation_order
-import churchpresenter.composeapp.generated.resources.bible_verse_selection_hint
 import churchpresenter.composeapp.generated.resources.book
 import churchpresenter.composeapp.generated.resources.chapter
-import churchpresenter.composeapp.generated.resources.clear
 import churchpresenter.composeapp.generated.resources.contains_phrase
-import churchpresenter.composeapp.generated.resources.copy_verse
 import churchpresenter.composeapp.generated.resources.current_book
 import churchpresenter.composeapp.generated.resources.entire_bible
 import churchpresenter.composeapp.generated.resources.exact_match
-import churchpresenter.composeapp.generated.resources.found_results
-import churchpresenter.composeapp.generated.resources.go_live
-import churchpresenter.composeapp.generated.resources.hold_live
-import churchpresenter.composeapp.generated.resources.ic_copy
-import churchpresenter.composeapp.generated.resources.ic_playlist_add
-import churchpresenter.composeapp.generated.resources.ic_search
-import churchpresenter.composeapp.generated.resources.mode
 import churchpresenter.composeapp.generated.resources.no_results_found
 import churchpresenter.composeapp.generated.resources.scope
-import churchpresenter.composeapp.generated.resources.search
-import churchpresenter.composeapp.generated.resources.swap_bibles
 import churchpresenter.composeapp.generated.resources.tab_focus_lost
 import churchpresenter.composeapp.generated.resources.verse
-import java.awt.Cursor
 import java.awt.Window as AwtWindow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
-import org.churchpresenter.app.churchpresenter.composables.DropdownSelector
 import org.churchpresenter.app.churchpresenter.composables.FocusLostBanner
 import org.churchpresenter.app.churchpresenter.composables.focusRescuePressHook
-import org.churchpresenter.app.churchpresenter.composables.initialPassClickable
 import org.churchpresenter.app.churchpresenter.composables.rememberFocusLostRescue
 import org.churchpresenter.app.churchpresenter.composables.rememberTokenGate
 import org.churchpresenter.app.churchpresenter.data.BibleBookAbbreviations
 import org.churchpresenter.app.churchpresenter.data.CrossReferenceRepository
 import org.churchpresenter.app.churchpresenter.data.formatCrossRefLabel
-import org.churchpresenter.app.churchpresenter.data.aggregateCrossRefs
-import org.churchpresenter.app.churchpresenter.data.mergeCrossRefs
 import org.churchpresenter.app.churchpresenter.data.sharedCrossReferences
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
 import org.churchpresenter.app.churchpresenter.data.VerseSequenceLog
@@ -139,11 +78,9 @@ import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
 import org.churchpresenter.app.churchpresenter.utils.UsageEvents
-import org.churchpresenter.app.churchpresenter.utils.highlightRanges
 import org.churchpresenter.app.churchpresenter.utils.isMultiTranslationPresentation
 import org.churchpresenter.app.churchpresenter.utils.isSplitScreenBible
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
-import org.churchpresenter.app.churchpresenter.viewmodel.BibleSearchMode
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
@@ -154,16 +91,11 @@ import org.churchpresenter.app.churchpresenter.viewmodel.nextLiveVerseNumber
 import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
 import org.churchpresenter.app.churchpresenter.viewmodel.verseSpan
 import org.churchpresenter.app.churchpresenter.viewmodel.verseTextOf
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-private val CROSS_REF_MIN_WIDTH = 200.dp
+internal val CROSS_REF_MIN_WIDTH = 200.dp
 
-private val CROSS_REF_MAX_WIDTH = 500.dp
-
-private const val CROSS_REF_RANGE_ANCHORS = 3
-
-private const val CROSS_REF_STATIC_LIMIT = 8
+internal val CROSS_REF_MAX_WIDTH = 500.dp
 
 internal fun withBibleColumnWidths(settings: AppSettings, isMaximized: Boolean, bookWidthDp: Int, chapterWidthDp: Int): AppSettings =
     if (isMaximized) settings.copy(maximizedLayout = settings.maximizedLayout.copy(bibleColWidthBook = bookWidthDp, bibleColWidthChapter = chapterWidthDp))
@@ -283,20 +215,6 @@ fun BibleTab(
 
     val crossRefsEnabled = appSettings.bibleSettings.crossReferencesPanel
     val crossRefRepository = crossReferences ?: sharedCrossReferences
-    var crossRefRows by remember { mutableStateOf<List<CrossRefRow>>(emptyList()) }
-    var selectedCrossRefIdx by remember { mutableStateOf(-1) }
-
-    var crossRefCounts by remember { mutableStateOf<Map<Int, Int>>(emptyMap()) }
-
-    var crossRefPopoverIndex by remember { mutableStateOf(-1) }
-
-    var crossRefPopoverAnchor by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
-    var crossRefPopoverLabel by remember { mutableStateOf("") }
-    var crossRefPopoverRows by remember { mutableStateOf<List<CrossRefRow>>(emptyList()) }
-
-    var crossRefNavigatedTo by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
-
-    var crossRefAnchorEpoch by remember { mutableStateOf(0) }
 
     val fallbackAbbreviationResources =
         BibleBookAbbreviations.abbreviationResourceIds.map { stringResource(it) }
@@ -306,117 +224,35 @@ fun BibleTab(
 
     val loadedModule = viewModel.primaryBible.value
 
-    var crossRefAnchors by remember { mutableStateOf<List<Triple<Int, Int, Int>>>(emptyList()) }
-
-    var crossRefAnchorIsLive by remember { mutableStateOf(false) }
-
-    var crossRefRun by remember { mutableStateOf<List<Triple<Int, Int, Int>>>(emptyList()) }
-
-    fun anchorLiveVerse(ref: Triple<Int, Int, Int>) {
-        val previous = crossRefRun.lastOrNull()
-        val continues = previous != null &&
-            previous.first == ref.first && previous.second == ref.second && ref.third > previous.third
-        crossRefRun = if (continues) crossRefRun + ref else listOf(ref)
-        crossRefAnchors = listOf(ref)
-        crossRefAnchorIsLive = true
-        crossRefNavigatedTo = null
-    }
-
-    LaunchedEffect(
-        selectedBookIndex, selectedChapter, selectedVerseIndex, verses,
-        verseSelectionToken, crossRefAnchorEpoch, loadedModule,
-    ) {
-        val selectedNumbers = viewModel.getSelectedVerseNumbers().ifEmpty {
-            listOfNotNull(verses.getOrNull(selectedVerseIndex)?.let(::verseNumberOf))
-        }
-
-        crossRefAnchors = selectedNumbers.take(CROSS_REF_RANGE_ANCHORS).mapNotNull { number ->
-            viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, number)
-                ?.let { (book, chapter, verse) -> verse?.let { Triple(book, chapter, it) } }
-        }
-        crossRefAnchorIsLive = false
-    }
-
-    val crossRefPassageMode = crossRefAnchorIsLive && crossRefRun.size > 1
-
-    LaunchedEffect(
-        crossRefsEnabled, crossRefAnchors, crossRefPassageMode, crossRefRun,
-
-        crossRefAnchorEpoch, loadedModule, fallbackAbbreviations,
-    ) {
-        if (!crossRefsEnabled || crossRefAnchors.isEmpty()) {
-            crossRefRows = emptyList()
-            crossRefNavigatedTo = null
-            return@LaunchedEffect
-        }
-
-        if (crossRefAnchors.size == 1 && crossRefAnchors.first() == crossRefNavigatedTo) return@LaunchedEffect
-        crossRefNavigatedTo = null
-
-        val learned = crossRefAnchors.first().let { (book, chapter, verse) ->
+    val crossRefs = rememberBibleCrossReferenceState(
+        enabled = crossRefsEnabled,
+        repository = crossRefRepository,
+        fallbackAbbreviations = fallbackAbbreviations,
+        selectedBookIndex = selectedBookIndex,
+        selectedChapter = selectedChapter,
+        selectedVerseIndex = selectedVerseIndex,
+        verses = verses,
+        verseSelectionToken = verseSelectionToken,
+        loadedModule = loadedModule,
+        moduleRefFor = viewModel::moduleRefFor,
+        canonicalRefForDisplay = viewModel::canonicalRefForDisplay,
+        selectedVerseNumbers = viewModel::getSelectedVerseNumbers,
+        successors = { book, chapter, verse ->
             verseSequenceLog?.successors(book, chapter, verse).orEmpty()
-        }.map { crossRefRow(viewModel, fallbackAbbreviations, it.bookId, it.chapter, it.verse, null, learned = true) }
-
-        crossRefRepository.ensureLoaded()
-        val sources = if (crossRefPassageMode) crossRefRun else crossRefAnchors
-        val perVerse = sources.map { (book, chapter, verse) -> crossRefRepository.forVerse(book, chapter, verse) }
-        val references = if (crossRefPassageMode) {
-            aggregateCrossRefs(perVerse, limit = CROSS_REF_STATIC_LIMIT).map {
-                crossRefRow(
-                    viewModel, fallbackAbbreviations, it.bookId, it.chapter, it.startVerse,
-                    it.endVerse, learned = false, count = it.sourceCount,
-                )
-            }
-        } else {
-            mergeCrossRefs(perVerse, limit = CROSS_REF_STATIC_LIMIT).map {
-                crossRefRow(viewModel, fallbackAbbreviations, it.bookId, it.chapter, it.verse, it.endVerse, learned = false)
-            }
-        }
-
-        val learnedKeys = learned.map { Triple(it.bookId, it.chapter, it.verse) }.toSet()
-        crossRefRows = learned + references.filter { Triple(it.bookId, it.chapter, it.verse) !in learnedKeys }
-        selectedCrossRefIdx = -1
-    }
-
-    LaunchedEffect(selectedBookIndex, selectedChapter, verses, loadedModule, crossRefRepository) {
-        crossRefRepository.ensureLoaded()
-        crossRefCounts = buildMap {
-            verses.forEach { line ->
-                val number = verseNumberOf(line) ?: return@forEach
-                val canonical = viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, number)
-                val verse = canonical?.third ?: return@forEach
-                val count = crossRefRepository.forVerse(canonical.first, canonical.second, verse).size
-                if (count > 0) put(number, count)
-            }
-        }
-    }
-
-    LaunchedEffect(crossRefPopoverAnchor, loadedModule, fallbackAbbreviations) {
-        val anchor = crossRefPopoverAnchor
-        if (anchor == null) {
-            crossRefPopoverRows = emptyList()
-            return@LaunchedEffect
-        }
-        crossRefRepository.ensureLoaded()
-        crossRefPopoverRows = crossRefRepository.forVerse(anchor.first, anchor.second, anchor.third)
-            .map { crossRefRow(viewModel, fallbackAbbreviations, it.bookId, it.chapter, it.verse, it.endVerse, learned = false) }
-    }
+        },
+    )
 
     val crossRefCountStr = stringResource(Res.string.bible_cross_references_count)
     val crossRefPopoverTitleStr = stringResource(Res.string.bible_cross_references_popover_title)
 
     fun openCrossRef(row: CrossRefRow) {
-        crossRefNavigatedTo = Triple(row.bookId, row.chapter, row.verse)
-        crossRefPopoverIndex = -1
-        crossRefPopoverAnchor = null
+        crossRefs.followed(row)
         viewModel.selectVerseByCanonicalRef(row.bookId, row.chapter, row.verse)
         focusRequester.requestFocus()
     }
 
     fun goLiveCrossRef(row: CrossRefRow) {
-        crossRefNavigatedTo = Triple(row.bookId, row.chapter, row.verse)
-        crossRefPopoverIndex = -1
-        crossRefPopoverAnchor = null
+        crossRefs.followed(row)
         viewModel.selectVerseByCanonicalRef(row.bookId, row.chapter, row.verse, goLiveSource = "crossref")
         focusRequester.requestFocus()
     }
@@ -547,7 +383,7 @@ fun BibleTab(
                 if (verse != null) {
                     verseSequenceLog?.recordGoLive(book, chapter, verse)
 
-                    anchorLiveVerse(Triple(book, chapter, verse))
+                    crossRefs.anchorLiveVerse(Triple(book, chapter, verse))
                 }
             }
         }
@@ -696,74 +532,7 @@ fun BibleTab(
         onSettingsChangeState.value { s -> withBibleCrossRefPanelWidth(s, isMaximized, widthDp) }
     }
 
-    @Composable
-    fun SearchModeChip(modifier: Modifier = Modifier) {
-        val (label, container, content) = when (searchMode) {
-            BibleSearchMode.AUTO -> Triple(
-                Res.string.bible_search_mode_auto,
-                MaterialTheme.colorScheme.primary,
-                MaterialTheme.colorScheme.onPrimary
-            )
-            BibleSearchMode.REFERENCE -> Triple(
-                Res.string.bible_search_mode_reference,
-                MaterialTheme.colorScheme.secondary,
-                MaterialTheme.colorScheme.onSecondary
-            )
-            BibleSearchMode.TEXT -> Triple(
-                Res.string.bible_search_mode_text,
-                MaterialTheme.colorScheme.tertiary,
-                MaterialTheme.colorScheme.onTertiary
-            )
-        }
-        TooltipArea(
-            tooltip = {
-                Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) {
-                    Text(
-                        text = stringResource(Res.string.bible_search_mode_tooltip),
-                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
-        ) {
-            Surface(
-                onClick = { viewModel.cycleSearchMode(); focusRequester.requestFocus() },
-                modifier = modifier,
-                shape = MaterialTheme.shapes.small,
-                color = container,
-                contentColor = content
-            ) {
-                Text(
-                    text = stringResource(label),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.05.sp
-                    ),
-                    maxLines = 1,
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                )
-            }
-        }
-    }
 
-    @Composable
-    fun DragHandle(onDragEnd: () -> Unit = ::saveColWidths, onDrag: (Float) -> Unit) {
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.outlineVariant)
-                .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)))
-                .draggable(
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta -> onDrag(delta) },
-                    onDragStopped = { onDragEnd() }
-                )
-        )
-    }
 
     val focusRescue = rememberFocusLostRescue(hostWindow, focusRequester)
     Column(
@@ -784,91 +553,22 @@ fun BibleTab(
         }
 
         val searchPlaceholder = stringResource(Res.string.bible_smart_search_hint)
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp)) {
-            val searchIsNarrow = maxWidth < 440.dp
-
-            if (searchIsNarrow) {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    BibleSearchField(
-                        value = searchQuery,
-                        placeholder = searchPlaceholder,
-                        onValueChange = { viewModel.onSmartQueryChanged(it) },
-                        onClear = { viewModel.clearSearch(); focusRequester.requestFocus() },
-                        onSubmit = { viewModel.submitSmartQuery(); focusRequester.requestFocus() },
-                        onFocusChanged = { searchFieldFocused = it },
-                        modeChip = { SearchModeChip() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DropdownSelector(
-                            label = stringResource(Res.string.scope),
-                            items = scopeOptions,
-                            selected = selectedScope,
-                            onSelectedChange = { newValue ->
-                                viewModel.updateSelectedScopeIndex(scopeOptions.indexOf(newValue).coerceAtLeast(0))
-                            }
-                        )
-                        DropdownSelector(
-                            label = stringResource(Res.string.mode),
-                            items = modeOptions,
-                            selected = selectedMode,
-                            onSelectedChange = { newValue ->
-                                viewModel.updateSelectedModeIndex(modeOptions.indexOf(newValue).coerceAtLeast(0))
-                            }
-                        )
-                        Box(
-                            modifier = Modifier.size(42.dp)
-                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
-                                    viewModel.submitSmartQuery(); focusRequester.requestFocus()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(painter = painterResource(Res.drawable.ic_search), contentDescription = stringResource(Res.string.search), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
-                        }
-                    }
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    BibleSearchField(
-                        value = searchQuery,
-                        placeholder = searchPlaceholder,
-                        onValueChange = { viewModel.onSmartQueryChanged(it) },
-                        onClear = { viewModel.clearSearch(); focusRequester.requestFocus() },
-                        onSubmit = { viewModel.submitSmartQuery(); focusRequester.requestFocus() },
-                        onFocusChanged = { searchFieldFocused = it },
-                        modeChip = { SearchModeChip() },
-                        modifier = Modifier.weight(1f)
-                    )
-                    DropdownSelector(
-                        label = stringResource(Res.string.scope),
-                        items = scopeOptions,
-                        selected = selectedScope,
-                        onSelectedChange = { newValue ->
-                            viewModel.updateSelectedScopeIndex(scopeOptions.indexOf(newValue).coerceAtLeast(0))
-                        }
-                    )
-                    DropdownSelector(
-                        label = stringResource(Res.string.mode),
-                        items = modeOptions,
-                        selected = selectedMode,
-                        onSelectedChange = { newValue ->
-                            viewModel.updateSelectedModeIndex(modeOptions.indexOf(newValue).coerceAtLeast(0))
-                        }
-                    )
-                    Box(
-                        modifier = Modifier.size(42.dp)
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
-                            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
-                                viewModel.submitSmartQuery(); focusRequester.requestFocus()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(painter = painterResource(Res.drawable.ic_search), contentDescription = stringResource(Res.string.search), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
-            }
-        }
+        BibleSearchRow(
+            searchQuery = searchQuery,
+            searchPlaceholder = searchPlaceholder,
+            searchMode = searchMode,
+            scopeOptions = scopeOptions,
+            selectedScope = selectedScope,
+            modeOptions = modeOptions,
+            selectedMode = selectedMode,
+            onQueryChange = { viewModel.onSmartQueryChanged(it) },
+            onClear = { viewModel.clearSearch(); focusRequester.requestFocus() },
+            onSubmit = { viewModel.submitSmartQuery(); focusRequester.requestFocus() },
+            onFocusChanged = { searchFieldFocused = it },
+            onCycleSearchMode = { viewModel.cycleSearchMode(); focusRequester.requestFocus() },
+            onScopeSelected = viewModel::updateSelectedScopeIndex,
+            onModeSelected = viewModel::updateSelectedModeIndex,
+        )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         if (engineSettings.enabled && sttConnected) {
@@ -992,65 +692,15 @@ fun BibleTab(
                 }
             }
         } else if (isSearchMode && searchResults.isNotEmpty()) {
-            Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(31.dp)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(Res.string.found_results, searchResults.size),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-                    val listState = rememberLazyListState()
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(end = 8.dp)) {
-                        itemsIndexed(searchResults) { _, result ->
-
-                            val resultText = result.verseText
-                            val highlightedText = buildAnnotatedString {
-                                var lastIndex = 0
-
-                                for ((safeStart, safeEnd) in highlightRanges(resultText, searchQuery)) {
-                                    append(resultText.substring(lastIndex.coerceAtMost(safeStart), safeStart))
-                                    withStyle(style = SpanStyle(
-                                        background = MaterialTheme.colorScheme.primaryContainer,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        fontWeight = FontWeight.Bold
-                                    )) {
-                                        append(resultText.substring(safeStart, safeEnd))
-                                    }
-                                    lastIndex = safeEnd
-                                }
-                                if (lastIndex < resultText.length) append(resultText.substring(lastIndex))
-                            }
-                            Text(
-                                text = highlightedText,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .initialPassClickable {
-                                        viewModel.selectSearchResult(result)
-                                        viewModel.clearSearch()
-                                        focusRequester.requestFocus()
-                                    }
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        }
-                    }
-                    VerticalScrollbar(
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                        adapter = rememberScrollbarAdapter(scrollState = listState)
-                    )
-                }
-            }
+            BibleSearchResults(
+                results = searchResults,
+                query = searchQuery,
+                onResultChosen = { result ->
+                    viewModel.selectSearchResult(result)
+                    viewModel.clearSearch()
+                    focusRequester.requestFocus()
+                },
+            )
         } else if (isSearchMode && searchQuery.isNotEmpty()) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -1083,8 +733,8 @@ fun BibleTab(
                 onCrossReferencesToggle = {
                     onSettingsChange { s -> withBibleCrossReferencePanel(s, !crossRefsEnabled) }
 
-                    crossRefPopoverIndex = -1
-                    crossRefPopoverAnchor = null
+                    crossRefs.popoverIndex = -1
+                    crossRefs.popoverAnchor = null
                     focusRequester.requestFocus()
                 },
                 onHoldLiveToggle = {
@@ -1116,324 +766,171 @@ fun BibleTab(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Row(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 4.dp)) {
-
-                Column(modifier = Modifier.width(with(density) { colWBook.toDp() }).fillMaxHeight()) {
-                    BibleBrowserColumn(
-                        items = filteredBooks,
-                        selectedIndex = filteredBooks.indexOf(books.getOrNull(selectedBookIndex) ?: "").coerceAtLeast(0),
-                        singleLine = true,
-                        onItemSelected = { index ->
-                            val bookName = filteredBooks.getOrNull(index)
-                            bookName?.let {
-                                val realIndex = books.indexOf(it)
-                                if (realIndex >= 0) viewModel.selectBook(realIndex)
-                            }
+            BibleBrowserPane(
+                books = books,
+                filteredBooks = filteredBooks,
+                filteredChapters = filteredChapters,
+                filteredVerses = filteredVerses,
+                selectedBookIndex = selectedBookIndex,
+                selectedChapter = selectedChapter,
+                selectedVerseIndices = filteredSelectionIndices(
+                    viewModel.selectedVerseIndices, verses, filteredVerses,
+                ),
+                selectedVerseInFiltered = if (filteredVerses.isEmpty()) -1 else
+                    filteredVerses.indexOf(verses.getOrNull(selectedVerseIndex)).coerceAtLeast(0),
+                accentColor = accentColor,
+                bookWidthPx = colWBook,
+                chapterWidthPx = colWChapter,
+                crossRefWidthPx = colWCrossRef,
+                splitWidthPx = colWSplit,
+                onBookWidthChange = { colWBook = it },
+                onChapterWidthChange = { colWChapter = it },
+                onCrossRefWidthChange = { colWCrossRef = it },
+                onSplitWidthChange = { colWSplit = it },
+                onSaveColumnWidths = ::saveColWidths,
+                onSaveCrossRefWidth = ::saveColWCrossRef,
+                onSaveSplitWidth = ::saveColWSplit,
+                crossRefs = crossRefs,
+                crossRefsEnabled = crossRefsEnabled,
+                crossRefCountLabel = { count -> crossRefCountStr.format(count) },
+                crossRefPopoverTitle = { label, size -> crossRefPopoverTitleStr.format(label, size) },
+                onOpenCrossRef = ::openCrossRef,
+                onGoLiveCrossRef = ::goLiveCrossRef,
+                onScheduleCrossRef = ::scheduleCrossRef,
+                onDockCrossRefs = {
+                    onSettingsChange { s -> withBibleCrossReferencePanel(s, true) }
+                    crossRefs.closePopover()
+                    focusRequester.requestFocus()
+                },
+                onUndockCrossRefs = {
+                    onSettingsChange { s -> withBibleCrossReferencePanel(s, false) }
+                    focusRequester.requestFocus()
+                },
+                onDismissPopover = { crossRefs.closePopover(); focusRequester.requestFocus() },
+                onRefsChipClicked = { index ->
+                    val verseText = filteredVerses.getOrNull(index)
+                    val realIndex = verseText?.let { verses.indexOf(it) } ?: -1
+                    if (realIndex >= 0) viewModel.selectVerse(realIndex)
+                    crossRefs.restartFrom()
+                    val canonical = verseText?.let(::verseNumberOf)
+                        ?.let { viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, it) }
+                        ?.let { (book, chapter, verse) -> verse?.let { Triple(book, chapter, it) } }
+                    if (crossRefsEnabled || canonical == null || crossRefs.popoverIndex == index) {
+                        crossRefs.closePopover()
+                    } else {
+                        crossRefs.popoverIndex = index
+                        crossRefs.popoverAnchor = canonical
+                        crossRefs.popoverLabel = viewModel
+                            .moduleRefFor(canonical.first, canonical.second, canonical.third)
+                            ?.let { formatCrossRefLabel(it.abbreviation, it.chapter, it.verse, null) }
+                            ?: ""
+                    }
+                    focusRequester.requestFocus()
+                },
+                onBookSelected = { index ->
+                    filteredBooks.getOrNull(index)?.let {
+                        val realIndex = books.indexOf(it)
+                        if (realIndex >= 0) viewModel.selectBook(realIndex)
+                    }
+                },
+                onChapterSelected = { index ->
+                    filteredChapters.getOrNull(index)?.toIntOrNull()?.let(viewModel::selectChapter)
+                },
+                onVerseSelected = { index ->
+                    filteredVerses.getOrNull(index)?.let {
+                        val realIndex = verses.indexOf(it)
+                        if (realIndex >= 0) viewModel.selectVerse(realIndex)
+                    }
+                    crossRefs.restartFrom()
+                    crossRefs.closePopover()
+                    focusRequester.requestFocus()
+                },
+                onVerseCtrlClicked = { index ->
+                    filteredVerses.getOrNull(index)?.let {
+                        val realIndex = verses.indexOf(it)
+                        if (realIndex >= 0) viewModel.ctrlClickVerse(realIndex)
+                    }
+                },
+                onVerseShiftClicked = { index ->
+                    filteredVerses.getOrNull(index)?.let {
+                        val realIndex = verses.indexOf(it)
+                        if (realIndex >= 0) viewModel.shiftClickVerse(realIndex)
+                    }
+                },
+                onVerseRightClicked = { index ->
+                    filteredVerses.getOrNull(index)?.let {
+                        val realIndex = verses.indexOf(it)
+                        if (realIndex >= 0) viewModel.selectVerse(realIndex)
+                    }
+                },
+                onVerseDoubleClicked = { goLiveWithHistory(); focusRequester.requestFocus() },
+                onCopyVerse = {
+                    val verseStr = verses.getOrNull(selectedVerseIndex) ?: ""
+                    val bookName = books.getOrNull(selectedBookIndex) ?: ""
+                    val reference = formatVerseReference(verseStr, bookName, selectedChapter)
+                    java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                        java.awt.datatransfer.StringSelection("$reference\n${verseTextOf(verseStr)}"), null,
+                    )
+                },
+                onAddToSchedule = {
+                    viewModel.addCurrentVerseToSchedule { bookName, chapter, verseNumber, verseText, verseRange, bookId ->
+                        onAddToSchedule?.invoke(bookName, chapter, verseNumber, verseText, verseRange, bookId)
+                    }
+                    focusRequester.requestFocus()
+                },
+                isSplitActive = isSplitActive,
+                liveChapterVerses = liveChapterVerses,
+                liveVerseNumbers = liveVerseNumbers,
+                onLiveVerseClicked = { verseNum ->
+                    scope.launch {
+                        val shown = viewModel.getVersesForDisplay(liveBookName, liveChapterNum, verseNum)
+                        if (shown.isNotEmpty()) {
+                            val primary = shown.first()
+                            statisticsManager?.recordVerseDisplay(primary.bibleName, primary.bookName, primary.chapter, primary.verseNumber)
+                            onVerseSelected(shown)
+                            onInstanceLinkSendVerse?.invoke(primary.bookName, primary.chapter, primary.verseNumber, primary.verseText, primary.verseRange)
+                            presenterManager?.let { if (it.bibleHold.value) { it.setBibleHold(false); onInstanceLinkSendBibleHold?.invoke(false) } }
+                            onPresenting(Presenting.BIBLE)
+                            viewModel.logLiveReference(
+                                displayBookIndex = viewModel.displayIndexForBookName(liveBookName)
+                                    .takeIf { it >= 0 } ?: viewModel.selectedBookIndex.value,
+                                chapter    = primary.chapter,
+                                verseStart = primary.verseNumber,
+                                verseEnd   = null,
+                                source     = "manual",
+                                autoFollow = viewModel.autoFollowEnabled.value,
+                            )
+                            viewModel.canonicalRefForBookName(
+                                liveBookName, primary.chapter, primary.verseNumber,
+                            )?.let(crossRefs::anchorLiveVerse)
                         }
-                    )
-                }
-
-                DragHandle { amount ->
-                    colWBook = (colWBook + amount).coerceIn(
-                        with(density) { 80.dp.toPx() },
-                        with(density) { 400.dp.toPx() }
-                    )
-                }
-
-                Column(modifier = Modifier.width(with(density) { colWChapter.toDp() }).fillMaxHeight()) {
-                    BibleBrowserColumn(
-                        items = filteredChapters,
-                        selectedIndex = filteredChapters.indexOf(selectedChapter.toString()).coerceAtLeast(0),
-                        centerText = true,
-                        rowHeight = 31.dp,
-                        onItemSelected = { index ->
-                            val chapterStr = filteredChapters.getOrNull(index)
-                            chapterStr?.toIntOrNull()?.let { chapter -> viewModel.selectChapter(chapter) }
+                    }
+                },
+            ) {
+                BibleHistoryPanel(
+                    entries = viewModel.history,
+                    expanded = historyExpanded,
+                    selectedIndex = selectedHistoryIdx,
+                    onToggleExpanded = { historyExpanded = !historyExpanded },
+                    onClear = { viewModel.clearHistory() },
+                    onEntryClick = { idx ->
+                        selectedHistoryIdx = idx
+                        viewModel.history.getOrNull(idx)?.let {
+                            viewModel.selectVerseByDetails(it.bookName, it.chapter, it.verseNumber, it.verseRange)
                         }
-                    )
-                }
-
-                DragHandle { amount ->
-                    colWChapter = (colWChapter + amount).coerceIn(
-                        with(density) { 60.dp.toPx() },
-                        with(density) { 300.dp.toPx() }
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-
-                    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-
-                    val crossRefReserve =
-                        if (crossRefsEnabled) colWCrossRef + with(density) { 5.dp.toPx() } else 0f
-                    val effectiveSplitWidth = if (isSplitActive)
-                        colWSplit.coerceAtMost(
-                            (constraints.maxWidth - crossRefReserve - with(density) { (100.dp + 6.dp).toPx() }).coerceAtLeast(0f)
-                        )
-                    else 0f
-                    Row(modifier = Modifier.fillMaxSize()) {
-
-                        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                            var showVerseContextMenu by remember { mutableStateOf(false) }
-                            var verseContextMenuOffset by remember { mutableStateOf(DpOffset.Zero) }
-
-                            Box(modifier = Modifier.fillMaxSize()
-                                .pointerInput(Unit) {
-                                    awaitPointerEventScope {
-                                        while (true) {
-                                            val event = awaitPointerEvent(PointerEventPass.Main)
-                                            if (event.type == PointerEventType.Press && event.button?.isSecondary == true) {
-                                                val pos = event.changes.first().position
-                                                verseContextMenuOffset = with(density) { DpOffset(pos.x.toDp(), pos.y.toDp()) }
-                                            }
-                                        }
-                                    }
-                                }
-                            ) {
-                                val multiIndicesInFiltered = filteredSelectionIndices(
-                                    viewModel.selectedVerseIndices, verses, filteredVerses,
-                                )
-
-                                BibleVerseColumn(
-                                    verses = filteredVerses,
-                                    selectedIndex = if (filteredVerses.isEmpty()) -1 else {
-                                        val currentVerse = verses.getOrNull(selectedVerseIndex)
-                                        filteredVerses.indexOf(currentVerse).coerceAtLeast(0)
-                                    },
-                                    selectedIndices = multiIndicesInFiltered,
-                                    accentColor = accentColor,
-                                    onItemSelected = { index ->
-                                        val verseText = filteredVerses.getOrNull(index)
-                                        verseText?.let {
-                                            val realIndex = verses.indexOf(it)
-                                            if (realIndex >= 0) viewModel.selectVerse(realIndex)
-                                        }
-
-                                        crossRefNavigatedTo = null
-                                        crossRefAnchorEpoch++
-
-                                        crossRefPopoverIndex = -1
-                                        crossRefPopoverAnchor = null
-                                        focusRequester.requestFocus()
-                                    },
-                                    refCountFor = { index ->
-                                        filteredVerses.getOrNull(index)
-                                            ?.let(::verseNumberOf)
-                                            ?.let { crossRefCounts[it] } ?: 0
-                                    },
-                                    refCountTooltip = { count ->
-                                        crossRefCountStr.format(count)
-                                    },
-                                    openRefIndex = if (crossRefsEnabled) -1 else crossRefPopoverIndex,
-                                    onRefsClicked = { index ->
-                                        val verseText = filteredVerses.getOrNull(index)
-                                        val realIndex = verseText?.let { verses.indexOf(it) } ?: -1
-                                        if (realIndex >= 0) viewModel.selectVerse(realIndex)
-                                        crossRefNavigatedTo = null
-                                        crossRefAnchorEpoch++
-                                        val number = verseText?.let(::verseNumberOf)
-                                        val canonical = number?.let {
-                                            viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, it)
-                                        }?.let { (book, chapter, verse) -> verse?.let { Triple(book, chapter, it) } }
-
-                                        if (crossRefsEnabled || canonical == null || crossRefPopoverIndex == index) {
-                                            crossRefPopoverIndex = -1
-                                            crossRefPopoverAnchor = null
-                                        } else {
-                                            crossRefPopoverIndex = index
-                                            crossRefPopoverAnchor = canonical
-                                            crossRefPopoverLabel = viewModel
-                                                .moduleRefFor(canonical.first, canonical.second, canonical.third)
-                                                ?.let { formatCrossRefLabel(it.abbreviation, it.chapter, it.verse, null) }
-                                                ?: ""
-                                        }
-                                        focusRequester.requestFocus()
-                                    },
-                                    refPopover = {
-                                        CrossReferencePopover(
-                                            title = crossRefPopoverTitleStr.format(
-                                                crossRefPopoverLabel, crossRefPopoverRows.size,
-                                            ),
-                                            rows = crossRefPopoverRows,
-                                            onDismiss = {
-                                                crossRefPopoverIndex = -1
-                                                crossRefPopoverAnchor = null
-                                                focusRequester.requestFocus()
-                                            },
-                                            onDock = {
-                                                onSettingsChange { s -> withBibleCrossReferencePanel(s, true) }
-                                                crossRefPopoverIndex = -1
-                                                crossRefPopoverAnchor = null
-                                                focusRequester.requestFocus()
-                                            },
-                                            onOpen = ::openCrossRef,
-                                            onGoLive = ::goLiveCrossRef,
-                                            onAddToSchedule = ::scheduleCrossRef,
-                                        )
-                                    },
-                                    onItemDoubleClicked = { _ -> goLiveWithHistory() },
-                                    onItemCtrlClicked = { index ->
-                                        val verseText = filteredVerses.getOrNull(index)
-                                        verseText?.let {
-                                            val realIndex = verses.indexOf(it)
-                                            if (realIndex >= 0) viewModel.ctrlClickVerse(realIndex)
-                                        }
-                                    },
-                                    onItemShiftClicked = { index ->
-                                        val verseText = filteredVerses.getOrNull(index)
-                                        verseText?.let {
-                                            val realIndex = verses.indexOf(it)
-                                            if (realIndex >= 0) viewModel.shiftClickVerse(realIndex)
-                                        }
-                                    },
-                                    onRightClicked = { index ->
-                                        val verseText = filteredVerses.getOrNull(index)
-                                        verseText?.let {
-                                            val realIndex = verses.indexOf(it)
-                                            if (realIndex >= 0) viewModel.selectVerse(realIndex)
-                                        }
-                                        showVerseContextMenu = true
-                                    }
-                                )
-
-                                DropdownMenu(
-                                    expanded = showVerseContextMenu,
-                                    onDismissRequest = { showVerseContextMenu = false },
-                                    offset = verseContextMenuOffset
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(Res.string.copy_verse)) },
-                                        leadingIcon = { Icon(painter = painterResource(Res.drawable.ic_copy), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface) },
-                                        onClick = {
-                                            val verseStr = verses.getOrNull(selectedVerseIndex) ?: ""
-                                            val verseText = verseTextOf(verseStr)
-                                            val bookName = books.getOrNull(selectedBookIndex) ?: ""
-                                            val reference = formatVerseReference(verseStr, bookName, selectedChapter)
-                                            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                                            clipboard.setContents(java.awt.datatransfer.StringSelection("$reference\n$verseText"), null)
-                                            showVerseContextMenu = false
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(Res.string.add_to_schedule)) },
-                                        leadingIcon = { Icon(painter = painterResource(Res.drawable.ic_playlist_add), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary) },
-                                        onClick = {
-                                            viewModel.addCurrentVerseToSchedule { bookName, chapter, verseNumber, verseText, verseRange, bookId ->
-                                                onAddToSchedule?.invoke(bookName, chapter, verseNumber, verseText, verseRange, bookId)
-                                            }
-                                            focusRequester.requestFocus()
-                                            showVerseContextMenu = false
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(Res.string.go_live)) },
-                                        leadingIcon = { Icon(imageVector = Icons.Default.Tv, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) },
-                                        onClick = { goLiveWithHistory(); focusRequester.requestFocus(); showVerseContextMenu = false }
-                                    )
-                                }
-                            }
-                        }
-
-                        if (crossRefsEnabled) {
-                            DragHandle(onDragEnd = ::saveColWCrossRef) { amount ->
-                                colWCrossRef = (colWCrossRef - amount).coerceIn(
-                                    with(density) { CROSS_REF_MIN_WIDTH.toPx() },
-                                    with(density) { CROSS_REF_MAX_WIDTH.toPx() },
-                                )
-                            }
-                            CrossReferencePanel(
-                                rows = crossRefRows,
-                                selectedIndex = selectedCrossRefIdx,
-                                onClick = { idx ->
-                                    selectedCrossRefIdx = idx
-                                    crossRefRows.getOrNull(idx)?.let(::openCrossRef)
-                                },
-                                onDoubleClick = { idx ->
-                                    selectedCrossRefIdx = idx
-                                    crossRefRows.getOrNull(idx)?.let(::goLiveCrossRef)
-                                },
-                                onAddToSchedule = { idx -> crossRefRows.getOrNull(idx)?.let(::scheduleCrossRef) },
-                                onClose = {
-                                    onSettingsChange { s -> withBibleCrossReferencePanel(s, false) }
-                                    focusRequester.requestFocus()
-                                },
-                                passageSpan = if (crossRefPassageMode) {
-                                    val chapter = crossRefRun.first().second
-                                    "$chapter:${crossRefRun.first().third}-${crossRefRun.last().third}"
-                                } else null,
-                                modifier = Modifier.width(with(density) { colWCrossRef.toDp() }).fillMaxHeight(),
+                        focusRequester.requestFocus()
+                    },
+                    onEntryDoubleClick = { idx ->
+                        selectedHistoryIdx = idx
+                        viewModel.history.getOrNull(idx)?.let {
+                            viewModel.selectVerseByDetails(
+                                it.bookName, it.chapter, it.verseNumber, it.verseRange,
+                                goLiveSource = "history",
                             )
                         }
-
-                        if (isSplitActive) {
-                            DragHandle(onDragEnd = ::saveColWSplit) { amount ->
-                                colWSplit = (colWSplit - amount).coerceIn(with(density) { 150.dp.toPx() }, with(density) { 600.dp.toPx() })
-                            }
-                            Column(modifier = Modifier.width(with(density) { effectiveSplitWidth.toDp() }).fillMaxHeight()) {
-                                LiveChapterPanel(
-                                    verses = liveChapterVerses,
-                                    liveVerseNumbers = liveVerseNumbers,
-                                    onVerseClicked = { verseNum ->
-                                        scope.launch {
-                                            val verses = viewModel.getVersesForDisplay(liveBookName, liveChapterNum, verseNum)
-                                            if (verses.isNotEmpty()) {
-                                                val primary = verses.first()
-                                                statisticsManager?.recordVerseDisplay(primary.bibleName, primary.bookName, primary.chapter, primary.verseNumber)
-                                                onVerseSelected(verses)
-                                                onInstanceLinkSendVerse?.invoke(primary.bookName, primary.chapter, primary.verseNumber, primary.verseText, primary.verseRange)
-                                                presenterManager?.let { if (it.bibleHold.value) { it.setBibleHold(false); onInstanceLinkSendBibleHold?.invoke(false) } }
-                                                onPresenting(Presenting.BIBLE)
-
-                                                viewModel.logLiveReference(
-                                                    displayBookIndex = viewModel.displayIndexForBookName(liveBookName)
-                                                        .takeIf { it >= 0 } ?: viewModel.selectedBookIndex.value,
-                                                    chapter    = primary.chapter,
-                                                    verseStart = primary.verseNumber,
-                                                    verseEnd   = null,
-                                                    source     = "manual",
-                                                    autoFollow = viewModel.autoFollowEnabled.value,
-                                                )
-                                                viewModel.canonicalRefForBookName(
-                                                    liveBookName, primary.chapter, primary.verseNumber,
-                                                )?.let(::anchorLiveVerse)
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-
-                    }
-                    }
-
-                    BibleHistoryPanel(
-                        entries = viewModel.history,
-                        expanded = historyExpanded,
-                        selectedIndex = selectedHistoryIdx,
-                        onToggleExpanded = { historyExpanded = !historyExpanded },
-                        onClear = { viewModel.clearHistory() },
-                        onEntryClick = { idx ->
-                            selectedHistoryIdx = idx
-                            viewModel.history.getOrNull(idx)?.let {
-                                viewModel.selectVerseByDetails(it.bookName, it.chapter, it.verseNumber, it.verseRange)
-                            }
-                            focusRequester.requestFocus()
-                        },
-                        onEntryDoubleClick = { idx ->
-                            selectedHistoryIdx = idx
-                            viewModel.history.getOrNull(idx)?.let {
-                                viewModel.selectVerseByDetails(
-                                    it.bookName, it.chapter, it.verseNumber, it.verseRange,
-                                    goLiveSource = "history",
-                                )
-                            }
-                            focusRequester.requestFocus()
-                        },
-                    )
-
-                }
-
+                        focusRequester.requestFocus()
+                    },
+                )
             }
         }
     }
