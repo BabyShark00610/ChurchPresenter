@@ -5,6 +5,7 @@ package org.churchpresenter.app.churchpresenter.screenshot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.ComposeUiTest
@@ -229,6 +230,48 @@ class BibleTabScreenshotTest {
     ) { vm ->
         vm.selectVerse(0)
         awaitCrossReferences()
+    }
+
+    @Test
+    fun `cross reference chips`() = shoot(
+        "cross_reference_chips",
+        crossReferences = crossReferenceFixture(),
+    ) { _ ->
+        waitUntilAtLeastOneExists(hasContentDescription("Cross references: 4"))
+    }
+
+    @Test
+    fun `the cross reference popover`() = shoot(
+        "cross_reference_popover",
+        crossReferences = crossReferenceFixture(),
+        rootIndex = 1,
+    ) { _ ->
+        waitUntilAtLeastOneExists(hasContentDescription("Cross references: 4"))
+        onNodeWithContentDescription("Cross references: 4").performClick()
+        waitForIdle()
+        waitUntilAtLeastOneExists(hasText("Rom 5:8", substring = true))
+    }
+
+    @Test
+    fun `a cross reference this module does not carry`() = shoot(
+        "cross_references_unavailable",
+        settings = { it.copy(bibleSettings = it.bibleSettings.copy(crossReferencesPanel = true)) },
+        crossReferences = CrossReferenceRepository {
+            """{"v":1,"r":{"001001001":"035003002 043003016"}}""".toByteArray()
+        },
+    ) { vm ->
+        vm.selectVerse(0)
+        waitUntilAtLeastOneExists(hasText("Hab 3:2"))
+    }
+
+    @Test
+    fun `the cross reference panel with nothing to show`() = shoot(
+        "cross_references_empty",
+        settings = { it.copy(bibleSettings = it.bibleSettings.copy(crossReferencesPanel = true)) },
+        crossReferences = crossReferenceFixture(),
+    ) { vm ->
+        vm.selectVerse(2)
+        waitUntilAtLeastOneExists(hasText(BibleLabel.CROSS_REFS_EMPTY))
     }
 
     @Test

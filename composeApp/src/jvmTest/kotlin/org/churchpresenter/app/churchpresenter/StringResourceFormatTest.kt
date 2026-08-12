@@ -77,6 +77,9 @@ class StringResourceFormatTest {
         "shortcut_capture_title", "shortcut_capture_prompt",
         // Names an on-screen arrow *button*, not a key.
         "bible_translation_order_hint",
+        // Escape dismisses a focusable Compose Popup. That is the toolkit's own behaviour, not an
+        // entry in ShortcutMap, so there is no binding to render it from and none to go stale.
+        "bible_cross_references_dismiss_hint",
     )
 
     /**

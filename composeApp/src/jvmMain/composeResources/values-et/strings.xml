@@ -76,6 +76,16 @@
     <string name="shadow_opacity">Intensiivsus (%)</string>
     <string name="hold_live">Hoia eetris</string>
     <string name="bible_split_browse_mode">Jagatud sirvimisrežiim</string>
+    <string name="bible_cross_references">Ristviited</string>
+    <string name="bible_cross_references_title">Viited</string>
+    <string name="bible_cross_references_none">Ristviiteid pole</string>
+    <string name="bible_cross_references_often_next">Sageli järgmisena</string>
+    <string name="bible_cross_references_passage">Lõik %1$s</string>
+    <string name="bible_cross_references_count">Ristviiteid: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · ristviiteid: %2$d</string>
+    <string name="bible_cross_references_keep_open">Kinnita</string>
+    <string name="bible_cross_references_close">Sulge paneel</string>
+    <string name="bible_cross_references_dismiss_hint">Esc sulgeb</string>
     <string name="bible_live_view">Live</string>
     <string name="fade_in">Sisse sulandumine</string>
     <string name="fade_out">Välja sulandumine</string>

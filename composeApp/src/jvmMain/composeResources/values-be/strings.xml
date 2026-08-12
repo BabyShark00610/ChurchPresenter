@@ -1697,6 +1697,16 @@
     <string name="copy_verse">Капіраваць верш</string>
     <string name="style">Стыль</string>
     <string name="bible_split_browse_mode">Рэжым раздзеленага прагляду</string>
+    <string name="bible_cross_references">Перакрыжаваныя спасылкі</string>
+    <string name="bible_cross_references_title">Спасылкі</string>
+    <string name="bible_cross_references_none">Няма перакрыжаваных спасылак</string>
+    <string name="bible_cross_references_often_next">Часта далей</string>
+    <string name="bible_cross_references_passage">Урывак %1$s</string>
+    <string name="bible_cross_references_count">Перакрыжаваных спасылак: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · перакрыжаваных спасылак: %2$d</string>
+    <string name="bible_cross_references_keep_open">Замацаваць</string>
+    <string name="bible_cross_references_close">Закрыць панэль</string>
+    <string name="bible_cross_references_dismiss_hint">Esc — закрыць</string>
     <string name="bible_live_view">Наўпрост</string>
     <string name="clear_recents">Ачысціць апошнія</string>
     <string name="recent">Апошнія:</string>

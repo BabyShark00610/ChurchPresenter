@@ -1697,6 +1697,16 @@
     <string name="copy_verse">Өлеңді көшіру</string>
     <string name="style">Стиль</string>
     <string name="bible_split_browse_mode">Бөлінген шолу режимі</string>
+    <string name="bible_cross_references">Айқас сілтемелер</string>
+    <string name="bible_cross_references_title">Сілтемелер</string>
+    <string name="bible_cross_references_none">Айқас сілтемелер жоқ</string>
+    <string name="bible_cross_references_often_next">Жиі келесі</string>
+    <string name="bible_cross_references_passage">Үзінді %1$s</string>
+    <string name="bible_cross_references_count">Айқас сілтемелер: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · айқас сілтемелер: %2$d</string>
+    <string name="bible_cross_references_keep_open">Бекіту</string>
+    <string name="bible_cross_references_close">Панельді жабу</string>
+    <string name="bible_cross_references_dismiss_hint">Жабу үшін Esc</string>
     <string name="bible_live_view">Тікелей</string>
     <string name="clear_recents">Жақындарды тазалау</string>
     <string name="recent">Жақында:</string>
