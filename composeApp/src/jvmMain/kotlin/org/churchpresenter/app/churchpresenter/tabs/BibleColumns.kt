@@ -74,6 +74,13 @@ import org.churchpresenter.app.churchpresenter.viewmodel.indexOfFirstLiveVerse
 import org.churchpresenter.app.churchpresenter.viewmodel.verseNumberOf
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.foundation.layout.width
+import java.awt.Cursor
 
 @Composable
 internal fun BibleLoadErrorBanner(errors: List<BibleLoadError>, modifier: Modifier = Modifier) {
@@ -432,4 +439,20 @@ internal fun BibleVerseColumn(
             adapter = rememberScrollbarAdapter(listState)
         )
     }
+}
+
+@Composable
+internal fun DragHandle(onDragEnd: () -> Unit, onDrag: (Float) -> Unit) {
+    Box(
+        modifier = Modifier
+            .width(4.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.outlineVariant)
+            .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)))
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> onDrag(delta) },
+                onDragStopped = { onDragEnd() }
+            )
+    )
 }
