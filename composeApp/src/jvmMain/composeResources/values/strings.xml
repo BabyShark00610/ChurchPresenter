@@ -88,6 +88,11 @@
     <string name="bible_cross_references_often_next">Often next</string>
     <string name="bible_cross_references_passage">Passage %1$s</string>
     <string name="bible_cross_references_source_count">×%1$d</string>
+    <string name="bible_cross_references_count">%1$d cross references</string>
+    <string name="bible_cross_references_popover_title">%1$s · %2$d cross references</string>
+    <string name="bible_cross_references_keep_open">Keep open</string>
+    <string name="bible_cross_references_close">Close panel</string>
+    <string name="bible_cross_references_dismiss_hint">Esc to close</string>
     <string name="bible_live_view">Live</string>
     <string name="fade_in">Fade In</string>
     <string name="fade_out">Fade Out</string>

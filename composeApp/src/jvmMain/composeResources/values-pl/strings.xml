@@ -1697,6 +1697,16 @@
     <string name="copy_verse">Kopiuj werset</string>
     <string name="style">Styl</string>
     <string name="bible_split_browse_mode">Tryb podzielonego przeglądania</string>
+    <string name="bible_cross_references">Odsyłacze</string>
+    <string name="bible_cross_references_title">Odsyłacze</string>
+    <string name="bible_cross_references_none">Brak odsyłaczy</string>
+    <string name="bible_cross_references_often_next">Często dalej</string>
+    <string name="bible_cross_references_passage">Fragment %1$s</string>
+    <string name="bible_cross_references_count">Odsyłacze: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · odsyłacze: %2$d</string>
+    <string name="bible_cross_references_keep_open">Przypnij</string>
+    <string name="bible_cross_references_close">Zamknij panel</string>
+    <string name="bible_cross_references_dismiss_hint">Esc — zamknij</string>
     <string name="bible_live_view">Na żywo</string>
     <string name="clear_recents">Wyczyść ostatnie</string>
     <string name="recent">Ostatnie:</string>
