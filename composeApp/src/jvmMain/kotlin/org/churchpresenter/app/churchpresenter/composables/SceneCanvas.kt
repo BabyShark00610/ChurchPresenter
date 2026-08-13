@@ -61,7 +61,6 @@ fun SceneCanvas(
     onSourceSelected: (String?) -> Unit,
     onTransformChanged: (sourceId: String, SourceTransform) -> Unit,
     isInteractive: Boolean = true,
-    isPresenter: Boolean = false,
     activeTool: String = "select",
     drawingStrokeColor: String = "#FFFFFF",
     drawingFillColor: String = "#00000000",
@@ -206,13 +205,14 @@ fun SceneCanvas(
             val shDp = with(density) { (t.height * ch).toInt().toDp() }
             val isSelected = isInteractive && source.id == selectedSourceId
 
+            val editableForDrag = isSelected && !source.locked && activeTool == "select"
             Box(
                 modifier = Modifier
                     .offset(sxDp, syDp)
                     .size(width = swDp, height = shDp)
                     // Pointer input BEFORE graphicsLayer so drag is in parent (unrotated) space
                     .then(
-                        if (isInteractive && activeTool == "select" && isSelected && !source.locked) {
+                        if (isInteractive && editableForDrag) {
                             // Selected + unlocked: drag to move with snapping
                             Modifier.pointerInput(source.id, isSelected) {
                                 var rawX = 0f
@@ -265,13 +265,14 @@ fun SceneCanvas(
             ) {
                 SceneSourceRenderer(
                     source = source,
-                    isPresenter = isPresenter,
                     fontScale = fontScale
                 )
             }
 
             // Resize + rotate handles for selected source
-            if (isSelected && !source.locked && cw > 0 && ch > 0 && activeTool == "select") {
+            val resizable = isSelected && !source.locked
+            val hasArea = cw > 0 && ch > 0
+            if (resizable && hasArea && activeTool == "select") {
                 ResizeHandles(
                     transform = t,
                     canvasWidth = cw,

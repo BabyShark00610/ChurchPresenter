@@ -39,8 +39,6 @@ internal fun RemoteCommandEffects(
     presentationViewModel: PresentationViewModel,
     bibleViewModel: BibleViewModel,
     presenterManager: PresenterManager,
-    selectedPictureItem: ScheduleItem.PictureItem?,
-    selectedPresentationItem: ScheduleItem.PresentationItem?,
     onSongItemVersionBump: () -> Unit,
     resolveImageFile: ((folderId: String, index: Int) -> File?)?,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,

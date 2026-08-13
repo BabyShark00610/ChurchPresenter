@@ -457,7 +457,9 @@ fun BibleTab(
         prevBookRef.value = selectedBookIndex
         prevChapterRef.value = selectedChapter
         val wasSequentialAdvance = viewModel.consumeSequentialChapterAdvance()
-        if ((bookChanged || chapterChanged) && !splitBrowseMode && currentIsPresenting && !wasSequentialAdvance) {
+        val navigatedAway = bookChanged || chapterChanged
+        val autoHoldApplies = !splitBrowseMode && currentIsPresenting && !wasSequentialAdvance
+        if (navigatedAway && autoHoldApplies) {
             presenterManager?.setBibleHold(true)
         }
     }
@@ -487,7 +489,8 @@ fun BibleTab(
         val movingUp = shortcuts.matches(ShortcutAction.BIBLE_PREVIOUS_VERSE, event)
         val movingDown = shortcuts.matches(ShortcutAction.BIBLE_NEXT_VERSE, event)
 
-        if (splitBrowseMode && liveChapterVerses.isNotEmpty() && (movingUp || movingDown)) {
+        val movingThroughVerses = movingUp || movingDown
+                if (splitBrowseMode && liveChapterVerses.isNotEmpty() && movingThroughVerses) {
             val refVerse = if (liveNavTargetVerse > 0) liveNavTargetVerse
                            else liveVerseNumbers.minOrNull() ?: 1
             val nextVerseNum = nextLiveVerseNumber(
@@ -731,7 +734,6 @@ fun BibleTab(
 
             FocusLostBanner(focusRescue, stringResource(Res.string.tab_focus_lost))
 
-            val accentColor = MaterialTheme.colorScheme.primary
             BibleColumnHeaderRow(
                 bookWidth = with(density) { colWBook.toDp() },
                 chapterWidth = with(density) { colWChapter.toDp() },
@@ -794,7 +796,6 @@ fun BibleTab(
                 ),
                 selectedVerseInFiltered = if (filteredVerses.isEmpty()) -1 else
                     filteredVerses.indexOf(verses.getOrNull(selectedVerseIndex)).coerceAtLeast(0),
-                accentColor = accentColor,
                 bookWidthPx = colWBook,
                 chapterWidthPx = colWChapter,
                 crossRefWidthPx = colWCrossRef,

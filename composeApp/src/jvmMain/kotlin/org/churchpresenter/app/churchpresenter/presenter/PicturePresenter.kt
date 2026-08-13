@@ -30,6 +30,7 @@ import java.io.File
 import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
+import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 
 /** The white key-output's alpha for [PicturePresenter]/[SlidePresenter] — a slide's own translation
  *  carries the transition, not a fade, so slides always key fully opaque. */
@@ -204,7 +205,7 @@ internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxH
             originalImage.toComposeImageBitmap()
         }
     } catch (e: Exception) {
-        e.printStackTrace()
+        CrashReporter.reportException(e, "Decoding picture for presenter")
         null
     }
 }

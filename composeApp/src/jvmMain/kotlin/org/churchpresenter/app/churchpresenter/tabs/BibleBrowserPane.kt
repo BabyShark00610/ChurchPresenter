@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,7 +67,6 @@ internal fun ColumnScope.BibleBrowserPane(
     selectedChapter: Int,
     selectedVerseIndices: Set<Int>?,
     selectedVerseInFiltered: Int,
-    accentColor: Color,
     bookWidthPx: Float,
     chapterWidthPx: Float,
     crossRefWidthPx: Float,
@@ -180,7 +178,6 @@ internal fun ColumnScope.BibleBrowserPane(
                                 verses = filteredVerses,
                                 selectedIndex = selectedVerseInFiltered,
                                 selectedIndices = selectedVerseIndices,
-                                accentColor = accentColor,
                                 onItemSelected = onVerseSelected,
                                 refCountFor = { index ->
                                     filteredVerses.getOrNull(index)

@@ -303,13 +303,11 @@ fun MainDesktop(
     /** Controller mode instant Bible verse display — non-null only when connected AND controlling. */
     instanceLinkSendVerse: ((bookName: String, chapter: Int, verseNumber: Int, verseText: String, verseRange: String) -> Unit)? = null,
     /** Controller mode instant picture display — non-null only when connected AND controlling. */
-    instanceLinkSendPicture: ((folderId: String, index: Int, fileName: String?) -> Unit)? = null,
     /** Controller mode instant song-section navigation (within an already-live song) — non-null only
      *  when connected AND controlling. */
     instanceLinkSendSongSection: ((number: String, section: Int, lineIndex: Int) -> Unit)? = null,
     /** Controller mode instant slide navigation (within an already-live presentation) — non-null only
      *  when connected AND controlling. */
-    instanceLinkSendSlide: ((id: String, index: Int) -> Unit)? = null,
     /** Controller mode instant clear — non-null only when connected AND controlling. */
     instanceLinkSendClear: (() -> Unit)? = null,
     /** Controller mode instant Bible Hold toggle — non-null only when connected AND controlling. */
@@ -769,8 +767,6 @@ fun MainDesktop(
         presentationViewModel = presentationViewModel,
         bibleViewModel = bibleViewModel,
         presenterManager = presenterManager,
-        selectedPictureItem = selectedPictureItem,
-        selectedPresentationItem = selectedPresentationItem,
         onSongItemVersionBump = { selectedSongItemVersion++ },
         resolveImageFile = resolveImageFile,
         onSettingsChange = onSettingsChange,
@@ -1082,7 +1078,6 @@ fun MainDesktop(
                         scheduleViewModel = scheduleViewModel,
                         onPresenting = presenting,
                         onAddLabel = { showAddLabelDialog = true },
-                        onAddWebsite = { showAddWebsiteDialog = true },
 
                         onPresentBible = { item ->
                             selectTab(Tabs.BIBLE)
@@ -1477,7 +1472,6 @@ fun MainDesktop(
                                 onInstanceLinkSendNextPicture = instanceLinkSendNextPicture,
                                 onInstanceLinkSendPreviousPicture = instanceLinkSendPreviousPicture,
                                 instanceLinkFetchPictureImageBytes = instanceLinkFetchPictureImageBytes,
-                                selectedPictureItem = selectedPictureItem,
                                 presenterManager = presenterManager,
                                 onSettingsChange = onSettingsChange,
                                 viewModel = picturesViewModel
@@ -1494,7 +1488,6 @@ fun MainDesktop(
                                 onInstanceLinkSendNextSlide = instanceLinkSendNextSlide,
                                 onInstanceLinkSendPreviousSlide = instanceLinkSendPreviousSlide,
                                 instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
-                                selectedPresentationItem = selectedPresentationItem,
                                 presenterManager = presenterManager,
                                 onSlidesLoaded = onPresentationSlidesLoaded,
                                 onSettingsChange = onSettingsChange,
@@ -1767,7 +1760,6 @@ fun MainDesktop(
     KonamiEasterEggDialog(
         isVisible = showKonamiEasterEgg,
         onDismiss = { showKonamiEasterEgg = false },
-        theme = theme
     )
 
     // Invite feedback on the launch after an unexpected shutdown (opt-in analytics only).
