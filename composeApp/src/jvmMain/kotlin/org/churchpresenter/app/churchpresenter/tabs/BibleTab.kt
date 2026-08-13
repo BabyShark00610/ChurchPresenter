@@ -226,7 +226,8 @@ fun BibleTab(
 
     val isSplitActive = splitBrowseMode
 
-    val crossRefsEnabled = appSettings.bibleSettings.crossReferencesPanel
+    val crossRefsAvailable = appSettings.bibleSettings.crossReferencesEnabled
+    val crossRefsEnabled = crossRefsAvailable && appSettings.bibleSettings.crossReferencesPanel
     val crossRefRepository = crossReferences ?: sharedCrossReferences
 
     val fallbackAbbreviationResources =
@@ -238,7 +239,8 @@ fun BibleTab(
     val loadedModule = viewModel.primaryBible.value
 
     val crossRefs = rememberBibleCrossReferenceState(
-        enabled = crossRefsEnabled,
+        available = crossRefsAvailable,
+        panelDocked = crossRefsEnabled,
         repository = crossRefRepository,
         fallbackAbbreviations = fallbackAbbreviations,
         selectedBookIndex = selectedBookIndex,
@@ -733,6 +735,7 @@ fun BibleTab(
             BibleColumnHeaderRow(
                 bookWidth = with(density) { colWBook.toDp() },
                 chapterWidth = with(density) { colWChapter.toDp() },
+                crossRefsVisible = crossRefsAvailable,
                 crossRefsEnabled = crossRefsEnabled,
                 holdAvailable = presenterManager != null && !splitBrowseMode,
                 holdLive = presenterManager?.bibleHold?.value ?: false,

@@ -74,6 +74,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun BibleColumnHeaderRow(
     bookWidth: Dp,
     chapterWidth: Dp,
+    crossRefsVisible: Boolean,
     crossRefsEnabled: Boolean,
     holdAvailable: Boolean,
     holdLive: Boolean,
@@ -134,57 +135,59 @@ internal fun BibleColumnHeaderRow(
                     )
                     Spacer(Modifier.weight(1f))
 
-                    val crossRefsLabel = stringResource(Res.string.bible_cross_references_title)
-                    TooltipArea(
-                        tooltip = {
-                            Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall) {
+                    if (crossRefsVisible) {
+                        val crossRefsLabel = stringResource(Res.string.bible_cross_references_title)
+                        TooltipArea(
+                            tooltip = {
+                                Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall) {
+                                    Text(
+                                        stringResource(Res.string.bible_cross_references),
+                                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            },
+                            tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .height(27.dp)
+                                    .background(
+                                        if (crossRefsEnabled) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surfaceVariant,
+                                        RoundedCornerShape(6.dp),
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (crossRefsEnabled) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outlineVariant,
+                                        RoundedCornerShape(6.dp),
+                                    )
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { MutableInteractionSource() },
+                                    ) {
+                                        onCrossReferencesToggle()
+                                    }
+                                    .padding(horizontal = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(Res.drawable.ic_link),
+                                    contentDescription = stringResource(Res.string.bible_cross_references),
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
                                 Text(
-                                    stringResource(Res.string.bible_cross_references),
-                                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.bodySmall,
+                                    crossRefsLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                    color = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 )
                             }
-                        },
-                        tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp)),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .height(27.dp)
-                                .background(
-                                    if (crossRefsEnabled) MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .border(
-                                    1.dp,
-                                    if (crossRefsEnabled) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.outlineVariant,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .clickable(
-                                    indication = null,
-                                    interactionSource = remember { MutableInteractionSource() },
-                                ) {
-                                    onCrossReferencesToggle()
-                                }
-                                .padding(horizontal = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_link),
-                                contentDescription = stringResource(Res.string.bible_cross_references),
-                                modifier = Modifier.size(12.dp),
-                                tint = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            )
-                            Text(
-                                crossRefsLabel,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                                color = if (crossRefsEnabled) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            )
                         }
                     }
 

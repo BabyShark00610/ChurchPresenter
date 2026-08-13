@@ -135,7 +135,8 @@ internal class BibleCrossReferenceState {
  */
 @Composable
 internal fun rememberBibleCrossReferenceState(
-    enabled: Boolean,
+    available: Boolean,
+    panelDocked: Boolean,
     repository: CrossReferenceRepository,
     fallbackAbbreviations: List<String>,
     selectedBookIndex: Int,
@@ -182,10 +183,10 @@ internal fun rememberBibleCrossReferenceState(
     // Resolve the column's contents. Keyed on the anchor, so a fast arrow-key scroll cancels the
     // in-flight resolution rather than queueing one per verse.
     LaunchedEffect(
-        enabled, state.anchors, state.passageMode, state.run,
+        available, panelDocked, state.anchors, state.passageMode, state.run,
         state.anchorEpoch, loadedModule, fallbackAbbreviations,
     ) {
-        if (!enabled || state.anchors.isEmpty()) {
+        if (!available || !panelDocked || state.anchors.isEmpty()) {
             state.rows = emptyList()
             state.navigatedTo = null
             return@LaunchedEffect
@@ -223,7 +224,11 @@ internal fun rememberBibleCrossReferenceState(
     // one chapter, redone only when the chapter or the module changes — cheap enough to run for
     // every chapter that is opened, which is what lets the chip say how much is there before
     // anything is clicked.
-    LaunchedEffect(selectedBookIndex, selectedChapter, verses, loadedModule, repository) {
+    LaunchedEffect(available, selectedBookIndex, selectedChapter, verses, loadedModule, repository) {
+        if (!available) {
+            state.counts = emptyMap()
+            return@LaunchedEffect
+        }
         repository.ensureLoaded()
         state.counts = buildMap {
             verses.forEach { line ->
