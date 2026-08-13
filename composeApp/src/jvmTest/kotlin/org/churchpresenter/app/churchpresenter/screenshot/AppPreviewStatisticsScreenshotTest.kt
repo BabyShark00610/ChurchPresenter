@@ -34,6 +34,7 @@ import kotlin.test.Test
 
 class AppPreviewStatisticsScreenshotTest {
 
+
     private fun dialog(
         name: String,
         width: Dp,
@@ -107,6 +108,7 @@ class AppPreviewStatisticsScreenshotTest {
                 theme = mode,
                 statisticsManager = StatisticsManager(),
                 onDismiss = {},
+                today = FIXED_TODAY,
             )
         }
 
@@ -117,7 +119,7 @@ class AppPreviewStatisticsScreenshotTest {
      */
     private fun seedSixMonths() {
         val zone = ZoneId.systemDefault()
-        val today = LocalDate.now()
+        val today = FIXED_TODAY
         val sundays = (0 until 26).map { week ->
             today.minusWeeks(week.toLong()).atTime(10, 30).atZone(zone).toInstant().toEpochMilli()
         }
@@ -182,6 +184,15 @@ class AppPreviewStatisticsScreenshotTest {
     }
 
     private companion object {
+        /**
+         * The day these images are recorded as, so they do not go stale overnight.
+         *
+         * Both halves have to be pinned: the seeded services are dated back from here, and the
+         * report's default range runs to here. A Sunday, so the services land where a real
+         * schedule would put them.
+         */
+        val FIXED_TODAY: LocalDate = LocalDate.of(2026, 3, 1)
+
         /** Four rotating sets, so counts differ the way a real rota's would. */
         val SERVICE_SETS = listOf(
             listOf(
