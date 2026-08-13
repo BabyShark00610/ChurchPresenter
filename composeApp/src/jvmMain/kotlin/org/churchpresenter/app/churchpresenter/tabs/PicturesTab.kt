@@ -256,7 +256,6 @@ fun PicturesTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit = {},
     viewModel: PicturesViewModel = remember { PicturesViewModel(appSettings) }
 ) {
-    val scope = rememberCoroutineScope()
     val folderDialogTitle = stringResource(Res.string.select_image_folder_dialog)
 
 

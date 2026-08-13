@@ -30,9 +30,6 @@ import kotlin.test.assertEquals
  */
 class BackgroundSettingsTabLabelsTest {
 
-    private fun settingsWith(change: BackgroundSettings.() -> BackgroundSettings): AppSettings =
-        AppSettings().let { it.copy(backgroundSettings = it.backgroundSettings.change()) }
-
     /** Every string the tab renders out of the box, and how many times it must appear. */
     private val outOfTheBox = mapOf(
         // Card headings and the two help lines.

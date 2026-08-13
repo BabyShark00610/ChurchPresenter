@@ -82,7 +82,6 @@ fun LowerThirdSettingsTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onOpenLottieGen: (outputDir: String, onFileSaved: (() -> Unit)?) -> Unit = { _, _ -> }
 ) {
-    val scope = rememberCoroutineScope()
     val viewModel = remember { LowerThirdSettingsViewModel() }
 
     // Keep viewModel folder in sync with settings

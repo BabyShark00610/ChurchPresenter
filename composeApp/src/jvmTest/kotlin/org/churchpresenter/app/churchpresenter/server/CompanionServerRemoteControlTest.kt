@@ -135,7 +135,6 @@ class CompanionServerRemoteControlTest {
 
     private fun HttpResponse.text(): String = runBlocking { bodyAsText() }
     private fun HttpResponse.obj(): JsonObject = json.parseToJsonElement(text()).jsonObject
-    private fun HttpResponse.array(): JsonArray = json.parseToJsonElement(text()).jsonArray
     private fun JsonObject.str(key: String) = getValue(key).jsonPrimitive.content
 
     /**

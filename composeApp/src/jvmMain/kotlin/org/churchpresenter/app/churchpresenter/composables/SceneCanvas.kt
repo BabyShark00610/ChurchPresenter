@@ -190,7 +190,6 @@ fun SceneCanvas(
             )
     ) {
         val density = LocalDensity.current
-        val scale = density.density
         val cw = canvasSize.width.toFloat()
         val ch = canvasSize.height.toFloat()
         val fontScale = if (scene.canvasWidth > 0 && cw > 0) (cw / density.density) / scene.canvasWidth.toFloat() else 1f
@@ -517,7 +516,6 @@ private fun ResizeHandles(
 ) {
     val handleSize = 8.dp
     val density = LocalDensity.current
-    val scale = density.density
     val currentTransform by rememberUpdatedState(transform)
 
     val handles = resizeHandles(canvasWidth, canvasHeight)

@@ -290,8 +290,6 @@ private fun SlideBitmapContent(slide: ImageBitmap?) {
         // Get physical pixel dimensions of the presenter window
         val windowInfo = LocalWindowInfo.current
         val containerSize = windowInfo.containerSize
-        val screenW = containerSize.width.takeIf { it > 0 } ?: 1920
-        val screenH = containerSize.height.takeIf { it > 0 } ?: 1080
         Image(
             bitmap = slide,
             contentDescription = stringResource(Res.string.presented_slide),
