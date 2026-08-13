@@ -158,7 +158,8 @@ fun CCLIReportDialog(
     isVisible: Boolean,
     theme: ThemeMode,
     statisticsManager: StatisticsManager,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    today: LocalDate = LocalDate.now(),
 ) {
     if (!isVisible) return
 
@@ -176,7 +177,8 @@ fun CCLIReportDialog(
         CCLIReportContent(
             theme = theme,
             statisticsManager = statisticsManager,
-            onDismiss = onDismiss
+            onDismiss = onDismiss,
+            today = today,
         )
     }
 }
@@ -194,10 +196,17 @@ fun CCLIReportDialog(
 internal fun CCLIReportContent(
     theme: ThemeMode,
     statisticsManager: StatisticsManager,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /**
+     * The day the report treats as "now", for the default range and the quick spans.
+     *
+     * A parameter so a screenshot can pin it. Left on the real clock the committed image carries
+     * whatever date it was recorded on and goes stale by the next day — which is exactly what
+     * happened to `previewApp/ccli_report_*`.
+     */
+    today: LocalDate = LocalDate.now(),
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val today = remember { LocalDate.now() }
     val zone = remember { ZoneId.systemDefault() }
 
     val yearRange = remember {
