@@ -1,0 +1,66 @@
+build:
+  maxIssues: 0
+
+console-reports:
+  active: true
+
+comments:
+  active: false
+
+style:
+  WildcardImport:
+    active: true
+    excludeImports: []
+  UnusedImports:
+    active: true
+  ForbiddenImport:
+    active: true
+    forbiddenPatterns: 'androidx\.compose\.material\.(?!icons)'
+  MaxLineLength:
+    active: false
+  MagicNumber:
+    active: false
+  ReturnCount:
+    active: false
+  LoopWithTooManyJumpStatements:
+    active: false
+  UnusedPrivateMember:
+    active: true
+
+complexity:
+  LongMethod:
+    active: false
+  LongParameterList:
+    active: false
+  TooManyFunctions:
+    active: false
+  CyclomaticComplexMethod:
+    active: false
+  LargeClass:
+    active: false
+  NestedBlockDepth:
+    active: false
+
+naming:
+  FunctionNaming:
+    active: true
+    ignoreAnnotated: ['Composable']
+  TopLevelPropertyNaming:
+    active: false
+  VariableNaming:
+    active: true
+    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*'
+  MatchingDeclarationName:
+    active: false
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false
+  TooGenericExceptionThrown:
+    active: false
+
+performance:
+  SpreadOperator:
+    active: false
