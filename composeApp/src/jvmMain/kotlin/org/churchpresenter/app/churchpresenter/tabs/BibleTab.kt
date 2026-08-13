@@ -227,7 +227,7 @@ fun BibleTab(
     val isSplitActive = splitBrowseMode
 
     val crossRefsAvailable = appSettings.bibleSettings.crossReferencesEnabled
-    val crossRefsEnabled = crossRefsAvailable && appSettings.bibleSettings.crossReferencesPanel
+    val crossRefsDocked = crossRefsAvailable && appSettings.bibleSettings.crossReferencesPanel
     val crossRefRepository = crossReferences ?: sharedCrossReferences
 
     val fallbackAbbreviationResources =
@@ -240,7 +240,7 @@ fun BibleTab(
 
     val crossRefs = rememberBibleCrossReferenceState(
         available = crossRefsAvailable,
-        panelDocked = crossRefsEnabled,
+        panelDocked = crossRefsDocked,
         repository = crossRefRepository,
         fallbackAbbreviations = fallbackAbbreviations,
         selectedBookIndex = selectedBookIndex,
@@ -736,7 +736,7 @@ fun BibleTab(
                 bookWidth = with(density) { colWBook.toDp() },
                 chapterWidth = with(density) { colWChapter.toDp() },
                 crossRefsVisible = crossRefsAvailable,
-                crossRefsEnabled = crossRefsEnabled,
+                crossRefsDocked = crossRefsDocked,
                 holdAvailable = presenterManager != null && !splitBrowseMode,
                 holdLive = presenterManager?.bibleHold?.value ?: false,
                 sttToggleVisible = appSettings.sttSettings.lastConnectedUrl.isNotBlank() &&
@@ -747,7 +747,7 @@ fun BibleTab(
                 storageDirectory = appSettings.bibleSettings.storageDirectory,
                 translationSelectionKey = translationSelectionKey,
                 onCrossReferencesToggle = {
-                    onSettingsChange { s -> withBibleCrossReferencePanel(s, !crossRefsEnabled) }
+                    onSettingsChange { s -> withBibleCrossReferencePanel(s, !crossRefsDocked) }
 
                     crossRefs.popoverIndex = -1
                     crossRefs.popoverAnchor = null
@@ -807,7 +807,7 @@ fun BibleTab(
                 onSaveCrossRefWidth = ::saveColWCrossRef,
                 onSaveSplitWidth = ::saveColWSplit,
                 crossRefs = crossRefs,
-                crossRefsEnabled = crossRefsEnabled,
+                crossRefsDocked = crossRefsDocked,
                 crossRefCountLabel = { count -> crossRefCountStr.format(count) },
                 crossRefPopoverTitle = { label, size -> crossRefPopoverTitleStr.format(label, size) },
                 onOpenCrossRef = ::openCrossRef,
@@ -831,7 +831,7 @@ fun BibleTab(
                     val canonical = verseText?.let(::verseNumberOf)
                         ?.let { viewModel.canonicalRefForDisplay(selectedBookIndex, selectedChapter, it) }
                         ?.let { (book, chapter, verse) -> verse?.let { Triple(book, chapter, it) } }
-                    if (crossRefsEnabled || canonical == null || crossRefs.popoverIndex == index) {
+                    if (crossRefsDocked || canonical == null || crossRefs.popoverIndex == index) {
                         crossRefs.closePopover()
                     } else {
                         crossRefs.popoverIndex = index
