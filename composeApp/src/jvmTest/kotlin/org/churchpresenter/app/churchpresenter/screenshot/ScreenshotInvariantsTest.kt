@@ -95,6 +95,37 @@ class ScreenshotInvariantsTest {
         )
     }
 
+    /**
+     * A screenshot that renders today's date is stale tomorrow.
+     *
+     * This one fails silently too, and differently from the others: the image is compared, it just
+     * differs on every run, so the whole set becomes noise a reviewer stops reading. It had already
+     * happened — `previewApp/ccli_report_*` seeded its services from `LocalDate.now()` and drew a
+     * default range ending today, so the three images moved a day at a time and nobody could tell a
+     * layout change from the calendar.
+     *
+     * `System.currentTimeMillis()` is deliberately allowed: it is used here for wait deadlines,
+     * which never reach the image. It is the `java.time` `now()` family that gets drawn.
+     */
+    @Test
+    fun `no screenshot renders a live clock`() {
+        val liveClock = Regex("""\b(LocalDate|LocalDateTime|LocalTime|Instant|ZonedDateTime|OffsetDateTime|Year|YearMonth)\.now\(""")
+        val offenders = sources()
+            .filterNot { (file, _) -> file.name == "${this::class.simpleName}.kt" }
+            .flatMap { (file, text) ->
+                text.lineSequence().withIndex()
+                    .filter { (_, line) -> liveClock.containsMatchIn(line) }
+                    // A comment may name the call to say it is deliberately not used.
+                    .filterNot { (_, line) -> line.trimStart().startsWith("//") || line.trimStart().startsWith("*") }
+                    .map { (i, line) -> "${file.name}:${i + 1}: ${line.trim()}" }
+            }
+        assertEquals(
+            emptyList(), offenders,
+            "pin the date instead — pass a fixed value in, the way AppPreviewStatisticsScreenshotTest " +
+                "does with FIXED_TODAY, so the committed image does not go stale overnight"
+        )
+    }
+
     @Test
     fun `every path that names the root derives it rather than restating it`() {
         val literal = Regex(""""(\.?/)?screenshots/""")
