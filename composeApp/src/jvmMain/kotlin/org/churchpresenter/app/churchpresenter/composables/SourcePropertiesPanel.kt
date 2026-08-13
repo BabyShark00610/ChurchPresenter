@@ -1,19 +1,9 @@
 package org.churchpresenter.app.churchpresenter.composables
 
-import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Surface
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,11 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,17 +29,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.utils.TimerStateManager
 import org.jetbrains.compose.resources.stringResource
 import churchpresenter.composeapp.generated.resources.Res
@@ -73,18 +55,6 @@ import churchpresenter.composeapp.generated.resources.canvas_source_clock
 import churchpresenter.composeapp.generated.resources.canvas_source_qrcode
 import churchpresenter.composeapp.generated.resources.canvas_source_camera
 import churchpresenter.composeapp.generated.resources.canvas_source_screen_capture
-import churchpresenter.composeapp.generated.resources.canvas_source_bible
-import churchpresenter.composeapp.generated.resources.canvas_bible_version
-import churchpresenter.composeapp.generated.resources.canvas_bible_verse_text
-import churchpresenter.composeapp.generated.resources.canvas_bible_reference
-import churchpresenter.composeapp.generated.resources.canvas_bible_insert
-import churchpresenter.composeapp.generated.resources.canvas_bible_start_verse
-import churchpresenter.composeapp.generated.resources.canvas_bible_end_verse
-import churchpresenter.composeapp.generated.resources.canvas_bible_ref_font_size
-import churchpresenter.composeapp.generated.resources.canvas_bible_ref_color
-import churchpresenter.composeapp.generated.resources.bible_no_primary_title
-import churchpresenter.composeapp.generated.resources.book
-import churchpresenter.composeapp.generated.resources.chapter
 import churchpresenter.composeapp.generated.resources.canvas_clock_mode
 import churchpresenter.composeapp.generated.resources.canvas_clock_format
 import churchpresenter.composeapp.generated.resources.canvas_clock_show_hours
@@ -96,7 +66,6 @@ import churchpresenter.composeapp.generated.resources.canvas_clock_target_second
 import churchpresenter.composeapp.generated.resources.canvas_text_color
 import churchpresenter.composeapp.generated.resources.canvas_text_bg_color
 import churchpresenter.composeapp.generated.resources.canvas_text_bold
-import churchpresenter.composeapp.generated.resources.canvas_text_italic
 import churchpresenter.composeapp.generated.resources.canvas_qr_type
 import churchpresenter.composeapp.generated.resources.canvas_qr_content
 import churchpresenter.composeapp.generated.resources.canvas_qr_foreground
@@ -179,35 +148,24 @@ import churchpresenter.composeapp.generated.resources.canvas_transform_w
 import churchpresenter.composeapp.generated.resources.canvas_transform_h
 import churchpresenter.composeapp.generated.resources.canvas_qr_default_text
 import churchpresenter.composeapp.generated.resources.canvas_decklink_device
-import churchpresenter.composeapp.generated.resources.canvas_verse_style
-import churchpresenter.composeapp.generated.resources.canvas_reference_style
 import churchpresenter.composeapp.generated.resources.timer_start
 import churchpresenter.composeapp.generated.resources.timer_reset
 import churchpresenter.composeapp.generated.resources.pause
-import churchpresenter.composeapp.generated.resources.ic_arrow_down
 import churchpresenter.composeapp.generated.resources.ic_folder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
-import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.SceneSource
-import org.churchpresenter.app.churchpresenter.models.SourceTransform
 import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
-import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
-import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
-import org.churchpresenter.app.churchpresenter.viewmodel.FileManager
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import org.jetbrains.compose.resources.painterResource
-import java.io.File
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
-import org.churchpresenter.app.churchpresenter.data.readTranslationTitle
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
 @Composable
@@ -230,14 +188,12 @@ fun SourcePropertiesPanel(
             color = MaterialTheme.colorScheme.onSurface
         )
 
-        // Name
         PropertyTextField(stringResource(Res.string.canvas_source_name), source.name) { newName ->
             onSourceUpdate(updateName(source, newName))
         }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-        // Transform
         Text(stringResource(Res.string.canvas_transform), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         val t = source.transform
@@ -267,7 +223,6 @@ fun SourcePropertiesPanel(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-        // Type-specific properties
         when (source) {
             is SceneSource.ImageSource -> ImageProperties(source, onSourceUpdate, fileChooser)
             is SceneSource.TextSource -> TextProperties(source, onSourceUpdate)
@@ -354,7 +309,7 @@ private fun TextProperties(source: SceneSource.TextSource, onUpdate: (SceneSourc
     val availableFonts = rememberSystemFonts()
 
     Text(stringResource(Res.string.canvas_source_text), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    // Multiline text input — supports Enter for line breaks
+
     var textValue by remember(source.text) { mutableStateOf(source.text) }
     var showTextDialog by remember { mutableStateOf(false) }
     StyledTextField(
@@ -585,7 +540,7 @@ private fun BrowserProperties(source: SceneSource.BrowserSource, onUpdate: (Scen
     PropertyTextField(stringResource(Res.string.canvas_browser_url), source.url) { v ->
         onUpdate(source.copy(url = v))
     }
-    // Show the browser's actual current URL (after redirects, navigation, etc.)
+
     val currentUrlFlow = remember(source.id) { SharedBrowserFrameCache.getCurrentUrl(source.id) }
     if (currentUrlFlow != null) {
         val currentUrl by currentUrlFlow.collectAsState()
@@ -777,12 +732,10 @@ private fun ClockProperties(source: SceneSource.ClockSource, onUpdate: (SceneSou
             v.toIntOrNull()?.let { onUpdate(source.copy(targetSecond = it.coerceIn(0, 59))) }
         }
 
-        // Timer controls
         val totalSeconds = source.targetHour * 3600 + source.targetMinute * 60 + source.targetSecond
         val timerState = TimerStateManager.getState(source.id, totalSeconds)
         val isRunning = timerState.isRunning
         val remaining = timerState.remainingSeconds
-
 
         val hh = remaining / 3600
         val mm = (remaining % 3600) / 60
@@ -930,7 +883,6 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    // Build unified device list: regular cameras + DeckLink devices
     val deckLinkDeviceFormat = stringResource(Res.string.canvas_decklink_device)
     var devices by remember { mutableStateOf(listCameraDevicesWithDeckLink(deckLinkDeviceFormat)) }
     val noCamerasLabel = stringResource(Res.string.canvas_camera_none_found)
@@ -959,7 +911,7 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
         )
 
         if (source.isDeckLink && source.deckLinkIndex >= 0) {
-            // Warn if device is already in use for output
+
             if (DeckLinkManager.isOutputActive(source.deckLinkIndex)) {
                 Text(
                     text = stringResource(Res.string.canvas_decklink_io_warning),
@@ -969,7 +921,6 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
                 )
             }
 
-            // DeckLink-specific controls: Video Connection + Mode
             var connections by remember { mutableStateOf<List<DeckLinkManager.VideoConnection>>(emptyList()) }
             var modes by remember { mutableStateOf<List<DeckLinkManager.InputMode>>(emptyList()) }
 
@@ -980,14 +931,12 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
                 }
             }
 
-            // Auto-select first connection if none set (DeckLink requires explicit connection)
             LaunchedEffect(connections, source.videoConnection) {
                 if (source.videoConnection == 0 && connections.isNotEmpty()) {
                     onUpdate(source.copy(videoConnection = connections.first().value))
                 }
             }
 
-            // Video Connection dropdown
             if (connections.isNotEmpty()) {
                 val connItems = connections.map { it.name }
                 DropdownSelector(
@@ -1004,7 +953,6 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
                 )
             }
 
-            // Mode dropdown
             val autoLabel = stringResource(Res.string.canvas_camera_mode_auto)
             val modeItems = listOf(autoLabel) + modes.map { it.name }
             DropdownSelector(
@@ -1024,7 +972,7 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
                 modifier = Modifier.fillMaxWidth()
             )
         } else if (source.devicePath.isNotEmpty() && !source.isDeckLink) {
-            // Non-DeckLink camera: ffmpeg format selector
+
             var formats by remember { mutableStateOf<List<CameraFormat>>(emptyList()) }
             LaunchedEffect(source.devicePath) {
                 formats = withContext(Dispatchers.IO) {
@@ -1077,481 +1025,6 @@ private fun CameraProperties(source: SceneSource.CameraSource, onUpdate: (SceneS
             )
         }
     }
-}
-
-/**
- * Which entry the camera dropdown shows as chosen, given the devices this machine can see.
- *
- * A DeckLink source is matched on its card index and an ordinary camera on its device path, because
- * those are what survive a reboot — a display name can change when a driver updates. When the stored
- * device is not present at all the panel shows the *stored path* rather than silently pretending the
- * first camera in the list is the one configured, so an operator can see that their camera is
- * missing; only when there is no stored path either does it fall back to the first entry.
- *
- * [devices] must not be empty — the panel offers no dropdown at all in that case.
- */
-internal fun selectedCameraName(devices: List<CameraDevice>, source: SceneSource.CameraSource): String =
-    if (source.isDeckLink) {
-        devices.find { it.isDeckLink && it.deckLinkIndex == source.deckLinkIndex }?.displayName
-            ?: devices.first().displayName
-    } else {
-        devices.find { !it.isDeckLink && it.path == source.devicePath }?.displayName
-            ?: if (source.devicePath.isNotEmpty()) source.devicePath else devices.first().displayName
-    }
-
-/**
- * The source re-pointed at [device].
- *
- * Format and connection are cleared rather than carried over: they are the *previous* device's
- * capabilities, and a resolution one camera offers is not one another necessarily does.
- */
-internal fun cameraSourceOn(
-    source: SceneSource.CameraSource,
-    device: CameraDevice
-): SceneSource.CameraSource = source.copy(
-    devicePath = device.path,
-    deviceName = device.name,
-    videoFormat = "",
-    videoConnection = 0,
-    isDeckLink = device.isDeckLink,
-    deckLinkIndex = device.deckLinkIndex
-)
-
-/** The DeckLink input the connection dropdown shows, falling back to the first the card offers. */
-internal fun selectedConnectionName(
-    connections: List<DeckLinkManager.VideoConnection>,
-    videoConnection: Int
-): String = connections.find { it.value == videoConnection }?.name ?: connections.first().name
-
-/**
- * The DeckLink mode the dropdown shows: [autoLabel] when none is stored, and also when the stored
- * one is not among those this card reports — a mode saved against different hardware must not leave
- * the dropdown naming something the card cannot actually be set to.
- */
-internal fun selectedModeName(
-    modes: List<DeckLinkManager.InputMode>,
-    videoFormat: String,
-    autoLabel: String
-): String =
-    if (videoFormat.isEmpty()) autoLabel
-    else modes.find { it.encodedValue == videoFormat }?.name ?: autoLabel
-
-/** The camera format the dropdown shows, on the same terms as [selectedModeName]. */
-internal fun selectedFormatName(
-    formats: List<CameraFormat>,
-    videoFormat: String,
-    autoLabel: String
-): String =
-    if (videoFormat.isEmpty()) autoLabel
-    else formats.find { it.encodedValue == videoFormat }?.displayName ?: autoLabel
-
-internal data class CameraDevice(
-    val name: String,
-    val path: String,
-    val displayName: String,
-    val isDeckLink: Boolean = false,
-    val deckLinkIndex: Int = -1
-)
-
-private fun listCameraDevicesWithDeckLink(deckLinkDeviceFormat: String = "DeckLink: %1\$s"): List<CameraDevice> {
-    val devices = mutableListOf<CameraDevice>()
-
-    // Add DeckLink devices (via SDK) — these provide proper capture card support
-    if (DeckLinkManager.isAvailable()) {
-        val deckLinkDevices = DeckLinkManager.listDevices()
-        for (device in deckLinkDevices) {
-            devices.add(CameraDevice(
-                name = device.name,
-                path = "decklink://${device.index}",
-                displayName = deckLinkDeviceFormat.format(device.name),
-                isDeckLink = true,
-                deckLinkIndex = device.index
-            ))
-        }
-    }
-
-    // Add regular cameras (via ffmpeg/system), filtering out DeckLink devices
-    // already listed via SDK (dshow names like "Decklink Video Capture" contain "decklink")
-    val hasDeckLink = devices.any { it.isDeckLink }
-    listCameraDevices().filterNot { cam ->
-        hasDeckLink && cam.name.lowercase().contains("decklink")
-    }.let { devices.addAll(it) }
-
-    System.err.println("[Camera] Found ${devices.size} total device(s) (${devices.count { it.isDeckLink }} DeckLink)")
-    return devices
-}
-
-internal data class CameraFormat(
-    val width: Int,
-    val height: Int,
-    val fps: Int,
-    val displayName: String = "${width}x${height} @ ${fps}fps",
-    val encodedValue: String = "${width}x${height}@${fps}"
-)
-
-/** Largest area first, then highest frame rate — the order the format dropdown offers them in. */
-private fun Set<Triple<Int, Int, Int>>.toSortedFormats(): List<CameraFormat> =
-    sortedWith(compareByDescending<Triple<Int, Int, Int>> { it.first * it.second }.thenByDescending { it.third })
-        .map { (w, h, fps) -> CameraFormat(w, h, fps) }
-
-/** Cache format listings so we don't re-open the device every time the source recomposes. */
-private val cameraFormatCache = mutableMapOf<String, List<CameraFormat>>()
-
-internal fun listCameraFormats(devicePath: String, deviceName: String): List<CameraFormat> {
-    cameraFormatCache[devicePath]?.let { return it }
-    val formats = cameraFormatsFor(
-        System.getProperty("os.name", "").lowercase(), devicePath, deviceName, ::readCommandOutput
-    )
-    System.err.println("[Camera] Found ${formats.size} format(s) for $deviceName")
-    formats.forEach { System.err.println("[Camera]   ${it.displayName}") }
-    if (formats.isNotEmpty()) cameraFormatCache[devicePath] = formats
-    return formats
-}
-
-/**
- * Which format enumeration a device qualifies for: each is tied to both an OS *and* the device-path
- * scheme that OS's capture backend uses, so a path saved on one machine and opened on another asks
- * nothing of a backend that isn't there. Anything else has no format list, and the dropdown stays
- * on whatever the source already stores.
- *
- * [osName] is a parameter for the same reason as in [cameraDevicesFor] — see the note there.
- */
-internal fun cameraFormatsFor(
-    osName: String,
-    devicePath: String,
-    deviceName: String,
-    run: CommandRunner,
-): List<CameraFormat> = when {
-    osName.contains("win") && devicePath.startsWith("dshow://") ->
-        dshowFormatsFrom(deviceName, run)
-    osName.contains("linux") && devicePath.startsWith("v4l2://") ->
-        v4l2FormatsFrom(devicePath.removePrefix("v4l2://"), run)
-    osName.contains("mac") && devicePath.startsWith("avfoundation://") ->
-        avfoundationFormatsFrom(devicePath.removePrefix("avfoundation://"), run)
-    else -> emptyList()
-}
-
-/**
- * The DirectShow formats ffmpeg reports for [deviceName].
- *
- * The name arrives as the device path stored it, so the `:dshow-vdev=` prefix has to come back off
- * before ffmpeg will recognise it. ffmpeg is given five seconds here and nowhere else: `-list_options`
- * opens the device to interrogate it, and a camera already held by another application never answers.
- */
-internal fun dshowFormatsFrom(deviceName: String, run: CommandRunner): List<CameraFormat> {
-    val name = deviceName.removePrefix(":dshow-vdev=")
-    val result = run(listOf("ffmpeg", "-f", "dshow", "-list_options", "true", "-i", "video=$name"), 5L)
-    return parseDshowFormats(result.output)
-}
-
-/**
- * Reads the resolutions out of `ffmpeg -f dshow -list_options`.
- *
- * Lines look like `min s=1920x1080 fps=30 max s=1920x1080 fps=30`, or
- * `s=1920x1080 min fps=30 max fps=30` — one size and one or more frame rates, every combination of
- * which the device supports.
- */
-internal fun parseDshowFormats(output: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    val sizePattern = Regex("""s=(\d+)x(\d+)""")
-    val fpsPattern = Regex("""fps=(\d+)""")
-    for (line in output.lines()) {
-        if (!line.contains("s=")) continue
-        val sizeMatch = sizePattern.find(line) ?: continue
-        val fpsMatches = fpsPattern.findAll(line).toList()
-        if (fpsMatches.isEmpty()) continue
-        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-        for (fm in fpsMatches) {
-            val fps = fm.groupValues[1].toIntOrNull() ?: continue
-            formats.add(Triple(w, h, fps))
-        }
-    }
-    return formats.toSortedFormats()
-}
-
-/**
- * The V4L2 formats [device] supports, asked of ffmpeg first and `v4l2-ctl` only if that came back
- * with nothing.
- *
- * ffmpeg is preferred because it is already a dependency and reports what ffmpeg itself will accept.
- * `v4l2-ctl` is the richer source — it enumerates frame rates per size rather than one line per
- * size — but ships separately, so it is the fallback rather than the first call.
- */
-internal fun v4l2FormatsFrom(device: String, run: CommandRunner): List<CameraFormat> {
-    val fromFfmpeg = parseV4l2Formats(
-        run(listOf("ffmpeg", "-f", "v4l2", "-list_formats", "all", "-i", device), 0L).output
-    )
-    if (fromFfmpeg.isNotEmpty()) return fromFfmpeg
-    return parseV4l2CtlFormats(
-        run(listOf("v4l2-ctl", "--list-formats-ext", "-d", device), 0L).output
-    )
-}
-
-/**
- * Reads the resolutions out of `ffmpeg -f v4l2 -list_formats`.
- *
- * One size per line, and a frame rate only sometimes — v4l2 will happily report a size with no rate
- * at all, which is taken as 30fps rather than dropped, since the size is the part that matters.
- */
-internal fun parseV4l2Formats(output: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
-    val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
-    for (line in output.lines()) {
-        val sizeMatch = sizePattern.find(line) ?: continue
-        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-        val fps = fpsPattern.find(line)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
-        formats.add(Triple(w, h, fps))
-    }
-    return formats.toSortedFormats()
-}
-
-/**
- * Reads the resolutions out of `v4l2-ctl --list-formats-ext`, whose output is indented rather than
- * one-line-per-format: a `Size:` line, then the frame rates it supports on their own lines beneath.
- * So a rate is attributed to the last size seen above it, and a rate before any size is ignored.
- */
-internal fun parseV4l2CtlFormats(output: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
-    val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
-    var lastW = 0
-    var lastH = 0
-    for (line in output.lines()) {
-        val sizeMatch = sizePattern.find(line)
-        if (sizeMatch != null) {
-            lastW = sizeMatch.groupValues[1].toIntOrNull() ?: 0
-            lastH = sizeMatch.groupValues[2].toIntOrNull() ?: 0
-        }
-        val fpsMatch = fpsPattern.find(line)
-        if (fpsMatch != null && lastW > 0 && lastH > 0) {
-            val fps = fpsMatch.groupValues[1].toDoubleOrNull()?.toInt() ?: 30
-            formats.add(Triple(lastW, lastH, fps))
-        }
-    }
-    return formats.toSortedFormats()
-}
-
-/**
- * The AVFoundation formats for the device at [deviceIndex]. avfoundation lists what it supports when
- * asked to open with `-list_formats`, and the `:none` suffix picks the video device with no audio.
- */
-internal fun avfoundationFormatsFrom(deviceIndex: String, run: CommandRunner): List<CameraFormat> =
-    parseAvfoundationFormats(
-        run(
-            listOf("ffmpeg", "-f", "avfoundation", "-list_formats", "all", "-i", "$deviceIndex:none"),
-            0L,
-        ).output
-    )
-
-/**
- * Reads the resolutions out of `ffmpeg -f avfoundation -list_formats`, whose lines carry a size and
- * usually a frame rate. As with v4l2, a size with no rate is kept at 30fps rather than dropped.
- */
-internal fun parseAvfoundationFormats(output: String): List<CameraFormat> {
-    val formats = mutableSetOf<Triple<Int, Int, Int>>()
-    val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
-    val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
-    for (line in output.lines()) {
-        val sizeMatch = sizePattern.find(line) ?: continue
-        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-        val fps = fpsPattern.find(line)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
-        formats.add(Triple(w, h, fps))
-    }
-    return formats.toSortedFormats()
-}
-
-private fun isFfmpegAvailable(): Boolean {
-    return try {
-        val process = ProcessBuilder("ffmpeg", "-version").redirectErrorStream(true).start()
-        process.inputStream.bufferedReader().readText()
-        process.waitFor() == 0
-    } catch (_: Exception) { false }
-}
-
-private fun listCameraDevices(): List<CameraDevice> {
-    val devices = cameraDevicesFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
-    System.err.println("[Camera] Found ${devices.size} camera device(s):")
-    devices.forEach { System.err.println("[Camera]   ${it.displayName} -> ${it.path}") }
-    return devices
-}
-
-/**
- * Which of the three per-OS camera enumerations applies to [osName], and its answer.
- *
- * [osName] is a parameter rather than read from `os.name` here so a test can ask for each platform's
- * listing without swapping the system property — which skiko latches JVM-wide, and which would take
- * every later Compose test in the same JVM down with it.
- */
-internal fun cameraDevicesFor(osName: String, run: CommandRunner): List<CameraDevice> = when {
-    osName.contains("linux") -> listLinuxCameras()
-    osName.contains("win") -> windowsCamerasFrom(run)
-    osName.contains("mac") -> macCamerasFrom(run)
-    else -> emptyList()
-}
-
-/**
- * The `/dev/video*` nodes, named from `/sys/class/video4linux/<node>/name` where that exists.
- *
- * Both roots are parameters so the listing can be pointed at a fixture: the real ones are the
- * machine's own hardware, which cannot be arranged from a test. Production always uses the defaults.
- */
-internal fun listLinuxCameras(
-    devDir: File = File("/dev"),
-    v4l2ClassDir: File = File("/sys/class/video4linux")
-): List<CameraDevice> {
-    return try {
-        devDir.listFiles { f -> f.name.startsWith("video") }
-            ?.sorted()
-            ?.map { file ->
-                val name = try {
-                    val nameFile = File(v4l2ClassDir, "${file.name}/name")
-                    if (nameFile.exists()) nameFile.readText().trim() else file.name
-                } catch (_: Exception) { file.name }
-                CameraDevice(
-                    name = name,
-                    path = "v4l2://${file.absolutePath}",
-                    displayName = "$name (${file.name})"
-                )
-            } ?: emptyList()
-    } catch (_: Exception) { emptyList() }
-}
-
-/** The PowerShell query naming every camera and imaging device Windows itself knows about. */
-private const val PNP_CAMERA_QUERY =
-    "Get-CimInstance Win32_PnPEntity | Where-Object { \$_.PNPClass -eq 'Camera' -or " +
-        "\$_.PNPClass -eq 'Image' } | Select-Object -ExpandProperty Name"
-
-/**
- * Both Windows camera listings, merged: ffmpeg's DirectShow enumeration for the names ffmpeg needs
- * back to open a device, and PowerShell's PnP query to fill in whatever ffmpeg missed. Either
- * command failing leaves its half empty rather than losing the other.
- */
-internal fun windowsCamerasFrom(run: CommandRunner): List<CameraDevice> {
-    val dshowOutput = run(listOf("ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"), 0L).output
-    val pnpOutput = run(listOf("powershell", "-NoProfile", "-Command", PNP_CAMERA_QUERY), 0L).output
-    return parseWindowsCameras(dshowOutput, pnpOutput)
-}
-
-/**
- * Merges what `ffmpeg -list_devices` and PowerShell's PnP query each know about the machine.
- *
- * ffmpeg's DirectShow listing is the authoritative source for device *names*, since those are the
- * exact strings ffmpeg needs back to open the device — capture cards such as Blackmagic's report a
- * DirectShow name quite unlike their PnP one. Two output shapes have to be read: ffmpeg 6.x+ tags
- * each line with its type, `"Name" (video|none|audio)`, while older builds print section headers and
- * then bare quoted names. Devices tagged `(none)` are kept — those are typically USB capture cards
- * whose pins report no specific media type, and they are still valid video sources.
- *
- * The PnP names then fill in anything ffmpeg missed. Matching is case-insensitive throughout, so a
- * device named by both sources is listed once, under the name ffmpeg gave it.
- */
-internal fun parseWindowsCameras(dshowOutput: String, pnpOutput: String): List<CameraDevice> {
-    val devices = mutableListOf<CameraDevice>()
-    val seenNames = mutableSetOf<String>()
-
-    fun add(name: String) {
-        if (name.lowercase() !in seenNames) {
-            devices.add(CameraDevice(name = name, path = "dshow://:dshow-vdev=$name", displayName = name))
-            seenNames.add(name.lowercase())
-        }
-    }
-
-    val namePattern = Regex("\"(.+?)\"\\s+\\((video|none)\\)")
-    var isVideo = false
-    for (line in dshowOutput.lines()) {
-        // New ffmpeg format (6.x+): "DeviceName" (video|none|audio)
-        val newMatch = namePattern.find(line)
-        if (newMatch != null) {
-            add(newMatch.groupValues[1])
-            continue
-        }
-        // Old ffmpeg format: section headers then quoted names
-        if (line.contains("DirectShow video devices")) isVideo = true
-        else if (line.contains("DirectShow audio devices")) isVideo = false
-        else if (isVideo) {
-            Regex("\"(.+?)\"").find(line)?.let { add(it.groupValues[1]) }
-        }
-    }
-
-    pnpOutput.lines()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .forEach { add(it) }
-
-    return devices
-}
-
-/**
- * Both macOS camera listings, merged: `system_profiler` finds the physical cameras, and ffmpeg's
- * AVFoundation enumeration finds the virtual ones (OBS, NDI and friends) that `system_profiler`
- * never reports. Either command failing leaves its half empty rather than losing the other.
- */
-internal fun macCamerasFrom(run: CommandRunner): List<CameraDevice> {
-    val profilerOutput = run(listOf("system_profiler", "SPCameraDataType", "-detailLevel", "mini"), 0L).output
-    val ffmpegOutput = run(listOf("ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""), 0L).output
-    return parseMacCameras(profilerOutput, ffmpegOutput)
-}
-
-/**
- * Merges macOS's two camera listings: the physical cameras `system_profiler` reports, then the
- * virtual ones (OBS, NDI and friends) that only ffmpeg's AVFoundation listing sees.
- *
- * `system_profiler` indents each camera as its own `Name:` heading, which is why a line qualifies
- * only if it ends in a colon — and the literal "Camera" heading above them is skipped. Devices are
- * addressed by *index*, not by name, so the order here is the order AVFoundation itself uses.
- *
- * As on Windows, ffmpeg prints one of two shapes: newer builds tag each line `"Name" (video)`, older
- * ones print a section header and then `[0] Name`. In the older shape the index ffmpeg itself
- * printed is used; in the newer one there is none to read, so the running count continues from the
- * physical cameras already found.
- */
-internal fun parseMacCameras(systemProfilerOutput: String, ffmpegOutput: String): List<CameraDevice> {
-    val devices = mutableListOf<CameraDevice>()
-    val seenNames = mutableSetOf<String>()
-
-    systemProfilerOutput.lines()
-        .filter { it.contains(":") && !it.trim().startsWith("Camera") && it.trim().endsWith(":") }
-        .map { it.trim().removeSuffix(":") }
-        .forEachIndexed { index, name ->
-            devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
-            seenNames.add(name.lowercase())
-        }
-
-    var isVideo = false
-    var deviceIndex = devices.size
-    for (line in ffmpegOutput.lines()) {
-        // New ffmpeg format (8.x+): "DeviceName" (video)
-        val newMatch = Regex("\"(.+?)\"\\s+\\(video\\)").find(line)
-        if (newMatch != null) {
-            val name = newMatch.groupValues[1]
-            if (name.lowercase() !in seenNames) {
-                devices.add(CameraDevice(name = name, path = "avfoundation://$deviceIndex", displayName = name))
-                seenNames.add(name.lowercase())
-                deviceIndex++
-            }
-            continue
-        }
-        // Old ffmpeg format: section headers then [index] name
-        if (line.contains("AVFoundation video devices")) isVideo = true
-        else if (line.contains("AVFoundation audio devices")) isVideo = false
-        else if (isVideo) {
-            val match = Regex("\\[(\\d+)]\\s+(.+)").find(line)
-            if (match != null) {
-                val index = match.groupValues[1]
-                val name = match.groupValues[2].trim()
-                if (name.lowercase() !in seenNames) {
-                    devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
-                    seenNames.add(name.lowercase())
-                }
-            }
-        }
-    }
-
-    return devices
 }
 
 @Composable
@@ -1614,658 +1087,5 @@ private fun ScreenCaptureProperties(source: SceneSource.ScreenCaptureSource, onU
     }
     PropertySliderWithInput(stringResource(Res.string.canvas_capture_interval), source.captureInterval.toFloat(), 33f, 1000f, "ms") { v ->
         onUpdate(source.copy(captureInterval = v.toInt()))
-    }
-}
-
-internal data class WindowInfo(val title: String, val id: Long)
-
-private fun listOpenWindows(): List<WindowInfo> =
-    openWindowsFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
-
-/**
- * Which per-OS window enumeration applies to [osName], and its answer.
- *
- * [osName] is a parameter for the same reason as in [cameraDevicesFor] — see the note there.
- */
-internal fun openWindowsFor(osName: String, run: CommandRunner): List<WindowInfo> = when {
-    osName.contains("linux") -> linuxWindowsFrom(run)
-    osName.contains("win") -> listWindowsWindows()
-    osName.contains("mac") -> macWindowsFrom(run)
-    else -> emptyList()
-}
-
-/**
- * The open windows on X11, via `xprop` and falling back to `wmctrl`.
- *
- * `xprop` is the primary because it is part of every X11 install, and it takes two calls: one to the
- * root window for the stacking list, then one per window for its title. Windows with no `_NET_WM_NAME`
- * are dropped — an unnamed window is of no use to an operator picking one from a list.
- *
- * `wmctrl` is tried only when that produced nothing at all, which happens under a window manager that
- * doesn't maintain `_NET_CLIENT_LIST_STACKING`. Its exit code is checked because it is the one command
- * here that is frequently *not installed*, and a shell reporting "not found" must not be parsed as a
- * window list.
- */
-internal fun linuxWindowsFrom(run: CommandRunner): List<WindowInfo> {
-    val windowIds = parseXpropWindowIds(
-        run(listOf("xprop", "-root", "_NET_CLIENT_LIST_STACKING"), 0L).output
-    )
-    if (windowIds.isNotEmpty()) {
-        val windows = windowIds
-            .mapNotNull { wid -> xpropWindow(wid, run(listOf("xprop", "-id", wid, "_NET_WM_NAME"), 0L).output) }
-            .filter { it.title.isNotBlank() }
-        if (windows.isNotEmpty()) return windows
-    }
-
-    val wmctrl = run(listOf("wmctrl", "-l"), 0L)
-    if (wmctrl.exitCode == 0) {
-        val windows = parseWmctrlWindows(wmctrl.output)
-        if (windows.isNotEmpty()) return windows
-    }
-
-    return emptyList()
-}
-
-/** The window ids in `xprop -root _NET_CLIENT_LIST_STACKING`, which prints them comma-separated. */
-internal fun parseXpropWindowIds(output: String): List<String> =
-    Regex("0x[0-9a-fA-F]+").findAll(output).map { it.value }.toList()
-
-/**
- * One window from `xprop -id <wid> _NET_WM_NAME`, whose title is the quoted part of its single line.
- *
- * Null when the property is missing or empty — an unnamed window is of no use to an operator picking
- * one from a list. The id is hexadecimal, and a malformed one is kept as window 0 rather than
- * dropping the window, matching how the wmctrl path treats the same case.
- */
-internal fun xpropWindow(windowId: String, nameOutput: String): WindowInfo? {
-    val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1)
-    if (name.isNullOrBlank()) return null
-    return WindowInfo(name, windowId.removePrefix("0x").toLongOrNull(16) ?: 0L)
-}
-
-/**
- * The windows in `wmctrl -l`, whose columns are id, desktop, host, then the title.
- *
- * The title is the **fourth** column and holds the rest of the line, spaces and all — so the split
- * is capped at four parts. It previously asked for five, which silently spent one part on the first
- * word of every title ("Mozilla Firefox" listed as "Firefox") and dropped one-word titles such as
- * "Terminal" entirely, because those lines then had only four parts and failed the size guard.
- */
-internal fun parseWmctrlWindows(output: String): List<WindowInfo> =
-    output.lines()
-        .filter { it.isNotBlank() }
-        .mapNotNull { line ->
-            val parts = line.split(Regex("\\s+"), limit = 4)
-            if (parts.size >= 4) {
-                val id = parts[0].removePrefix("0x").toLongOrNull(16) ?: 0L
-                val title = parts[3]
-                if (title.isNotBlank()) WindowInfo(title, id) else null
-            } else null
-        }
-
-private fun listWindowsWindows(): List<WindowInfo> {
-    return try {
-        WindowsWindowCapture.listWindows().map { WindowInfo(it.title, it.hwnd) }
-    } catch (_: Exception) { emptyList() }
-}
-
-/** The AppleScript that walks every visible process and collects the name of each of its windows. */
-private val MAC_WINDOW_TITLES_SCRIPT = """
-    tell application "System Events"
-        set windowList to {}
-        repeat with proc in (every process whose visible is true)
-            repeat with win in (every window of proc)
-                set end of windowList to (name of win)
-            end repeat
-        end repeat
-        return windowList
-    end tell
-""".trimIndent()
-
-/**
- * The open windows on macOS, which only System Events can enumerate. Note this is the call that can
- * raise the accessibility-permission prompt, which is why no test drives the real runner through it.
- */
-internal fun macWindowsFrom(run: CommandRunner): List<WindowInfo> =
-    parseMacWindowTitles(run(listOf("osascript", "-e", MAC_WINDOW_TITLES_SCRIPT), 0L).output)
-
-/**
- * The window titles AppleScript returns, which arrive as one comma-separated line.
- *
- * There is no window id in that answer — macOS capture matches on the title instead — so every
- * window is reported as id 0, and the capture panel writes an empty id for it.
- */
-internal fun parseMacWindowTitles(output: String): List<WindowInfo> =
-    output.split(",")
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .map { WindowInfo(it, 0L) }
-
-// --- Helper composables ---
-
-@Composable
-private fun PropertyTextField(label: String, value: String, modifier: Modifier = Modifier, onValueChange: (String) -> Unit) {
-    var text by remember(value) { mutableStateOf(value) }
-    StyledTextField(
-        value = text,
-        onValueChange = {
-            text = it
-            onValueChange(it)
-        },
-        label = label,
-        modifier = modifier.fillMaxWidth()
-    )
-}
-
-@Composable
-private fun PropertyFloatField(label: String, value: Float, modifier: Modifier = Modifier, onValueChange: (Float) -> Unit) {
-    var text by remember(value) { mutableStateOf("%.3f".format(value)) }
-    var hasFocus by remember { mutableStateOf(false) }
-    StyledTextField(
-        value = text,
-        onValueChange = { text = it },
-        label = label,
-        modifier = modifier.onFocusChanged { state ->
-            if (hasFocus && !state.isFocused) {
-                text.toFloatOrNull()?.let(onValueChange)
-                    ?: run { text = "%.3f".format(value) }
-            }
-            hasFocus = state.isFocused
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = {
-            text.toFloatOrNull()?.let(onValueChange)
-                ?: run { text = "%.3f".format(value) }
-        })
-    )
-}
-
-@Composable
-private fun PropertySlider(label: String, value: Float, min: Float, max: Float, onValueChange: (Float) -> Unit) {
-    Column {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        SlimSlider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = min..max,
-            trailingLabel = if (min == 0f && max == 1f) "${(value * 100).toInt()}%" else "%.2f".format(value),
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun PropertySliderWithInput(label: String, value: Float, min: Float, max: Float, suffix: String = "", onValueChange: (Float) -> Unit) {
-    var textValue by remember(value) { mutableStateOf(value.toInt().toString()) }
-    Column {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            SlimSlider(
-                value = value.coerceIn(min, max),
-                onValueChange = {
-                    textValue = it.toInt().toString()
-                    onValueChange(it)
-                },
-                valueRange = min..max,
-                modifier = Modifier.weight(1f)
-            )
-            var hasFocus by remember { mutableStateOf(false) }
-            val commitValue = {
-                textValue.toFloatOrNull()?.let { onValueChange(it.coerceIn(min, max)) }
-                    ?: run { textValue = value.toInt().toString() }
-            }
-            StyledTextField(
-                value = textValue,
-                onValueChange = { textValue = it },
-                modifier = Modifier.width(60.dp).onFocusChanged { state ->
-                    if (hasFocus && !state.isFocused) commitValue()
-                    hasFocus = state.isFocused
-                },
-                trailingIcon = if (suffix.isNotEmpty()) { {
-                    Text(suffix, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.padding(end = 6.dp))
-                } } else null,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { commitValue() })
-            )
-        }
-    }
-}
-
-@Composable
-private fun BibleProperties(
-    source: SceneSource.BibleSource,
-    onUpdate: (SceneSource) -> Unit,
-    appSettings: AppSettings?
-) {
-    val availableFonts = rememberSystemFonts()
-
-    // Available bible files, each paired with the name to show for it.
-    //
-    // Listing the folder and reading a `##Title:` out of every module in it are both file I/O, and
-    // neither belongs in composition: this panel recomposes on every canvas selection and property
-    // edit, and the folder can hold a hundred modules. The selector below simply waits for the list.
-    val storageDir = appSettings?.bibleSettings?.storageDirectory ?: ""
-    val bibleOptions by produceState(emptyList<Pair<String, String>>(), storageDir) {
-        value = withContext(Dispatchers.IO) {
-            if (storageDir.isEmpty()) emptyList()
-            else FileManager().getBibleFilesInDirectory(storageDir)
-                .map { fileName -> fileName to readTranslationTitle(File(storageDir, fileName)) }
-        }
-    }
-
-    // Selected bible version
-    var selectedBibleFile by remember {
-        mutableStateOf(appSettings?.bibleSettings?.translationList()?.firstOrNull()?.fileName ?: "")
-    }
-
-    // Bible data loading — keyed on the selected bible file. The picked version is handed over as a
-    // one-entry stack, not as the legacy `primaryBible` field: BibleViewModel loads whatever
-    // `translationList()` returns, and that ignores the legacy field entirely once the stack is
-    // populated. Written the old way this dropdown moved nothing at all on a configured machine --
-    // it only appeared to work on a settings file still falling back to the legacy pair.
-    val bibleVm = remember(appSettings, selectedBibleFile) {
-        appSettings?.let {
-            val settings = it.copy(
-                bibleSettings = it.bibleSettings.withTranslations(
-                    listOf(BibleTranslationSettings(fileName = selectedBibleFile)),
-                ),
-            )
-            BibleViewModel(settings)
-        }
-    }
-
-    val bible = bibleVm?.primaryBible?.value
-    val books = bibleVm?.books?.value ?: emptyList()
-    val verses = bibleVm?.verses?.value ?: emptyList()
-    val selectedBookIndex = bibleVm?.selectedBookIndex?.value ?: 0
-    val selectedChapter = bibleVm?.selectedChapter?.value ?: 1
-
-    Text(stringResource(Res.string.canvas_source_bible), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-    // Bible version selector
-    if (bibleOptions.isNotEmpty()) {
-        DropdownSelector(
-            label = stringResource(Res.string.canvas_bible_version),
-            value = selectedBibleFile,
-            options = bibleOptions,
-            onValueChange = { selectedBibleFile = it },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    // Book selector
-    if (books.isNotEmpty()) {
-        DropdownSelector(
-            label = stringResource(Res.string.book),
-            items = books,
-            selected = books.getOrElse(selectedBookIndex) { "" },
-            onSelectedChange = { bookName ->
-                val idx = books.indexOf(bookName)
-                if (idx >= 0) bibleVm?.loadChapter(idx, 1)
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        // Chapter selector
-        val chapterCount = bible?.getChapterCount(bible.getBookId(selectedBookIndex)) ?: 0
-        if (chapterCount > 0) {
-            DropdownSelector(
-                label = stringResource(Res.string.chapter),
-                items = (1..chapterCount).map { it.toString() },
-                selected = selectedChapter.toString(),
-                onSelectedChange = { bibleVm?.loadChapter(selectedBookIndex, it.toIntOrNull() ?: 1) },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        // Verse range selector
-        if (verses.isNotEmpty()) {
-            var startVerse by remember(selectedBookIndex, selectedChapter) { mutableStateOf(1) }
-            var endVerse by remember(selectedBookIndex, selectedChapter) { mutableStateOf(1) }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                StyledTextField(
-                    value = startVerse.toString(),
-                    onValueChange = { v ->
-                        v.toIntOrNull()?.let { sv ->
-                            startVerse = sv.coerceIn(1, verses.size)
-                            if (endVerse < startVerse) endVerse = startVerse
-                        }
-                    },
-                    label = stringResource(Res.string.canvas_bible_start_verse),
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                StyledTextField(
-                    value = endVerse.toString(),
-                    onValueChange = { v ->
-                        v.toIntOrNull()?.let { ev ->
-                            endVerse = ev.coerceIn(startVerse, verses.size)
-                        }
-                    },
-                    label = stringResource(Res.string.canvas_bible_end_verse),
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-            }
-
-            // Insert button
-            Button(
-                onClick = {
-                    val bookName = books.getOrElse(selectedBookIndex) { "" }
-                    val bookId = bible?.getBookId(selectedBookIndex) ?: return@Button
-                    val verseTexts = (startVerse..endVerse).mapNotNull { vNum ->
-                        bible.getVerseDetails(bookId, selectedChapter, vNum)?.second
-                    }
-                    val combinedText = verseTexts.joinToString(" ")
-                    val reference = if (startVerse == endVerse) {
-                        "$bookName $selectedChapter:$startVerse"
-                    } else {
-                        "$bookName $selectedChapter:$startVerse-$endVerse"
-                    }
-                    onUpdate(source.copy(verseText = combinedText, referenceText = reference))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(stringResource(Res.string.canvas_bible_insert))
-            }
-        }
-    } else if (appSettings == null || storageDir.isEmpty()) {
-        Text(
-            stringResource(Res.string.bible_no_primary_title),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-    HorizontalDivider()
-    Spacer(modifier = Modifier.height(4.dp))
-
-    // Editable verse text field
-    var verseTextValue by remember(source.verseText) { mutableStateOf(source.verseText) }
-    StyledTextField(
-        value = verseTextValue,
-        onValueChange = {
-            verseTextValue = it
-            onUpdate(source.copy(verseText = it))
-        },
-        label = stringResource(Res.string.canvas_bible_verse_text),
-        singleLine = false,
-        minLines = 2,
-        maxLines = 6,
-        modifier = Modifier.fillMaxWidth()
-    )
-
-    // Editable reference field
-    var refTextValue by remember(source.referenceText) { mutableStateOf(source.referenceText) }
-    StyledTextField(
-        value = refTextValue,
-        onValueChange = {
-            refTextValue = it
-            onUpdate(source.copy(referenceText = it))
-        },
-        label = stringResource(Res.string.canvas_bible_reference),
-        modifier = Modifier.fillMaxWidth()
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-    HorizontalDivider()
-    Spacer(modifier = Modifier.height(4.dp))
-
-    // Font styling for verse text
-    Text(stringResource(Res.string.canvas_verse_style), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    FontDropdown(
-        label = stringResource(Res.string.canvas_font),
-        selected = source.fontFamily,
-        fonts = availableFonts,
-        onSelectedChange = { onUpdate(source.copy(fontFamily = it)) },
-        modifier = Modifier.fillMaxWidth()
-    )
-    PropertyTextField(stringResource(Res.string.canvas_clock_font_size), source.fontSize.toString()) { v ->
-        v.toIntOrNull()?.let { onUpdate(source.copy(fontSize = it)) }
-    }
-    ColorPickerField(
-        color = source.fontColor,
-        onColorChange = { onUpdate(source.copy(fontColor = it)) },
-        label = stringResource(Res.string.canvas_font_color)
-    )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        LabeledCheckbox(
-            checked = source.bold,
-            onCheckedChange = { onUpdate(source.copy(bold = it)) },
-            label = stringResource(Res.string.canvas_text_bold),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        LabeledCheckbox(
-            checked = source.italic,
-            onCheckedChange = { onUpdate(source.copy(italic = it)) },
-            label = stringResource(Res.string.canvas_text_italic),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-
-    Spacer(modifier = Modifier.height(4.dp))
-
-    // Font styling for reference
-    Text(stringResource(Res.string.canvas_reference_style), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    PropertyTextField(stringResource(Res.string.canvas_bible_ref_font_size), source.referenceFontSize.toString()) { v ->
-        v.toIntOrNull()?.let { onUpdate(source.copy(referenceFontSize = it)) }
-    }
-    ColorPickerField(
-        color = source.referenceFontColor,
-        onColorChange = { onUpdate(source.copy(referenceFontColor = it)) },
-        label = stringResource(Res.string.canvas_bible_ref_color)
-    )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        LabeledCheckbox(
-            checked = source.referenceBold,
-            onCheckedChange = { onUpdate(source.copy(referenceBold = it)) },
-            label = stringResource(Res.string.canvas_text_bold),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        LabeledCheckbox(
-            checked = source.referenceItalic,
-            onCheckedChange = { onUpdate(source.copy(referenceItalic = it)) },
-            label = stringResource(Res.string.canvas_text_italic),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-
-    Spacer(modifier = Modifier.height(4.dp))
-
-    // Background color
-    ColorPickerField(
-        color = source.backgroundColor,
-        onColorChange = { onUpdate(source.copy(backgroundColor = it)) },
-        label = stringResource(Res.string.canvas_text_bg_color)
-    )
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Column {
-            Text(stringResource(Res.string.canvas_align_horizontal), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            HorizontalAlignmentButtons(
-                selectedAlignment = source.horizontalAlignment,
-                onAlignmentChange = { onUpdate(source.copy(horizontalAlignment = it)) },
-                leftValue = "left",
-                centerValue = "center",
-                rightValue = "right"
-            )
-        }
-        Column {
-            Text(stringResource(Res.string.canvas_align_vertical), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            VerticalAlignmentButtons(
-                selectedAlignment = source.verticalAlignment,
-                onAlignmentChange = { onUpdate(source.copy(verticalAlignment = it)) },
-                topValue = "top",
-                middleValue = "center",
-                bottomValue = "bottom"
-            )
-        }
-    }
-
-    Spacer(modifier = Modifier.height(4.dp))
-
-    // Line spacing
-    Text(stringResource(Res.string.canvas_line_spacing), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        SlimSlider(
-            value = source.lineSpacing / 100f,
-            onValueChange = { onUpdate(source.copy(lineSpacing = (it * 100).toInt())) },
-            valueRange = 0.5f..3f,
-            trailingLabel = "${source.lineSpacing}%",
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-// --- Transform update helpers ---
-
-private fun updateName(source: SceneSource, name: String): SceneSource = when (source) {
-    is SceneSource.ImageSource -> source.copy(name = name)
-    is SceneSource.TextSource -> source.copy(name = name)
-    is SceneSource.ColorSource -> source.copy(name = name)
-    is SceneSource.VideoSource -> source.copy(name = name)
-    is SceneSource.BrowserSource -> source.copy(name = name)
-    is SceneSource.ShapeSource -> source.copy(name = name)
-    is SceneSource.ClockSource -> source.copy(name = name)
-    is SceneSource.QRCodeSource -> source.copy(name = name)
-    is SceneSource.CameraSource -> source.copy(name = name)
-    is SceneSource.ScreenCaptureSource -> source.copy(name = name)
-    is SceneSource.BibleSource -> source.copy(name = name)
-}
-
-private fun updateTransform(source: SceneSource, transform: SourceTransform): SceneSource = when (source) {
-    is SceneSource.ImageSource -> source.copy(transform = transform)
-    is SceneSource.TextSource -> source.copy(transform = transform)
-    is SceneSource.ColorSource -> source.copy(transform = transform)
-    is SceneSource.VideoSource -> source.copy(transform = transform)
-    is SceneSource.BrowserSource -> source.copy(transform = transform)
-    is SceneSource.ShapeSource -> source.copy(transform = transform)
-    is SceneSource.ClockSource -> source.copy(transform = transform)
-    is SceneSource.QRCodeSource -> source.copy(transform = transform)
-    is SceneSource.CameraSource -> source.copy(transform = transform)
-    is SceneSource.ScreenCaptureSource -> source.copy(transform = transform)
-    is SceneSource.BibleSource -> source.copy(transform = transform)
-}
-
-@Composable
-private fun FontDropdown(
-    label: String,
-    selected: String,
-    fonts: List<String>,
-    onSelectedChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val expanded = rememberSaveable { mutableStateOf(false) }
-    val selectedFontFamily = remember(selected) { systemFontFamilyOrDefault(selected) }
-
-    Box(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .height(42.dp)
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { expanded.value = true }
-                .padding(start = 11.dp, end = 11.dp, top = 0.dp, bottom = 6.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            if (label.isNotEmpty()) {
-                Text(
-                    text = label.uppercase(),
-                    fontSize = 8.sp,
-                    lineHeight = 9.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = selected,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = selectedFontFamily
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    painter = painterResource(Res.drawable.ic_arrow_down),
-                    contentDescription = null,
-                    modifier = Modifier.size(9.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                )
-            }
-        }
-        DropdownMenu(
-            containerColor = MaterialTheme.colorScheme.surface,
-            expanded = expanded.value,
-            onDismissRequest = { expanded.value = false }
-        ) {
-            val scrollState = rememberScrollState()
-            Box(modifier = Modifier.height(300.dp).width(220.dp)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .verticalScroll(scrollState)
-                        .padding(end = 10.dp)
-                ) {
-                    fonts.forEach { font ->
-                        val fontFamily = remember(font) { systemFontFamilyOrDefault(font) }
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    font,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = fontFamily)
-                                )
-                            },
-                            onClick = {
-                                onSelectedChange(font)
-                                expanded.value = false
-                            }
-                        )
-                    }
-                }
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(scrollState),
-                    modifier = Modifier.align(Alignment.CenterEnd).height(300.dp),
-                    style = LocalScrollbarStyle.current.copy(
-                        thickness = 8.dp,
-                        minimalHeight = 24.dp,
-                        unhoverColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
-                        hoverColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                    )
-                )
-            }
-        }
     }
 }
