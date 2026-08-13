@@ -1472,6 +1472,7 @@ fun MainDesktop(
                                 onInstanceLinkSendNextPicture = instanceLinkSendNextPicture,
                                 onInstanceLinkSendPreviousPicture = instanceLinkSendPreviousPicture,
                                 instanceLinkFetchPictureImageBytes = instanceLinkFetchPictureImageBytes,
+                                selectedPictureItem = selectedPictureItem,
                                 presenterManager = presenterManager,
                                 onSettingsChange = onSettingsChange,
                                 viewModel = picturesViewModel
@@ -1488,6 +1489,7 @@ fun MainDesktop(
                                 onInstanceLinkSendNextSlide = instanceLinkSendNextSlide,
                                 onInstanceLinkSendPreviousSlide = instanceLinkSendPreviousSlide,
                                 instanceLinkFetchPresentationSlideBytes = instanceLinkFetchPresentationSlideBytes,
+                                selectedPresentationItem = selectedPresentationItem,
                                 presenterManager = presenterManager,
                                 onSlidesLoaded = onPresentationSlidesLoaded,
                                 onSettingsChange = onSettingsChange,
