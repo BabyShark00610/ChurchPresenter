@@ -72,6 +72,7 @@
     <string name="bible_split_browse_mode">Mod Navigare Divizat</string>
     <string name="bible_cross_references">Referințe încrucișate</string>
     <string name="bible_cross_references_title">Referințe</string>
+    <string name="bible_cross_references_enable">Afișează referințele încrucișate</string>
     <string name="bible_cross_references_none">Fără referințe încrucișate</string>
     <string name="bible_cross_references_often_next">Deseori urmează</string>
     <string name="bible_cross_references_passage">Pasajul %1$s</string>

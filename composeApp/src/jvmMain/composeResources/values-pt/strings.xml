@@ -1721,6 +1721,7 @@
     <string name="bible_split_browse_mode">Modo de navegação dividida</string>
     <string name="bible_cross_references">Referências cruzadas</string>
     <string name="bible_cross_references_title">Referências</string>
+    <string name="bible_cross_references_enable">Mostrar referências cruzadas</string>
     <string name="bible_cross_references_none">Sem referências cruzadas</string>
     <string name="bible_cross_references_often_next">Costuma vir a seguir</string>
     <string name="bible_cross_references_passage">Passagem %1$s</string>

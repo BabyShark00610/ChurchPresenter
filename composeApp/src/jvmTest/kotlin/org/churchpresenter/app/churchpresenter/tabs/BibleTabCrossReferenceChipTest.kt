@@ -28,6 +28,17 @@ class BibleTabCrossReferenceChipTest {
     private fun withPanel(settings: AppSettings) =
         settings.copy(bibleSettings = settings.bibleSettings.copy(crossReferencesPanel = true))
 
+    private fun turnedOff(settings: AppSettings) =
+        settings.copy(bibleSettings = settings.bibleSettings.copy(crossReferencesEnabled = false))
+
+    private fun turnedOffWhileDocked(settings: AppSettings) =
+        settings.copy(
+            bibleSettings = settings.bibleSettings.copy(
+                crossReferencesEnabled = false,
+                crossReferencesPanel = true,
+            )
+        )
+
     private fun chip(count: Int) = "Cross references: $count"
 
     private fun ComposeUiTest.chipNames(): List<String> =
@@ -56,6 +67,21 @@ class BibleTabCrossReferenceChipTest {
         bibleTab(crossReferences = references()) { _, _ ->
             assertFalse(hasActionButton(BibleLabel.CROSS_REFS_CLOSE), "the panel is off")
             assertTrue(hasActionButton(chip(2)))
+        }
+
+    @Test
+    fun `the setting off leaves no chips and no Refs button`() =
+        bibleTab(settings = ::turnedOff, crossReferences = references()) { _, _ ->
+            assertEquals(emptyList(), chipNames())
+            assertFalse(hasActionButton(BibleLabel.CROSS_REFS_TOGGLE))
+        }
+
+    @Test
+    fun `the setting off hides a panel that was left docked`() =
+        bibleTab(settings = ::turnedOffWhileDocked, crossReferences = references()) { _, _ ->
+            assertFalse(hasActionButton(BibleLabel.CROSS_REFS_CLOSE))
+            assertFalse(showsExactly("John 3:16"))
+            assertEquals(emptyList(), chipNames())
         }
 
     @Test

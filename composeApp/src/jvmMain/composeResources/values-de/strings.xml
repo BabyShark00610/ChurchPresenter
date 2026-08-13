@@ -1699,6 +1699,7 @@
     <string name="bible_split_browse_mode">Geteilter Browsemodus</string>
     <string name="bible_cross_references">Querverweise</string>
     <string name="bible_cross_references_title">Verweise</string>
+    <string name="bible_cross_references_enable">Querverweise anzeigen</string>
     <string name="bible_cross_references_none">Keine Querverweise</string>
     <string name="bible_cross_references_often_next">Oft als Nächstes</string>
     <string name="bible_cross_references_passage">Abschnitt %1$s</string>

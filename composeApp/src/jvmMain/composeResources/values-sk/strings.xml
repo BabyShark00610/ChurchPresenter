@@ -1721,6 +1721,7 @@
     <string name="bible_split_browse_mode">Rozdelený režim prehliadania</string>
     <string name="bible_cross_references">Krížové odkazy</string>
     <string name="bible_cross_references_title">Odkazy</string>
+    <string name="bible_cross_references_enable">Zobrazovať krížové odkazy</string>
     <string name="bible_cross_references_none">Žiadne krížové odkazy</string>
     <string name="bible_cross_references_often_next">Často nasleduje</string>
     <string name="bible_cross_references_passage">Pasáž %1$s</string>

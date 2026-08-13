@@ -264,11 +264,11 @@ class BibleSettingsTabTest {
         val before = harness.current.bibleSettings
 
         val after = toggle(Box.CROSS_REFERENCES, harness)
-        if (after.crossReferencesPanel) onAllNodes(isToggleable())[Box.CROSS_REFERENCES].assertIsOn()
+        if (after.crossReferencesEnabled) onAllNodes(isToggleable())[Box.CROSS_REFERENCES].assertIsOn()
         else onAllNodes(isToggleable())[Box.CROSS_REFERENCES].assertIsOff()
 
-        assertEquals(true, after.crossReferencesPanel, "the cross-reference column starts off and turns on")
-        assertEquals(before.copy(crossReferencesPanel = true), after)
+        assertEquals(false, after.crossReferencesEnabled, "cross references start on and turn off")
+        assertEquals(before.copy(crossReferencesEnabled = false), after)
     }
 
     @Test
