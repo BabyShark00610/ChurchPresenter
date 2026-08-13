@@ -1699,6 +1699,7 @@
     <string name="bible_split_browse_mode">Бөлінген шолу режимі</string>
     <string name="bible_cross_references">Айқас сілтемелер</string>
     <string name="bible_cross_references_title">Сілтемелер</string>
+    <string name="bible_cross_references_enable">Айқас сілтемелерді көрсету</string>
     <string name="bible_cross_references_none">Айқас сілтемелер жоқ</string>
     <string name="bible_cross_references_often_next">Жиі келесі</string>
     <string name="bible_cross_references_passage">Үзінді %1$s</string>

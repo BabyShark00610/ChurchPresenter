@@ -1721,6 +1721,7 @@
     <string name="bible_split_browse_mode">Gesplitste bladermodus</string>
     <string name="bible_cross_references">Kruisverwijzingen</string>
     <string name="bible_cross_references_title">Verwijzingen</string>
+    <string name="bible_cross_references_enable">Kruisverwijzingen tonen</string>
     <string name="bible_cross_references_none">Geen kruisverwijzingen</string>
     <string name="bible_cross_references_often_next">Vaak hierna</string>
     <string name="bible_cross_references_passage">Passage %1$s</string>

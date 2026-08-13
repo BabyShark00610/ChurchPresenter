@@ -1699,6 +1699,7 @@
     <string name="bible_split_browse_mode">Tryb podzielonego przeglądania</string>
     <string name="bible_cross_references">Odsyłacze</string>
     <string name="bible_cross_references_title">Odsyłacze</string>
+    <string name="bible_cross_references_enable">Pokaż odsyłacze</string>
     <string name="bible_cross_references_none">Brak odsyłaczy</string>
     <string name="bible_cross_references_often_next">Często dalej</string>
     <string name="bible_cross_references_passage">Fragment %1$s</string>

@@ -61,6 +61,7 @@
     <string name="bible_split_browse_mode">Режим раздельного просмотра</string>
     <string name="bible_cross_references">Перекрёстные ссылки</string>
     <string name="bible_cross_references_title">Ссылки</string>
+    <string name="bible_cross_references_enable">Показывать перекрёстные ссылки</string>
     <string name="bible_cross_references_none">Нет перекрёстных ссылок</string>
     <string name="bible_cross_references_often_next">Часто далее</string>
     <string name="bible_cross_references_passage">Отрывок %1$s</string>

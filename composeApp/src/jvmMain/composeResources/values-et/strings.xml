@@ -78,6 +78,7 @@
     <string name="bible_split_browse_mode">Jagatud sirvimisrežiim</string>
     <string name="bible_cross_references">Ristviited</string>
     <string name="bible_cross_references_title">Viited</string>
+    <string name="bible_cross_references_enable">Näita ristviiteid</string>
     <string name="bible_cross_references_none">Ristviiteid pole</string>
     <string name="bible_cross_references_often_next">Sageli järgmisena</string>
     <string name="bible_cross_references_passage">Lõik %1$s</string>
