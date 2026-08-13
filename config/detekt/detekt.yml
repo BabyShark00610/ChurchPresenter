@@ -42,14 +42,24 @@ complexity:
     active: false
 
 naming:
-  FunctionNaming:
-    active: true
-    ignoreAnnotated: ['Composable']
   TopLevelPropertyNaming:
     active: false
   VariableNaming:
     active: true
-    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*'
+    variablePattern: '(_)?[a-z][A-Za-z0-9]*|[A-Z][A-Z0-9_]*'
+    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*|[A-Z][A-Z0-9_]*'
+  FunctionParameterNaming:
+    active: true
+    parameterPattern: '(_)?[a-z][A-Za-z0-9]*'
+  ConstructorParameterNaming:
+    active: true
+    parameterPattern: '(_)?[a-z][A-Za-z0-9]*'
+    privateParameterPattern: '(_)?[a-z][A-Za-z0-9]*'
+    excludes: ['**/test/**', '**/jvmTest/**', '**/PlanningCenterClient.kt', '**/StockMediaClient.kt']
+  FunctionNaming:
+    active: true
+    ignoreAnnotated: ['Composable']
+    excludes: ['**/test/**', '**/jvmTest/**', '**/X11WindowCapture.kt']
   MatchingDeclarationName:
     active: false
 
