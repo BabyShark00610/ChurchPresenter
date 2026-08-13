@@ -1,34 +1,18 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import org.churchpresenter.app.churchpresenter.composables.finalPassCombinedClickable
-import org.churchpresenter.app.churchpresenter.models.ShortcutAction
-import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
-import org.churchpresenter.app.churchpresenter.utils.label
-import org.churchpresenter.app.churchpresenter.composables.initialPassCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,24 +20,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonColors
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,123 +36,48 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isShiftPressed
-import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.file_chooser_open_schedule
 import churchpresenter.composeapp.generated.resources.file_chooser_save_schedule
 import churchpresenter.composeapp.generated.resources.file_filter_schedule
-import churchpresenter.composeapp.generated.resources.ic_add
-import churchpresenter.composeapp.generated.resources.ic_arrow_down
-import churchpresenter.composeapp.generated.resources.ic_arrow_up
-import churchpresenter.composeapp.generated.resources.ic_close
 import churchpresenter.composeapp.generated.resources.ic_delete
-import churchpresenter.composeapp.generated.resources.ic_drag_dots
-import churchpresenter.composeapp.generated.resources.ic_edit
-import churchpresenter.composeapp.generated.resources.ic_folder
-import churchpresenter.composeapp.generated.resources.ic_label
-import churchpresenter.composeapp.generated.resources.ic_play
-import churchpresenter.composeapp.generated.resources.ic_check
-import churchpresenter.composeapp.generated.resources.ic_note
-import churchpresenter.composeapp.generated.resources.ic_redo
-import churchpresenter.composeapp.generated.resources.ic_remove
-import churchpresenter.composeapp.generated.resources.ic_save
-import churchpresenter.composeapp.generated.resources.ic_undo
-import churchpresenter.composeapp.generated.resources.pause_duration_ms
-import churchpresenter.composeapp.generated.resources.planning_center_import_title
 import churchpresenter.composeapp.generated.resources.schedule
-import churchpresenter.composeapp.generated.resources.schedule_density_compact
-import churchpresenter.composeapp.generated.resources.schedule_density_detailed
-import churchpresenter.composeapp.generated.resources.schedule_density_normal
-import churchpresenter.composeapp.generated.resources.schedule_item_count
-import churchpresenter.composeapp.generated.resources.schedule_note_placeholder
-import churchpresenter.composeapp.generated.resources.tooltip_note
-import churchpresenter.composeapp.generated.resources.tooltip_note_clear
-import churchpresenter.composeapp.generated.resources.tooltip_note_done
-import churchpresenter.composeapp.generated.resources.tooltip_redo
-import churchpresenter.composeapp.generated.resources.tooltip_redo_unbound
-import churchpresenter.composeapp.generated.resources.tooltip_undo
-import churchpresenter.composeapp.generated.resources.tooltip_undo_unbound
 import churchpresenter.composeapp.generated.resources.autosave_restore_confirm
 import churchpresenter.composeapp.generated.resources.autosave_restore_discard
 import churchpresenter.composeapp.generated.resources.autosave_restore_message
 import churchpresenter.composeapp.generated.resources.autosave_restore_title
-import churchpresenter.composeapp.generated.resources.schedule_add_files
 import churchpresenter.composeapp.generated.resources.schedule_drop_hint
 import churchpresenter.composeapp.generated.resources.schedule_drop_to_remove
-import churchpresenter.composeapp.generated.resources.tooltip_add_label
-import churchpresenter.composeapp.generated.resources.tooltip_clear_schedule
-import churchpresenter.composeapp.generated.resources.tooltip_edit_label
-import churchpresenter.composeapp.generated.resources.tooltip_go_live
-import churchpresenter.composeapp.generated.resources.tooltip_move_down
-import churchpresenter.composeapp.generated.resources.tooltip_schedule_zoom_in
-import churchpresenter.composeapp.generated.resources.tooltip_schedule_zoom_out
-import churchpresenter.composeapp.generated.resources.tooltip_move_up
-import churchpresenter.composeapp.generated.resources.tooltip_new_schedule
-import churchpresenter.composeapp.generated.resources.tooltip_open_schedule
-import churchpresenter.composeapp.generated.resources.tooltip_remove
-import churchpresenter.composeapp.generated.resources.tooltip_save_schedule
 import kotlin.math.abs
 import kotlinx.coroutines.launch
-import org.churchpresenter.app.churchpresenter.composables.ConditionalTooltipArea
-import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
 import org.churchpresenter.app.churchpresenter.data.settings.PlanningCenterSettings
 import org.churchpresenter.app.churchpresenter.dialogs.PlanningCenterImportDialog
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
-import org.churchpresenter.app.churchpresenter.utils.Utils
-import org.churchpresenter.app.churchpresenter.utils.DroppedFileAction
-import org.churchpresenter.app.churchpresenter.utils.IMAGE_EXTENSIONS
 import org.churchpresenter.app.churchpresenter.utils.DragItemGeometry
-import org.churchpresenter.app.churchpresenter.utils.ScheduleDensity
-import org.churchpresenter.app.churchpresenter.utils.classifyDroppedFile
 import org.churchpresenter.app.churchpresenter.utils.dragDropTarget
 import org.churchpresenter.app.churchpresenter.utils.scheduleCanZoomIn
 import org.churchpresenter.app.churchpresenter.utils.scheduleCanZoomOut
 import org.churchpresenter.app.churchpresenter.utils.scheduleDensityFor
-import org.churchpresenter.app.churchpresenter.utils.scheduleShowDetailLine
-import org.churchpresenter.app.churchpresenter.utils.scheduleShowKindDetails
 import org.churchpresenter.app.churchpresenter.utils.scheduleZoomIn
 import org.churchpresenter.app.churchpresenter.utils.scheduleZoomOut
 import org.churchpresenter.app.churchpresenter.viewmodel.ScheduleViewModel
-import org.churchpresenter.app.churchpresenter.viewmodel.announcementTimerSubtext
-import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemDetailText
 import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemGlyph
-import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemKindLabel
-import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemPaletteIndex
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import java.awt.datatransfer.DataFlavor
@@ -193,18 +90,13 @@ import java.nio.file.Path
 import java.text.SimpleDateFormat
 import java.util.Date
 
-/**
- * Actions exposed to the parent composable so toolbar/menu can drive the schedule
- * without holding a reference to [ScheduleViewModel].
- */
 data class ScheduleTabActions(
     val newSchedule: () -> Unit = {},
     val openSchedule: () -> Unit = {},
     val saveSchedule: () -> Unit = {},
     val saveScheduleAs: () -> Unit = {},
     val removeSelected: () -> Unit = {},
-    /** Removes a specific item by id, regardless of current UI selection — used to apply an
-     *  approved remote "remove from schedule" request (mobile companion or Instance Link). */
+
     val removeById: (id: String) -> Unit = {},
     val clearSchedule: () -> Unit = {},
     val moveSelectedToTop: () -> Unit = {},
@@ -226,25 +118,14 @@ data class ScheduleTabActions(
     val addDictionary: (number: String, word: String, transliteration: String, definition: String) -> Unit = { _, _, _, _ -> }
 )
 
-/** The card density percentage a schedule opens at; the rung ladder itself lives in ScheduleZoom.kt. */
 private const val ZOOM_DEFAULT = 100
 
-/** How far the pointer must travel on a card's icon before it becomes a reorder drag. */
 private val DRAG_HANDLE_THRESHOLD = 4.dp
 
-/** Height of the drop-here-to-remove zone at the bottom of the list, shown while dragging. */
 private val DELETE_ZONE_HEIGHT = 56.dp
 
-/** Corner radius shared by every card (section or item) in the list. */
-private val CARD_SHAPE = RoundedCornerShape(9.dp)
+internal val CARD_SHAPE = RoundedCornerShape(9.dp)
 
-/**
- * Locators for the toolbar buttons whose tooltip names a keyboard shortcut.
- *
- * Those tooltips are built from the live binding and render the modifier as `⌃` on macOS and
- * `Ctrl` elsewhere, so a test that found the button by its tooltip text passed on one platform and
- * failed on the others. The tag is stable in both.
- */
 internal object ScheduleToolbarTags {
     const val UNDO = "schedule_undo"
     const val REDO = "schedule_redo"
@@ -254,9 +135,7 @@ internal object ScheduleToolbarTags {
 @Composable
 fun ScheduleTab(
     modifier: Modifier = Modifier,
-    /** Optional pre-created view model. Pass one from a parent composable to survive panel
-     *  collapse/expand (i.e. when this composable leaves the composition inside AnimatedVisibility).
-     *  If null a local view model is created and owned by this composable. */
+
     scheduleViewModel: ScheduleViewModel? = null,
     onPresenting: (Presenting) -> Unit = { Presenting.NONE },
     onItemClick: (ScheduleItem) -> Unit = {},
@@ -285,7 +164,7 @@ fun ScheduleTab(
     onPlanningCenterDisconnect: () -> Unit = {}
 ) {
     val onScheduleChangedState = rememberUpdatedState(onScheduleChanged)
-    // Use the provided view model, or fall back to a locally-owned one.
+
     val viewModel = scheduleViewModel ?: remember { ScheduleViewModel(onScheduleChanged = { items -> onScheduleChangedState.value?.invoke(items) }) }
     val scope = rememberCoroutineScope()
 
@@ -318,13 +197,10 @@ fun ScheduleTab(
         )
     }
 
-    // State holders — lambdas capture the State object, not the string value,
-    // so they always read the latest value via .value without re-registering.
     val strSaveScheduleAs = rememberUpdatedState(stringResource(Res.string.file_chooser_save_schedule))
     val strOpenSchedule   = rememberUpdatedState(stringResource(Res.string.file_chooser_open_schedule))
     val strFileFilter     = rememberUpdatedState(stringResource(Res.string.file_filter_schedule))
 
-    // Register actions once — no recomposition cycle.
     LaunchedEffect(Unit) {
         onActionsReady(
             ScheduleTabActions(
@@ -358,7 +234,6 @@ fun ScheduleTab(
         )
     }
 
-    // Notify parent when selection changes
     LaunchedEffect(viewModel.selectedItemId) {
         onSelectedItemChanged(viewModel.selectedItemId)
     }
@@ -389,7 +264,6 @@ fun ScheduleTab(
             onClearSchedule = { viewModel.clearSchedule() }
         )
 
-        // Schedule items list with drag-and-drop support
         val viewModelState = rememberUpdatedState(viewModel)
         var listHeightPx by remember { mutableStateOf(0) }
         Box(
@@ -399,7 +273,6 @@ fun ScheduleTab(
         ) {
             val listState = rememberLazyListState()
 
-            // Drag-to-reorder state: shift+click+drag anywhere on a card, or plain drag on its icon
             var draggingFromIndex by remember { mutableStateOf(-1) }
             var dropTargetIndex by remember { mutableStateOf<Int?>(null) }
             var isDragActive by remember { mutableStateOf(false) }
@@ -409,8 +282,6 @@ fun ScheduleTab(
 
             val baseDensity = LocalDensity.current
 
-            // Reorder gesture, shared by the whole-card shift+drag and the per-card icon handle.
-            // The handle path arms only after real movement so a plain click still selects the card.
             val dragThresholdPx = with(baseDensity) { DRAG_HANDLE_THRESHOLD.toPx() }
             val deleteZonePx = with(baseDensity) { DELETE_ZONE_HEIGHT.toPx() }
             fun Modifier.reorderGesture(index: Int, requireShift: Boolean): Modifier =
@@ -426,9 +297,7 @@ fun ScheduleTab(
                             var travelled = if (requireShift) dragThresholdPx else 0f
                             var armed = false
                             var dragging = true
-                            // Idempotent: called on the normal drop path AND from finally, so a
-                            // cancelled gesture (node disposed mid-drag) can never strand the
-                            // state — a stuck isDragActive freezes the whole sidebar.
+
                             fun endDrag() {
                                 if (draggingFromIndex == index) draggingFromIndex = -1
                                 dropTargetIndex = null
@@ -438,8 +307,7 @@ fun ScheduleTab(
                             }
                             try {
                             while (dragging) {
-                                // Another card already owns this drag (a shift+press on the grip
-                                // reaches both gestures) — don't arm a second one over it
+
                                 if (!armed && travelled >= dragThresholdPx && !isDragActive) {
                                     val itemInfo = listState.layoutInfo.visibleItemsInfo
                                         .firstOrNull { it.index == index }
@@ -454,8 +322,7 @@ fun ScheduleTab(
                                 }
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 if (armed) event.changes.forEach { it.consume() }
-                                // A drop outside every card's bounds can arrive as something
-                                // other than Release, so treat "nothing pressed" as the end too
+
                                 val finished = event.type == PointerEventType.Release ||
                                     event.changes.none { it.pressed }
                                 if (finished) {
@@ -481,7 +348,7 @@ fun ScheduleTab(
                                         continue
                                     }
                                     dragCursorY += deltaY
-                                    // Over the delete zone the card is being removed, not reordered
+
                                     val hit = dragDropTarget(
                                         cursorY = dragCursorY,
                                         listHeightPx = listHeightPx,
@@ -503,7 +370,6 @@ fun ScheduleTab(
                     }
                 }
 
-            // Register AWT DropTarget on the window for file drag-and-drop
             DisposableEffect(Unit) {
                 val awtWindow = java.awt.Window.getWindows().firstOrNull { it.isShowing }
                 val dropTarget = awtWindow?.let { win ->
@@ -533,7 +399,7 @@ fun ScheduleTab(
             }
 
             if (scheduleItems.isEmpty()) {
-                // Empty state hint
+
                 Text(
                     text = stringResource(Res.string.schedule_drop_hint),
                     style = MaterialTheme.typography.bodyMedium,
@@ -550,16 +416,9 @@ fun ScheduleTab(
                     .padding(horizontal = 8.dp)
                     .padding(top = 6.dp, bottom = 10.dp, end = 4.dp)
             ) {
-                // A fixed copy, not the live list. `itemsIndexed` reads `items[index]` inside the key
-                // and content-type lambdas it builds, and those run when the lazy layout rebuilds its
-                // key map — which can be after a delete or an undo has already shortened the list,
-                // leaving it indexing past the end and taking the whole tab down. Copying at
-                // composition gives those lambdas a list that cannot shrink under them.
+
                 itemsIndexed(rows, key = { _, item -> item.id }) { index, item ->
                     val isDraggingThis = isDragActive && draggingFromIndex == index
-                    // Every row is spaced the same, labels included: the extra room a section
-                    // used to get above it (and, briefly, below it too) made the heading float
-                    // away from the list rather than sit in it.
 
                     Box(
                         modifier = Modifier
@@ -617,7 +476,6 @@ fun ScheduleTab(
                 adapter = rememberScrollbarAdapter(scrollState = listState)
             )
 
-            // Drop-here-to-remove zone, only while a card is being dragged
             if (isDragActive) {
                 Row(
                     modifier = Modifier
@@ -646,7 +504,6 @@ fun ScheduleTab(
                 }
             }
 
-            // Floating drag preview — elevated card follows cursor
             if (isDragActive) {
                 val dragItem = scheduleItems.getOrNull(draggingFromIndex)
                 dragItem?.let { item ->
@@ -683,8 +540,6 @@ fun ScheduleTab(
             }
         }
 
-        // Add Files button at the bottom — dashed outline (a drop-target look), not a filled
-        // button, matching the reference design.
         Row(
             modifier = Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
@@ -741,984 +596,9 @@ fun ScheduleTab(
     }
 }
 
-/**
- * The panel header: title, item count, the Compact/Normal/Detailed density toggle, and the
- * toolbar (file ops, undo/redo, add-section, import, remove/clear) grouped into pill containers.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ScheduleHeader(
-    itemCount: Int,
-    density: ScheduleDensity,
-    onZoomOut: () -> Unit,
-    onZoomIn: () -> Unit,
-    canZoomOut: Boolean,
-    canZoomIn: Boolean,
-    onNewSchedule: () -> Unit,
-    onOpenSchedule: () -> Unit,
-    onSaveSchedule: () -> Unit,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onAddLabel: () -> Unit,
-    onImportPlanningCenter: () -> Unit,
-    onClearSchedule: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            itemVerticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(Res.string.schedule),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            // The count sits in the same pill the toolbars use rather than a chunkier box of its
-            // own: same corner radius, same border, same 2dp inset, so the three groups along this
-            // header read as one family instead of one of them looking padded out.
-            PillGroup {
-                Text(
-                    text = stringResource(Res.string.schedule_item_count, itemCount),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            PillGroup {
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_remove),
-                    text = stringResource(Res.string.tooltip_schedule_zoom_out),
-                    onClick = onZoomOut,
-                    enabled = canZoomOut,
-                    buttonSize = 24.dp,
-                    iconSize = 13.dp,
-                    iconTint = if (canZoomOut) MaterialTheme.colorScheme.onSurfaceVariant
-                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                )
-                val compactName = stringResource(Res.string.schedule_density_compact)
-                val normalName = stringResource(Res.string.schedule_density_normal)
-                val detailedName = stringResource(Res.string.schedule_density_detailed)
-                // The two outer rungs borrow their neighbour's name: they change how much room a
-                // card takes, not what it shows.
-                val densityName = when (density) {
-                    ScheduleDensity.EXTRA_COMPACT, ScheduleDensity.COMPACT -> compactName
-                    ScheduleDensity.NORMAL -> normalName
-                    ScheduleDensity.DETAILED, ScheduleDensity.EXTRA_DETAILED -> detailedName
-                }
-                Box(
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Holds the width of the longest of the three names so the +/- buttons keep
-                    // their place as the label changes under them -- and stays right in every
-                    // locale, which a hardcoded dp would not: "Detailed" is "Detailliert" in
-                    // German and "Подробный" in Russian. Invisible and semantics-free, so a test
-                    // or a screen reader still sees one label.
-                    listOf(compactName, normalName, detailedName).forEach { name ->
-                        Text(
-                            text = name,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.alpha(0f).clearAndSetSemantics {}
-                        )
-                    }
-                    Text(
-                        text = densityName,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_add),
-                    text = stringResource(Res.string.tooltip_schedule_zoom_in),
-                    onClick = onZoomIn,
-                    enabled = canZoomIn,
-                    buttonSize = 24.dp,
-                    iconSize = 13.dp,
-                    iconTint = if (canZoomIn) MaterialTheme.colorScheme.onSurfaceVariant
-                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                )
-            }
-        }
+internal val ACTION_BUTTON_SIZE = 30.dp
+internal val ACTION_ICON_SIZE = 13.dp
+internal val SECTION_ACTION_BUTTON_SIZE = 22.dp
+internal val SECTION_ACTION_ICON_SIZE = 12.dp
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            itemVerticalAlignment = Alignment.CenterVertically
-        ) {
-            // One pill, which wraps inside itself when the panel gets too narrow -- see
-            // [PillGroup]. It stays a single group at any width; only the icons move, one at a
-            // time, onto a second line of the same pill.
-            PillGroup {
-                // New Schedule clears the whole list — the same weight as Clear Schedule at the
-                // tail of this toolbar, so it stays a plain icon button rather than the kind of
-                // prominent "+" button a genuinely additive action would get.
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_add),
-                    text = stringResource(Res.string.tooltip_new_schedule),
-                    onClick = onNewSchedule,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_folder),
-                    text = stringResource(Res.string.tooltip_open_schedule),
-                    onClick = onOpenSchedule,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_save),
-                    text = stringResource(Res.string.tooltip_save_schedule),
-                    onClick = onSaveSchedule,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // Clear sits with the other whole-schedule actions rather than at the tail: it
-                // is the same kind of thing as New, and moving it here is what lets a narrow
-                // panel settle on two lines instead of three -- the four file-level icons fill
-                // the first, the four editing ones the second.
-                // No "Remove from Schedule" alongside it: that acted on the current selection, so
-                // it did nothing at all until a row had been clicked, with nothing on the button
-                // to say so -- and every row now carries its own Remove. The menu item and the
-                // Delete shortcut still reach `ScheduleTabActions.removeSelected`, unchanged.
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_delete),
-                    text = stringResource(Res.string.tooltip_clear_schedule),
-                    onClick = onClearSchedule,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.error
-                )
-                PillDivider()
-                // Undo and Redo wrap as a pair: they read as one control, and a line break
-                // between them would put Redo alone at the start of the second row.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                // The key in the tooltip is the binding actually in force. When the action is
-                // unbound there is no key to name, so the tooltip drops the parenthetical rather
-                // than rendering "Undo ()".
-                val shortcuts = LocalShortcuts.current
-                val undoKeys = shortcuts.label(ShortcutAction.UNDO)
-                val redoKeys = shortcuts.label(ShortcutAction.REDO)
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_undo),
-                    text = if (undoKeys.isEmpty()) stringResource(Res.string.tooltip_undo_unbound)
-                           else stringResource(Res.string.tooltip_undo, undoKeys),
-                    onClick = onUndo,
-                    modifier = Modifier.testTag(ScheduleToolbarTags.UNDO),
-                    enabled = canUndo,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = if (canUndo) MaterialTheme.colorScheme.onSurfaceVariant
-                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                )
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_redo),
-                    text = if (redoKeys.isEmpty()) stringResource(Res.string.tooltip_redo_unbound)
-                           else stringResource(Res.string.tooltip_redo, redoKeys),
-                    onClick = onRedo,
-                    modifier = Modifier.testTag(ScheduleToolbarTags.REDO),
-                    enabled = canRedo,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = if (canRedo) MaterialTheme.colorScheme.onSurfaceVariant
-                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                )
-                }
-                PillDivider()
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_label),
-                    text = stringResource(Res.string.tooltip_add_label),
-                    onClick = onAddLabel,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TooltipIconButton(
-                    painter = rememberVectorPainter(Icons.Default.CloudDownload),
-                    text = stringResource(Res.string.planning_center_import_title),
-                    onClick = onImportPlanningCenter,
-                    buttonSize = 26.dp,
-                    iconSize = 14.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-/**
- * A rounded, bordered pill housing compact icon buttons — the toolbar's visual grouping.
- *
- * Lays its buttons out in a `FlowRow`, so a pill too wide for the panel wraps *inside itself*: the
- * buttons move onto a second line one at a time and the pill grows to hold them, staying one group
- * with one border rather than clipping its tail or splitting into two pills that read as unrelated.
- * At a width that fits, the FlowRow is a plain row and nothing moves.
- */
-@Composable
-private fun PillGroup(content: @Composable () -> Unit) {
-    FlowRow(
-        modifier = Modifier
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-            .padding(2.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(1.dp)
-    ) { content() }
-}
-
-@Composable
-private fun PillDivider() {
-    VerticalDivider(
-        modifier = Modifier.height(14.dp).padding(horizontal = 2.dp),
-        color = MaterialTheme.colorScheme.outlineVariant,
-        thickness = 1.dp
-    )
-}
-
-/**
- * Same shape as [TooltipIconButton], but anchors its tooltip well to the left of the button
- * instead of above or below it. Row-action buttons sit mid-row, only ~3dp from the next card,
- * with several sibling buttons packed 1dp apart on both sides — the app-wide default
- * (below-center) spills onto the card underneath, an above-center placement spills onto the row
- * above's own buttons, and even a small leftward nudge lands on the very next sibling button
- * (each is only ~27-30dp wide). A big enough leftward offset clears the whole button cluster
- * (five or six buttons, under 180dp total) regardless of which one triggered it, landing on the
- * row's own (non-interactive) title text instead — the only placement that can't cover a control
- * in this row or any other. A local copy avoids widening [TooltipIconButton]'s own signature with
- * an experimental-API parameter, which would force every one of its call sites across the app to
- * opt in for no benefit to them.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ScheduleRowActionButton(
-    painter: Painter,
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    // One size for every button in the strip. The play/edit button used to be 30dp against the
-    // others' 27dp, and Row's CenterVertically did not save them: mixed heights came out sharing a
-    // bottom edge, so the four small buttons sat ~1.5dp low -- a visible wobble at Compact, where
-    // the card is barely taller than the buttons. Wrapping them in a uniform-height Box does not
-    // help either, IconButton's own minimum-interactive sizing escapes it. Their emphasis comes
-    // from [iconSize] instead, which is what actually reads at this scale.
-    buttonSize: Dp = 30.dp,
-    iconSize: Dp = 13.dp,
-    iconTint: Color? = null,
-    colors: IconButtonColors = IconButtonDefaults.iconButtonColors()
-) {
-    ConditionalTooltipArea(
-        // `anchor` is the point on the BUTTON to align to; `alignment` is which point ON THE
-        // TOOLTIP touches it. Leaving `alignment` at its default (BottomCenter) — as an earlier
-        // version of this did — puts the tooltip's bottom-center on the button's left-center
-        // point, so it still extends upward and sideways back over the row instead of clearing
-        // it. `alignment = CenterStart` puts the tooltip's own left edge there instead, so the
-        // whole tooltip extends purely leftward from a small gap off the button, staying level
-        // with this row (never another row's controls) the entire time. (`CenterEnd` looks like
-        // the intuitive choice but is backwards — per Compose's ComponentRect math it anchors the
-        // tooltip's LEFT edge to the point, extending the tooltip rightward on top of the button.)
-        tooltipPlacement = TooltipPlacement.ComponentRect(
-            anchor = Alignment.CenterStart,
-            alignment = Alignment.CenterStart,
-            offset = DpOffset((-8).dp, 0.dp)
-        ),
-        tooltip = {
-            Surface(
-                color = MaterialTheme.colorScheme.inverseSurface,
-                shape = MaterialTheme.shapes.extraSmall,
-                tonalElevation = 4.dp
-            ) {
-                Text(
-                    text = text,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        }
-    ) {
-        IconButton(onClick = onClick, modifier = modifier.size(buttonSize), colors = colors) {
-            Image(
-                painter = painter,
-                contentDescription = text,
-                modifier = Modifier.size(iconSize),
-                colorFilter = iconTint?.let { ColorFilter.tint(it) }
-            )
-        }
-    }
-}
-
-/** The dashed drop-target-styled "Add Files…" button at the foot of the panel. */
-@Composable
-private fun ScheduleAddFilesButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val hovered by interactionSource.collectIsHoveredAsState()
-    val shape = RoundedCornerShape(8.dp)
-    val borderColor = if (hovered) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                       else MaterialTheme.colorScheme.outlineVariant
-    val contentColor = if (hovered) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-    val bg = if (hovered) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-             else MaterialTheme.colorScheme.surfaceContainerHigh
-    val strokeWidthPx = with(LocalDensity.current) { 1.dp.toPx() }
-    val cornerRadiusPx = with(LocalDensity.current) { 8.dp.toPx() }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .hoverable(interactionSource)
-            .clip(shape)
-            .background(bg, shape)
-            .drawWithContent {
-                drawContent()
-                drawRoundRect(
-                    color = borderColor,
-                    style = Stroke(width = strokeWidthPx, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))),
-                    cornerRadius = CornerRadius(cornerRadiusPx)
-                )
-            }
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            painter = painterResource(Res.drawable.ic_add),
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(11.dp)
-        )
-        Spacer(modifier = Modifier.width(7.dp))
-        Text(
-            text = stringResource(Res.string.schedule_add_files),
-            color = contentColor,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-/**
- * Adds each dropped file to the schedule as whatever [classifyDroppedFile] says it is.
- *
- * `internal` rather than private so the drop handling can be tested directly: the drop itself
- * arrives through an AWT `DropTarget` on the real window, which a headless test cannot deliver.
- */
-internal fun handleDroppedFiles(files: List<File>, viewModel: ScheduleViewModel) {
-    for (file in files) {
-        if (file.isDirectory) {
-            // Folder dropped — count image files inside and add as pictures
-            val imageCount = file.listFiles()?.count { child ->
-                child.isFile && child.extension.lowercase() in IMAGE_EXTENSIONS
-            } ?: 0
-            if (imageCount > 0) {
-                viewModel.addPicture(file.absolutePath, file.name, imageCount)
-            }
-            continue
-        }
-
-        val ext = file.extension.lowercase()
-        when (classifyDroppedFile(ext)) {
-            DroppedFileAction.PRESENTATION ->
-                viewModel.addPresentation(file.absolutePath, file.nameWithoutExtension, 0, ext)
-            DroppedFileAction.MEDIA ->
-                viewModel.addMedia(file.absolutePath, file.nameWithoutExtension, "local")
-            DroppedFileAction.PICTURE -> {
-                // Single image dropped — add parent folder as picture source
-                val parentFolder = file.parentFile
-                val imageCount = parentFolder?.listFiles()?.count { child ->
-                    child.isFile && child.extension.lowercase() in IMAGE_EXTENSIONS
-                } ?: 1
-                viewModel.addPicture(
-                    parentFolder?.absolutePath ?: file.absolutePath,
-                    parentFolder?.name ?: file.name,
-                    imageCount
-                )
-            }
-            DroppedFileAction.LOWER_THIRD ->
-                viewModel.addLowerThird(file.nameWithoutExtension, file.nameWithoutExtension, false, 0L)
-            DroppedFileAction.NONE -> {}
-        }
-    }
-}
-
-/** The strip's button and icon sizes: one size for a content row, a smaller pair for a section. */
-private val ACTION_BUTTON_SIZE = 30.dp
-private val ACTION_ICON_SIZE = 13.dp
-private val SECTION_ACTION_BUTTON_SIZE = 22.dp
-private val SECTION_ACTION_ICON_SIZE = 12.dp
-
-/** A section's own vertical padding, fixed rather than density-scaled -- it heads a group, so it
- *  stays the same slim band however large the cards under it grow. */
-private val SECTION_ROW_PADDING = 3.dp
-
-/** Vertical padding inside a card at each density rung. */
-private fun ScheduleDensity.rowPadding(): Dp = when (this) {
-    ScheduleDensity.EXTRA_COMPACT -> 2.dp
-    ScheduleDensity.COMPACT -> 4.dp
-    ScheduleDensity.NORMAL -> 7.dp
-    ScheduleDensity.DETAILED -> 9.dp
-    ScheduleDensity.EXTRA_DETAILED -> 13.dp
-}
-
-/** Minimum card height at each density rung. */
-private fun ScheduleDensity.rowMinHeight(): Dp = when (this) {
-    ScheduleDensity.EXTRA_COMPACT -> 26.dp
-    ScheduleDensity.COMPACT -> 32.dp
-    ScheduleDensity.NORMAL -> 42.dp
-    ScheduleDensity.DETAILED -> 54.dp
-    ScheduleDensity.EXTRA_DETAILED -> 68.dp
-}
-
-/**
- * One row of a small rotating theme palette for a type-icon chip's background/foreground — not a
- * distinct hue per content type (that would mean hardcoded colors), but enough variety that
- * adjacent kinds in a service read as visually different.
- */
-@Composable
-private fun scheduleChipColors(paletteIndex: Int): Pair<Color, Color> {
-    val scheme = MaterialTheme.colorScheme
-    return when (paletteIndex % 4) {
-        0 -> scheme.primaryContainer to scheme.onPrimaryContainer
-        1 -> scheme.secondaryContainer to scheme.onSecondaryContainer
-        2 -> scheme.tertiaryContainer to scheme.onTertiaryContainer
-        else -> scheme.errorContainer to scheme.onErrorContainer
-    }
-}
-
-/**
- * Test tags for one schedule row's geometry.
- *
- * Both name a container that draws rather than reads — a card and a scrim — so neither publishes
- * text or a description a test could find it by, and both carry an invariant about *where* they
- * are rather than what they say.
- */
-internal const val SCHEDULE_ROW_CARD_TAG = "schedule_row_card"
-
-/** The hover-revealed action strip, whose gradient scrim has to cover the card behind it. */
-internal const val SCHEDULE_ROW_ACTIONS_TAG = "schedule_row_actions"
-
-@Composable
-private fun ScheduleItemRow(
-    item: ScheduleItem,
-    /** Applied to the grip dots, which double as the drag-to-reorder handle. */
-    dragHandleModifier: Modifier = Modifier,
-    density: ScheduleDensity,
-    isSelected: Boolean,
-    note: String,
-    onSelect: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onRemove: () -> Unit,
-    onPresent: () -> Unit,
-    onEditLabel: () -> Unit = {},
-    onNoteChanged: (String) -> Unit = {}
-) {
-    val interactionSource = remember(item.id) { MutableInteractionSource() }
-    val hovered by interactionSource.collectIsHoveredAsState()
-    val actionsAlpha by animateFloatAsState(if (hovered) 1f else 0f, label = "scheduleRowActionsAlpha")
-
-    var noteExpanded by remember(item.id) { mutableStateOf(false) }
-    var noteText by remember(item.id) { mutableStateOf(note) }
-
-    // Sync local noteText when external note changes (e.g. after undo/redo)
-    LaunchedEffect(note) {
-        if (noteText != note) noteText = note
-    }
-
-    val isSection = item is ScheduleItem.LabelItem
-    val sectionAccent = if (item is ScheduleItem.LabelItem) Utils.parseHexColor(item.textColor) else Color.Unspecified
-
-    val cardBg = when {
-        isSection -> Utils.parseHexColor(item.backgroundColor)
-        isSelected -> MaterialTheme.colorScheme.surfaceContainerHigh
-        else -> MaterialTheme.colorScheme.surfaceContainer
-    }
-    // A label's text/background are both user-chosen (Add Label dialog). WCAG's contrast ratio
-    // is luminance-only, so two colors close in hue (navy text on a mid-blue background, say)
-    // can clear the AA 4.5:1 minimum for normal text on paper while still reading as low-contrast
-    // to the eye — going to the AAA threshold (7:1) catches those near-miss same-hue pairs too.
-    // Only the rendered title falls back to white/black; the accent bar and border stay the
-    // user's actual color, and the stored colors are untouched either way.
-    val sectionText = if (isSection) Utils.ensureContrast(sectionAccent, cardBg, minRatio = 7.0) else sectionAccent
-    val cardBorder = when {
-        isSection -> sectionAccent.copy(alpha = 0.35f)
-        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    }
-    val leftAccent = when {
-        isSection -> sectionAccent
-        isSelected -> MaterialTheme.colorScheme.primary
-        else -> Color.Transparent
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(SCHEDULE_ROW_CARD_TAG)
-            .hoverable(interactionSource)
-            .clip(CARD_SHAPE)
-            .background(cardBg, CARD_SHAPE)
-            .border(1.dp, cardBorder, CARD_SHAPE)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = 3.dp,
-                    end = 6.dp,
-                    // A section is a heading, not a card of content: it takes the height of its
-                    // own single line rather than the density's, which had it standing as tall as
-                    // the items it heads -- at Detailed, 70dp of band for one word.
-                    top = if (isSection) SECTION_ROW_PADDING else density.rowPadding(),
-                    bottom = if (isSection) SECTION_ROW_PADDING else density.rowPadding()
-                )
-                .heightIn(min = if (isSection) 0.dp else density.rowMinHeight())
-                // The row's own height, resolved from its children's intrinsics rather than left
-                // to the LazyColumn's unbounded height constraint. Without it every `fillMax*`
-                // inside this row is a no-op -- there is no bounded height to fill -- which is why
-                // the title column wrapped its text and sat at the top of the card, and why the
-                // action strip's scrim was only as tall as the buttons themselves.
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Left accent bar (decorative) + grip dots + type icon — the grip and icon together
-            // form the drag-to-reorder handle, matching their combined touch target before this
-            // redesign rather than shrinking it down to the 4dp-wide grip glyph alone.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .height(24.dp)
-                        .background(leftAccent, RoundedCornerShape(2.dp))
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .pointerHoverIcon(PointerIcon.Hand)
-                        .then(dragHandleModifier)
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_drag_dots),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(16.dp)
-                    )
-                    if (!isSection) {
-                        val (chipBg, chipFg) = scheduleChipColors(scheduleItemPaletteIndex(item))
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .background(chipBg, RoundedCornerShape(7.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = scheduleItemGlyph(item),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = chipFg
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Content takes the row's full remaining width — the action buttons below overlay on
-            // top of it (only while hovered) rather than reserving their own permanent column, so
-            // text is never squeezed to make room for controls that are usually hidden.
-            Box(modifier = Modifier.weight(1f)) {
-                // Selecting/presenting lives here (Initial-pass: survives the LazyColumn
-                // scroll-gesture-eats-clicks issue on ARM Mac). The overlaid action row below is a
-                // separate sibling in this Box (painted after, so it sits on top) — its own
-                // buttons keep their normal click handling untouched.
-                //
-                // fillMaxSize, not fillMaxWidth: the Box's height is whichever sibling is
-                // taller, which can be the action-button row rather than this Column's own
-                // wrapped text (a single Compact-density title line is shorter than the row of
-                // 27-30dp buttons). fillMaxWidth alone left this Column's clickable bounds at
-                // just its text's own height, so clicking the card below the text but still
-                // inside the row's visible bounds hit nothing.
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // Selection applies to section rows too — otherwise a label can never
-                        // become `selectedItemId`, and the toolbar's "Remove from Schedule"
-                        // button (which acts on the current selection) can't touch it. Only
-                        // double-click-to-present stays disabled for sections: there's nothing
-                        // to go live with.
-                        .initialPassCombinedClickable(
-                            onClick = { onSelect() },
-                            onDoubleClick = if (!isSection) { { onPresent() } } else null
-                        ),
-                    // Centred, because fillMaxSize above stretches this Column to whichever
-                    // sibling is taller and the action-button row usually is: at Compact a single
-                    // title line is ~20dp against the buttons' 30dp, so a top-aligned title sat
-                    // visibly high in its own card. Normal and Detailed hid it because their
-                    // detail lines make this Column the taller sibling.
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    if (isSection) {
-                        Text(
-                            text = item.displayText,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                            color = sectionText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    } else {
-                        ScheduleItemContent(item = item, density = density, isSelected = isSelected)
-                    }
-
-                    // No note preview here: the row below the card draws the saved note, with
-                    // the button that opens it for editing. Both were drawn on the same
-                    // `note.isNotEmpty() && !noteExpanded` condition, so every item carrying a note
-                    // showed it twice -- once italic under its title and again in its own band.
-                }
-
-                // Hover-revealed action buttons — always present (so they stay reachable by
-                // keyboard and testable), only their opacity tracks hover. A scrim fading from
-                // transparent to the card's own background sits behind them so they stay legible
-                // over whatever text they're overlapping. Also carries its own Final-pass
-                // select/present click: a nested button's Main-pass click wins first, and only a
-                // click that lands here without hitting a button falls through to select the card.
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .testTag(SCHEDULE_ROW_ACTIONS_TAG)
-                        // Fills the row's height so the gradient scrim covers the whole card behind
-                        // it. At the buttons' own ~30dp it was a band floating in the middle of a
-                        // 54dp Detailed card, with the card's background showing above and below.
-                        .fillMaxHeight()
-                        .alpha(actionsAlpha)
-                        .background(
-                            Brush.horizontalGradient(
-                                0f to Color.Transparent,
-                                0.35f to cardBg.copy(alpha = 0.82f),
-                                1f to cardBg.copy(alpha = 0.82f)
-                            )
-                        )
-                        .padding(start = 20.dp)
-                        .finalPassCombinedClickable(
-                            onClick = { onSelect() },
-                            onDoubleClick = if (!isSection) { { onPresent() } } else null
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // On a section these shrink with the row: at their usual 30dp they would be
-                    // the tallest thing in it and the heading could never get shorter than a card.
-                    val actionSize = if (isSection) SECTION_ACTION_BUTTON_SIZE else ACTION_BUTTON_SIZE
-                    val actionIcon = if (isSection) SECTION_ACTION_ICON_SIZE else ACTION_ICON_SIZE
-                    ScheduleRowActionButton(
-                        painter = painterResource(Res.drawable.ic_arrow_up),
-                        text = stringResource(Res.string.tooltip_move_up),
-                        onClick = onMoveUp,
-                        buttonSize = actionSize,
-                        iconSize = actionIcon,
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ScheduleRowActionButton(
-                        painter = painterResource(Res.drawable.ic_arrow_down),
-                        text = stringResource(Res.string.tooltip_move_down),
-                        onClick = onMoveDown,
-                        buttonSize = actionSize,
-                        iconSize = actionIcon,
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ScheduleRowActionButton(
-                        painter = painterResource(Res.drawable.ic_note),
-                        text = stringResource(Res.string.tooltip_note),
-                        onClick = { noteExpanded = !noteExpanded },
-                        buttonSize = actionSize,
-                        iconSize = actionIcon,
-                        iconTint = if (note.isNotEmpty() || noteExpanded) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ScheduleRowActionButton(
-                        painter = painterResource(Res.drawable.ic_close),
-                        text = stringResource(Res.string.tooltip_remove),
-                        onClick = onRemove,
-                        buttonSize = actionSize,
-                        iconSize = actionIcon,
-                        iconTint = MaterialTheme.colorScheme.error
-                    )
-                    // Slightly larger than the other four, matching the reference design — but
-                    // NOT permanently filled with color: the reference only does that for
-                    // whichever item is currently live, a concept this app doesn't track per
-                    // schedule item, so every row would otherwise show a "live-looking" button
-                    // that never actually means anything.
-                    if (isSection) {
-                        ScheduleRowActionButton(
-                            painter = painterResource(Res.drawable.ic_edit),
-                            text = stringResource(Res.string.tooltip_edit_label),
-                            onClick = onEditLabel,
-                            modifier = Modifier.padding(start = 2.dp),
-                            buttonSize = actionSize,
-                            iconSize = SECTION_ACTION_ICON_SIZE,
-                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        ScheduleRowActionButton(
-                            painter = painterResource(Res.drawable.ic_play),
-                            text = stringResource(Res.string.tooltip_go_live),
-                            onClick = onPresent,
-                            modifier = Modifier.padding(start = 2.dp),
-                            iconSize = 15.dp,
-                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // Saved note preview, or the inline editor — either way it always gets its own row so
-        // opening/closing it never fights the hover-alpha of the action buttons above.
-        if (note.isNotEmpty() && !noteExpanded) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 38.dp, end = 8.dp, bottom = 7.dp)
-                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
-                    .padding(start = 8.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Text(
-                    text = note,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.weight(1f).padding(top = 2.dp, bottom = 2.dp)
-                )
-                ScheduleRowActionButton(
-                    painter = painterResource(Res.drawable.ic_edit),
-                    text = stringResource(Res.string.tooltip_note),
-                    onClick = { noteExpanded = true },
-                    iconSize = 11.dp,
-                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-                )
-            }
-        }
-
-        AnimatedVisibility(visible = noteExpanded) {
-            val noteInteractionSource = remember { MutableInteractionSource() }
-            val noteFieldFocused by noteInteractionSource.collectIsFocusedAsState()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 38.dp, end = 8.dp, bottom = 7.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(7.dp))
-                    .border(
-                        width = 1.dp,
-                        color = if (noteFieldFocused) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(7.dp)
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = noteText,
-                    onValueChange = { noteText = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    textStyle = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    maxLines = 3,
-                    interactionSource = noteInteractionSource,
-                    decorationBox = { innerTextField ->
-                        Box {
-                            if (noteText.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.schedule_note_placeholder),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                )
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_check),
-                    text = stringResource(Res.string.tooltip_note_done),
-                    onClick = {
-                        onNoteChanged(noteText)
-                        noteExpanded = false
-                    },
-                    buttonSize = 32.dp,
-                    iconSize = 15.dp,
-                    iconTint = MaterialTheme.colorScheme.primary
-                )
-                TooltipIconButton(
-                    painter = painterResource(Res.drawable.ic_close),
-                    text = stringResource(Res.string.tooltip_note_clear),
-                    onClick = {
-                        noteText = ""
-                        onNoteChanged("")
-                    },
-                    modifier = Modifier.padding(end = 4.dp),
-                    buttonSize = 32.dp,
-                    iconSize = 15.dp,
-                    iconTint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
-}
-
-/** The title line and, at Normal/Detailed density, the per-type detail line(s) below it. */
-@Composable
-private fun ScheduleItemContent(item: ScheduleItem, density: ScheduleDensity, isSelected: Boolean) {
-    val titleColor = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface
-    val detailColor = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (item is ScheduleItem.SongItem && item.songNumber > 0) {
-            Text(
-                text = item.songNumber.toString(),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Text(
-            // A song's own displayText prepends its number ("42 - Amazing Grace") for contexts
-            // without room for the two as separate elements; here the number already has its own
-            // Text above, so the title alone avoids showing it twice.
-            text = if (item is ScheduleItem.SongItem) item.title else item.displayText,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-            color = titleColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-    }
-
-    if (!scheduleShowDetailLine(density.percent)) return
-
-    when (item) {
-        is ScheduleItem.SongItem -> if (item.songbook.isNotBlank()) {
-            Text(
-                text = item.songbook,
-                style = MaterialTheme.typography.bodySmall,
-                color = detailColor,
-                maxLines = 1,
-                // Songbook names are often long paths/editions whose distinguishing part is at the
-                // END, so clip the front instead of the tail
-                overflow = TextOverflow.StartEllipsis
-            )
-        }
-        is ScheduleItem.BibleVerseItem -> Text(
-            text = scheduleItemDetailText(item).orEmpty(),
-            style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1, overflow = TextOverflow.Ellipsis
-        )
-        is ScheduleItem.PictureItem -> Text(
-            text = scheduleItemDetailText(item).orEmpty(),
-            style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1, overflow = TextOverflow.Ellipsis
-        )
-        is ScheduleItem.PresentationItem -> if (!scheduleShowKindDetails(density.percent)) {
-            Text(
-                text = scheduleItemDetailText(item).orEmpty(),
-                style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-        }
-        is ScheduleItem.MediaItem -> if (!scheduleShowKindDetails(density.percent)) {
-            Text(
-                text = scheduleItemDetailText(item).orEmpty(),
-                style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-        }
-        is ScheduleItem.LowerThirdItem -> if (item.pauseAtFrame) {
-            Text(
-                text = stringResource(Res.string.pause_duration_ms, item.pauseDurationMs),
-                style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1
-            )
-        }
-        is ScheduleItem.AnnouncementItem -> {
-            val timerSubtext = announcementTimerSubtext(item)
-            if (item.isTimer && timerSubtext != null) {
-                Text(
-                    text = timerSubtext,
-                    style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1
-                )
-            }
-        }
-        is ScheduleItem.WebsiteItem -> Text(
-            text = item.url,
-            style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1, overflow = TextOverflow.Ellipsis
-        )
-        is ScheduleItem.DictionaryItem -> Text(
-            text = item.transliteration,
-            style = MaterialTheme.typography.bodySmall, color = detailColor, maxLines = 1, overflow = TextOverflow.Ellipsis
-        )
-        is ScheduleItem.LabelItem, is ScheduleItem.SceneItem -> { /* no secondary text */ }
-    }
-
-    // Detailed density adds the uppercase type chip (and, for file-backed items, the path)
-    if (scheduleShowKindDetails(density.percent)) {
-        val path = when (item) {
-            is ScheduleItem.PresentationItem -> item.filePath
-            is ScheduleItem.MediaItem -> item.mediaUrl
-            else -> null
-        }
-        Row(
-            modifier = Modifier.padding(top = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val (chipBg, chipFg) = scheduleChipColors(scheduleItemPaletteIndex(item))
-            Box(
-                modifier = Modifier.background(chipBg, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp)
-            ) {
-                Text(
-                    text = stringResource(scheduleItemKindLabel(item)).uppercase(),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    fontWeight = FontWeight.Bold,
-                    color = chipFg
-                )
-            }
-            if (path != null) {
-                Text(
-                    text = path,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = detailColor.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
+internal val SECTION_ROW_PADDING = 3.dp
