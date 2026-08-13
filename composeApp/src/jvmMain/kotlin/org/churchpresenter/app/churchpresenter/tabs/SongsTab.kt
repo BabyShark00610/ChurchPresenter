@@ -44,9 +44,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -54,19 +52,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -78,7 +71,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -94,12 +86,7 @@ import org.churchpresenter.app.churchpresenter.data.StatisticsManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import org.churchpresenter.app.churchpresenter.composables.SectionLabelRow
 import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
-import org.churchpresenter.app.churchpresenter.composables.ActionIconButton
-import org.churchpresenter.app.churchpresenter.composables.AddToScheduleButton
-import org.churchpresenter.app.churchpresenter.composables.FocusLostBanner
-import org.churchpresenter.app.churchpresenter.composables.GoLiveButton
 import org.churchpresenter.app.churchpresenter.composables.focusRescuePressHook
 import org.churchpresenter.app.churchpresenter.composables.rememberFocusLostRescue
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -107,19 +94,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import java.awt.Cursor
 import java.awt.Window as AwtWindow
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import churchpresenter.composeapp.generated.resources.songs_indexing
-import churchpresenter.composeapp.generated.resources.songs_no_db_title
-import churchpresenter.composeapp.generated.resources.songs_no_db_hint
-import churchpresenter.composeapp.generated.resources.songs_no_db_step
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
 import kotlinx.coroutines.delay
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.add_to_favorites
@@ -130,11 +110,7 @@ import churchpresenter.composeapp.generated.resources.edit_song
 import churchpresenter.composeapp.generated.resources.exact_match
 import churchpresenter.composeapp.generated.resources.back_to_live
 import churchpresenter.composeapp.generated.resources.go_live
-import churchpresenter.composeapp.generated.resources.ic_add
 import churchpresenter.composeapp.generated.resources.line_navigation_hint
-import churchpresenter.composeapp.generated.resources.metronome_bpm_label
-import churchpresenter.composeapp.generated.resources.unit_bpm
-import churchpresenter.composeapp.generated.resources.ok
 import churchpresenter.composeapp.generated.resources.new_song
 import churchpresenter.composeapp.generated.resources.ic_arrow_down
 import churchpresenter.composeapp.generated.resources.ic_arrow_up
@@ -145,16 +121,13 @@ import churchpresenter.composeapp.generated.resources.confirm_delete
 import churchpresenter.composeapp.generated.resources.cancel
 import churchpresenter.composeapp.generated.resources.filter
 import churchpresenter.composeapp.generated.resources.ic_close
-import churchpresenter.composeapp.generated.resources.ic_note
 import churchpresenter.composeapp.generated.resources.ic_search
 import churchpresenter.composeapp.generated.resources.ic_star
 import churchpresenter.composeapp.generated.resources.ic_star_filled
 import churchpresenter.composeapp.generated.resources.ic_edit
 import churchpresenter.composeapp.generated.resources.ic_playlist_add
-import churchpresenter.composeapp.generated.resources.no_lyrics_available
 import churchpresenter.composeapp.generated.resources.remove_from_favorites
 import churchpresenter.composeapp.generated.resources.song_favorites
-import churchpresenter.composeapp.generated.resources.tab_focus_lost
 import churchpresenter.composeapp.generated.resources.song_favorites_clear
 import churchpresenter.composeapp.generated.resources.song_play_count
 import churchpresenter.composeapp.generated.resources.song_columns
@@ -163,7 +136,6 @@ import churchpresenter.composeapp.generated.resources.search
 import churchpresenter.composeapp.generated.resources.search_clear
 import churchpresenter.composeapp.generated.resources.search_songs
 import churchpresenter.composeapp.generated.resources.song_book
-import churchpresenter.composeapp.generated.resources.song_title_slide
 import churchpresenter.composeapp.generated.resources.starts_with
 import churchpresenter.composeapp.generated.resources.title
 import churchpresenter.composeapp.generated.resources.tune
@@ -173,7 +145,6 @@ import org.churchpresenter.app.churchpresenter.composables.DropdownSelector
 import org.churchpresenter.app.churchpresenter.composables.initialPassClickable
 import org.churchpresenter.app.churchpresenter.composables.finalPassClickable
 import org.churchpresenter.app.churchpresenter.composables.initialPassCombinedClickable
-import org.churchpresenter.app.churchpresenter.composables.finalPassCombinedClickable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.dialogs.EditSongDialog
@@ -194,13 +165,9 @@ import org.churchpresenter.app.churchpresenter.utils.isDualLanguagePresentation
 import org.churchpresenter.app.churchpresenter.utils.isSplitScreenSong
 import org.churchpresenter.app.churchpresenter.utils.isChordChartPresentation
 import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
-import org.churchpresenter.app.churchpresenter.utils.mergeColumnOrder
 import org.churchpresenter.app.churchpresenter.utils.moveColumn
 import org.churchpresenter.app.churchpresenter.utils.songColumnSortKey
 import org.churchpresenter.app.churchpresenter.viewmodel.resolveEditedSongPush
-import org.churchpresenter.app.churchpresenter.viewmodel.songCreditLine
-import org.churchpresenter.app.churchpresenter.viewmodel.songTitleLine
-import org.churchpresenter.app.churchpresenter.viewmodel.titleSlideSection
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
@@ -268,28 +235,19 @@ fun SongsTab(
     val currentSortAscending by viewModel.sortAscending
 
     // Edit Song Dialog state (pure UI state — fine to keep here)
-    var showEditDialog by remember { mutableStateOf(false) }
-    var songToEdit by remember { mutableStateOf<SongItem?>(null) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var songToDelete by remember { mutableStateOf<SongItem?>(null) }
-    var showNewSongDialog by remember { mutableStateOf(false) }
+    val dialogs = rememberSongDialogRequests()
 
     // Favorites panel state
     var favoritesExpanded by remember { mutableStateOf(true) }
     val favorites by viewModel.favorites
 
     // Track which song/section/line is currently live on the presenter.
-    // liveSongId is the song's stable songId (not a list index) so it survives the
+    // live.songId is the song's stable songId (not a list index) so it survives the
     // filtered list being rebuilt by search — see AGENT.md's "Song Edit While Live" note.
-    var liveSongId by remember { mutableStateOf<String?>(null) }
-    var liveSectionIndex by remember { mutableStateOf(0) }
-    var liveLineIndex by remember { mutableStateOf(0) }
-
-    // Track whether the title slide entry is currently selected in the lyrics panel
-    var isTitleSlideSelected by remember { mutableStateOf(false) }
+    val live = rememberSongLiveState()
 
     // Reset title-slide selection whenever the active song changes
-    LaunchedEffect(selectedSongIndex) { isTitleSlideSelected = false }
+    LaunchedEffect(selectedSongIndex) { live.titleSlideSelected = false }
 
     // Helper: push current viewModel selection to presenter and track as live.
     // goLive=true marks this call as an explicit "go live" action so statistics are
@@ -306,7 +264,7 @@ fun SongsTab(
         }
         // Record song display for statistics — only when the song is actually live
         // (or being sent live), and only when a different song is presented.
-        val isDifferentSong = items.getOrNull(idx)?.songId?.let { it != liveSongId } ?: false
+        val isDifferentSong = items.getOrNull(idx)?.songId?.let { it != live.songId } ?: false
         if ((goLive || isPresenting) && isDifferentSong) {
             if (idx in items.indices) {
                 val song = items[idx]
@@ -350,9 +308,9 @@ fun SongsTab(
                 onInstanceLinkSendSongSection?.invoke(song.number, viewModel.selectedSectionIndex.value, viewModel.selectedLineIndex.value)
             }
         }
-        liveSongId = items.getOrNull(idx)?.songId
-        liveSectionIndex = viewModel.selectedSectionIndex.value
-        liveLineIndex = viewModel.selectedLineIndex.value
+        live.songId = items.getOrNull(idx)?.songId
+        live.sectionIndex = viewModel.selectedSectionIndex.value
+        live.lineIndex = viewModel.selectedLineIndex.value
     }
 
     // Re-pushes freshly-edited content to the presenter when the just-saved song is the one
@@ -363,13 +321,13 @@ fun SongsTab(
     // song together, and the settings write has not reached `appSettings` yet in that same frame.
     fun sendEditedSongToPresenter(editedSong: SongItem, tuning: SongTuning) {
         val sections = viewModel.getLyricSections(editedSong)
-        val push = resolveEditedSongPush(sections, liveSectionIndex, liveLineIndex, editedSong, tuning)
+        val push = resolveEditedSongPush(sections, live.sectionIndex, live.lineIndex, editedSong, tuning)
         onAllSectionsChanged(sections)
         onSectionIndexChanged(push.sectionIndex)
         onLineIndexChanged(push.lineIndex)
         onSongItemSelected(push.section)
-        liveSectionIndex = push.sectionIndex
-        liveLineIndex = push.lineIndex
+        live.sectionIndex = push.sectionIndex
+        live.lineIndex = push.lineIndex
     }
 
     val tabFocusRequester = remember { FocusRequester() }
@@ -445,56 +403,21 @@ fun SongsTab(
 
     LaunchedEffect(dialogDismissSignal) { tabFocusRequester.requestFocus() }
 
-    // Column widths driven by settings; local state for smooth dragging
-    var colWNumber by remember(appSettings.songSettings.colWidthNumber) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthNumber.dp.toPx() })
-    }
-    var colWTitle by remember(appSettings.songSettings.colWidthTitle) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthTitle.dp.toPx() })
-    }
-    var colWSongbook by remember(appSettings.songSettings.colWidthSongbook) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthSongbook.dp.toPx() })
-    }
-    var colWTune by remember(appSettings.songSettings.colWidthTune) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthTune.dp.toPx() })
-    }
-    var colWPlayCount by remember(appSettings.songSettings.colWidthPlayCount) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthPlayCount.dp.toPx() })
-    }
-    var colWAuthor by remember(appSettings.songSettings.colWidthAuthor) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthAuthor.dp.toPx() })
-    }
-    var colWComposer by remember(appSettings.songSettings.colWidthComposer) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthComposer.dp.toPx() })
-    }
+    val columns = rememberSongTableColumns(
+        settings = appSettings,
+        density = density,
+        availableColumns = availableSongColumns(songbooks.size, hasAddToSchedule = onAddToSchedule != null),
+    )
 
     // Favorites panel height in px
     var favPanelHeightPx by remember(appSettings.songFavoritesPanelHeightDp) {
         mutableStateOf(with(density) { appSettings.songFavoritesPanelHeightDp.dp.toPx() })
     }
 
-    // Column order — "songbook" excluded when only one songbook loaded;
-    // "add_to_schedule" excluded when the callback is absent
     val actionCols = setOf("favorites", "add_to_schedule")
     val availableCols = availableSongColumns(songbooks.size, hasAddToSchedule = onAddToSchedule != null)
-    var colOrder by remember(appSettings.songColOrder, songbooks.size) {
-        mutableStateOf(mergeColumnOrder(appSettings.songColOrder, availableCols))
-    }
-    // Drag-to-reorder state
-    var draggingColId by remember { mutableStateOf<String?>(null) }
-    var dragAccumX by remember { mutableStateOf(0f) }
+    val visibleCols = columns.visible
 
-    // Column visibility
-    var hiddenCols by remember(appSettings.songHiddenCols) {
-        mutableStateOf(appSettings.songHiddenCols)
-    }
-    var showColMenu by remember { mutableStateOf(false) }
-    var colMenuOffset by remember { mutableStateOf(DpOffset.Zero) }
-    var showColumnsMenu by remember { mutableStateOf(false) }
-    // Plain val — recomputed on every recomposition so it always reflects the current
-    // colOrder and hiddenCols state objects (remember(key){} creates new MutableState on
-    // each settings save, which would silently break a derivedStateOf subscription).
-    val visibleCols = colOrder.filter { it !in hiddenCols }
 
     val windowState = LocalMainWindowState.current
     val isMaximized = windowState?.placement != WindowPlacement.Floating
@@ -508,19 +431,20 @@ fun SongsTab(
     var rowTotalWidth by remember { mutableStateOf(0f) }
 
     fun saveColWidths() {
+        val dp = columns.widthsInDp()
         onSettingsChangeState.value { s ->
             s.copy(
                 songSettings = s.songSettings.copy(
-                    colWidthNumber      = with(density) { colWNumber.toDp().value.toInt() },
-                    colWidthTitle       = with(density) { colWTitle.toDp().value.toInt() },
-                    colWidthSongbook    = with(density) { colWSongbook.toDp().value.toInt() },
-                    colWidthTune        = with(density) { colWTune.toDp().value.toInt() },
-                    colWidthPlayCount   = with(density) { colWPlayCount.toDp().value.toInt() },
-                    colWidthAuthor      = with(density) { colWAuthor.toDp().value.toInt() },
-                    colWidthComposer    = with(density) { colWComposer.toDp().value.toInt() },
+                    colWidthNumber      = dp["number"] ?: s.songSettings.colWidthNumber,
+                    colWidthTitle       = dp["title"] ?: s.songSettings.colWidthTitle,
+                    colWidthSongbook    = dp["songbook"] ?: s.songSettings.colWidthSongbook,
+                    colWidthTune        = dp["tune"] ?: s.songSettings.colWidthTune,
+                    colWidthPlayCount   = dp["play_count"] ?: s.songSettings.colWidthPlayCount,
+                    colWidthAuthor      = dp["author"] ?: s.songSettings.colWidthAuthor,
+                    colWidthComposer    = dp["composer"] ?: s.songSettings.colWidthComposer,
                 ),
-                songColOrder = colOrder,
-                songHiddenCols = hiddenCols
+                songColOrder = columns.order,
+                songHiddenCols = columns.hidden,
             )
         }
     }
@@ -533,28 +457,9 @@ fun SongsTab(
         }
     }
 
-    fun colWidth(id: String) = when (id) {
-        "number"     -> colWNumber
-        "title"      -> colWTitle
-        "songbook"   -> colWSongbook
-        "tune"       -> colWTune
-        "play_count" -> colWPlayCount
-        "author"     -> colWAuthor
-        "composer"   -> colWComposer
-        else         -> with(density) { 30.dp.toPx() } // action columns: 6dp spacer + 24dp icon button
-    }
+    fun colWidth(id: String) = columns.widthOf(id)
 
-    fun setColWidth(id: String, px: Float) {
-        when (id) {
-            "number"     -> colWNumber    = px.coerceAtLeast(with(density) { 30.dp.toPx() })
-            "title"      -> colWTitle     = px.coerceAtLeast(with(density) { 60.dp.toPx() })
-            "songbook"   -> colWSongbook  = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-            "tune"       -> colWTune      = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-            "play_count" -> colWPlayCount = px.coerceAtLeast(with(density) { 30.dp.toPx() })
-            "author"     -> colWAuthor    = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-            "composer"   -> colWComposer  = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-        }
-    }
+    fun setColWidth(id: String, px: Float) = columns.setWidth(id, px)
 
     fun sortKey(id: String) = songColumnSortKey(id)
 
@@ -780,8 +685,8 @@ fun SongsTab(
                                     event.button?.isSecondary == true
                                 ) {
                                     val pos = event.changes.firstOrNull()?.position
-                                    if (pos != null) colMenuOffset = with(density) { DpOffset(pos.x.toDp(), pos.y.toDp()) }
-                                    showColMenu = true
+                                    if (pos != null) columns.menuOffset = with(density) { DpOffset(pos.x.toDp(), pos.y.toDp()) }
+                                    columns.showMenu = true
                                 }
                             }
                         }
@@ -802,30 +707,30 @@ fun SongsTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 visibleCols.forEach { colId ->
-                    val isBeingDragged = colId == draggingColId
+                    val isBeingDragged = colId == columns.draggingId
                     val sk = sortKey(colId)
                     val isSortable = sk.isNotEmpty() && colId != "add_to_schedule"
                     val isSorted = isSortable && currentSortColumn == sk
                     val reorderDragMod = Modifier.pointerInput(colId) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
-                                val vc = colOrder.filter { it !in hiddenCols }
-                                val newVisIdx = computeNewIdx(colId, dragAccumX, vc)
+                                val vc = columns.order.filter { it !in columns.hidden }
+                                val newVisIdx = computeNewIdx(colId, columns.dragAccumX, vc)
                                 val targetId = vc.getOrNull(newVisIdx)
                                 if (targetId != null) {
-                                    val reordered = moveColumn(colOrder, colId, targetId)
-                                    if (reordered !== colOrder) {
-                                        colOrder = reordered
-                                        onSettingsChangeState.value { s -> s.copy(songColOrder = colOrder) }
+                                    val reordered = moveColumn(columns.order, colId, targetId)
+                                    if (reordered !== columns.order) {
+                                        columns.order = reordered
+                                        onSettingsChangeState.value { s -> s.copy(songColOrder = columns.order) }
                                     }
                                 }
-                                draggingColId = null
-                                dragAccumX = 0f
+                                columns.draggingId = null
+                                columns.dragAccumX = 0f
                             },
-                            onDragCancel = { draggingColId = null; dragAccumX = 0f }
+                            onDragCancel = { columns.draggingId = null; columns.dragAccumX = 0f }
                         ) { _, amount ->
-                            if (draggingColId != colId) { draggingColId = colId; dragAccumX = 0f }
-                            dragAccumX += amount
+                            if (columns.draggingId != colId) { columns.draggingId = colId; columns.dragAccumX = 0f }
+                            columns.dragAccumX += amount
                         }
                     }
                     val cellColor = when {
@@ -924,16 +829,16 @@ fun SongsTab(
                 TooltipIconButton(
                     painter = rememberVectorPainter(Icons.Default.Tune),
                     text = stringResource(Res.string.song_columns),
-                    onClick = { showColumnsMenu = true },
+                    onClick = { columns.showColumnsMenu = true },
                     buttonSize = 36.dp,
                     iconTint = MaterialTheme.colorScheme.onSurface
                 )
                 DropdownMenu(
-                    expanded = showColumnsMenu,
-                    onDismissRequest = { showColumnsMenu = false }
+                    expanded = columns.showColumnsMenu,
+                    onDismissRequest = { columns.showColumnsMenu = false }
                 ) {
                     availableCols.forEach { colId ->
-                        val isVisible = colId !in hiddenCols
+                        val isVisible = colId !in columns.hidden
                         val isProtected = colId == "title"
                         DropdownMenuItem(
                             text = { Text(allColLabels[colId] ?: colId) },
@@ -946,8 +851,8 @@ fun SongsTab(
                             },
                             onClick = {
                                 if (!(isProtected && isVisible)) {
-                                    hiddenCols = if (isVisible) hiddenCols + colId else hiddenCols - colId
-                                    onSettingsChangeState.value { s -> s.copy(songHiddenCols = hiddenCols) }
+                                    columns.hidden = if (isVisible) columns.hidden + colId else columns.hidden - colId
+                                    onSettingsChangeState.value { s -> s.copy(songHiddenCols = columns.hidden) }
                                 }
                             },
                             enabled = !(isProtected && isVisible)
@@ -958,12 +863,12 @@ fun SongsTab(
 
             // Right-click dropdown — toggle column visibility
             DropdownMenu(
-                expanded = showColMenu,
-                onDismissRequest = { showColMenu = false },
-                offset = colMenuOffset
+                expanded = columns.showMenu,
+                onDismissRequest = { columns.showMenu = false },
+                offset = columns.menuOffset
             ) {
                 availableCols.forEach { colId ->
-                    val isVisible = colId !in hiddenCols
+                    val isVisible = colId !in columns.hidden
                     val isProtected = colId == "title"
                     DropdownMenuItem(
                         text = { Text(allColLabels[colId] ?: colId) },
@@ -976,8 +881,8 @@ fun SongsTab(
                         },
                         onClick = {
                             if (!(isProtected && isVisible)) {
-                                hiddenCols = if (isVisible) hiddenCols + colId else hiddenCols - colId
-                                onSettingsChangeState.value { s -> s.copy(songHiddenCols = hiddenCols) }
+                                columns.hidden = if (isVisible) columns.hidden + colId else columns.hidden - colId
+                                onSettingsChangeState.value { s -> s.copy(songHiddenCols = columns.hidden) }
                             }
                         },
                         enabled = !(isProtected && isVisible)
@@ -1041,7 +946,7 @@ fun SongsTab(
                                 )
                                 .finalPassClickable {
                                     viewModel.selectSong(index)
-                                    if (isPresenting && liveSongId != null) {
+                                    if (isPresenting && live.songId != null) {
                                         viewModel.selectSection(-1)
                                     }
                                     tabFocusRequester.requestFocus()
@@ -1116,7 +1021,7 @@ fun SongsTab(
                                                 .width(with(density) { colWidth(colId).toDp() })
                                                 .initialPassClickable {
                                                     viewModel.selectSong(index)
-                                                    if (isPresenting && liveSongId != null) {
+                                                    if (isPresenting && live.songId != null) {
                                                         viewModel.selectSection(-1)
                                                     }
                                                     tabFocusRequester.requestFocus()
@@ -1226,8 +1131,7 @@ fun SongsTab(
                                     )
                                 },
                                 onClick = {
-                                    songToEdit = song
-                                    showEditDialog = true
+                                    dialogs.edit(song)
                                     tabFocusRequester.requestFocus()
                                     showContextMenu = false
                                 }
@@ -1244,8 +1148,7 @@ fun SongsTab(
                                     )
                                 },
                                 onClick = {
-                                    songToDelete = song
-                                    showDeleteConfirm = true
+                                    dialogs.delete(song)
                                     showContextMenu = false
                                 }
                             )
@@ -1438,349 +1341,34 @@ fun SongsTab(
                 )
         )
 
-        // Right panel — Lyrics display (fixed width, resizable via drag handle)
-        Column(
-            modifier = Modifier
-                .width(with(density) { lyricsPanelPx.toDp() })
-                .fillMaxHeight()
-        ) {
-            // Header row with action buttons — switches to icon-only when width is tight
-            val editSongStr    = stringResource(Res.string.edit_song)
-            val goLiveStr      = stringResource(Res.string.go_live)
-            val addScheduleStr = stringResource(Res.string.add_to_schedule)
-
-            val hasSongSelected = selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size && selectedSectionIndex >= 0
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    ActionIconButton(
-                        onClick = { songToEdit = filteredSongs[selectedSongIndex]; showEditDialog = true; tabFocusRequester.requestFocus() },
-                        tooltipText = editSongStr,
-                        painter = painterResource(Res.drawable.ic_edit),
-                        containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary
-                    )
-                }
-
-                // New Song button
-                ActionIconButton(
-                    onClick = { showNewSongDialog = true; tabFocusRequester.requestFocus() },
-                    tooltipText = newSongStr,
-                    painter = painterResource(Res.drawable.ic_add),
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                )
-
-                if (onAddToSchedule != null && selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    AddToScheduleButton(
-                        onClick = {
-                            filteredSongs.getOrNull(selectedSongIndex)?.let { item ->
-                                onAddToSchedule(item.number.toIntOrNull() ?: 0, item.title, item.songbook, item.songId)
-                            }
-                            tabFocusRequester.requestFocus()
-                        },
-                        tooltipText = addScheduleStr,
-                        // Tagged because "Add to Schedule" is the right name for several controls
-                        // here — this one, the per-row buttons and the favourites panel's — and only
-                        // this one adds the *selected* song. The name is shared on purpose; the tag
-                        // is how a test says which of them it means.
-                        modifier = Modifier.testTag(SONGS_ADD_SELECTED_TAG)
-                    )
-                }
-
-                GoLiveButton(
-                    onClick = { sendToPresenter(goLive = true); onPresenting(Presenting.LYRICS); tabFocusRequester.requestFocus() },
-                    enabled = hasSongSelected,
-                    tooltipText = goLiveStr
-                )
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            FocusLostBanner(focusRescue, stringResource(Res.string.tab_focus_lost))
-
-            // "Back to Live" button — shown when browsing a different song than what's live.
-            // Compares songId, not index/position, so this stays correct even when the live
-            // song has been filtered out of the visible list by a search.
-            val currentSongIdForLiveCheck = filteredSongs.getOrNull(selectedSongIndex)?.songId
-            if (isPresenting && liveSongId != null && currentSongIdForLiveCheck != liveSongId) {
-                Button(
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                    onClick = {
-                        liveSongId?.let { viewModel.selectSongById(it) }
-                        viewModel.selectSection(liveSectionIndex)
-                        viewModel.setLineIndex(liveLineIndex)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(backToLiveStr, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onError, maxLines = 1)
-                }
-            }
-
-            // Navigation hint — only in line mode, and drawn from the live bindings so a rebind is
-            // reflected here. Hidden when both pairs are unbound: a sentence naming keys that do
-            // nothing is worse than no hint.
-            val isLineModeHint = isSongLineMode(appSettings.songSettings)
-            if (isLineModeHint && lineNavHintStr.isNotEmpty()) {
-                Text(
-                    text = lineNavHintStr,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
-                )
-            }
-
-            // Lyrics content
-            val noSongsLoaded = filteredSongs.isEmpty() && searchQuery.isBlank()
-            if (noSongsLoaded) {
-                // ── Empty state: no song database configured ──────────────
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.widthIn(max = 320.dp),
-                        shape = MaterialTheme.shapes.large,
-                        tonalElevation = 3.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_note),
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                            Text(
-                                text = stringResource(Res.string.songs_no_db_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                            Text(
-                                text = stringResource(Res.string.songs_no_db_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = stringResource(Res.string.songs_no_db_step),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-            } else {
-            // ── Normal lyrics view ────────────────────────────────────
-            Box {
-                val lyricsListState = rememberLazyListState()
-                val titleSlideEnabled = appSettings.songSettings.titleSlideEnabled
-                val currentSong = filteredSongs.getOrNull(selectedSongIndex)
-
-                LaunchedEffect(selectedSectionIndex, isTitleSlideSelected) {
-                    if (isTitleSlideSelected) {
-                        lyricsListState.animateScrollToItem(0)
-                    } else if (selectedSectionIndex >= 0) {
-                        val offset = if (titleSlideEnabled && currentSong != null) 1 else 0
-                        lyricsListState.animateScrollToItem(selectedSectionIndex + offset)
-                    }
-                }
-
-                // Get lyric sections from ViewModel — no parsing in UI
-                val sections = if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    viewModel.getLyricSections()
-                } else emptyList()
-
-                LazyColumn(
-                    state = lyricsListState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(12.dp)
-                ) {
-                    // ── Title slide entry ────────────────────────────────────
-                    if (titleSlideEnabled && currentSong != null && sections.isNotEmpty()) {
-                        item {
-                            val titleLine = songTitleLine(
-                                currentSong,
-                                appSettings.songSettings.titleSlideShowSongNumber,
-                            )
-                            val creditLine = songCreditLine(currentSong)
-
-                            fun buildTitleSection() =
-                                titleSlideSection(
-                                    currentSong,
-                                    appSettings.tuningFor(currentSong.songId),
-                                    appSettings.songSettings.titleSlideShowSongNumber,
-                                )
-
-                            fun sendTitleSlide() {
-                                val ts = buildTitleSection()
-                                val allSections = listOf(ts) + viewModel.getLyricSections()
-                                onAllSectionsChanged(allSections)
-                                onSectionIndexChanged(0)
-                                onLineIndexChanged(0)
-                                onSongItemSelected(ts)
-                                isTitleSlideSelected = true
-                                liveSongId = currentSong.songId
-                                liveSectionIndex = -1
-                                liveLineIndex = 0
-                            }
-
-                            val contentColor = if (isTitleSlideSelected)
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            else
-                                MaterialTheme.colorScheme.onSurface
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (isTitleSlideSelected)
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                        else Color.Transparent
-                                    )
-                                    .initialPassCombinedClickable(
-                                        onClick = { sendTitleSlide() },
-                                        onDoubleClick = { sendTitleSlide(); onPresenting(Presenting.LYRICS) }
-                                    )
-                                    .padding(8.dp)
-                            ) {
-                                // Same chip the lyric sections use, so the title slide reads as
-                                // one more entry in the list rather than a differently-styled one.
-                                SectionLabelRow(
-                                    label = stringResource(Res.string.song_title_slide),
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                )
-                                Text(
-                                    text = titleLine,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = contentColor
-                                )
-                                if (creditLine.isNotBlank()) {
-                                    Text(
-                                        text = creditLine,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = contentColor.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Regular lyric sections ───────────────────────────────
-                    if (sections.isNotEmpty()) {
-                        itemsIndexed(sections) { sectionIndex, section ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (!isTitleSlideSelected && sectionIndex == selectedSectionIndex)
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                        else Color.Transparent
-                                    )
-                                    .finalPassCombinedClickable(
-                                        onClick = {
-                                            viewModel.selectSection(sectionIndex)
-                                            isTitleSlideSelected = false
-                                            sendToPresenter(goLive = isPresenting)
-                                        },
-                                        onDoubleClick = {
-                                            viewModel.selectSection(sectionIndex)
-                                            isTitleSlideSelected = false
-                                            sendToPresenter(goLive = true)
-                                            onPresenting(Presenting.LYRICS)
-                                        }
-                                    )
-                                    .padding(8.dp)
-                            ) {
-                                val textColor = if (!isTitleSlideSelected && sectionIndex == selectedSectionIndex)
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                else
-                                    MaterialTheme.colorScheme.onSurface
-
-                                val isPerLineMode = isSongLineMode(appSettings.songSettings)
-                                val activeLineIndex = if (isPerLineMode && sectionIndex == selectedSectionIndex)
-                                    viewModel.selectedLineIndex.value else -1
-
-                                // Render section header if present — the same chip the editor's
-                                // preview uses, so a verse is recognised the same way in both.
-                                section.header?.let { header ->
-                                    SectionLabelRow(
-                                        label = header.trim().trim('[', ']', '{', '}').trim(),
-                                        modifier = Modifier.padding(vertical = 4.dp),
-                                    )
-                                }
-
-                                // Lyrics panel always shows both — language filtering only applies to presenter
-                                val langDisplay = Constants.SONG_LANG_BOTH
-                                val showPrimary = langDisplay != Constants.SONG_LANG_SECONDARY
-                                val showSecondary = langDisplay != Constants.SONG_LANG_PRIMARY && section.secondaryLines.isNotEmpty()
-
-                                val lineClickHandler: ((Int) -> Unit)? = if (isPerLineMode) { lineIdx ->
-                                    viewModel.selectSection(sectionIndex)
-                                    viewModel.setLineIndex(lineIdx)
-                                    isTitleSlideSelected = false
-                                    sendToPresenter(goLive = isPresenting)
-                                } else null
-                                // Double-click on the words goes live too — at the clicked LINE,
-                                // so per-line display mode stays line-accurate (the section's own
-                                // double-click below the text still covers the background).
-                                val lineDoubleClickHandler: ((Int) -> Unit)? = if (isPerLineMode) { lineIdx ->
-                                    viewModel.selectSection(sectionIndex)
-                                    viewModel.setLineIndex(lineIdx)
-                                    isTitleSlideSelected = false
-                                    sendToPresenter(goLive = true)
-                                    onPresenting(Presenting.LYRICS)
-                                } else null
-
-                                if (showPrimary && showSecondary) {
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
-                                        }
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
-                                        }
-                                    }
-                                } else if (showSecondary) {
-                                    LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
-                                } else {
-                                    LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler)
-                                }
-                            }
-                            // No separator between sections: each one opens with its own labelled
-                            // chip and rule, which is what divides them now.
-                        }
-                    } else {
-                        item {
-                            Text(
-                                text = stringResource(Res.string.no_lyrics_available),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                VerticalScrollbar(
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    adapter = rememberScrollbarAdapter(scrollState = lyricsListState)
-                )
-            }
-            } // end else (songs loaded)
-        }
+        SongLyricsPanel(
+            lyricsPanelPx = lyricsPanelPx,
+            appSettings = appSettings,
+            filteredSongs = filteredSongs,
+            selectedSongIndex = selectedSongIndex,
+            selectedSectionIndex = selectedSectionIndex,
+            selectedLineIndex = viewModel.selectedLineIndex.value,
+            searchQuery = searchQuery,
+            isPresenting = isPresenting,
+            live = live,
+            dialogs = dialogs,
+            backToLiveStr = backToLiveStr,
+            lineNavHintStr = lineNavHintStr,
+            newSongStr = newSongStr,
+            focusRescue = focusRescue,
+            tabFocusRequester = tabFocusRequester,
+            lyricSections = { viewModel.getLyricSections() },
+            onSectionSelected = { viewModel.selectSection(it) },
+            onLineSelected = { viewModel.setLineIndex(it) },
+            onBackToLiveSong = { live.songId?.let { viewModel.selectSongById(it) } },
+            onSectionIndexChanged = onSectionIndexChanged,
+            onLineIndexChanged = onLineIndexChanged,
+            onAllSectionsChanged = onAllSectionsChanged,
+            onSongItemSelected = onSongItemSelected,
+            onAddToSchedule = onAddToSchedule,
+            onPresenting = onPresenting,
+            sendToPresenter = ::sendToPresenter,
+        )
     }
 
     // The metronome tempo is only ever read by the stage monitor, so the field that sets it is
@@ -1791,26 +1379,26 @@ fun SongsTab(
 
     // Edit Song Dialog — pure UI dialog state is fine here
     EditSongDialog(
-        isVisible = showEditDialog,
-        song = songToEdit,
+        isVisible = dialogs.editing != null,
+        song = dialogs.editing,
         songbooks = viewModel.songbooks.value,
         existingSongs = viewModel.songsData.value.getSongs(),
         theme = theme,
-        tuning = songToEdit?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
+        tuning = dialogs.editing?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
         showTuningFields = hasStageMonitorScreen,
         chordsVisible = appSettings.songSettings.editorShowChords,
         onChordsVisibleChange = { visible ->
             onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
         },
-        onDismiss = { showEditDialog = false },
+        onDismiss = { dialogs.closeEditor() },
         onSave = { updatedSong, tuning ->
-            songToEdit?.let { oldSong ->
-                val wasLive = isPresenting && liveSongId == oldSong.songId
+            dialogs.editing?.let { oldSong ->
+                val wasLive = isPresenting && live.songId == oldSong.songId
                 val success = viewModel.updateSong(oldSong, updatedSong)
                 if (success) {
                     onSettingsChangeState.value { s -> s.withTuning(updatedSong.songId, tuning) }
-                    songToEdit = null
-                    showEditDialog = false
+                    dialogs.closeEditor()
+                    dialogs.closeEditor()
                     if (wasLive) sendEditedSongToPresenter(updatedSong, tuning)
                 }
             }
@@ -1818,11 +1406,11 @@ fun SongsTab(
     )
 
     // Delete Song Confirmation Dialog
-    if (showDeleteConfirm) {
-        val s = songToDelete
+    if (dialogs.deleting != null) {
+        val s = dialogs.deleting
         if (s != null) {
             AlertDialog(
-                onDismissRequest = { showDeleteConfirm = false; songToDelete = null },
+                onDismissRequest = { dialogs.closeDelete(); dialogs.closeDelete() },
                 title = { Text(stringResource(Res.string.confirm_delete)) },
                 text = {
                     Column {
@@ -1842,14 +1430,13 @@ fun SongsTab(
                         shape = RoundedCornerShape(6.dp),
                         onClick = {
                         viewModel.deleteSong(s)
-                        showDeleteConfirm = false
-                        songToDelete = null
+                        dialogs.closeDelete()
                     }) {
                         Text(stringResource(Res.string.delete_saved_string), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(shape = RoundedCornerShape(6.dp), onClick = { showDeleteConfirm = false; songToDelete = null }) {
+                    TextButton(shape = RoundedCornerShape(6.dp), onClick = { dialogs.closeDelete(); dialogs.closeDelete() }) {
                         Text(stringResource(Res.string.cancel))
                     }
                 }
@@ -1869,7 +1456,7 @@ fun SongsTab(
         )
     }
     EditSongDialog(
-        isVisible = showNewSongDialog,
+        isVisible = dialogs.creatingNew,
         song = newSongTemplate,
         songbooks = viewModel.songbooks.value,
         existingSongs = viewModel.songsData.value.getSongs(),
@@ -1880,21 +1467,21 @@ fun SongsTab(
         onChordsVisibleChange = { visible ->
             onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
         },
-        onDismiss = { showNewSongDialog = false },
+        onDismiss = { dialogs.closeNew() },
         onSave = { newSong, tuning ->
             val success = viewModel.createSong(newSong)
             if (success) {
                 if (tuning != SongTuning()) {
                     onSettingsChangeState.value { s -> s.withTuning(newSong.songId, tuning) }
                 }
-                showNewSongDialog = false
+                dialogs.closeNew()
             }
         }
     )
 }
 
 @Composable
-private fun LyricLines(
+internal fun LyricLines(
     lines: List<String>,
     textColor: Color,
     activeLineIndex: Int = -1,
