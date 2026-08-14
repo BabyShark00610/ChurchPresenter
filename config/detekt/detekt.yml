@@ -48,7 +48,7 @@ complexity:
 
 naming:
   TopLevelPropertyNaming:
-    active: false
+    active: true
   VariableNaming:
     active: true
     variablePattern: '(_)?[a-z][A-Za-z0-9]*|[A-Z][A-Z0-9_]*'
