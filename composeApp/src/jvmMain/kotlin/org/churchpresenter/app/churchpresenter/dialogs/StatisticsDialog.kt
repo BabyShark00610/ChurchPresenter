@@ -81,6 +81,8 @@ import org.jetbrains.compose.resources.stringResource
 import javax.swing.filechooser.FileNameExtensionFilter
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 
+private const val MIN_BAR_FRACTION = 0.02f
+
 @Composable
 fun StatisticsDialog(
     isVisible: Boolean,
@@ -468,7 +470,7 @@ private fun StatBarRow(
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(fraction = (count.toFloat() / maxCount).coerceIn(0.02f, 1f))
+                    .fillMaxWidth(fraction = (count.toFloat() / maxCount).coerceIn(MIN_BAR_FRACTION, 1f))
                     .clip(RoundedCornerShape(3.dp))
                     .background(barBrush)
             )

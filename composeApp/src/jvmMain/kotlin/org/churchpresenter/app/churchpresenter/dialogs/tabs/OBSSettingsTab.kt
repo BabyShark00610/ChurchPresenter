@@ -75,6 +75,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.OBSWebSocketManager
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.stringResource
 
+private const val TRAILING_SPACER_WEIGHT = 3f
+
 @Composable
 fun OBSSettingsTab(
     settings: AppSettings,
@@ -309,7 +311,7 @@ fun OBSSettingsTab(
                                     modifier = Modifier.weight(2f)
                                 )
                             } else {
-                                Spacer(Modifier.weight(3f))
+                                Spacer(Modifier.weight(TRAILING_SPACER_WEIGHT))
                             }
                         }
                         Spacer(Modifier.height(6.dp))

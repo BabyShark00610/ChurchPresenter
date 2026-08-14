@@ -21,6 +21,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.utils.LottieFonts
 
+private const val FRAME_INTERVAL_MS = 16L
+
 /**
  * Renders a Lottie animation to ARGB pixel frames off-screen.
  *
@@ -115,7 +117,7 @@ class LowerThirdOffscreenRenderer(
             val deadline = System.currentTimeMillis() + COMPOSITION_LOAD_TIMEOUT_MS
             while (!compositionLoaded && System.currentTimeMillis() < deadline) {
                 renderOnce().close()
-                delay(16)
+                delay(FRAME_INTERVAL_MS)
             }
             if (!compositionLoaded) {
                 throw Exception("Lottie composition failed to load for off-screen rendering")

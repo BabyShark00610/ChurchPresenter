@@ -14,6 +14,9 @@ import java.awt.HeadlessException
 import java.awt.Rectangle
 import java.util.Locale
 
+private const val SCREEN_POLL_INTERVAL_MS = 2000L
+private const val MAX_SIMPLE_RATIO_SIDE = 64
+
 /** Empty on a headless JVM (CI, or a genuinely displayless deployment) instead of throwing. */
 private fun safeScreenDevices(): Array<GraphicsDevice> = try {
     GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
@@ -27,7 +30,7 @@ fun rememberScreenDevices(): Array<GraphicsDevice> {
     var devices by remember { mutableStateOf(safeScreenDevices()) }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(2000)
+            delay(SCREEN_POLL_INTERVAL_MS)
             val current = safeScreenDevices()
             if (current.size != devices.size) {
                 devices = current
@@ -117,7 +120,7 @@ fun formatAspectRatio(width: Int, height: Int): String {
     val w = width / gcd
     val h = height / gcd
     // Accept simplified ratios where both sides are reasonable (≤64)
-    return if (w <= 64 && h <= 64) "$w:$h"
+    return if (w <= MAX_SIMPLE_RATIO_SIDE && h <= MAX_SIMPLE_RATIO_SIDE) "$w:$h"
     else String.format(Locale.US, "%.2f:1", width.toFloat() / height.toFloat())
 }
 

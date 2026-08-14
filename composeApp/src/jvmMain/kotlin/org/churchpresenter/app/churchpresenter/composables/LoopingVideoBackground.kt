@@ -23,6 +23,9 @@ import java.awt.image.DataBufferInt
 import java.io.File
 import java.nio.ByteBuffer
 
+private const val FRAME_INTERVAL_MS = 16L
+private const val SURFACE_ATTACH_MS = 100L
+
 /**
  * A self-contained looping video background with no audio.
  * Plays the video at [videoPath] in an infinite loop, filling the available space.
@@ -66,7 +69,7 @@ fun LoopingVideoBackground(
                     currentFrame.value = img.toComposeImageBitmap()
                 }
             }
-            delay(16)
+            delay(FRAME_INTERVAL_MS)
         }
     }
 
@@ -109,7 +112,7 @@ fun LoopingVideoBackground(
 
     // Start playback with VLC input-level repeat (loops at demuxer level, no gap)
     LaunchedEffect(videoPath) {
-        delay(100) // let video surface attach
+        delay(SURFACE_ATTACH_MS) // let video surface attach
         try {
             mediaPlayer.audio().setVolume(0)
             mediaPlayer.media().play(

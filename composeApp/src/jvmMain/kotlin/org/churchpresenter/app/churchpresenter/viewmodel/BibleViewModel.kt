@@ -26,6 +26,8 @@ import androidx.compose.runtime.derivedStateOf
 import java.io.File
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 
+private const val MAX_HISTORY_ENTRIES = 50
+
 class BibleViewModel(
     internal var appSettings: AppSettings,
     internal val onBibleLoaded: ((bible: Bible, translation: String) -> Unit)? = null,
@@ -217,7 +219,7 @@ class BibleViewModel(
 
         _history.add(0, entry)
 
-        while (_history.size > 50) _history.removeLast()
+        while (_history.size > MAX_HISTORY_ENTRIES) _history.removeLast()
     }
 
     fun clearHistory() { _history.clear() }

@@ -81,6 +81,15 @@ import org.churchpresenter.app.churchpresenter.viewmodel.OBSWebSocketManager
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.stringResource
 
+private const val TAB_BACKGROUND = 3
+private const val TAB_PROJECTION = 4
+private const val TAB_LOWER_THIRD = 5
+private const val TAB_SERVER = 6
+private const val TAB_STAGE_MONITOR = 7
+private const val TAB_ATEM = 8
+private const val TAB_DICTIONARY = 9
+private const val TAB_INTEGRATIONS = 10
+
 @Composable
 fun OptionsDialog(
     isVisible: Boolean,
@@ -285,13 +294,13 @@ internal fun OptionsDialogContent(
                                 },
                                 presenterManager = presenterManager
                             )
-                            3 -> BackgroundSettingsTab(
+                            TAB_BACKGROUND -> BackgroundSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            4 -> ProjectionSettingsTab(
+                            TAB_PROJECTION -> ProjectionSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
@@ -302,14 +311,14 @@ internal fun OptionsDialogContent(
                                 scenes = scenes,
                                 detectScreens = detectScreens
                             )
-                            5 -> LowerThirdSettingsTab(
+                            TAB_LOWER_THIRD -> LowerThirdSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 },
                                 onOpenLottieGen = onOpenLottieGen
                             )
-                            6 -> ServerSettingsTab(
+                            TAB_SERVER -> ServerSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
@@ -317,25 +326,25 @@ internal fun OptionsDialogContent(
                                 companionServer = companionServer,
                                 remoteClientManager = remoteClientManager
                             )
-                            7 -> StageMonitorSettingsTab(
+                            TAB_STAGE_MONITOR -> StageMonitorSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            8 -> AtemSettingsTab(
+                            TAB_ATEM -> AtemSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            9 -> DictionarySettingsTab(
+                            TAB_DICTIONARY -> DictionarySettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            10 -> if (obsManager != null) {
+                            TAB_INTEGRATIONS -> if (obsManager != null) {
                                 OBSSettingsTab(
                                     settings = currentSettings,
                                     onSettingsChange = { updateFn ->

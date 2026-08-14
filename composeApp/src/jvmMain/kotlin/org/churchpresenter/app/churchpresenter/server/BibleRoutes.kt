@@ -17,6 +17,8 @@ import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
+private const val SUMMARY_PREVIEW_CHARS = 60
+
 /**
  * Routes for the Bible catalogue, chapter/verse lookup and the Strong's dictionary.
  *
@@ -224,7 +226,7 @@ internal fun Route.bibleAndDictionaryRoutes(
                     scope.launch { server.onInstantAction.emit(CompanionServer.RemoteInstantAction(
                         actionType = "present",
                         title = verseRef,
-                        detail = req.verseText.take(60),
+                        detail = req.verseText.take(SUMMARY_PREVIEW_CHARS),
                         clientId = clientId
                     )) }
                     call.respondText("""{"ok":true}""", ContentType.Application.Json)

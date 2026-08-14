@@ -84,6 +84,10 @@ import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 import org.churchpresenter.app.churchpresenter.composables.LabeledRadioButton
 
+private const val STATUS_POLL_MS = 1000L
+private const val SECONDS_PER_MINUTE = 60
+private const val SUMMARY_PREVIEW_CHARS = 40
+
 @Composable
 fun InstanceLinkDialog(
     isVisible: Boolean,
@@ -239,7 +243,7 @@ internal fun InstanceLinkDialogContent(
                                 LaunchedEffect(Unit) {
                                     while (true) {
                                         ageNowMs = System.currentTimeMillis()
-                                        delay(1000)
+                                        delay(STATUS_POLL_MS)
                                     }
                                 }
                                 val ageSeconds = ((ageNowMs - lastMessageAtMs) / 1000).coerceAtLeast(0)
@@ -465,8 +469,8 @@ internal fun InstanceLinkDialogContent(
 
 /** Formats an elapsed-seconds count for the "Last update N ago" readout. */
 internal fun formatInstanceLinkAge(ageSeconds: Long): String =
-    if (ageSeconds < 60) "${ageSeconds}s"
-    else "${ageSeconds / 60}m ${ageSeconds % 60}s"
+    if (ageSeconds < SECONDS_PER_MINUTE) "${ageSeconds}s"
+    else "${ageSeconds / SECONDS_PER_MINUTE}m ${ageSeconds % SECONDS_PER_MINUTE}s"
 
 /** Short human-readable summary of a [LiveStateDto] for the "Last received" readout. */
 @Composable
@@ -477,10 +481,10 @@ internal fun liveStateSummary(state: LiveStateDto): String = when (state.content
     "PICTURES" -> stringResource(Res.string.obs_mode_pictures)
     "PRESENTATION" -> stringResource(Res.string.obs_mode_presentation)
     "MEDIA" -> state.mediaUrl?.substringAfterLast('/') ?: stringResource(Res.string.obs_mode_media)
-    "ANNOUNCEMENTS" -> state.announcementText?.take(40) ?: stringResource(Res.string.obs_mode_announcements)
+    "ANNOUNCEMENTS" -> state.announcementText?.take(SUMMARY_PREVIEW_CHARS) ?: stringResource(Res.string.obs_mode_announcements)
     "WEBSITE" -> state.websiteTitle ?: state.websiteUrl ?: stringResource(Res.string.obs_mode_website)
     "CANVAS" -> state.sceneName ?: stringResource(Res.string.obs_mode_canvas)
-    "QA" -> state.questionText?.take(40) ?: stringResource(Res.string.obs_mode_qa)
+    "QA" -> state.questionText?.take(SUMMARY_PREVIEW_CHARS) ?: stringResource(Res.string.obs_mode_qa)
     "DICTIONARY" -> state.dictionaryWord ?: stringResource(Res.string.tab_dictionary)
     "LOWER_THIRD" -> stringResource(Res.string.obs_mode_lower_third)
     "NONE" -> stringResource(Res.string.obs_mode_none)

@@ -7,6 +7,7 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -15,6 +16,9 @@ import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import java.io.File
 import java.net.URLEncoder
+
+private const val REGEX_GROUP_IDENTIFIER = 3
+private const val REGEX_GROUP_DISPLAY_NAME = 4
 
 /**
  * Lists the Bible modules available in the Zefania XML archive.
@@ -165,13 +169,13 @@ object ZefaniaRepositoryIndex {
                 if (cached != null && cached.etag.isNotBlank()) header("If-None-Match", cached.etag)
             }
 
-            if (response.status.value == 304 && cached != null) {
+            if (response.status == HttpStatusCode.NotModified && cached != null) {
                 writeMeta(cacheFile, nowMillis, cached.etag)
                 memoryCache = nowMillis to cached
                 return@withContext IndexOutcome.Success(cached)
             }
 
-            if (response.status.value == 403 && response.headers["x-ratelimit-remaining"] == "0") {
+            if (response.status == HttpStatusCode.Forbidden && response.headers["x-ratelimit-remaining"] == "0") {
                 val reset = response.headers["x-ratelimit-reset"]?.toLongOrNull()
                 return@withContext cached
                     ?.let { IndexOutcome.Success(it, stale = true) }
@@ -274,9 +278,9 @@ object ZefaniaRepositoryIndex {
         if (match != null) {
             // A few are underscore-separated; normalise so the two shapes render alike.
             releaseDate = match.groupValues[1].replace('_', '-')
-            identifier = match.groupValues[3]
+            identifier = match.groupValues[REGEX_GROUP_IDENTIFIER]
             // A handful of modules carry no parenthesised title; the identifier is all there is.
-            displayName = match.groupValues[4].ifBlank { identifier }.replace('_', ' ').trim()
+            displayName = match.groupValues[REGEX_GROUP_DISPLAY_NAME].ifBlank { identifier }.replace('_', ' ').trim()
         } else {
             // Never drop a module just because its name doesn't follow the convention — fall back
             // to something usable rather than making a translation invisible.

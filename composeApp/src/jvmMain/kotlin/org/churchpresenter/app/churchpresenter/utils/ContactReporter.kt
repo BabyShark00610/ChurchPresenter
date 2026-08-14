@@ -16,6 +16,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.BuildConfig
 
+private const val HTTP_OK = 200
+private const val HTTP_TOO_MANY_REQUESTS = 429
+
 /**
  * Sends a contact / feedback message to the ChurchPresenter server, which relays
  * it by email.
@@ -99,8 +102,8 @@ object ContactReporter {
      * form, or to fix their input — split out from [submit] so it is testable without a socket.
      */
     internal fun classifyStatus(status: Int): Outcome? = when (status) {
-        200 -> Outcome.Success
-        429 -> Outcome.RateLimited
+        HTTP_OK -> Outcome.Success
+        HTTP_TOO_MANY_REQUESTS -> Outcome.RateLimited
         in 400..499 -> null
         else -> Outcome.Failure
     }

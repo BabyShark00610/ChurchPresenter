@@ -75,6 +75,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+private const val PREVIEW_DEBOUNCE_MS = 400L
+private const val COLUMN_WEIGHT = 0.48f
+private const val SELECTION_BAR_WIDTH = 4f
+private const val PREVIEW_ASPECT_W = 16f
+private const val PREVIEW_ASPECT_H = 9f
+
 @Composable
 fun LowerThirdSettingsTab(
     settings: AppSettings,
@@ -103,7 +109,7 @@ fun LowerThirdSettingsTab(
     // because a lower third's JSON runs to megabytes.
     var debouncedPath by remember { mutableStateOf(viewModel.importSourcePath()) }
     LaunchedEffect(selectedFile, lottieFolder) {
-        delay(400)
+        delay(PREVIEW_DEBOUNCE_MS)
         debouncedPath = viewModel.importSourcePath()
     }
     val previewJsonContent by produceState("", debouncedPath) {
@@ -142,7 +148,7 @@ fun LowerThirdSettingsTab(
         SettingsSection(
             title = stringResource(Res.string.lottie_files),
             modifier = Modifier
-                .weight(0.48f)
+                .weight(COLUMN_WEIGHT)
                 .widthIn(min = 400.dp, max = 450.dp)
                 .heightIn(min = 600.dp)
         ) {
@@ -189,7 +195,7 @@ fun LowerThirdSettingsTab(
                                     else MaterialTheme.colorScheme.surface
                                 )
                                 .drawBehind {
-                                    if (isSelected) drawRect(color = listAccentColor, size = Size(4f, size.height))
+                                    if (isSelected) drawRect(color = listAccentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                                 }
                                 .clickable { viewModel.selectFile(fileName) }
                                 .padding(vertical = 8.dp, horizontal = 12.dp),
@@ -232,7 +238,7 @@ fun LowerThirdSettingsTab(
         // ── Right panel — live preview ───────────────────────────────
         Column(
             modifier = Modifier
-                .weight(0.48f)
+                .weight(COLUMN_WEIGHT)
                 .widthIn(min = 400.dp, max = 450.dp)
                 .heightIn(min = 600.dp)
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
@@ -253,7 +259,7 @@ fun LowerThirdSettingsTab(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .aspectRatio(PREVIEW_ASPECT_W / PREVIEW_ASPECT_H)
                     .background(Color.Black, RoundedCornerShape(8.dp))
                     .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center

@@ -5,6 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
 
+private const val HEX_RADIX = 16
+private const val WINDOW_LINE_FIELDS = 4
+
 internal fun listOpenWindows(): List<WindowInfo> =
     openWindowsFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
 
@@ -41,7 +44,7 @@ internal fun parseXpropWindowIds(output: String): List<String> =
 internal fun xpropWindow(windowId: String, nameOutput: String): WindowInfo? {
     val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1)
     if (name.isNullOrBlank()) return null
-    return WindowInfo(name, windowId.removePrefix("0x").toLongOrNull(16) ?: 0L)
+    return WindowInfo(name, windowId.removePrefix("0x").toLongOrNull(HEX_RADIX) ?: 0L)
 }
 
 internal fun parseWmctrlWindows(output: String): List<WindowInfo> =
@@ -49,8 +52,8 @@ internal fun parseWmctrlWindows(output: String): List<WindowInfo> =
         .filter { it.isNotBlank() }
         .mapNotNull { line ->
             val parts = line.split(Regex("\\s+"), limit = 4)
-            if (parts.size >= 4) {
-                val id = parts[0].removePrefix("0x").toLongOrNull(16) ?: 0L
+            if (parts.size >= WINDOW_LINE_FIELDS) {
+                val id = parts[0].removePrefix("0x").toLongOrNull(HEX_RADIX) ?: 0L
                 val title = parts[3]
                 if (title.isNotBlank()) WindowInfo(title, id) else null
             } else null

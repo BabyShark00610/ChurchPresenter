@@ -151,6 +151,10 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
 import kotlinx.coroutines.launch
 
+private const val MENU_OFFSET_X = 100
+private const val MENU_OFFSET_Y = 60
+private const val HANDLE_VISIBLE_ALPHA = 0.01f
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaTab(
@@ -526,7 +530,7 @@ fun MediaTab(
                 if (volumeExpanded) {
                     Popup(
                         alignment = Alignment.BottomCenter,
-                        offset = IntOffset(100, 60),
+                        offset = IntOffset(MENU_OFFSET_X, MENU_OFFSET_Y),
                         onDismissRequest = { volumeExpanded = false },
                         properties = PopupProperties(focusable = true)
                     ) {
@@ -747,7 +751,7 @@ private fun MediaSeekBar(
                     )
                 }
                 // Hover handle — fades/scales in only on hover or drag
-                if (handleAlpha > 0.01f) {
+                if (handleAlpha > HANDLE_VISIBLE_ALPHA) {
                     val hx = (size.width * playedFraction).coerceIn(0f, size.width)
                     drawCircle(color = handleColor.copy(alpha = handleAlpha), radius = 6.dp.toPx() * handleScale, center = Offset(hx, cy))
                 }

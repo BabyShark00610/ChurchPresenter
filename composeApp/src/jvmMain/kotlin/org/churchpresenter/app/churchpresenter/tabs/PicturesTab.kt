@@ -150,6 +150,19 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 
+private const val MILLIS_PER_SECOND = 1000
+private const val CAPTION_FONT_SP = 12.5f
+private const val TINY_LABEL_FONT_SP = 8f
+private const val TINY_LABEL_LINE_SP = 9f
+private const val SMALL_LABEL_FONT_SP = 11.5f
+private const val MAX_AUTO_SCROLL_SECONDS = 30
+private const val MIN_TRANSITION_MS = 100
+private const val MAX_TRANSITION_MS = 2000
+private const val DRAGGED_ITEM_ALPHA = 0.35f
+private const val DRAGGED_ITEM_Z_INDEX = 10f
+private const val DRAGGED_ITEM_SCALE = 1.08f
+private const val DRAGGED_ITEM_ELEVATION = 16f
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun PicturesTab(
@@ -180,7 +193,7 @@ fun PicturesTab(
     // Auto-scroll effect
     LaunchedEffect(viewModel.isPlaying, viewModel.selectedImageIndex, viewModel.autoScrollInterval) {
         if (viewModel.isPlaying && viewModel.images.isNotEmpty()) {
-            delay((viewModel.autoScrollInterval * 1000).toLong())
+            delay((viewModel.autoScrollInterval * MILLIS_PER_SECOND).toLong())
             viewModel.nextImage()
         }
     }
@@ -303,7 +316,7 @@ fun PicturesTab(
                 Text(
                     stringResource(Res.string.select_folder),
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = TextUnit(12.5f, TextUnitType.Sp),
+                        fontSize = TextUnit(CAPTION_FONT_SP, TextUnitType.Sp),
                         fontWeight = FontWeight.SemiBold
                     )
                 )
@@ -558,8 +571,8 @@ fun PicturesTab(
                 ) {
                     Text(
                         text = stringResource(Res.string.auto_scroll_interval).uppercase(),
-                        fontSize = TextUnit(8f, TextUnitType.Sp),
-                        lineHeight = TextUnit(9f, TextUnitType.Sp),
+                        fontSize = TextUnit(TINY_LABEL_FONT_SP, TextUnitType.Sp),
+                        lineHeight = TextUnit(TINY_LABEL_LINE_SP, TextUnitType.Sp),
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.9.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -595,7 +608,7 @@ fun PicturesTab(
                             TextButton(
                                 shape = RoundedCornerShape(6.dp),
                                 onClick = {
-                                intervalInput.toIntOrNull()?.coerceIn(1, 30)?.let { v ->
+                                intervalInput.toIntOrNull()?.coerceIn(1, MAX_AUTO_SCROLL_SECONDS)?.let { v ->
                                     viewModel.autoScrollInterval = v.toFloat()
                                     onSettingsChange { s -> s.copy(pictureSettings = s.pictureSettings.copy(autoScrollInterval = v.toFloat())) }
                                 }
@@ -621,8 +634,8 @@ fun PicturesTab(
                 ) {
                     Text(
                         text = stringResource(Res.string.transition_duration).uppercase(),
-                        fontSize = TextUnit(8f, TextUnitType.Sp),
-                        lineHeight = TextUnit(9f, TextUnitType.Sp),
+                        fontSize = TextUnit(TINY_LABEL_FONT_SP, TextUnitType.Sp),
+                        lineHeight = TextUnit(TINY_LABEL_LINE_SP, TextUnitType.Sp),
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.9.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -658,7 +671,7 @@ fun PicturesTab(
                             TextButton(
                                 shape = RoundedCornerShape(6.dp),
                                 onClick = {
-                                transitionInput.toIntOrNull()?.coerceIn(100, 2000)?.let { v ->
+                                transitionInput.toIntOrNull()?.coerceIn(MIN_TRANSITION_MS, MAX_TRANSITION_MS)?.let { v ->
                                     viewModel.transitionDuration = v.toFloat()
                                     onSettingsChange { s -> s.copy(pictureSettings = s.pictureSettings.copy(transitionDuration = v.toFloat())) }
                                 }
@@ -725,7 +738,7 @@ fun PicturesTab(
                     Text(
                         text = stringResource(Res.string.pictures_arrow_key_hint, navLabel, rowLabel),
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = TextUnit(11.5f, TextUnitType.Sp)
+                            fontSize = TextUnit(SMALL_LABEL_FONT_SP, TextUnitType.Sp)
                         ),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                         maxLines = 1,
@@ -740,7 +753,7 @@ fun PicturesTab(
                 Text(
                     text = stringResource(Res.string.pictures_reorder_hint),
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = TextUnit(11.5f, TextUnitType.Sp)
+                        fontSize = TextUnit(SMALL_LABEL_FONT_SP, TextUnitType.Sp)
                     ),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                     maxLines = 1,
@@ -784,7 +797,7 @@ fun PicturesTab(
                         Column(
                             modifier = Modifier
                                 .animateItem()
-                                .alpha(if (isDraggingThis) 0.35f else 1f)
+                                .alpha(if (isDraggingThis) DRAGGED_ITEM_ALPHA else 1f)
                                 .border(2.dp, borderColor, RoundedCornerShape(8.dp))
                                 .clip(RoundedCornerShape(8.dp))
                                 .pointerInput(imageFile) {
@@ -900,7 +913,7 @@ fun PicturesTab(
                                 Text(
                                     text = imageFile.nameWithoutExtension,
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = TextUnit(11.5f, TextUnitType.Sp),
+                                        fontSize = TextUnit(SMALL_LABEL_FONT_SP, TextUnitType.Sp),
                                         fontWeight = if (isSelected) FontWeight.SemiBold
                                                      else FontWeight.Medium
                                     ),
@@ -921,13 +934,13 @@ fun PicturesTab(
                             Box(
                                 modifier = Modifier
                                     .size(150.dp)
-                                    .zIndex(10f)
+                                    .zIndex(DRAGGED_ITEM_Z_INDEX)
                                     .graphicsLayer {
                                         translationX = dragCursorInGrid.x - 75.dp.toPx()
                                         translationY = dragCursorInGrid.y - 75.dp.toPx()
-                                        scaleX = 1.08f
-                                        scaleY = 1.08f
-                                        shadowElevation = 16f
+                                        scaleX = DRAGGED_ITEM_SCALE
+                                        scaleY = DRAGGED_ITEM_SCALE
+                                        shadowElevation = DRAGGED_ITEM_ELEVATION
                                     }
                                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                                     .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))

@@ -78,6 +78,10 @@ import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.jetbrains.compose.resources.stringResource
 
+private const val DISABLED_ALPHA = 0.5f
+private val BROWSER_SOURCE_RESOLUTIONS = listOf(1280 to 720, 1920 to 1080, 2560 to 1440, 3840 to 2160)
+private val BROWSER_SOURCE_FRAME_RATES = listOf(10, 15, 24, 30, 60)
+
 /**
  * The "Browser Source outputs" card of the Projection settings tab — the OBS/vMix overlay outputs,
  * their resolution/fps and per-output content toggles.
@@ -243,7 +247,7 @@ SettingsSection(title = stringResource(Res.string.browser_source_outputs)) {
             // Dim (not disable) the rest of this card's controls when the output is off, so
             // it's obvious at a glance which outputs are inactive — the controls underneath
             // still work normally if the output is re-enabled.
-            Column(modifier = Modifier.alpha(if (output.browserSourceEnabled) 1f else 0.5f)) {
+            Column(modifier = Modifier.alpha(if (output.browserSourceEnabled) 1f else DISABLED_ALPHA)) {
             Row(verticalAlignment = Alignment.Top) {
                 Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     @OptIn(ExperimentalMaterial3Api::class)
@@ -316,7 +320,7 @@ SettingsSection(title = stringResource(Res.string.browser_source_outputs)) {
                             expanded = resolutionExpanded,
                             onDismissRequest = { resolutionExpanded = false }
                         ) {
-                            listOf(1280 to 720, 1920 to 1080, 2560 to 1440, 3840 to 2160).forEach { (w, h) ->
+                            BROWSER_SOURCE_RESOLUTIONS.forEach { (w, h) ->
                                 DropdownMenuItem(
                                     text = { Text("$w\u00d7$h", style = MaterialTheme.typography.bodySmall) },
                                     onClick = {
@@ -357,7 +361,7 @@ SettingsSection(title = stringResource(Res.string.browser_source_outputs)) {
                             expanded = fpsExpanded,
                             onDismissRequest = { fpsExpanded = false }
                         ) {
-                            listOf(10, 15, 24, 30, 60).forEach { fps ->
+                            BROWSER_SOURCE_FRAME_RATES.forEach { fps ->
                                 DropdownMenuItem(
                                     text = { Text(fps.toString(), style = MaterialTheme.typography.bodySmall) },
                                     onClick = {

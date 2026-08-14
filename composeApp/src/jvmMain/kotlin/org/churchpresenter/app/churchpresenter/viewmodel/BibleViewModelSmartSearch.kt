@@ -6,6 +6,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.data.BibleSearch
 
+private const val SCORE_EXACT = 100
+private const val SCORE_PREFIX = 80
+private const val SCORE_CONTAINS = 60
+
 /**
  * The unified search box: turning what was typed into a book, a reference or a text query, and
  * acting on it.
@@ -17,9 +21,9 @@ internal fun BibleViewModel.canonicalBookIdToIndex(canonicalId: Int): Int? =
 internal fun BibleViewModel.scoreNameMatch(name: String, norm: String, normNoSpace: String): Int {
     val nameNoSpace = name.replace(" ", "")
     return when {
-        name == norm || nameNoSpace == normNoSpace -> 100
-        name.startsWith(norm) || nameNoSpace.startsWith(normNoSpace) -> 80
-        name.contains(norm) || nameNoSpace.contains(normNoSpace) -> 60
+        name == norm || nameNoSpace == normNoSpace -> SCORE_EXACT
+        name.startsWith(norm) || nameNoSpace.startsWith(normNoSpace) -> SCORE_PREFIX
+        name.contains(norm) || nameNoSpace.contains(normNoSpace) -> SCORE_CONTAINS
         else -> 0
     }
 }

@@ -56,6 +56,16 @@ import churchpresenter.composeapp.generated.resources.recent
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
 
+private const val HUE_DEGREES = 360f
+private const val HUE_SECTOR_DEGREES = 60f
+private const val HUE_SECTOR_MAX = 5
+private const val HUE_SECTOR_BLUE_GREEN = 3
+private const val HUE_SECTOR_BLUE_RED = 4
+private const val HEX_ARGB_LENGTH = 8
+private const val HEX_RGB_LENGTH = 6
+private const val HEX_RADIX = 16
+private const val HEX_PAIR = 2
+
 /**
  * A beautiful Compose-native color picker dialog.
  *
@@ -320,7 +330,7 @@ internal fun HueBar(
             .pointerInput(barWidth) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    fun update(x: Float) = onHueChange((x / barWidth * 360f).coerceIn(0f, 360f))
+                    fun update(x: Float) = onHueChange((x / barWidth * HUE_DEGREES).coerceIn(0f, HUE_DEGREES))
                     update(down.position.x)
                     drag(down.id) { change ->
                         change.consume()
@@ -345,12 +355,12 @@ internal fun cpHsvToColor(h: Float, s: Float, v: Float): Color {
     val c = v * s
     val x = c * (1f - abs((h / 60f) % 2f - 1f))
     val m = v - c
-    val (r, g, b) = when ((h / 60f).toInt().coerceIn(0, 5)) {
+    val (r, g, b) = when ((h / HUE_SECTOR_DEGREES).toInt().coerceIn(0, HUE_SECTOR_MAX)) {
         0 -> Triple(c, x, 0f)
         1 -> Triple(x, c, 0f)
         2 -> Triple(0f, c, x)
-        3 -> Triple(0f, x, c)
-        4 -> Triple(x, 0f, c)
+        HUE_SECTOR_BLUE_GREEN -> Triple(0f, x, c)
+        HUE_SECTOR_BLUE_RED -> Triple(x, 0f, c)
         else -> Triple(c, 0f, x)
     }
     return Color(
@@ -386,14 +396,18 @@ fun cpColorToHex(color: Color): String {
 internal fun cpTryParseHex(hex: String): Color? = try {
     val clean = hex.trim().removePrefix("#")
     when (clean.length) {
-        8 -> {
+        HEX_ARGB_LENGTH -> {
             val a = clean.substring(0, 2).toInt(16)
             val r = clean.substring(2, 4).toInt(16)
             val g = clean.substring(4, 6).toInt(16)
             val b = clean.substring(6, 8).toInt(16)
             Color(r, g, b, a)
         }
-        6 -> Color(clean.substring(0, 2).toInt(16), clean.substring(2, 4).toInt(16), clean.substring(4, 6).toInt(16))
+        HEX_RGB_LENGTH -> Color(
+            clean.substring(0, 2).toInt(HEX_RADIX),
+            clean.substring(HEX_PAIR, HEX_PAIR * 2).toInt(HEX_RADIX),
+            clean.substring(HEX_PAIR * 2, HEX_RGB_LENGTH).toInt(HEX_RADIX)
+        )
         else -> null
     }
 } catch (_: Exception) { null }

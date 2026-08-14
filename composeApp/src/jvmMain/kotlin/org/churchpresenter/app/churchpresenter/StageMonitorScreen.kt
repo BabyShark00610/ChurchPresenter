@@ -86,6 +86,10 @@ import java.io.File
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
+private const val CLOCK_TICK_MS = 1000L
+private const val BOTTOM_MIDDLE_WEIGHT = 0.8f
+private const val SHADOW_OFFSET_DIVISOR = 10f
+
 /**
  * Full-screen stage monitor layout — 5 quadrant zones plus a full-screen zone, whose content is
  * routed per content type via settings (sm.contentZones), rather than hardcoded to a specific zone:
@@ -163,7 +167,7 @@ fun StageMonitorScreen(
     LaunchedEffect(Unit) {
         while (true) {
             clockText = formatClock()
-            delay(1000L)
+            delay(CLOCK_TICK_MS)
         }
     }
 
@@ -267,7 +271,7 @@ fun StageMonitorScreen(
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     StageZoneBox(sm, StageMonitorZone.BOTTOM_LEFT, renderData, mediaViewModel, ::contentFor, Modifier.weight(1f))
                     VerticalDivider(color = Color.DarkGray, thickness = 1.dp)
-                    StageZoneBox(sm, StageMonitorZone.BOTTOM_MIDDLE, renderData, mediaViewModel, ::contentFor, Modifier.weight(0.8f))
+                    StageZoneBox(sm, StageMonitorZone.BOTTOM_MIDDLE, renderData, mediaViewModel, ::contentFor, Modifier.weight(BOTTOM_MIDDLE_WEIGHT))
                     VerticalDivider(color = Color.DarkGray, thickness = 1.dp)
                     StageZoneBox(sm, StageMonitorZone.BOTTOM_RIGHT, renderData, mediaViewModel, ::contentFor, Modifier.weight(1f))
                 }
@@ -592,7 +596,7 @@ private fun buildTextStyle(
         textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None,
         shadow = if (shadow) Shadow(
             color = shadowColor.copy(alpha = shadowOpacity / 100f),
-            offset = Offset(shadowSize / 10f, shadowSize / 10f),
+            offset = Offset(shadowSize / SHADOW_OFFSET_DIVISOR, shadowSize / SHADOW_OFFSET_DIVISOR),
             blurRadius = shadowSize / 5f
         ) else null
     )

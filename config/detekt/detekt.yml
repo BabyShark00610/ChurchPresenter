@@ -19,7 +19,12 @@ style:
   MaxLineLength:
     active: false
   MagicNumber:
-    active: false
+    active: true
+    ignorePropertyDeclaration: true
+    ignoreLocalVariableDeclaration: true
+    ignoreAnnotation: true
+    ignoreEnums: true
+    ignoreRanges: true
   ReturnCount:
     active: false
   LoopWithTooManyJumpStatements:

@@ -27,6 +27,9 @@ import java.awt.Canvas
 import java.awt.Component
 import java.awt.Container
 import java.awt.Window as AwtWindow
+private const val RESCUE_ATTEMPTS = 10
+private const val RESCUE_INTERVAL_MS = 100L
+
 
 /**
  * Creates and drives the focus-lost rescue for one tab. [active] gates the banner and the
@@ -57,9 +60,9 @@ fun rememberFocusLostRescue(
     LaunchedEffect(state.windowFocused) {
         if (state.windowFocused && !state.tabHasFocus && state.active) {
             state.restoreAwtFocusOwner()
-            repeat(10) {
+            repeat(RESCUE_ATTEMPTS) {
                 requester.requestFocus()
-                delay(100)
+                delay(RESCUE_INTERVAL_MS)
                 if (state.tabHasFocus) return@LaunchedEffect
             }
         }

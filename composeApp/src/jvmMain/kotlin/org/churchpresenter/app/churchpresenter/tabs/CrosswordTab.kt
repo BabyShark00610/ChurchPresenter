@@ -74,6 +74,8 @@ import org.churchpresenter.app.churchpresenter.data.RenderedCrossword
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
+private const val SETTLE_MS = 500L
+
 private val CELL_SIZE = 36.dp
 private const val MAX_LEVELS = 100
 
@@ -128,7 +130,7 @@ fun CrosswordTab(
     fun saveProgress(levelIdx: Int, input: Map<Pair<Int, Int>, Char>) {
         saveJob?.cancel()
         saveJob = scope.launch {
-            delay(500)
+            delay(SETTLE_MS)
             val serialized = serializeInput(input)
             onSettingsChange { s ->
                 s.copy(crosswordProgress = s.crosswordProgress + (levelIdx to serialized))

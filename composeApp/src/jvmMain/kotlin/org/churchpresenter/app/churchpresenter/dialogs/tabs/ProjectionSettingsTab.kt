@@ -115,6 +115,8 @@ import java.awt.GraphicsEnvironment
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 
+private const val HALF_WIDTH = 0.5f
+
 /**
  * One physical display, reduced to what this tab needs of it: its index in the device list (which is
  * what gets stored as a `targetDisplay`), whether it is the primary monitor, and its bounds.
@@ -618,7 +620,7 @@ fun ProjectionSettingsTab(
 
         // Visual representation box with position fields
         Column(
-            modifier = Modifier.fillMaxWidth(0.5f),
+            modifier = Modifier.fillMaxWidth(HALF_WIDTH),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top position

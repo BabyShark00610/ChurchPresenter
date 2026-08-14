@@ -82,6 +82,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val SELECTION_BAR_WIDTH = 4f
+
 private val CROSS_REF_POPOVER_WIDTH = 380.dp
 
 private val CROSS_REF_POPOVER_MAX_HEIGHT = 420.dp
@@ -159,7 +161,7 @@ private fun CrossReferenceCard(
             .padding(horizontal = 6.dp, vertical = 2.dp)
             .background(background, RoundedCornerShape(9.dp))
             .drawBehind {
-                if (selected) drawRect(color = markerColor, size = Size(4f, size.height))
+                if (selected) drawRect(color = markerColor, size = Size(SELECTION_BAR_WIDTH, size.height))
             },
         verticalAlignment = Alignment.Top,
     ) {

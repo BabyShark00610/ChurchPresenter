@@ -65,6 +65,9 @@ import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
 
+private const val THUMB_ASPECT_W = 4f
+private const val THUMB_ASPECT_H = 3f
+
 private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "bmp")
 private val VIDEO_EXTENSIONS = setOf("mp4", "mov", "avi", "mkv", "webm")
 private const val BUNDLED_BACKGROUNDS_PATH = "files/backgrounds"
@@ -304,7 +307,7 @@ private fun LibraryThumbnail(
 
     Box(
         modifier = Modifier
-            .aspectRatio(4f / 3f)
+            .aspectRatio(THUMB_ASPECT_W / THUMB_ASPECT_H)
             .clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
