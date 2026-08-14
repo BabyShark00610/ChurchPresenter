@@ -21,7 +21,9 @@ style:
   MagicNumber:
     active: false
   ReturnCount:
-    active: false
+    active: true
+    max: 3
+    excludeGuardClauses: true
   LoopWithTooManyJumpStatements:
     active: false
   UnusedPrivateMember:

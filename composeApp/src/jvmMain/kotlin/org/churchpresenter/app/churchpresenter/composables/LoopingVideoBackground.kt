@@ -34,11 +34,10 @@ fun LoopingVideoBackground(
     videoPath: String,
     modifier: Modifier = Modifier
 ) {
-    if (videoPath.isBlank()) return
     val file = remember(videoPath) { File(videoPath) }
-    if (!file.exists()) return
-    if (!isVlcAvailable) return
-    if (CrashReporter.videoBackgroundsDisabled) return
+    val playable = videoPath.isNotBlank() && file.exists() &&
+        isVlcAvailable && !CrashReporter.videoBackgroundsDisabled
+    if (!playable) return
 
     val currentFrame = remember { mutableStateOf<ImageBitmap?>(null) }
     val frameVersion = remember { mutableStateOf(0L) }

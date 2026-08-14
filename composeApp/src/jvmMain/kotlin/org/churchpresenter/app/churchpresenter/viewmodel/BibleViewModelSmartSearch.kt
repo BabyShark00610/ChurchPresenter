@@ -67,11 +67,12 @@ internal fun BibleViewModel.resolveBook(token: String): Int = rankedBookMatches(
 internal fun BibleViewModel.resolveBookForLiveNav(token: String): Int {
     val norm = token.trim().lowercase()
     if (norm.isEmpty()) return -1
-    _books.value.indexOfFirst { it.lowercase() == norm }.takeIf { it >= 0 }?.let { return it }
+    val exact = _books.value.indexOfFirst { it.lowercase() == norm }
+    if (exact >= 0) return exact
     val ranked = rankedBookMatches(token)
-    val top = ranked.firstOrNull() ?: return -1
-    val topCount = ranked.count { it.second == top.second }
-    return if (topCount == 1) top.first else -1
+    val top = ranked.firstOrNull()
+    val topCount = ranked.count { it.second == top?.second }
+    return if (top != null && topCount == 1) top.first else -1
 }
 
 internal fun BibleViewModel.parseReference(input: String): SmartReference? {

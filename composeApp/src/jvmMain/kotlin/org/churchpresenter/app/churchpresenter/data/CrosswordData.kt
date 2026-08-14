@@ -240,18 +240,24 @@ object CrosswordLayoutEngine {
         var hasIntersection = false
         for (i in word.indices) {
             val (r, c) = if (dir == CrosswordDirection.ACROSS) row to col + i else row + i to col
-            val existing = grid[r to c]
-            if (existing != null) {
-                if (existing != word[i]) return false  // letter conflict
-                hasIntersection = true
-            } else {
-                // No parallel adjacency — perpendicular neighbours must be empty
-                val n1 = if (dir == CrosswordDirection.ACROSS) r - 1 to c else r to c - 1
-                val n2 = if (dir == CrosswordDirection.ACROSS) r + 1 to c else r to c + 1
-                if (grid.containsKey(n1) || grid.containsKey(n2)) return false
-            }
+            if (blocksLetter(grid, r, c, word[i], dir)) return false
+            if (grid.containsKey(r to c)) hasIntersection = true
         }
         return hasIntersection  // must share at least one letter with an existing word
+    }
+
+    private fun blocksLetter(
+        grid: Map<Pair<Int, Int>, Char>,
+        r: Int, c: Int,
+        letter: Char,
+        dir: CrosswordDirection
+    ): Boolean {
+        val existing = grid[r to c]
+        if (existing != null) return existing != letter  // letter conflict
+        // No parallel adjacency — perpendicular neighbours must be empty
+        val n1 = if (dir == CrosswordDirection.ACROSS) r - 1 to c else r to c - 1
+        val n2 = if (dir == CrosswordDirection.ACROSS) r + 1 to c else r to c + 1
+        return grid.containsKey(n1) || grid.containsKey(n2)
     }
 
     internal fun renderGrid(

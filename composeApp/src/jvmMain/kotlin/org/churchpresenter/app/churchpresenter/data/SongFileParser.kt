@@ -271,29 +271,22 @@ class SongFileParser {
         }
         private val cacheFile = File(System.getProperty("user.home"), ".churchpresenter/song_cache.json")
 
-        fun loadSongCache(storageDirectory: String): List<SongItem>? {
-            try {
-                if (!cacheFile.exists()) return null
-                val cache = cacheJson.decodeFromString<SongCache>(cacheFile.readText(StandardCharsets.UTF_8))
-                if (cache.storageDirectory != storageDirectory) return null
-                // Prefer cachedSongs (with timestamps); fall back to legacy songs list
-                return if (cache.cachedSongs.isNotEmpty()) cache.cachedSongs.map { it.song }
-                else cache.songs.ifEmpty { null }
-            } catch (_: Exception) {
-                return null
-            }
+        private fun readCacheFor(storageDirectory: String): SongCache? = try {
+            cacheJson.decodeFromString<SongCache>(cacheFile.readText(StandardCharsets.UTF_8))
+                .takeIf { it.storageDirectory == storageDirectory }
+        } catch (_: Exception) {
+            null
         }
 
-        fun loadCachedSongMap(storageDirectory: String): Map<String, CachedSong> {
-            try {
-                if (!cacheFile.exists()) return emptyMap()
-                val cache = cacheJson.decodeFromString<SongCache>(cacheFile.readText(StandardCharsets.UTF_8))
-                if (cache.storageDirectory != storageDirectory) return emptyMap()
-                return cache.cachedSongs.associateBy { it.song.sourceFile }
-            } catch (_: Exception) {
-                return emptyMap()
-            }
+        fun loadSongCache(storageDirectory: String): List<SongItem>? {
+            val cache = readCacheFor(storageDirectory) ?: return null
+            // Prefer cachedSongs (with timestamps); fall back to legacy songs list
+            return if (cache.cachedSongs.isNotEmpty()) cache.cachedSongs.map { it.song }
+            else cache.songs.ifEmpty { null }
         }
+
+        fun loadCachedSongMap(storageDirectory: String): Map<String, CachedSong> =
+            readCacheFor(storageDirectory)?.cachedSongs?.associateBy { it.song.sourceFile } ?: emptyMap()
 
         fun saveSongCache(storageDirectory: String, cachedSongs: List<CachedSong>) {
             try {

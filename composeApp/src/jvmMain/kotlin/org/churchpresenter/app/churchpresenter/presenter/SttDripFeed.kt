@@ -77,12 +77,14 @@ internal fun reanchorCursor(prevFull: String, prevRevealed: Int, newFull: String
     if (newFull.startsWith(shown)) return revealed
 
     val carriedOver = overlapLength(shown, newFull)
-    if (carriedOver > 0) return carriedOver
-    if (revealed == 0) return 0
-    // Nothing shown survived. If the new caption still picks up where the old one left off, the
-    // window merely scrolled past it and the rest has never been read — reveal it properly.
-    if (overlapLength(prevFull, newFull) > 0) return 0
-    return newFull.length
+    return when {
+        carriedOver > 0 -> carriedOver
+        revealed == 0 -> 0
+        // Nothing shown survived. If the new caption still picks up where the old one left off,
+        // the window merely scrolled past it and the rest has never been read — reveal it properly.
+        overlapLength(prevFull, newFull) > 0 -> 0
+        else -> newFull.length
+    }
 }
 
 /** The largest number of characters by which the tail of [a] and the head of [b] coincide. */

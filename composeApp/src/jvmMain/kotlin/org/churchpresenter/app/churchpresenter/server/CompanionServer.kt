@@ -77,6 +77,10 @@ import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
  * Data is pushed in via [updateSongs] / [updateSchedule].
  * Song-selection events from mobile arrive via [onSongSelected].
  */
+private const val MAX_UPLOAD_BYTES = 200L * 1024 * 1024
+
+private val UPLOADABLE_EXTENSIONS = setOf("pdf", "ppt", "pptx", "key")
+
 class CompanionServer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -1032,63 +1036,55 @@ class CompanionServer {
      * Try to parse a [ScheduleItem] from raw JSON using the flat [RemoteItemRequest] format first,
      * then fall back to the legacy sealed-class [AddToScheduleRequest] format.
      */
-    internal fun parseRemoteItem(body: String): ScheduleItem? {
-        // 1. Try flat format: {"item":{"songNumber":42,"title":"…","songbook":"…"}}
-        try {
-            val req = json.decodeFromString(RemoteItemRequest.serializer(), body)
-            val dto = req.item
-            // Handle picture identified by folder-id (companion app format).
-            // folderPath is null in this case — resolve via the cached catalog.
-            if (dto.folderId != null && dto.folderPath == null) {
-                val catalog = pictures.catalogs[dto.folderId]
-                if (catalog != null) {
-                    val safeId = dto.id.ifBlank { java.util.UUID.randomUUID().toString() }
-                    return ScheduleItem.PictureItem(
-                        id         = safeId,
-                        folderPath = catalog.folderPath,
-                        folderName = catalog.folderName,
-                        imageCount = catalog.imageTotal
-                    )
-                }
-            }
-            // Handle presentation identified by id/fileHash (companion app format).
-            // filePath is not sent — resolve via presentations._presentationFilePaths (populated by
-            // updatePresentation and updateSchedule) then fall back to _schedule scan.
-            // NOTE: mobile may omit the "type" field when it equals the default ("presentation"),
-            // so also accept type==null as long as the id resolves in presentations._presentationFilePaths.
-            val looksLikePresentation = dto.type == "presentation" || dto.type == null
-            val noExplicitTarget = dto.filePath == null && dto.folderId == null
-            if (noExplicitTarget && dto.id.isNotBlank() && looksLikePresentation) {
-                val filePath = presentations._presentationFilePaths[dto.id]
-                    ?: _schedule.value.firstOrNull { s ->
-                        s.type == "presentation" && (
-                            s.id == dto.id ||
-                            s.filePath?.hashCode()?.toUInt()?.toString(16) == dto.id
-                        )
-                    }?.filePath
-                if (filePath != null) {
-                    val catalog = presentations._presentationCatalogs[dto.id]
-                    return ScheduleItem.PresentationItem(
-                        id         = java.util.UUID.randomUUID().toString(),
-                        filePath   = filePath,
-                        fileName   = catalog?.fileName ?: dto.title ?: "",
-                        slideCount = catalog?.slideTotal ?: 0,
-                        fileType   = catalog?.fileType ?: ""
-                    )
-                }
-            }
-            val item = dto.toScheduleItem()
-            if (item != null) return item
-        } catch (_: Exception) {
-            // ignore — try legacy format below
-        }
-        // 2. Fall back to legacy sealed-class format with discriminator
-        try {
-            return json.decodeFromString(AddToScheduleRequest.serializer(), body).item
-        } catch (_: Exception) {
-            // ignore
-        }
-        return null
+    internal fun parseRemoteItem(body: String): ScheduleItem? =
+        // 1. flat format: {"item":{"songNumber":42,"title":"…","songbook":"…"}}
+        runCatching { parseFlatRemoteItem(body) }.getOrNull()
+        // 2. legacy sealed-class format with discriminator
+            ?: runCatching { json.decodeFromString(AddToScheduleRequest.serializer(), body).item }.getOrNull()
+
+    private fun parseFlatRemoteItem(body: String): ScheduleItem? {
+        val dto = json.decodeFromString(RemoteItemRequest.serializer(), body).item
+        return pictureItemFor(dto) ?: presentationItemFor(dto) ?: dto.toScheduleItem()
+    }
+
+    // Picture identified by folder-id (companion app format): folderPath is null in that case —
+    // resolve it via the cached catalog.
+    private fun pictureItemFor(dto: RemoteItemDto): ScheduleItem.PictureItem? {
+        if (dto.folderId == null || dto.folderPath != null) return null
+        val catalog = pictures.catalogs[dto.folderId] ?: return null
+        return ScheduleItem.PictureItem(
+            id         = dto.id.ifBlank { java.util.UUID.randomUUID().toString() },
+            folderPath = catalog.folderPath,
+            folderName = catalog.folderName,
+            imageCount = catalog.imageTotal
+        )
+    }
+
+    // Presentation identified by id/fileHash (companion app format): filePath is not sent — resolve
+    // via presentations._presentationFilePaths (populated by updatePresentation and updateSchedule)
+    // then fall back to a _schedule scan.
+    // NOTE: mobile may omit the "type" field when it equals the default ("presentation"), so also
+    // accept type==null as long as the id resolves in presentations._presentationFilePaths.
+    private fun presentationItemFor(dto: RemoteItemDto): ScheduleItem.PresentationItem? {
+        val looksLikePresentation = dto.type == "presentation" || dto.type == null
+        val noExplicitTarget = dto.filePath == null && dto.folderId == null
+        if (!noExplicitTarget || dto.id.isBlank() || !looksLikePresentation) return null
+        val filePath = presentations._presentationFilePaths[dto.id]
+            ?: _schedule.value.firstOrNull { s ->
+                s.type == "presentation" && (
+                    s.id == dto.id ||
+                    s.filePath?.hashCode()?.toUInt()?.toString(16) == dto.id
+                )
+            }?.filePath
+            ?: return null
+        val catalog = presentations._presentationCatalogs[dto.id]
+        return ScheduleItem.PresentationItem(
+            id         = java.util.UUID.randomUUID().toString(),
+            filePath   = filePath,
+            fileName   = catalog?.fileName ?: dto.title ?: "",
+            slideCount = catalog?.slideTotal ?: 0,
+            fileType   = catalog?.fileType ?: ""
+        )
     }
 
     internal suspend fun checkApiKey(call: ApplicationCall): Boolean {
@@ -1138,33 +1134,42 @@ class CompanionServer {
         return approved
     }
 
+    /** The uploaded file's safe name and bytes, or null once the rejection has been responded with. */
+    private suspend fun receiveUploadedFile(call: ApplicationCall): Pair<String, ByteArray>? {
+        val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
+        if (contentLength > MAX_UPLOAD_BYTES) {
+            call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max 200 MB)"}""")
+            return null
+        }
+        val parsed = json.parseToJsonElement(call.receiveText()) as? JsonObject
+        val name   = (parsed?.get("name") as? JsonPrimitive)?.content
+        val data   = (parsed?.get("data") as? JsonPrimitive)?.content
+        if (name.isNullOrBlank() || data.isNullOrBlank()) {
+            call.respond(HttpStatusCode.BadRequest, """{"error":"name and data are required"}""")
+            return null
+        }
+        return decodeUploadedFile(call, name, data)
+    }
+
+    private suspend fun decodeUploadedFile(call: ApplicationCall, name: String, data: String): Pair<String, ByteArray>? {
+        val safeName = File(name).name.ifBlank { "upload.pdf" }
+        val ext = safeName.substringAfterLast('.', "").lowercase()
+        if (ext !in UPLOADABLE_EXTENSIONS) {
+            call.respond(HttpStatusCode.UnsupportedMediaType, """{"error":"unsupported file type: $ext"}""")
+            return null
+        }
+        val base64Match = Regex("^data:[^;]+;base64,(.+)$").find(data)
+        if (base64Match == null) {
+            call.respond(HttpStatusCode.BadRequest, """{"error":"data must be a base64 data URI"}""")
+            return null
+        }
+        return safeName to Base64.getDecoder().decode(base64Match.groupValues[1])
+    }
+
     internal suspend fun handlePresentationFileUpload(call: ApplicationCall) {
         try {
-            val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
-            if (contentLength > 200 * 1024 * 1024) {
-                call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max 200 MB)"}""")
-                return
-            }
-            val body   = call.receiveText()
-            val parsed = json.parseToJsonElement(body) as? JsonObject
-            val name   = (parsed?.get("name") as? JsonPrimitive)?.content
-            val data   = (parsed?.get("data") as? JsonPrimitive)?.content
-            if (name.isNullOrBlank() || data.isNullOrBlank()) {
-                call.respond(HttpStatusCode.BadRequest, """{"error":"name and data are required"}""")
-                return
-            }
-            val safeName = File(name).name.ifBlank { "upload.pdf" }
+            val (safeName, fileBytes) = receiveUploadedFile(call) ?: return
             val ext = safeName.substringAfterLast('.', "").lowercase()
-            if (ext !in setOf("pdf", "ppt", "pptx", "key")) {
-                call.respond(HttpStatusCode.UnsupportedMediaType, """{"error":"unsupported file type: $ext"}""")
-                return
-            }
-            val base64Match = Regex("^data:[^;]+;base64,(.+)$").find(data)
-            if (base64Match == null) {
-                call.respond(HttpStatusCode.BadRequest, """{"error":"data must be a base64 data URI"}""")
-                return
-            }
-            val fileBytes = Base64.getDecoder().decode(base64Match.groupValues[1])
             val uploadDir = File(System.getProperty("user.home"), ".churchpresenter/device_presentations").also { it.mkdirs() }
             val uniqueName = if (File(uploadDir, safeName).exists()) {
                 val ts   = System.currentTimeMillis()

@@ -43,16 +43,17 @@ object ChordSheetImporter {
      * themselves come from [SongSectionWords], shared with the parser and the preview's colouring.
      */
     fun sectionMarkerOf(line: String, verseCounter: () -> Int): String? {
+        if (line.isBlank()) return null
         val t = line.trim()
-        if (t.isEmpty()) return null
         // Already in the app's own form — take it as it stands.
         if (ChordTransposer.isSectionHeader(t)) return t
         val group = SongSectionWords.looseGroupOf(t) ?: return null
         val name = SongSectionWords.CANONICAL.getValue(group)
-        if (group == SongSectionWordGroup.CHORUS) return "{$name}"
-        if (group != SongSectionWordGroup.VERSE) return "[$name]"
-        val number = Regex("\\d+").find(t)?.value?.toIntOrNull() ?: verseCounter()
-        return "[$name $number]"
+        return when (group) {
+            SongSectionWordGroup.CHORUS -> "{$name}"
+            SongSectionWordGroup.VERSE -> "[$name ${Regex("\\d+").find(t)?.value?.toIntOrNull() ?: verseCounter()}]"
+            else -> "[$name]"
+        }
     }
 
     /**

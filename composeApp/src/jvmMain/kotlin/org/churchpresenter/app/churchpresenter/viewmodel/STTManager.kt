@@ -424,14 +424,7 @@ class STTManager {
         TrainingDataLogger.cleanupOldLogsOnce()
 
         val client = HttpClient.newHttpClient()
-        val statusRequest = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/api/transcription/status"))
-            .GET()
-            .build()
-        val statusResponse = client.send(statusRequest, HttpResponse.BodyHandlers.ofString())
-        if (statusResponse.statusCode() != 200) return
-        val state = JSONObject(statusResponse.body()).optJSONObject("state") ?: return
-        val dbName = state.stringOrNull("db_name") ?: return
+        val dbName = remoteDbName(client, baseUrl) ?: return
 
         val encodedPath = URLEncoder.encode(dbName, "UTF-8")
         val downloadRequest = HttpRequest.newBuilder()
@@ -446,6 +439,16 @@ class STTManager {
         val tmp = File(logDir, "${target.name}.tmp")
         tmp.writeBytes(downloadResponse.body())
         Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    private fun remoteDbName(client: HttpClient, baseUrl: String): String? {
+        val statusRequest = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/api/transcription/status"))
+            .GET()
+            .build()
+        val statusResponse = client.send(statusRequest, HttpResponse.BodyHandlers.ofString())
+        if (statusResponse.statusCode() != 200) return null
+        return JSONObject(statusResponse.body()).optJSONObject("state")?.stringOrNull("db_name")
     }
 
     fun dispose() {

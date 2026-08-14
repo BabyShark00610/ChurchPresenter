@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Paths
 
+private const val SPS_FIELD_SEPARATOR = "#\$#"
+
+private const val SPS_MIN_FIELDS = 6
 
 class Songs {
     private val items = mutableStateListOf<SongItem>()
@@ -295,89 +298,51 @@ class Songs {
     }
 
     fun saveSongToFile(originalSong: SongItem, updatedSong: SongItem, storageDirectory: String): Boolean {
-        try {
-            if (storageDirectory.isEmpty()) {
-                return false
+        if (storageDirectory.isEmpty()) return false
+        val sourceFile = updatedSong.sourceFile.ifEmpty { originalSong.sourceFile }
+        return try {
+            if (sourceFile.isNotEmpty()) {
+                SongFileParser().writeSongFile(updatedSong.copy(sourceFile = sourceFile), sourceFile)
+                true
+            } else {
+                val dir = java.io.File(storageDirectory)
+                val spsFiles = dir.listFiles { file ->
+                    file.extension.lowercase() == Constants.EXTENSION_SPS
+                } ?: emptyArray()
+                spsFiles.any { updateSongInFile(it.absolutePath, originalSong, updatedSong) }
             }
-
-            // If the song has a sourceFile (.song format), save directly to that file
-            if (updatedSong.sourceFile.isNotEmpty()) {
-                val parser = SongFileParser()
-                parser.writeSongFile(updatedSong, updatedSong.sourceFile)
-                return true
-            }
-            if (originalSong.sourceFile.isNotEmpty()) {
-                val parser = SongFileParser()
-                parser.writeSongFile(updatedSong.copy(sourceFile = originalSong.sourceFile), originalSong.sourceFile)
-                return true
-            }
-
-            val dir = java.io.File(storageDirectory)
-            if (!dir.exists() || !dir.isDirectory) {
-                return false
-            }
-
-            val spsFiles = dir.listFiles { file ->
-                file.extension.lowercase() == Constants.EXTENSION_SPS
-            } ?: emptyArray()
-
-            for (file in spsFiles) {
-                if (updateSongInFile(file.absolutePath, originalSong, updatedSong)) {
-                    return true
-                }
-            }
-
-            return false
         } catch (e: Exception) {
-            return false
+            false
         }
     }
 
-    /**
-     * Update a song in a specific .sps file
-     */
-    private fun updateSongInFile(filePath: String, originalSong: SongItem, updatedSong: SongItem): Boolean {
-        try {
-            val path = Paths.get(filePath)
-            if (!Files.exists(path)) {
-                return false
-            }
-
-            val lines = Files.readAllLines(path, StandardCharsets.UTF_8).toMutableList()
-            var songUpdated = false
-
-            for (i in lines.indices) {
-                val line = lines[i]
-
-                if (line.startsWith("##") || line.isBlank()) continue
-
-                val parts = line.split("#\$#")
-                if (parts.size >= 6) {
-                    val number = parts[0]
-                    val title = parts[1]
-
-                    if (number == originalSong.number && title == originalSong.title) {
-                        val lyricsText = formatLyricsForSps(updatedSong.lyrics)
-                        val categoryId = if (parts.size >= 3) parts[2] else ""
-
-                        val updatedLine = "${updatedSong.number}#\$#${updatedSong.title}#\$#$categoryId#\$#${updatedSong.tune}#\$#${updatedSong.author}#\$#${updatedSong.composer}#\$#$lyricsText"
-
-                        lines[i] = updatedLine
-                        songUpdated = true
-                        break
-                    }
-                }
-            }
-
-            if (songUpdated) {
-                Files.write(path, lines, StandardCharsets.UTF_8)
-                return true
-            }
-
-            return false
-        } catch (e: Exception) {
-            return false
+    /** Update a song in a specific .sps file */
+    private fun updateSongInFile(filePath: String, originalSong: SongItem, updatedSong: SongItem): Boolean = try {
+        val path = Paths.get(filePath)
+        val lines = Files.readAllLines(path, StandardCharsets.UTF_8).toMutableList()
+        val index = lines.indexOfFirst { isSpsLineFor(it, originalSong) }
+        if (index >= 0) {
+            lines[index] = spsLineFor(lines[index], updatedSong)
+            Files.write(path, lines, StandardCharsets.UTF_8)
         }
+        index >= 0
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun isSpsLineFor(line: String, song: SongItem): Boolean {
+        if (line.startsWith("##") || line.isBlank()) return false
+        val parts = line.split(SPS_FIELD_SEPARATOR)
+        return parts.size >= SPS_MIN_FIELDS && parts[0] == song.number && parts[1] == song.title
+    }
+
+    private fun spsLineFor(existingLine: String, song: SongItem): String {
+        val parts = existingLine.split(SPS_FIELD_SEPARATOR)
+        val categoryId = parts.getOrElse(2) { "" }
+        val lyricsText = formatLyricsForSps(song.lyrics)
+        return listOf(
+            song.number, song.title, categoryId, song.tune, song.author, song.composer, lyricsText
+        ).joinToString(SPS_FIELD_SEPARATOR)
     }
 
     /**
