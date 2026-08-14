@@ -30,7 +30,7 @@ style:
     max: 3
     excludeGuardClauses: true
   LoopWithTooManyJumpStatements:
-    active: false
+    active: true
   UnusedPrivateMember:
     active: true
 

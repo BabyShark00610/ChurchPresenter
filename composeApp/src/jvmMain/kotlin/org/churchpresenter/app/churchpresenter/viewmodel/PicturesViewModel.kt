@@ -250,15 +250,21 @@ class PicturesViewModel(
         scope.launch {
             for (index in 0 until imageCount) {
                 val cacheFile = File(cacheDir, "image_%04d.jpg".format(index))
-                if (!cacheFile.exists()) {
-                    val bytes = fetchBytes(index) ?: continue
-                    val tmp = File(cacheDir, "${cacheFile.name}.tmp")
-                    tmp.writeBytes(bytes)
-                    if (!tmp.renameTo(cacheFile)) { tmp.delete(); continue }
+                var cached = cacheFile.exists()
+                if (!cached) {
+                    val bytes = fetchBytes(index)
+                    if (bytes != null) {
+                        val tmp = File(cacheDir, "${cacheFile.name}.tmp")
+                        tmp.writeBytes(bytes)
+                        cached = tmp.renameTo(cacheFile)
+                        if (!cached) tmp.delete()
+                    }
                 }
-                _images.add(cacheFile)
-                decodeThumbnail(cacheFile)
-                presenterManager?.let { syncWithPresenter(it) }
+                if (cached) {
+                    _images.add(cacheFile)
+                    decodeThumbnail(cacheFile)
+                    presenterManager?.let { syncWithPresenter(it) }
+                }
             }
         }
     }
@@ -478,10 +484,9 @@ class PicturesViewModel(
                     var changed = false
                     for (event in key.pollEvents()) {
                         val kind = event.kind()
-                        if (kind == StandardWatchEventKinds.OVERFLOW) continue
                         val fileName = event.context().toString()
                         val ext = fileName.substringAfterLast('.', "").lowercase()
-                        if (ext !in imageExtensions) continue
+                        if (kind == StandardWatchEventKinds.OVERFLOW || ext !in imageExtensions) continue
 
                         val file = File(folder, fileName)
                         when (kind) {

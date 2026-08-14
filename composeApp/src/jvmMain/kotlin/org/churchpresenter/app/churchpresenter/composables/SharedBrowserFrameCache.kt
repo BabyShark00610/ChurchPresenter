@@ -448,38 +448,34 @@ object SharedBrowserFrameCache {
                     put("format", "png")
                 })
 
-                if (response == null) {
-                    if (frameCount == 0) {
-                        System.err.println("[BrowserSource] captureScreenshot returned null")
-                    }
-                    delay(entry.captureIntervalMs)
-                    continue
-                }
-
-                val data = response["data"]?.jsonPrimitive?.contentOrNull
+                val data = response?.get("data")?.jsonPrimitive?.contentOrNull
                 if (data == null) {
                     if (frameCount == 0) {
-                        System.err.println("[BrowserSource] captureScreenshot response has no 'data': ${response.keys}")
-                    }
-                    delay(entry.captureIntervalMs)
-                    continue
-                }
-
-                val pngBytes = withContext(Dispatchers.IO) {
-                    Base64.getDecoder().decode(data)
-                }
-                val img = withContext(Dispatchers.IO) {
-                    ImageIO.read(ByteArrayInputStream(pngBytes))
-                }
-                if (img != null) {
-                    entry.frame.value = img.toComposeImageBitmap()
-                    frameCount++
-                    if (frameCount == 1) {
-                        System.err.println("[BrowserSource] First frame captured: ${img.width}x${img.height}")
+                        if (response == null) {
+                            System.err.println("[BrowserSource] captureScreenshot returned null")
+                        } else {
+                            System.err.println(
+                                "[BrowserSource] captureScreenshot response has no 'data': ${response.keys}"
+                            )
+                        }
                     }
                 } else {
-                    if (frameCount == 0) {
-                        System.err.println("[BrowserSource] ImageIO.read returned null (${pngBytes.size} bytes)")
+                    val pngBytes = withContext(Dispatchers.IO) {
+                        Base64.getDecoder().decode(data)
+                    }
+                    val img = withContext(Dispatchers.IO) {
+                        ImageIO.read(ByteArrayInputStream(pngBytes))
+                    }
+                    if (img != null) {
+                        entry.frame.value = img.toComposeImageBitmap()
+                        frameCount++
+                        if (frameCount == 1) {
+                            System.err.println("[BrowserSource] First frame captured: ${img.width}x${img.height}")
+                        }
+                    } else {
+                        if (frameCount == 0) {
+                            System.err.println("[BrowserSource] ImageIO.read returned null (${pngBytes.size} bytes)")
+                        }
                     }
                 }
             } catch (e: CancellationException) {
