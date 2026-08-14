@@ -21,6 +21,8 @@ import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
 import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 
+private const val SUMMARY_PREVIEW_CHARS = 60
+
 /**
  * The companion WebSocket: snapshot on connect, then the live command/event stream.
  *
@@ -239,7 +241,7 @@ internal fun Route.webSocketRoute(
                                         scope.launch { server.onSelectBibleVerse.emit(req) }
                                         val ref = if (req.verseRange.isNotEmpty()) "${req.bookName} ${req.chapter}:${req.verseRange}"
                                                   else "${req.bookName} ${req.chapter}:${req.verseNumber}"
-                                        scope.launch { server.onInstantAction.emit(CompanionServer.RemoteInstantAction("present", ref, req.verseText.take(60), wsClientId)) }
+                                        scope.launch { server.onInstantAction.emit(CompanionServer.RemoteInstantAction("present", ref, req.verseText.take(SUMMARY_PREVIEW_CHARS), wsClientId)) }
                                         sendCommandAck(msg.commandId, ok = true)
                                     }
                                     Constants.WS_CMD_CLEAR -> {

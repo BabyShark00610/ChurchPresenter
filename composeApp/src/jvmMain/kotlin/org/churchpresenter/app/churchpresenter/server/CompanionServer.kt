@@ -67,6 +67,14 @@ import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogSide
 import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
 import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
 
+private const val PORT_SCAN_RANGE = 40
+private const val WEBSOCKET_PING_PERIOD_MS = 10_000L
+private const val WEBSOCKET_TIMEOUT_MS = 20_000L
+private const val SHUTDOWN_GRACE_MS = 1_000L
+private const val SHUTDOWN_TIMEOUT_MS = 2_000L
+private const val MAX_UPLOAD_MB = 200
+private const val BYTES_PER_MB = 1024 * 1024
+
 // ── CompanionServer ───────────────────────────────────────────────────────────
 
 /**
@@ -77,8 +85,6 @@ import org.churchpresenter.app.churchpresenter.viewmodel.QAManager
  * Data is pushed in via [updateSongs] / [updateSchedule].
  * Song-selection events from mobile arrive via [onSongSelected].
  */
-private const val MAX_UPLOAD_BYTES = 200L * 1024 * 1024
-
 private val UPLOADABLE_EXTENSIONS = setOf("pdf", "ppt", "pptx", "key")
 
 class CompanionServer {
@@ -923,7 +929,7 @@ class CompanionServer {
     }
 
     private fun findFreePort(startPort: Int): Int {
-        for (candidate in startPort until startPort + 40) {
+        for (candidate in startPort until startPort + PORT_SCAN_RANGE) {
             if (isPortFree(candidate)) return candidate
         }
         return startPort
@@ -943,8 +949,8 @@ class CompanionServer {
             // ghost entries from _connectedInstanceLinkFollowers instead of leaving half-open
             // TCP sessions "connected" indefinitely.
             install(WebSockets) {
-                pingPeriodMillis = 10_000
-                timeoutMillis = 20_000
+                pingPeriodMillis = WEBSOCKET_PING_PERIOD_MS
+                timeoutMillis = WEBSOCKET_TIMEOUT_MS
             }
             install(PartialContent)
             install(CORS) {
@@ -1018,7 +1024,7 @@ class CompanionServer {
 
     fun stop() {
         tunnelManager.stop()
-        server?.stop(1_000, 2_000)
+        server?.stop(SHUTDOWN_GRACE_MS, SHUTDOWN_TIMEOUT_MS)
         server = null
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancelChildren()
         _isRunning.value = false
@@ -1137,7 +1143,7 @@ class CompanionServer {
     /** The uploaded file's safe name and bytes, or null once the rejection has been responded with. */
     private suspend fun receiveUploadedFile(call: ApplicationCall): Pair<String, ByteArray>? {
         val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
-        if (contentLength > MAX_UPLOAD_BYTES) {
+        if (contentLength > MAX_UPLOAD_MB * BYTES_PER_MB) {
             call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max 200 MB)"}""")
             return null
         }

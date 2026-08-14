@@ -32,6 +32,9 @@ import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 
+private const val MIN_SOURCE_SIZE = 0.01f
+private const val MAX_ROTATION_DEGREES = 180f
+
 @Composable
 fun SourcePropertiesPanel(
     source: SceneSource,
@@ -71,14 +74,14 @@ fun SourcePropertiesPanel(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             PropertyFloatField(stringResource(Res.string.canvas_transform_w), t.width, Modifier.weight(1f)) { v ->
-                onSourceUpdate(updateTransform(source, t.copy(width = v.coerceAtLeast(0.01f))))
+                onSourceUpdate(updateTransform(source, t.copy(width = v.coerceAtLeast(MIN_SOURCE_SIZE))))
             }
             PropertyFloatField(stringResource(Res.string.canvas_transform_h), t.height, Modifier.weight(1f)) { v ->
-                onSourceUpdate(updateTransform(source, t.copy(height = v.coerceAtLeast(0.01f))))
+                onSourceUpdate(updateTransform(source, t.copy(height = v.coerceAtLeast(MIN_SOURCE_SIZE))))
             }
         }
 
-        PropertySliderWithInput(stringResource(Res.string.canvas_rotation), t.rotation, -180f, 180f, "°") { v ->
+        PropertySliderWithInput(stringResource(Res.string.canvas_rotation), t.rotation, -MAX_ROTATION_DEGREES, MAX_ROTATION_DEGREES, "°") { v ->
             onSourceUpdate(updateTransform(source, t.copy(rotation = v)))
         }
         PropertySlider(stringResource(Res.string.canvas_opacity), t.opacity, 0f, 1f) { v ->

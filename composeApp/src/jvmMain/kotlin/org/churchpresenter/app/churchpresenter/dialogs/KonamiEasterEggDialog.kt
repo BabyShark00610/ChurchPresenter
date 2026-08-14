@@ -43,6 +43,9 @@ import org.jetbrains.compose.resources.stringResource
 import kotlin.math.sin
 import kotlin.random.Random
 
+private const val WOBBLE_FREQUENCY = 20f
+private const val CONFETTI_HEIGHT_DIVISOR = 4
+
 private data class ConfettiParticle(
     val x: Float,
     val y: Float,
@@ -155,7 +158,7 @@ private fun ConfettiOverlay() {
                 particles = particles.map { p ->
                     val newY = p.y + p.vy * dt
                     ConfettiParticle(
-                        x = p.x + p.vx * dt + sin(newY * 20f + p.wobble) * 0.001f,
+                        x = p.x + p.vx * dt + sin(newY * WOBBLE_FREQUENCY + p.wobble) * 0.001f,
                         y = if (newY > 1.1f) -0.05f else newY,
                         vx = p.vx,
                         vy = p.vy,
@@ -177,7 +180,7 @@ private fun ConfettiOverlay() {
             rotate(degrees = p.rotation, pivot = Offset(px, py)) {
                 drawRect(
                     color = p.color.copy(alpha = 0.85f),
-                    topLeft = Offset(px - p.size / 2, py - p.size / 4),
+                    topLeft = Offset(px - p.size / 2, py - p.size / CONFETTI_HEIGHT_DIVISOR),
                     size = Size(p.size, p.size / 2)
                 )
             }

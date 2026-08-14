@@ -2,6 +2,8 @@ package org.churchpresenter.app.churchpresenter.data
 
 import java.util.Base64
 
+private const val CLUE_LINE_FIELDS = 4
+
 // XOR key shared with the ChurchPresenter-Cross encoder app
 internal const val CROSSWORD_XOR_KEY = "CHURCHPRESENTER"
 
@@ -86,7 +88,7 @@ object CrosswordDecoder {
                 line.equals("LAYOUT:", ignoreCase = true) -> inLayout = true
                 inLayout -> {
                     val parts = line.split(" ")
-                    if (parts.size == 4) {
+                    if (parts.size == CLUE_LINE_FIELDS) {
                         val num = parts[0].toIntOrNull() ?: continue
                         val dir = when (parts[1].uppercase()) {
                             "ACROSS" -> CrosswordDirection.ACROSS

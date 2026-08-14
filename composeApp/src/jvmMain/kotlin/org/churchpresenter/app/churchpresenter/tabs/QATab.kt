@@ -144,6 +144,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private const val SORT_BY_VOTES = 3
+private const val DISPLAY_PREVIEW_CHARS = 50
+private const val FILTER_QUEUED = 3
+private const val FILTER_FINISHED = 4
+private const val FILTER_DENIED = 5
+private const val FILTER_HISTORY = 6
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QATab(
@@ -210,7 +217,7 @@ fun QATab(
             0 -> sortedByDescending { timestamp(it) }
             1 -> sortedBy { timestamp(it) }
             2 -> sortedByDescending { voteCount(it) }
-            3 -> sortedBy { voteCount(it) }
+            SORT_BY_VOTES -> sortedBy { voteCount(it) }
             else -> this
         }
     }
@@ -455,7 +462,7 @@ fun QATab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        stringResource(Res.string.qa_displaying, displayedQuestion.text.take(50)),
+                        stringResource(Res.string.qa_displaying, displayedQuestion.text.take(DISPLAY_PREVIEW_CHARS)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
@@ -483,10 +490,10 @@ fun QATab(
                             0 -> if (sessionActive) stringResource(Res.string.qa_waiting) else stringResource(Res.string.qa_start_session_hint)
                             1 -> if (sessionActive) stringResource(Res.string.qa_waiting) else stringResource(Res.string.qa_start_session_hint)
                             2 -> stringResource(Res.string.qa_no_approved)
-                            3 -> if (sessionActive) stringResource(Res.string.qa_waiting) else stringResource(Res.string.qa_start_session_hint)
-                            4 -> stringResource(Res.string.qa_no_finished)
-                            5 -> stringResource(Res.string.qa_no_denied)
-                            6 -> stringResource(Res.string.qa_no_history)
+                            FILTER_QUEUED -> if (sessionActive) stringResource(Res.string.qa_waiting) else stringResource(Res.string.qa_start_session_hint)
+                            FILTER_FINISHED -> stringResource(Res.string.qa_no_finished)
+                            FILTER_DENIED -> stringResource(Res.string.qa_no_denied)
+                            FILTER_HISTORY -> stringResource(Res.string.qa_no_history)
                             else -> ""
                         },
                         style = MaterialTheme.typography.bodyLarge,
@@ -495,7 +502,7 @@ fun QATab(
                 }
             } else {
                 // History tab actions bar
-                if (selectedFilter == 6 && filteredQuestions.isNotEmpty()) {
+                if (selectedFilter == FILTER_HISTORY && filteredQuestions.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

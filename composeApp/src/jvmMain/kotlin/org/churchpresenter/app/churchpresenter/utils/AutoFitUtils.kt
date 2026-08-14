@@ -7,6 +7,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 
+private const val SECTION_INDICATOR_SPACER_PX = 4
+
 /**
  * The floor the two searches in this file settle on, in settings units at the 1920×1080 reference
  * resolution. Named rather than repeated at the five places that had it inline.
@@ -121,7 +123,7 @@ fun calculateAutoFitForAllSections(
                         density = referenceDensity
                     ).size.height
                     // Spacer (4px reference) + indicator line height
-                    sectionHeight += 4 + lineHeight
+                    sectionHeight += SECTION_INDICATOR_SPACER_PX + lineHeight
                 }
                 // Check height: all lines of this section must fit
                 if (sectionHeight > effectiveHeight) {

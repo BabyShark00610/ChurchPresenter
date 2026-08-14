@@ -97,6 +97,10 @@ import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Desktop
 import java.net.URI
 
+private const val HALF_WIDTH = 0.5f
+private const val THUMB_ASPECT_W = 4f
+private const val THUMB_ASPECT_H = 3f
+
 /**
  * Lets the user search Pexels/Pixabay and download a photo or video directly into
  * the background file pickers. Each source gets its own tab with its own API key
@@ -260,7 +264,7 @@ private fun StockSourcePane(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         ApiKeyField(
-            modifier = Modifier.fillMaxWidth(0.5f),
+            modifier = Modifier.fillMaxWidth(HALF_WIDTH),
             label = keyLabel,
             value = apiKey,
             onValueChange = onApiKeyChange,
@@ -390,7 +394,7 @@ private fun StockMediaThumbnail(
 
     Box(
         modifier = Modifier
-            .aspectRatio(4f / 3f)
+            .aspectRatio(THUMB_ASPECT_W / THUMB_ASPECT_H)
             .clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {

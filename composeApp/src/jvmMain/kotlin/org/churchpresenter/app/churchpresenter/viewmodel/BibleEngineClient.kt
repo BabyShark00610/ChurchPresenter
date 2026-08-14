@@ -28,6 +28,9 @@ import java.time.Instant
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import org.json.JSONObject
 
+private const val JITTER_MIN = 0.8
+private const val JITTER_MAX = 1.2
+
 /**
  * One `scripture.*` event from the Bible Lookup Engine, decoded.
  *
@@ -77,7 +80,7 @@ internal const val MAX_RETRY_DELAY_MS = 30_000L
  */
 internal fun retryDelayMs(attempt: Int, floorMs: Long = DEFAULT_RETRY_FLOOR_MS): Long {
     val base = (floorMs shl attempt.coerceAtMost(4)).coerceAtMost(MAX_RETRY_DELAY_MS)
-    return (base * Random.nextDouble(0.8, 1.2)).toLong().coerceAtLeast(floorMs)
+    return (base * Random.nextDouble(JITTER_MIN, JITTER_MAX)).toLong().coerceAtLeast(floorMs)
 }
 
 /**

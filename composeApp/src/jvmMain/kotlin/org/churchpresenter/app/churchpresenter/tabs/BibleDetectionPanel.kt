@@ -115,6 +115,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val SELECTION_BAR_WIDTH = 4f
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BibleDetectionPanel(
@@ -426,7 +428,7 @@ internal fun BibleDetectionPanel(
                             else MaterialTheme.colorScheme.surface
                         )
                         .drawBehind {
-                            if (isSelected) drawRect(color = markerColor, size = Size(4f, size.height))
+                            if (isSelected) drawRect(color = markerColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                         }
                         .initialPassCombinedClickable(
                             onClick = { onDetectionClick(idx) },

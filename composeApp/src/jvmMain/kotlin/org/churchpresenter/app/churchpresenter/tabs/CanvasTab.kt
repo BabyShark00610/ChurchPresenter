@@ -134,6 +134,12 @@ import churchpresenter.composeapp.generated.resources.canvas_toggle_lock
 import churchpresenter.composeapp.generated.resources.canvas_aspect_ratio_warning
 import churchpresenter.composeapp.generated.resources.canvas_fix_aspect_ratio
 
+private const val SCENE_LIST_WEIGHT = 0.4f
+private const val SOURCE_LIST_WEIGHT = 0.6f
+private const val SELECTION_BAR_WIDTH = 4f
+private const val HIDDEN_SOURCE_ALPHA = 0.5f
+private const val ASPECT_EPSILON = 0.01f
+
 /**
  * Where a left-panel drag's final width is written back — mirrors `MainDesktop.withScheduleWidth`,
  * pulled out of the composable the same way so the windowed-vs-maximized branch is testable without
@@ -260,7 +266,7 @@ fun CanvasTab(
             val displayAr0 = if (presentationBounds0.height > 0) presentationBounds0.width.toFloat() / presentationBounds0.height else 0f
 
             @OptIn(ExperimentalFoundationApi::class)
-            LazyColumn(modifier = Modifier.weight(0.4f).fillMaxWidth()) {
+            LazyColumn(modifier = Modifier.weight(SCENE_LIST_WEIGHT).fillMaxWidth()) {
                 items(sceneViewModel.scenes) { scene ->
                     val isSelected = scene.id == sceneViewModel.currentSceneId.value
                     val isRenaming = renamingSceneId == scene.id
@@ -275,7 +281,7 @@ fun CanvasTab(
                                 else Color.Transparent
                             )
                             .drawBehind {
-                                if (isSelected) drawRect(color = sceneAccentColor, size = Size(4f, size.height))
+                                if (isSelected) drawRect(color = sceneAccentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                             }
                             .padding(start = 12.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -391,7 +397,7 @@ fun CanvasTab(
             Spacer(Modifier.height(4.dp))
 
             if (currentScene != null) {
-                LazyColumn(modifier = Modifier.weight(0.6f).fillMaxWidth()) {
+                LazyColumn(modifier = Modifier.weight(SOURCE_LIST_WEIGHT).fillMaxWidth()) {
                     // Render in reverse order so top item = front
                     items(currentScene.sources.reversed()) { source ->
                         val isSelected = source.id == selectedSourceId
@@ -404,7 +410,7 @@ fun CanvasTab(
                                     else Color.Transparent
                                 )
                                 .drawBehind {
-                                    if (isSelected) drawRect(color = sourceAccentColor, size = Size(4f, size.height))
+                                    if (isSelected) drawRect(color = sourceAccentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                                 }
                                 .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -457,7 +463,7 @@ fun CanvasTab(
                                 source.name,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f).alpha(if (source.visible) 1f else 0.5f)
+                                modifier = Modifier.weight(1f).alpha(if (source.visible) 1f else HIDDEN_SOURCE_ALPHA)
                                     .initialPassClickable { sceneViewModel.selectSource(source.id) }
                             )
                         }
@@ -848,7 +854,7 @@ fun CanvasTab(
                 val displayH = presentationBounds.height
                 val displayAr = if (displayH > 0) displayW.toFloat() / displayH else 0f
                 val sceneAr = if (currentScene.canvasHeight > 0) currentScene.canvasWidth.toFloat() / currentScene.canvasHeight else 0f
-                if (displayAr > 0f && kotlin.math.abs(displayAr - sceneAr) > 0.01f) {
+                if (displayAr > 0f && kotlin.math.abs(displayAr - sceneAr) > ASPECT_EPSILON) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

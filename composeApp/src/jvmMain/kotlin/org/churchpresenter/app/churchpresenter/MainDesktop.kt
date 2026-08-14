@@ -170,6 +170,10 @@ import org.churchpresenter.app.churchpresenter.viewmodel.onEngineScripture
 import org.churchpresenter.app.churchpresenter.viewmodel.onEngineVersion
 import org.churchpresenter.app.churchpresenter.viewmodel.setInstanceLinkSource
 
+private const val PANEL_COLLAPSE_ANIM_MS = 220
+private const val CLOCK_TICK_MS = 1000L
+private const val CONTENT_CROSSFADE_MS = 120
+
 // Kept for NavigationTopBar / menu — wraps ScheduleTabActions
 data class ScheduleActions(
     val newSchedule: () -> Unit = {},
@@ -948,11 +952,11 @@ fun MainDesktop(
             // rendered width below tracks schedulePanelPx/previewPanelPx with no extra lag.
             val scheduleVisibleFraction = remember { Animatable(if (scheduleCollapsed) 0f else 1f) }
             LaunchedEffect(scheduleCollapsed) {
-                scheduleVisibleFraction.animateTo(if (scheduleCollapsed) 0f else 1f, animationSpec = tween(220))
+                scheduleVisibleFraction.animateTo(if (scheduleCollapsed) 0f else 1f, animationSpec = tween(PANEL_COLLAPSE_ANIM_MS))
             }
             val previewVisibleFraction = remember { Animatable(if (previewCollapsed) 0f else 1f) }
             LaunchedEffect(previewCollapsed) {
-                previewVisibleFraction.animateTo(if (previewCollapsed) 0f else 1f, animationSpec = tween(220))
+                previewVisibleFraction.animateTo(if (previewCollapsed) 0f else 1f, animationSpec = tween(PANEL_COLLAPSE_ANIM_MS))
             }
 
             fun saveScheduleWidth() {
@@ -1039,7 +1043,7 @@ fun MainDesktop(
                             LaunchedEffect(instanceLinkConnectionStatus == InstanceLinkStatus.ERROR) {
                                 while (instanceLinkConnectionStatus == InstanceLinkStatus.ERROR) {
                                     reconnectNowMs = System.currentTimeMillis()
-                                    delay(1000)
+                                    delay(CLOCK_TICK_MS)
                                 }
                             }
                             val retrySecondsLeft = retrySecondsLeft(instanceLinkNextRetryAtMs, reconnectNowMs)
@@ -1409,7 +1413,7 @@ fun MainDesktop(
 
                     AnimatedContent(
                         targetState = currentTab,
-                        transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(120)) },
+                        transitionSpec = { fadeIn(tween(CONTENT_CROSSFADE_MS)) togetherWith fadeOut(tween(CONTENT_CROSSFADE_MS)) },
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         label = "tab_content"
                     ) { tab ->

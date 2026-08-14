@@ -9,6 +9,12 @@ import com.sun.jna.platform.win32.WinGDI
 import java.awt.Rectangle
 import java.awt.image.BufferedImage
 
+private const val BITS_PER_PIXEL: Short = 32
+private const val OPAQUE_ALPHA = 255
+private const val ALPHA_SHIFT = 24
+private const val RED_SHIFT = 16
+private const val GREEN_SHIFT = 8
+
 /**
  * Windows window capture using JNA (user32.dll + gdi32.dll).
  * Lists visible windows via EnumWindows and captures window content
@@ -120,7 +126,7 @@ object WindowsWindowCapture {
         bmi.bmiHeader.biWidth = width
         bmi.bmiHeader.biHeight = -height // top-down
         bmi.bmiHeader.biPlanes = 1
-        bmi.bmiHeader.biBitCount = 32
+        bmi.bmiHeader.biBitCount = BITS_PER_PIXEL
         bmi.bmiHeader.biCompression = WinGDI.BI_RGB
 
         val bufferSize = width.toLong() * height * 4
@@ -147,7 +153,7 @@ object WindowsWindowCapture {
             val b = (bgra shr 16) and 0xFF
             val g = (bgra shr 8) and 0xFF
             val r = bgra and 0xFF
-            pixels[i] = (255 shl 24) or (r shl 16) or (g shl 8) or b
+            pixels[i] = (OPAQUE_ALPHA shl ALPHA_SHIFT) or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
         }
         img.setRGB(0, 0, width, height, pixels, 0, width)
         return img

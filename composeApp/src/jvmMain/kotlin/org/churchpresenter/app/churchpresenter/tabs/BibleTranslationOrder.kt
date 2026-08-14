@@ -64,6 +64,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSet
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val EXPANDED_ROTATION = 180f
+
 private val TRANSLATION_ORDER_ROW_HEIGHT = 46.dp
 
 private fun translationTitle(displayNames: Map<String, String>, translation: BibleTranslationSettings): String =
@@ -133,7 +135,7 @@ internal fun TranslationOrderSelector(
             Icon(
                 painter = painterResource(Res.drawable.ic_arrow_down),
                 contentDescription = null,
-                modifier = Modifier.size(12.dp).rotate(if (expanded) 180f else 0f),
+                modifier = Modifier.size(12.dp).rotate(if (expanded) EXPANDED_ROTATION else 0f),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

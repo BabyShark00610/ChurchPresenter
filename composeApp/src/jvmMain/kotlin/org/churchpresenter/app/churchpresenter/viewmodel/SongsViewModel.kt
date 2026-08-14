@@ -26,6 +26,8 @@ import org.churchpresenter.app.churchpresenter.utils.isChorusHeader
 import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
 import java.io.File
 
+private const val SONG_NUMBER_DIGITS = 4
+
 class SongsViewModel(
     private var appSettings: AppSettings,
     private val onSongsLoaded: ((List<SongItem>) -> Unit)? = null,
@@ -801,7 +803,7 @@ class SongsViewModel(
 
     private fun buildSongFileName(number: String, title: String): String {
         return if (number.isNotBlank()) {
-            "${number.padStart(4, '0')} - $title.song"
+            "${number.padStart(SONG_NUMBER_DIGITS, '0')} - $title.song"
         } else {
             "$title.song"
         }
@@ -887,7 +889,7 @@ class SongsViewModel(
             if (!targetDir.exists()) targetDir.mkdirs()
 
             val fileName = if (song.number.isNotBlank()) {
-                "${song.number.padStart(4, '0')} - ${song.title}.song"
+                "${song.number.padStart(SONG_NUMBER_DIGITS, '0')} - ${song.title}.song"
             } else {
                 "${song.title}.song"
             }

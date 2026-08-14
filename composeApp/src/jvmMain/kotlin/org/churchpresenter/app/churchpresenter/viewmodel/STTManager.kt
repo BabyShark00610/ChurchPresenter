@@ -25,6 +25,9 @@ import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+private const val HTTP_OK = 200
+private const val MODEL_POLL_INTERVAL_MS = 60_000L
+
 data class STTSegment(
     val id: Int,
     val timestamp: String,
@@ -358,7 +361,7 @@ class STTManager {
                 .GET()
                 .build()
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            if (response.statusCode() == 200) {
+            if (response.statusCode() == HTTP_OK) {
                 val json = JSONObject(response.body())
                 if (json.optBoolean("success", false)) {
                     // Collect disabled color groups to filter them out
@@ -412,7 +415,7 @@ class STTManager {
         dbCaptureJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 if (helpDevModeEnabled) runCatching { captureDbSnapshot(baseUrl) }
-                delay(60_000L)
+                delay(MODEL_POLL_INTERVAL_MS)
             }
         }
     }
@@ -432,7 +435,7 @@ class STTManager {
             .GET()
             .build()
         val downloadResponse = client.send(downloadRequest, HttpResponse.BodyHandlers.ofByteArray())
-        if (downloadResponse.statusCode() != 200) return
+        if (downloadResponse.statusCode() != HTTP_OK) return
 
         val logDir = File(System.getProperty("user.home"), ".churchpresenter/bible-stt-logs").also { it.mkdirs() }
         val target = File(logDir, File(dbName).name)

@@ -83,6 +83,9 @@ import org.churchpresenter.app.churchpresenter.viewmodel.scheduleItemPaletteInde
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val PALETTE_SIZE = 4
+private const val GRADIENT_MIDPOINT = 0.35f
+
 internal fun ScheduleDensity.rowPadding(): Dp = when (this) {
     ScheduleDensity.EXTRA_COMPACT -> 2.dp
     ScheduleDensity.COMPACT -> 4.dp
@@ -102,7 +105,7 @@ internal fun ScheduleDensity.rowMinHeight(): Dp = when (this) {
 @Composable
 internal fun scheduleChipColors(paletteIndex: Int): Pair<Color, Color> {
     val scheme = MaterialTheme.colorScheme
-    return when (paletteIndex % 4) {
+    return when (paletteIndex % PALETTE_SIZE) {
         0 -> scheme.primaryContainer to scheme.onPrimaryContainer
         1 -> scheme.secondaryContainer to scheme.onSecondaryContainer
         2 -> scheme.tertiaryContainer to scheme.onTertiaryContainer
@@ -270,7 +273,7 @@ internal fun ScheduleItemRow(
                         .background(
                             Brush.horizontalGradient(
                                 0f to Color.Transparent,
-                                0.35f to cardBg.copy(alpha = 0.82f),
+                                GRADIENT_MIDPOINT to cardBg.copy(alpha = 0.82f),
                                 1f to cardBg.copy(alpha = 0.82f)
                             )
                         )

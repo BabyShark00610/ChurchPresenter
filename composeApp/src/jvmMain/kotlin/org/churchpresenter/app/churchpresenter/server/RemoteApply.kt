@@ -25,6 +25,8 @@ import org.churchpresenter.app.churchpresenter.utils.InstanceLinkLogger
 import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 
+private const val SUMMARY_PREVIEW_CHARS = 60
+
 /**
  * Applying what a *remote* instance sends to this one: the Instance Link follower path, and the
  * approved remote requests that arrive from a phone or a linked controller.
@@ -482,14 +484,14 @@ internal fun remoteEventLabel(item: ScheduleItem): Pair<String, String> = when (
     is ScheduleItem.BibleVerseItem -> {
         val ref = if (item.verseRange.isNotEmpty()) "${item.bookName} ${item.chapter}:${item.verseRange}"
         else "${item.bookName} ${item.chapter}:${item.verseNumber}"
-        ref to item.verseText.take(60)
+        ref to item.verseText.take(SUMMARY_PREVIEW_CHARS)
     }
 
     is ScheduleItem.PictureItem -> item.folderName to "${item.imageCount} images"
     is ScheduleItem.PresentationItem -> item.fileName to item.fileType.uppercase()
     is ScheduleItem.MediaItem -> item.mediaTitle to item.mediaType
-    is ScheduleItem.LabelItem -> item.text.take(60) to ""
-    is ScheduleItem.AnnouncementItem -> item.text.take(60) to ""
+    is ScheduleItem.LabelItem -> item.text.take(SUMMARY_PREVIEW_CHARS) to ""
+    is ScheduleItem.AnnouncementItem -> item.text.take(SUMMARY_PREVIEW_CHARS) to ""
     is ScheduleItem.LowerThirdItem -> item.presetLabel to ""
     is ScheduleItem.WebsiteItem -> item.title to item.url
     is ScheduleItem.SceneItem -> item.sceneName to "Scene"

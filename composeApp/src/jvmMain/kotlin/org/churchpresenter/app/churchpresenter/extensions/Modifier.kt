@@ -12,6 +12,9 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 
+private const val SHAKE_OFFSET_DP = 5f
+private const val SHAKE_STEP_MS = 50
+
 fun Modifier.errorShake(
     trigger: Boolean, // A boolean state that changes to trigger the animation
     onAnimationFinish: () -> Unit // Callback when the animation completes
@@ -24,8 +27,8 @@ fun Modifier.errorShake(
             // Animate the offset back and forth several times
             for (i in 0..8) { // Number of shakes (4 left, 4 right)
                 when (i % 2) {
-                    0 -> shake.animateTo(5f, tween(50, easing = LinearEasing))
-                    else -> shake.animateTo(-5f, tween(50, easing = LinearEasing))
+                    0 -> shake.animateTo(SHAKE_OFFSET_DP, tween(SHAKE_STEP_MS, easing = LinearEasing))
+                    else -> shake.animateTo(-SHAKE_OFFSET_DP, tween(SHAKE_STEP_MS, easing = LinearEasing))
                 }
             }
             // Animate back to original position

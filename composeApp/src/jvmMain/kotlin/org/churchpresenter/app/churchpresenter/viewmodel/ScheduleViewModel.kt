@@ -37,6 +37,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
+private const val AUTOSAVE_INTERVAL_MS = 60_000L
+private const val MAX_UNDO_DEPTH = 50
+
 class ScheduleViewModel(
     private val onScheduleChanged: ((List<ScheduleItem>) -> Unit)? = null
 ) {
@@ -99,7 +102,7 @@ class ScheduleViewModel(
         Runtime.getRuntime().addShutdownHook(Thread { scope.cancel() })
         scope.launch {
             while (true) {
-                delay(60_000)
+                delay(AUTOSAVE_INTERVAL_MS)
                 if (isDirty && _scheduleItems.isNotEmpty()) {
                     try {
                         autoSaveFile.parentFile?.mkdirs()
@@ -210,7 +213,7 @@ class ScheduleViewModel(
 
     private fun pushUndoSnapshot() {
         undoStack.addLast(ScheduleSnapshot(_scheduleItems.toList(), _notes.toMap()))
-        if (undoStack.size > 50) undoStack.removeFirst()
+        if (undoStack.size > MAX_UNDO_DEPTH) undoStack.removeFirst()
         redoStack.clear()
         _canUndo.value = true
         _canRedo.value = false

@@ -78,6 +78,8 @@ import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 
+private const val MIN_RECONNECT_DELAY_MS = 500
+
 @Composable
 fun CompanionSatelliteSettingsTab(
     settings: AppSettings,
@@ -338,7 +340,7 @@ private fun CompanionConnectionCard(
                         value = reconnectDelayText,
                         onValueChange = { v ->
                             reconnectDelayText = v
-                            v.toIntOrNull()?.let { onUpdate { copy(reconnectDelayMs = it.coerceAtLeast(500)) } }
+                            v.toIntOrNull()?.let { onUpdate { copy(reconnectDelayMs = it.coerceAtLeast(MIN_RECONNECT_DELAY_MS)) } }
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

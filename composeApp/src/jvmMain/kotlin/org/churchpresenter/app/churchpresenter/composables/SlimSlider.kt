@@ -31,6 +31,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+private const val DISABLED_ALPHA = 0.5f
+private const val HANDLE_VISIBLE_ALPHA = 0.01f
+
 /**
  * A slim, modern slider matching the media seek bar: a 5px rounded track with a teal (theme
  * `primary`) gradient fill for the selected portion, and a white handle that fades and scales in
@@ -76,7 +79,7 @@ fun SlimSlider(
     }
 
     Row(
-        modifier = modifier.alpha(if (enabled) 1f else 0.5f),
+        modifier = modifier.alpha(if (enabled) 1f else DISABLED_ALPHA),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -116,7 +119,7 @@ fun SlimSlider(
                         cornerRadius = radius
                     )
                 }
-                if (handleAlpha > 0.01f) {
+                if (handleAlpha > HANDLE_VISIBLE_ALPHA) {
                     val hx = (size.width * fraction).coerceIn(0f, size.width)
                     drawCircle(color = handleColor.copy(alpha = handleAlpha), radius = 6.dp.toPx() * handleScale, center = Offset(hx, cy))
                 }

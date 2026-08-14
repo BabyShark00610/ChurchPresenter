@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
 
+private const val PACKED_REF_LENGTH = 9
+private const val BOOK_DIGITS = 3
+private const val CHAPTER_END = 6
+
 /** One learned successor: a verse that has followed another, and how often. */
 data class LearnedRef(
     val bookId: Int,
@@ -230,10 +234,10 @@ internal fun packRef(bookId: Int, chapter: Int, verse: Int): String? {
 
 /** The inverse of [packRef]; null for anything that is not nine digits. */
 internal fun unpackRef(packed: String): Triple<Int, Int, Int>? {
-    if (packed.length != 9 || !packed.all { it.isDigit() }) return null
+    if (packed.length != PACKED_REF_LENGTH || !packed.all { it.isDigit() }) return null
     return Triple(
-        packed.substring(0, 3).toInt(),
-        packed.substring(3, 6).toInt(),
-        packed.substring(6).toInt(),
+        packed.substring(0, BOOK_DIGITS).toInt(),
+        packed.substring(BOOK_DIGITS, CHAPTER_END).toInt(),
+        packed.substring(CHAPTER_END).toInt(),
     )
 }

@@ -38,6 +38,21 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.imageio.ImageIO
 
+private const val HTTP_OK = 200
+private const val MILLIS_PER_SECOND = 1000L
+private const val MIN_FPS = 1
+private const val MAX_FPS = 60
+private const val MIN_CAPTURE_INTERVAL_MS = 16L
+private const val MIN_STARTUP_CAPTURE_INTERVAL_MS = 33L
+private const val NAVIGATE_SETTLE_MS = 2000L
+private const val PAGE_LOAD_SETTLE_MS = 3000L
+private const val DEVTOOLS_POLL_INTERVAL_MS = 500L
+private const val WMIC_TIMEOUT_S = 5L
+private const val PROCESS_KILL_TIMEOUT_S = 3L
+private const val WEBSOCKET_CONNECT_TIMEOUT_S = 10L
+private const val WEBSOCKET_SEND_TIMEOUT_S = 5L
+private const val CDP_RESPONSE_TIMEOUT_S = 30L
+
 /**
  * Shared browser frame cache using Chrome DevTools Protocol (CDP).
  *
@@ -138,7 +153,7 @@ object SharedBrowserFrameCache {
     /** Update capture FPS without restarting the browser. */
     fun setFps(sourceId: String, fps: Int) {
         val entry = synchronized(this) { entries[sourceId] } ?: return
-        entry.captureIntervalMs = (1000L / fps.coerceIn(1, 60)).coerceAtLeast(16)
+        entry.captureIntervalMs = (MILLIS_PER_SECOND / fps.coerceIn(MIN_FPS, MAX_FPS)).coerceAtLeast(MIN_CAPTURE_INTERVAL_MS)
     }
 
     /** Get the current URL flow for a source (for properties panel display). */
@@ -156,7 +171,7 @@ object SharedBrowserFrameCache {
             try {
                 entry.currentUrl.value = url
                 cdp.sendAsync("Page.navigate", buildJsonObject { put("url", url) })
-                delay(2000) // wait for page load
+                delay(NAVIGATE_SETTLE_MS) // wait for page load
                 if (forceTransparent) {
                     cdp.sendAsync("Runtime.evaluate", buildJsonObject {
                         put("expression", "document.documentElement.style.background='transparent';document.body.style.background='transparent';")
@@ -257,19 +272,19 @@ object SharedBrowserFrameCache {
                     "get", "ProcessId"
                 ).redirectErrorStream(true).start()
                 val output = proc.inputStream.bufferedReader().readText()
-                proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+                proc.waitFor(WMIC_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
                 val pids = Regex("\\d+").findAll(output).map { it.value }.toList()
                 for (pid in pids) {
                     System.err.println("[BrowserSource] Killing zombie browser process: PID $pid")
                     ProcessBuilder("taskkill", "/F", "/T", "/PID", pid)
                         .redirectErrorStream(true).start()
-                        .waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
                 }
             } else {
                 // On Linux/macOS, kill headless chrome/edge processes
                 ProcessBuilder("pkill", "-f", "--headless.*--remote-debugging-port")
                     .redirectErrorStream(true).start()
-                    .waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
             }
         } catch (_: Exception) {}
     }
@@ -407,7 +422,7 @@ object SharedBrowserFrameCache {
             System.err.println("[BrowserSource] Page.navigate($url): $resp")
 
             // Wait for page to load
-            delay(3000)
+            delay(PAGE_LOAD_SETTLE_MS)
 
             // Inject transparency CSS
             if (forceTransparent) {
@@ -423,7 +438,7 @@ object SharedBrowserFrameCache {
         }
 
         // Start capture loop
-        entry.captureIntervalMs = (1000L / fps.coerceIn(1, 60)).coerceAtLeast(33)
+        entry.captureIntervalMs = (MILLIS_PER_SECOND / fps.coerceIn(MIN_FPS, MAX_FPS)).coerceAtLeast(MIN_STARTUP_CAPTURE_INTERVAL_MS)
         System.err.println("[BrowserSource] Starting capture loop at ${fps}fps")
 
         var frameCount = 0
@@ -488,11 +503,11 @@ object SharedBrowserFrameCache {
                 val response = withContext(Dispatchers.IO) {
                     httpClient.send(request, HttpResponse.BodyHandlers.ofString())
                 }
-                if (response.statusCode() == 200) return true
+                if (response.statusCode() == HTTP_OK) return true
             } catch (_: Exception) {
                 // Not ready yet
             }
-            delay(500)
+            delay(DEVTOOLS_POLL_INTERVAL_MS)
         }
         return false
     }
@@ -545,12 +560,12 @@ object SharedBrowserFrameCache {
                     val pid = process.pid()
                     ProcessBuilder("taskkill", "/F", "/T", "/PID", pid.toString())
                         .redirectErrorStream(true).start()
-                        .waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
                 } catch (_: Throwable) {}
             } else {
                 process.destroyForcibly()
             }
-            process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+            process.waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
         } catch (_: Throwable) {
             process.destroyForcibly()
         }
@@ -602,7 +617,7 @@ object SharedBrowserFrameCache {
                 ws = HttpClient.newHttpClient()
                     .newWebSocketBuilder()
                     .buildAsync(URI.create(wsUrl), listener)
-                    .get(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .get(WEBSOCKET_CONNECT_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
                 true
             } catch (e: Exception) {
                 System.err.println("[BrowserSource] WebSocket connect error: ${e.message}")
@@ -630,7 +645,7 @@ object SharedBrowserFrameCache {
                     System.err.println("[BrowserSource] CDP send '$method': WebSocket is null")
                     return null
                 }
-                socket.sendText(msg.toString(), true)?.get(5, java.util.concurrent.TimeUnit.SECONDS)
+                socket.sendText(msg.toString(), true)?.get(WEBSOCKET_SEND_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
             } catch (e: Exception) {
                 pending.remove(id)
                 System.err.println("[BrowserSource] CDP sendText '$method' failed: ${e::class.simpleName}: ${e.message}")
@@ -640,7 +655,7 @@ object SharedBrowserFrameCache {
             // Wait for the response, but don't block coroutine cancellation
             return try {
                 withContext(Dispatchers.IO) {
-                    future.get(30, java.util.concurrent.TimeUnit.SECONDS)
+                    future.get(CDP_RESPONSE_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
                 }
             } catch (e: CancellationException) {
                 pending.remove(id)

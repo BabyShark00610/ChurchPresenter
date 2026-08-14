@@ -21,6 +21,8 @@ import kotlin.random.Random
 import kotlin.random.nextULong
 import kotlin.io.use
 
+private const val HEX_RADIX = 16
+
 /**
  * A [FileChooser] implementation that uses DBus to communicate with the XDG Desktop Portal's File Chooser API on Linux.
  *
@@ -243,7 +245,7 @@ object XdgFileChooser : FileChooser() {
 
                 requestPaths(
                     path, filters, suggestedName, selectDirectory, multiple,
-                    uniqueNameOf { conn.uniqueName }, Random.nextULong().toString(16)
+                    uniqueNameOf { conn.uniqueName }, Random.nextULong().toString(HEX_RADIX)
                 ) { options, requestPath ->
                     conn.addGenericSigHandler(responseMatchRule(requestPath)) { signal ->
                         response.complete(parseResponse(signal.parameters))

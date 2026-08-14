@@ -31,6 +31,11 @@ import java.util.Locale
 import javax.swing.SwingUtilities
 import androidx.compose.foundation.Image
 
+private const val POSITION_POLL_MS = 200
+private const val VOLUME_PERCENT_SCALE = 100
+private const val STATE_SETTLE_MS = 250L
+private const val FRAME_INTERVAL_MS = 16L
+
 /**
  * Initialises the JavaFX toolkit exactly once for the lifetime of the process.
  * Still needed for WebView (WebsitePresenter).
@@ -373,7 +378,7 @@ fun VideoPlayer(
                     if (!firstFrameCaptured.value) {
                         // Delay pause by 200 ms so VLC can decode and render the first frame
                         // before being paused. Without this, portrait/MOV videos stay black.
-                        javax.swing.Timer(200) {
+                        javax.swing.Timer(POSITION_POLL_MS) {
                             if (!viewModel.isPlaying) mediaPlayer.controls().pause()
                         }.also { it.isRepeats = false; it.start() }
                     } else {
@@ -423,7 +428,7 @@ fun VideoPlayer(
         // VLC pipeline to capture a first frame (see playing() below), and without this guard
         // that grace window would be audible even though the file is meant to load paused.
         if (!audioEnabled || !viewModel.isPlaying) mp.audio().setVolume(0)
-        else mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+        else mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
 
         // When the caller has determined this instance must never produce audio (e.g. a
         // background decoder mounted only to keep rendering a paused frame), disable the
@@ -445,7 +450,7 @@ fun VideoPlayer(
             if (viewModel.isPlaying) {
                 // Restore real volume now that playback is genuinely resuming — the load
                 // above may have muted the player to silence the first-frame grace window.
-                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
                 mp.controls().play()
             } else {
                 mp.controls().pause()
@@ -456,7 +461,7 @@ fun VideoPlayer(
     // Volume sync
     LaunchedEffect(viewModel.effectiveVolume) {
         if (audioEnabled) {
-            mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+            mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
         }
     }
 
@@ -471,7 +476,7 @@ fun VideoPlayer(
     if (audioEnabled) {
         LaunchedEffect(viewModel.mediaUrl) {
             while (isActive) {
-                delay(250)
+                delay(STATE_SETTLE_MS)
                 if (mp.status().isPlaying) {
                     viewModel.setCurrentPosition(mp.status().time())
                     // Fallback: pick up duration if the lengthChanged event was missed.
@@ -539,7 +544,7 @@ fun SoftwareVideoPlayer(
                     SharedVideoOutput.frame.value = bitmap
                 }
             }
-            delay(16) // ~60fps cap
+            delay(FRAME_INTERVAL_MS) // ~60fps cap
         }
     }
 
@@ -584,7 +589,7 @@ fun SoftwareVideoPlayer(
                         // Give VLC up to 200 ms to decode and deliver the first frame to the
                         // render callback before pausing. This is critical for portrait/rotated
                         // videos (e.g. iPhone MOV) where the decoder may take longer to start.
-                        javax.swing.Timer(200) {
+                        javax.swing.Timer(POSITION_POLL_MS) {
                             if (!viewModel.isPlaying) mediaPlayer.controls().pause()
                         }.also { it.isRepeats = false; it.start() }
                     } else {
@@ -634,7 +639,7 @@ fun SoftwareVideoPlayer(
         // VLC pipeline to capture a first frame (see playing() below), and without this guard
         // that grace window would be audible even though the video is meant to load paused.
         if (!audioEnabled || !viewModel.isPlaying) mp.audio().setVolume(0)
-        else mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+        else mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
 
         // :codec=avcodec forces FFmpeg software decoding, bypassing VideoToolbox.
         // Required for Dolby Vision HEVC / 10-bit files where VideoToolbox outputs zero-copy
@@ -661,7 +666,7 @@ fun SoftwareVideoPlayer(
             if (viewModel.isPlaying) {
                 // Restore real volume now that playback is genuinely resuming — the load
                 // above may have muted the player to silence the first-frame grace window.
-                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
                 mp.controls().play()
             } else {
                 mp.controls().pause()
@@ -672,7 +677,7 @@ fun SoftwareVideoPlayer(
     // Volume sync
     LaunchedEffect(viewModel.effectiveVolume) {
         if (audioEnabled) {
-            mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+            mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
         }
     }
 
@@ -687,7 +692,7 @@ fun SoftwareVideoPlayer(
     if (audioEnabled) {
         LaunchedEffect(viewModel.mediaUrl) {
             while (isActive) {
-                delay(250)
+                delay(STATE_SETTLE_MS)
                 if (mp.status().isPlaying) {
                     viewModel.setCurrentPosition(mp.status().time())
                     // Fallback: pick up duration if lengthChanged was missed.

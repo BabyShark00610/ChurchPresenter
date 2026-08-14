@@ -5,6 +5,13 @@ import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
 import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 
+private const val OPEN_RETRY_ATTEMPTS = 3
+private const val OPEN_RETRY_DELAY_MS = 100L
+private const val OUTPUT_INFO_FIELDS = 4
+private const val OUTPUT_INFO_FPS_NUM = 2
+private const val OUTPUT_INFO_FPS_DEN = 3
+private const val DEVICE_STATUS_FIELDS = 3
+
 /**
  * Kotlin wrapper for BlackMagic DeckLink JNI native library.
  * Supports multiple simultaneous device outputs.
@@ -147,10 +154,10 @@ object DeckLinkManager {
                 val w = info?.width ?: 1920
                 val h = info?.height ?: 1080
                 val blackPixels = IntArray(w * h)
-                repeat(3) {
+                repeat(OPEN_RETRY_ATTEMPTS) {
                     nativeSendFrame(deviceIndex, blackPixels, w, h)
                 }
-                Thread.sleep(100)
+                Thread.sleep(OPEN_RETRY_DELAY_MS)
                 nativeClose(deviceIndex)
             } catch (_: Throwable) {}
         }
@@ -400,12 +407,12 @@ object DeckLinkManager {
         }
 
     internal fun parseOutputInfo(rawArray: IntArray): OutputInfo? =
-        if (rawArray.size >= 4 && rawArray[0] > 0 && rawArray[1] > 0) {
-            OutputInfo(rawArray[0], rawArray[1], rawArray[2], rawArray[3])
+        if (rawArray.size >= OUTPUT_INFO_FIELDS && rawArray[0] > 0 && rawArray[1] > 0) {
+            OutputInfo(rawArray[0], rawArray[1], rawArray[OUTPUT_INFO_FPS_NUM], rawArray[OUTPUT_INFO_FPS_DEN])
         } else null
 
     internal fun parseDeviceStatus(rawArray: IntArray): DeviceStatus? =
-        if (rawArray.size >= 3) {
+        if (rawArray.size >= DEVICE_STATUS_FIELDS) {
             DeviceStatus(
                 signalLocked = rawArray[0] != 0,
                 busy = rawArray[1],

@@ -15,6 +15,8 @@ import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds
 import java.nio.file.WatchService
 
+private const val DEBOUNCE_MS = 300L
+
 class SongFolderWatcher(
     private val scope: CoroutineScope,
     private val onSongsChanged: () -> Unit
@@ -85,7 +87,7 @@ class SongFolderWatcher(
 
                     if (relevant) {
                         // Debounce: wait a bit for batch operations to settle
-                        delay(300)
+                        delay(DEBOUNCE_MS)
                         withContext(Dispatchers.Main) {
                             onSongsChanged()
                         }

@@ -7,6 +7,7 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -176,7 +177,7 @@ object BebliaCatalogIndex {
                 if (cached != null && cached.etag.isNotBlank()) header("If-None-Match", cached.etag)
             }
 
-            if (response.status.value == 304 && cached != null) {
+            if (response.status == HttpStatusCode.NotModified && cached != null) {
                 BibleInstallSupport.BibleIndexCache.writeMeta(cacheFile, nowMillis, cached.etag)
                 memoryCache = nowMillis to cached
                 return@withContext IndexOutcome.Success(cached)

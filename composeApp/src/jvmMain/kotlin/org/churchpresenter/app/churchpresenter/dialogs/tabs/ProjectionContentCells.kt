@@ -65,6 +65,8 @@ import churchpresenter.composeapp.generated.resources.top
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.jetbrains.compose.resources.stringResource
 
+private const val DIMMED_ALPHA = 0.55f
+
 /**
  * The individual cells of the Projection tab's per-output content grid: the on/off toggle, the
  * Bible translation picker and the song language picker.
@@ -219,7 +221,7 @@ internal fun ContentTranslationCell(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .alpha(if (showing) 1f else 0.55f)
+                .alpha(if (showing) 1f else DIMMED_ALPHA)
                 .clip(triggerShape)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
         ) {
@@ -593,7 +595,7 @@ internal fun ContentLangCell(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .alpha(if (isOff) 0.55f else 1f)
+                .alpha(if (isOff) DIMMED_ALPHA else 1f)
                 .clip(triggerShape)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
         ) {

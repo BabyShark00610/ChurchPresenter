@@ -163,6 +163,17 @@ import java.awt.Window
 import java.io.File
 import javax.swing.SwingUtilities
 
+private const val ATEM_REACHABLE_POLL_MS = 30_000L
+private const val ATEM_UNREACHABLE_POLL_MS = 10_000L
+private const val UPLOAD_ERROR_DISPLAY_MS = 8000L
+private const val COMPOSITION_LOAD_SETTLE_MS = 3000L
+private const val DEFAULT_FRAME_RATE = 30f
+private const val MILLIS_PER_SECOND_F = 1000f
+private const val PREVIEW_SETTLE_MS = 800L
+private const val ASPECT_EPSILON = 0.01f
+private const val MAX_FIT_SCALE = 1.01f
+private const val SELECTION_BAR_WIDTH = 4f
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LowerThirdTab(
@@ -279,7 +290,7 @@ fun LowerThirdTab(
             val reachable = probeAtemReachable(host, port)
             atemReachable = reachable
             if (reachable) atemEverConnected = true
-            delay(if (reachable) 30_000L else 10_000L)
+            delay(if (reachable) ATEM_REACHABLE_POLL_MS else ATEM_UNREACHABLE_POLL_MS)
         }
     }
     var atemIsClip by remember { mutableStateOf(false) }
@@ -298,7 +309,7 @@ fun LowerThirdTab(
     // Auto-dismiss a remote upload error after a while (success self-clears server-side)
     LaunchedEffect(remoteUpload?.error) {
         val errored = remoteUpload
-        if (errored?.error != null) { delay(8000); AtemUploadStatus.clear(errored.id) }
+        if (errored?.error != null) { delay(UPLOAD_ERROR_DISPLAY_MS); AtemUploadStatus.clear(errored.id) }
     }
 
     // Fetch media pool slot info + FPS when dialog opens or mode toggles
@@ -355,7 +366,7 @@ fun LowerThirdTab(
     // True while composition is loading — prevents flashing warning triangle during async load
     var isCompositionLoading by remember(jsonContent) { mutableStateOf(jsonContent.isNotBlank()) }
     LaunchedEffect(composition) { if (composition != null) isCompositionLoading = false }
-    LaunchedEffect(jsonContent) { if (jsonContent.isNotBlank()) { delay(3000); isCompositionLoading = false } }
+    LaunchedEffect(jsonContent) { if (jsonContent.isNotBlank()) { delay(COMPOSITION_LOAD_SETTLE_MS); isCompositionLoading = false } }
 
     // Reset when file changes
     LaunchedEffect(selectedFile) {
@@ -366,7 +377,7 @@ fun LowerThirdTab(
     }
 
     fun totalDurationMs(): Long =
-        ((composition?.durationFrames ?: 0f) / (composition?.frameRate ?: 30f) * 1000f)
+        ((composition?.durationFrames ?: 0f) / (composition?.frameRate ?: DEFAULT_FRAME_RATE) * MILLIS_PER_SECOND_F)
             .toLong().coerceAtLeast(1L)
 
     // Cache variant for an ATEM upload. Frame count comes from the lottie JSON itself
@@ -442,7 +453,7 @@ fun LowerThirdTab(
                 atemReachable = true
                 atemProgress = 1f
                 AtemUploadStatus.complete(id)
-                delay(800)
+                delay(PREVIEW_SETTLE_MS)
                 AtemUploadStatus.clear(id)
                 if (closeDialogOnSuccess) showAtemDialog = false
             } catch (e: Exception) {
@@ -554,7 +565,7 @@ fun LowerThirdTab(
                         val s = appSettings.atemSettings
                         val designAspect = cw.toFloat() / ch
                         val frameAspect = s.renderWidth.toFloat() / s.renderHeight
-                        if (kotlin.math.abs(designAspect - frameAspect) > 0.01f) {
+                        if (kotlin.math.abs(designAspect - frameAspect) > ASPECT_EPSILON) {
                             Text(
                                 stringResource(
                                     Res.string.atem_aspect_mismatch,
@@ -565,7 +576,7 @@ fun LowerThirdTab(
                             )
                         }
                         val fitScale = minOf(s.renderWidth.toFloat() / cw, s.renderHeight.toFloat() / ch)
-                        if (fitScale > 1.01f) {
+                        if (fitScale > MAX_FIT_SCALE) {
                             Text(
                                 stringResource(
                                     Res.string.atem_upscale_notice,
@@ -764,7 +775,7 @@ fun LowerThirdTab(
                                     .height(36.dp)
                                     .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                                     .drawBehind {
-                                        if (isSelected) drawRect(color = accentColor, size = Size(4f, size.height))
+                                        if (isSelected) drawRect(color = accentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                                     }
                                     .finalPassClickable { selectedFile = file; isPlaying = false }
                                     .padding(start = 12.dp, end = 4.dp),

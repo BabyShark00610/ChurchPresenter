@@ -7,6 +7,11 @@ import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import java.awt.image.BufferedImage
 
+private const val OPAQUE_ALPHA = 255
+private const val ALPHA_SHIFT = 24
+private const val RED_SHIFT = 16
+private const val GREEN_SHIFT = 8
+
 /**
  * X11 Composite extension window capture via JNA.
  * Captures window content even when occluded by other windows.
@@ -169,7 +174,7 @@ object X11WindowCapture {
                 val r = ((pixel shr 16) and 0xFF).toInt()
                 val g = ((pixel shr 8) and 0xFF).toInt()
                 val b = (pixel and 0xFF).toInt()
-                img.setRGB(x, y, (255 shl 24) or (r shl 16) or (g shl 8) or b)
+                img.setRGB(x, y, (OPAQUE_ALPHA shl ALPHA_SHIFT) or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b)
             }
         }
         return img
