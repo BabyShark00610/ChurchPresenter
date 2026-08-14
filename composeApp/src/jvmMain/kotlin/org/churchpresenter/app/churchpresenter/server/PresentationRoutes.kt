@@ -49,8 +49,25 @@ internal fun Route.presentationRoutes(
     json: Json,
     scope: CoroutineScope,
 ) {
-    presentationCatalogRoutes(server, _presentationCatalog, _presentationCatalogs, _scheduleItemToPresentationId, _slideBytes, json, scope)
-    presentationUploadRoutes(server, _fileUploadEnabled, _maxMediaUploadMb, _presentationCatalogs, _presentationFilePaths, _slideBytes, json, scope)
+    presentationCatalogRoutes(
+        server,
+        _presentationCatalog,
+        _presentationCatalogs,
+        _scheduleItemToPresentationId,
+        _slideBytes,
+        json,
+        scope
+    )
+    presentationUploadRoutes(
+        server,
+        _fileUploadEnabled,
+        _maxMediaUploadMb,
+        _presentationCatalogs,
+        _presentationFilePaths,
+        _slideBytes,
+        json,
+        scope
+    )
 }
 
 private fun Route.presentationCatalogRoutes(
@@ -87,7 +104,11 @@ private fun Route.presentationCatalogRoutes(
                     val resolvedId = _scheduleItemToPresentationId[id] ?: id
                     val dto = _presentationCatalogs[resolvedId]
                     if (dto == null) {
-                        server.logRest("/api/presentations/{id}", HttpStatusCode.NotFound.value, "not_found_or_not_yet_rendered")
+                        server.logRest(
+                            "/api/presentations/{id}",
+                            HttpStatusCode.NotFound.value,
+                            "not_found_or_not_yet_rendered"
+                        )
                         call.respond(HttpStatusCode.NotFound, "Presentation not found or not yet rendered")
                         return@get
                     }
@@ -112,17 +133,29 @@ private fun Route.presentationSlideRoutes(
 ) {
                 get("${Constants.ENDPOINT_PRESENTATIONS}/{id}/slides/{index}") {
                     if (!server.checkApiKey(call)) return@get
-                    val id    = call.parameters["id"]    ?: run { call.respond(HttpStatusCode.BadRequest, "Missing id"); return@get }
-                    val index = call.parameters["index"]?.toIntOrNull() ?: run { call.respond(HttpStatusCode.BadRequest, "Invalid index"); return@get }
+                    val id    = call.parameters["id"]    ?: run {
+                        call.respond(HttpStatusCode.BadRequest, "Missing id"); return@get
+                    }
+                    val index = call.parameters["index"]?.toIntOrNull() ?: run {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid index"); return@get
+                    }
                     val resolvedId = _scheduleItemToPresentationId[id] ?: id
                     val slides = _slideBytes[resolvedId]
                     if (slides == null) {
-                        server.logRest("/api/presentations/{id}/slides/{index}", HttpStatusCode.NotFound.value, "presentation_not_found")
+                        server.logRest(
+                            "/api/presentations/{id}/slides/{index}",
+                            HttpStatusCode.NotFound.value,
+                            "presentation_not_found"
+                        )
                         call.respond(HttpStatusCode.NotFound, "Presentation not found")
                         return@get
                     }
                     if (index < 0 || index >= slides.size) {
-                        server.logRest("/api/presentations/{id}/slides/{index}", HttpStatusCode.NotFound.value, "slide_index_out_of_range")
+                        server.logRest(
+                            "/api/presentations/{id}/slides/{index}",
+                            HttpStatusCode.NotFound.value,
+                            "slide_index_out_of_range"
+                        )
                         call.respond(HttpStatusCode.NotFound, "Slide index out of range")
                         return@get
                     }
@@ -155,7 +188,8 @@ private fun Route.presentationSlideRoutes(
                     }
                     val clientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
                     scope.launch { server.onSelectSlide.emit(SelectSlideRequest(id = id, index = index)) }
-                    val presentationName = _presentationCatalogs[_scheduleItemToPresentationId[id] ?: id]?.fileName ?: id
+                    val presentationName =
+                        _presentationCatalogs[_scheduleItemToPresentationId[id] ?: id]?.fileName ?: id
                     scope.launch { server.onInstantAction.emit(CompanionServer.RemoteInstantAction(
                         actionType = "present",
                         title = presentationName,
@@ -229,7 +263,10 @@ private fun Route.mediaUploadRoutes(
                         val maxBytes = _maxMediaUploadMb.value.toLong() * 1024 * 1024
                         val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
                         if (contentLength > maxBytes) {
-                            call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max ${_maxMediaUploadMb.value} MB)"}""")
+                            call.respond(
+                                HttpStatusCode.PayloadTooLarge,
+                                """{"error":"file too large (max ${_maxMediaUploadMb.value} MB)"}"""
+                            )
                             return@post
                         }
                         val rawName = call.request.queryParameters["name"]
@@ -241,10 +278,16 @@ private fun Route.mediaUploadRoutes(
                         val ext = safeName.substringAfterLast('.', "").lowercase()
                         // Accept exactly what the desktop media player (VLC) can play.
                         if (ext !in Constants.VIDEO_EXTENSIONS && ext !in Constants.AUDIO_EXTENSIONS) {
-                            call.respond(HttpStatusCode.UnsupportedMediaType, """{"error":"unsupported file type: $ext"}""")
+                            call.respond(
+                                HttpStatusCode.UnsupportedMediaType,
+                                """{"error":"unsupported file type: $ext"}"""
+                            )
                             return@post
                         }
-                        val uploadDir = File(System.getProperty("user.home"), ".churchpresenter/device_media").also { it.mkdirs() }
+                        val uploadDir = File(
+                            System.getProperty("user.home"),
+                            ".churchpresenter/device_media"
+                        ).also { it.mkdirs() }
                         val uniqueName = if (File(uploadDir, safeName).exists()) {
                             val ts   = System.currentTimeMillis()
                             val base = safeName.substringBeforeLast('.', safeName)
@@ -257,7 +300,9 @@ private fun Route.mediaUploadRoutes(
                                 file.outputStream().use { out -> input.copyTo(out, bufferSize = 1 shl 20) }
                             }
                         }
-                        val mediaType = if (ext in Constants.AUDIO_EXTENSIONS) Constants.MEDIA_TYPE_AUDIO else Constants.MEDIA_TYPE_LOCAL
+                        val mediaType = if (
+                            ext in Constants.AUDIO_EXTENSIONS
+                        ) Constants.MEDIA_TYPE_AUDIO else Constants.MEDIA_TYPE_LOCAL
                         val uploadClientId = call.request.headers[Constants.HEADER_DEVICE_ID] ?: ""
                         scope.launch { server.onInstantAction.emit(CompanionServer.RemoteInstantAction(
                             actionType = "upload",
@@ -267,11 +312,15 @@ private fun Route.mediaUploadRoutes(
                         )) }
                         val escapedPath = file.absolutePath.replace("\\", "\\\\").replace("\"", "\\\"")
                         call.respondText(
-                            """{"ok":true,"path":"$escapedPath","name":"${file.nameWithoutExtension.replace("\"", "\\\"")}","mediaType":"$mediaType"}""",
+                            """{"ok":true,"path":"$escapedPath","name":"""" +
+                                """${file.nameWithoutExtension.replace("\"", "\\\"")}","mediaType":"$mediaType"}""",
                             ContentType.Application.Json
                         )
                     } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, """{"error":"upload failed: ${e.message?.replace("\"", "\\\"")}"}""")
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            """{"error":"upload failed: ${e.message?.replace("\"", "\\\"")}"}"""
+                        )
                     }
                 }
 

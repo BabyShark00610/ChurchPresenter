@@ -44,8 +44,13 @@ private fun Route.lowerThirdRoutes(
                 get("/api/lowerthirds") {
                     if (!server.checkApiKey(call)) return@get
                     val items = server.atem.lowerThirdFiles().map { f ->
-                        val dur = try { LottieRenderCache.lottieDurationMs(f.readText()) ?: 0L } catch (_: Exception) { 0L }
-                        val nameJson = json.encodeToString(kotlinx.serialization.serializer<String>(), f.nameWithoutExtension)
+                        val dur = try {
+                            LottieRenderCache.lottieDurationMs(f.readText()) ?: 0L
+                        } catch (_: Exception) { 0L }
+                        val nameJson = json.encodeToString(
+                            kotlinx.serialization.serializer<String>(),
+                            f.nameWithoutExtension
+                        )
                         """{"name":$nameJson,"durationMs":$dur}"""
                     }
                     call.respondText("[${items.joinToString(",")}]", ContentType.Application.Json)
@@ -60,14 +65,24 @@ private fun Route.lowerThirdRoutes(
                 get("/api/lowerthirds/{name}/json") {
                     if (!server.checkApiKey(call)) return@get
                     val rawName = call.parameters["name"] ?: ""
-                    val file = server.atem.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
+                    val file = server.atem.lowerThirdFiles().firstOrNull {
+                        it.nameWithoutExtension.equals(rawName, ignoreCase = true)
+                    }
                     if (file == null) {
-                        server.logRest("/api/lowerthirds/{name}/json", HttpStatusCode.NotFound.value, "lower_third_not_found")
+                        server.logRest(
+                            "/api/lowerthirds/{name}/json",
+                            HttpStatusCode.NotFound.value,
+                            "lower_third_not_found"
+                        )
                         call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
                         return@get
                     }
                     val ltJson = try { file.readText() } catch (_: Exception) {
-                        server.logRest("/api/lowerthirds/{name}/json", HttpStatusCode.InternalServerError.value, "could_not_read_lottie_file")
+                        server.logRest(
+                            "/api/lowerthirds/{name}/json",
+                            HttpStatusCode.InternalServerError.value,
+                            "could_not_read_lottie_file"
+                        )
                         call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
                         return@get
                     }
@@ -126,7 +141,9 @@ private fun Route.atemClipRoutes(
                         call.respond(HttpStatusCode.BadRequest, """{"error":"name required"}""")
                         return@post
                     }
-                    val file = server.atem.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(name, ignoreCase = true) }
+                    val file = server.atem.lowerThirdFiles().firstOrNull {
+                        it.nameWithoutExtension.equals(name, ignoreCase = true)
+                    }
                     if (file == null) {
                         call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
                         return@post
@@ -166,7 +183,8 @@ private fun Route.atemClipRoutes(
                         else -> ""","me":${key.mixEffect + 1},"key":${key.keyer + 1}"""
                     }
                     call.respondText(
-                        """{"status":"uploading","type":"clip","name":${server.atem.jsonStr(name)},"slot":${slot + 1}$keyInfoClip}""",
+                        """{"status":"uploading","type":"clip","name":${server.atem.jsonStr(name)},"slot":""" +
+                            """${slot + 1}$keyInfoClip}""",
                         ContentType.Application.Json
                     )
                 }
@@ -218,7 +236,8 @@ private suspend fun handleAtemStillUpload(
                     else -> ""","me":${key.mixEffect + 1},"key":${key.keyer + 1}"""
                 }
                 call.respondText(
-                    """{"status":"uploading","type":"still","name":${server.atem.jsonStr(name)},"slot":${slot + 1}$keyInfo}""",
+                    """{"status":"uploading","type":"still","name":${server.atem.jsonStr(name)},"slot":${slot + 1}""" +
+                        """$keyInfo}""",
                     ContentType.Application.Json
                 )
 }
