@@ -393,100 +393,117 @@ object SharedBrowserFrameCache {
         cdp.onUrlChanged = { url -> entry.currentUrl.value = url }
         System.err.println("[BrowserSource] WebSocket connected")
 
-        // Configure viewport and transparency
-        var resp = cdp.sendAsync("Emulation.setDeviceMetricsOverride", buildJsonObject {
-            put("width", renderWidth)
-            put("height", renderHeight)
-            put("deviceScaleFactor", 1)
-            put("mobile", false)
-        })
-        System.err.println("[BrowserSource] setDeviceMetricsOverride: $resp")
+        configurePage(cdp, url, renderWidth, renderHeight, customCss, forceTransparent)
+        runCaptureLoop(entry, cdp, fps)
+    }
 
-        if (forceTransparent) {
-            resp = cdp.sendAsync("Emulation.setDefaultBackgroundColorOverride", buildJsonObject {
-                put("color", buildJsonObject {
-                    put("r", 0)
-                    put("g", 0)
-                    put("b", 0)
-                    put("a", 0)
-                })
+    /** Viewport, transparency and navigation for a freshly connected page. */
+    private suspend fun configurePage(
+        cdp: CdpConnection,
+        url: String,
+        renderWidth: Int,
+        renderHeight: Int,
+        customCss: String,
+        forceTransparent: Boolean,
+    ) {
+    // Configure viewport and transparency
+    var resp = cdp.sendAsync("Emulation.setDeviceMetricsOverride", buildJsonObject {
+        put("width", renderWidth)
+        put("height", renderHeight)
+        put("deviceScaleFactor", 1)
+        put("mobile", false)
+    })
+    System.err.println("[BrowserSource] setDeviceMetricsOverride: $resp")
+
+    if (forceTransparent) {
+        resp = cdp.sendAsync("Emulation.setDefaultBackgroundColorOverride", buildJsonObject {
+            put("color", buildJsonObject {
+                put("r", 0)
+                put("g", 0)
+                put("b", 0)
+                put("a", 0)
             })
-            System.err.println("[BrowserSource] setDefaultBackgroundColorOverride: $resp")
+        })
+        System.err.println("[BrowserSource] setDefaultBackgroundColorOverride: $resp")
+    }
+
+    cdp.sendAsync("Page.enable", null)
+
+    // Navigate to the URL
+    if (url.isNotBlank()) {
+        resp = cdp.sendAsync("Page.navigate", buildJsonObject { put("url", url) })
+        System.err.println("[BrowserSource] Page.navigate($url): $resp")
+
+        // Wait for page to load
+        delay(PAGE_LOAD_SETTLE_MS)
+
+        // Inject transparency CSS
+        if (forceTransparent) {
+            cdp.sendAsync("Runtime.evaluate", buildJsonObject {
+                put("expression", "document.documentElement.style.background='transparent';document.body.style.background='transparent';")
+            })
         }
-
-        cdp.sendAsync("Page.enable", null)
-
-        // Navigate to the URL
-        if (url.isNotBlank()) {
-            resp = cdp.sendAsync("Page.navigate", buildJsonObject { put("url", url) })
-            System.err.println("[BrowserSource] Page.navigate($url): $resp")
-
-            // Wait for page to load
-            delay(PAGE_LOAD_SETTLE_MS)
-
-            // Inject transparency CSS
-            if (forceTransparent) {
-                cdp.sendAsync("Runtime.evaluate", buildJsonObject {
-                    put("expression", "document.documentElement.style.background='transparent';document.body.style.background='transparent';")
-                })
-            }
-            if (customCss.isNotBlank()) {
-                cdp.sendAsync("Runtime.evaluate", buildJsonObject {
-                    put("expression", "var s=document.createElement('style');s.textContent='${escapeForJsStringLiteral(customCss)}';document.head.appendChild(s);")
-                })
-            }
+        if (customCss.isNotBlank()) {
+            cdp.sendAsync("Runtime.evaluate", buildJsonObject {
+                put("expression", "var s=document.createElement('style');s.textContent='${escapeForJsStringLiteral(customCss)}';document.head.appendChild(s);")
+            })
         }
+    }
 
-        // Start capture loop
-        entry.captureIntervalMs = (MILLIS_PER_SECOND / fps.coerceIn(MIN_FPS, MAX_FPS)).coerceAtLeast(MIN_STARTUP_CAPTURE_INTERVAL_MS)
-        System.err.println("[BrowserSource] Starting capture loop at ${fps}fps")
+    }
 
-        var frameCount = 0
-        while (currentCoroutineContext().isActive) {
-            try {
-                val response = cdp.sendAsync("Page.captureScreenshot", buildJsonObject {
-                    put("format", "png")
-                })
+    /** Screenshots the page at [fps] into the entry until the coroutine is cancelled. */
+    private suspend fun runCaptureLoop(entry: CacheEntry, cdp: CdpConnection, fps: Int) {
+    // Start capture loop
+    entry.captureIntervalMs = (MILLIS_PER_SECOND / fps.coerceIn(MIN_FPS, MAX_FPS)).coerceAtLeast(MIN_STARTUP_CAPTURE_INTERVAL_MS)
+    System.err.println("[BrowserSource] Starting capture loop at ${fps}fps")
 
-                val data = response?.get("data")?.jsonPrimitive?.contentOrNull
-                if (data == null) {
-                    if (frameCount == 0) {
-                        if (response == null) {
-                            System.err.println("[BrowserSource] captureScreenshot returned null")
-                        } else {
-                            System.err.println(
-                                "[BrowserSource] captureScreenshot response has no 'data': ${response.keys}"
-                            )
-                        }
+    var frameCount = 0
+    while (currentCoroutineContext().isActive) {
+        try {
+            val response = cdp.sendAsync("Page.captureScreenshot", buildJsonObject {
+                put("format", "png")
+            })
+
+            val data = response?.get("data")?.jsonPrimitive?.contentOrNull
+            if (data == null) {
+                if (frameCount == 0) {
+                    if (response == null) {
+                        System.err.println("[BrowserSource] captureScreenshot returned null")
+                    } else {
+                        System.err.println(
+                            "[BrowserSource] captureScreenshot response has no 'data': ${response.keys}"
+                        )
+                    }
+                }
+            } else {
+                val pngBytes = withContext(Dispatchers.IO) {
+                    Base64.getDecoder().decode(data)
+                }
+                val img = withContext(Dispatchers.IO) {
+                    ImageIO.read(ByteArrayInputStream(pngBytes))
+                }
+                if (img != null) {
+                    entry.frame.value = img.toComposeImageBitmap()
+                    frameCount++
+                    if (frameCount == 1) {
+                        System.err.println("[BrowserSource] First frame captured: ${img.width}x${img.height}")
                     }
                 } else {
-                    val pngBytes = withContext(Dispatchers.IO) {
-                        Base64.getDecoder().decode(data)
+                    if (frameCount == 0) {
+                        System.err.println("[BrowserSource] ImageIO.read returned null (${pngBytes.size} bytes)")
                     }
-                    val img = withContext(Dispatchers.IO) {
-                        ImageIO.read(ByteArrayInputStream(pngBytes))
-                    }
-                    if (img != null) {
-                        entry.frame.value = img.toComposeImageBitmap()
-                        frameCount++
-                        if (frameCount == 1) {
-                            System.err.println("[BrowserSource] First frame captured: ${img.width}x${img.height}")
-                        }
-                    } else {
-                        if (frameCount == 0) {
-                            System.err.println("[BrowserSource] ImageIO.read returned null (${pngBytes.size} bytes)")
-                        }
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                if (frameCount == 0) {
-                    System.err.println("[BrowserSource] Capture error: ${e.message}")
                 }
             }
-            delay(entry.captureIntervalMs)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            if (frameCount == 0) {
+                System.err.println("[BrowserSource] Capture error: ${e.message}")
+            }
         }
+        delay(entry.captureIntervalMs)
+    }
     }
 
     private suspend fun waitForCdpReady(port: Int, timeoutMs: Long): Boolean {

@@ -193,73 +193,8 @@ internal suspend fun applyRemoteLiveState(
         return
     }
     when (mode) {
-        Presenting.BIBLE -> {
-            val codeBook = state.verseCodeBook
-            val codeChapter = state.verseCodeChapter
-            val codeVerse = state.verseCodeVerse
-            val hasFullCode = codeBook != null && codeChapter != null && codeVerse != null
-            if (bibleSyncMode == BibleSyncMode.REFERENCE_ONLY && hasFullCode) {
-                // Reference-only: never touch a downloaded file — resolve the SAME canonical verse in
-                // this instance's own independently-configured (possibly different-language) Bible via
-                // Bible.getVerseDetailsByCode, so the follower shows its own translation's wording, not
-                // the primary's. If this Bible has no verse at that code (versification mismatch, or no
-                // local bible configured), there's nothing sensible to show — quietly no-op.
-                val result = localPrimaryBible?.getVerseDetailsByCode(codeBook, codeChapter, codeVerse)
-                if (result != null) {
-                    presenterManager.setSelectedVerses(
-                        listOf(
-                            SelectedVerse(
-                                bibleAbbreviation = localPrimaryBible.getBibleAbbreviation(),
-                                bibleName = localPrimaryBible.getBibleTitle(),
-                                bookName = result.bookName,
-                                chapter = result.displayChapter,
-                                verseNumber = result.displayVerse,
-                                verseText = result.verseText,
-                                verseRange = state.verseRange ?: ""
-                            )
-                        )
-                    )
-                    InstanceLinkLogger.log(
-                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                        mapOf("contentType" to "BIBLE", "resolved" to true, "mode" to "reference_only")
-                    )
-                } else {
-                    InstanceLinkLogger.log(
-                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                        mapOf(
-                            "contentType" to "BIBLE", "resolved" to false, "mode" to "reference_only",
-                            "reason" to if (localPrimaryBible == null) "no_local_bible_loaded" else "verse_code_not_found"
-                        )
-                    )
-                }
-            } else if (state.bookName != null) {
-                // Full replica: the primary's own wording, verbatim.
-                // setSelectedVerses (plural), not setSelectedVerse — only the plural setter feeds the
-                // selectedVerses -> displayedVerses bridging LaunchedEffect that BiblePresenter actually
-                // renders from; the singular setter alone leaves the screen blank despite the mode
-                // correctly switching to BIBLE.
-                presenterManager.setSelectedVerses(
-                    listOf(
-                        SelectedVerse(
-                            bookName = state.bookName,
-                            chapter = state.chapter ?: 0,
-                            verseNumber = state.verseNumber ?: 0,
-                            verseText = state.verseText ?: "",
-                            verseRange = state.verseRange ?: ""
-                        )
-                    )
-                )
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "BIBLE", "resolved" to true, "mode" to "full_replica")
-                )
-            } else {
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "BIBLE", "resolved" to false, "reason" to "no_book_name_in_state")
-                )
-            }
-        }
+        Presenting.BIBLE ->
+            applyRemoteBible(state, presenterManager, bibleSyncMode, localPrimaryBible)
         Presenting.LYRICS -> if (state.songTitle != null) {
             presenterManager.setLyricSection(
                 LyricSection(
@@ -298,162 +233,12 @@ internal suspend fun applyRemoteLiveState(
                 mapOf("contentType" to "WEBSITE", "resolved" to (state.websiteUrl != null))
             )
         }
-        Presenting.PICTURES -> {
-            val folderId = state.pictureFolderId
-            val index = state.pictureIndex
-            if (folderId != null && index != null) {
-                val cacheFile = File(instanceLinkPictureCacheDir, "${folderId}_$index.jpg")
-                if (!cacheFile.exists()) {
-                    val bytes = instanceLinkViewModel.fetchPictureImageBytes(folderId, index)
-                    if (bytes != null) {
-                        // Temp-file + rename: this apply can be cancelled mid-write by a newer
-                        // live state (collectLatest) — a truncated file must never land under the
-                        // final name, or the exists() cache gate would trust it forever.
-                        val tmp = File(cacheFile.parentFile, "${cacheFile.name}.tmp")
-                        tmp.writeBytes(bytes)
-                        if (!tmp.renameTo(cacheFile)) tmp.delete()
-                        if (!cacheFile.exists()) {
-                            InstanceLinkLogger.log(
-                                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                                mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "cache_write_failed")
-                            )
-                            return
-                        }
-                    } else {
-                        InstanceLinkLogger.log(
-                            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                            mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "fetch_failed")
-                        )
-                        return
-                    }
-                }
-                presenterManager.setSelectedImagePath(cacheFile.absolutePath)
-                InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "PICTURES", "resolved" to true))
-            } else {
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "missing_folder_id_or_index")
-                )
-            }
-        }
-        Presenting.LOWER_THIRD -> {
-            val name = state.lowerThirdName
-            if (name != null) {
-                val bytes = instanceLinkViewModel.fetchLowerThirdJson(name)
-                if (bytes != null) {
-                    presenterManager.setLottieContent(
-                        String(bytes, Charsets.UTF_8), pauseAtFrame = false, pauseFrame = -1f,
-                        pauseDurationMs = 2000L, presetName = name
-                    )
-                    InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "LOWER_THIRD", "resolved" to true))
-                } else {
-                    InstanceLinkLogger.log(
-                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                        mapOf("contentType" to "LOWER_THIRD", "resolved" to false, "reason" to "fetch_failed")
-                    )
-                }
-            } else {
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "LOWER_THIRD", "resolved" to false, "reason" to "no_name_in_state")
-                )
-            }
-        }
-        Presenting.MEDIA -> {
-            // No position/transport sync in this pass: LiveStateDto carries which media is live,
-            // not where playback is — a follower starts the same media from the top.
-            val mediaType = state.mediaType
-            val streamUrl = state.mediaId?.let { instanceLinkViewModel.mediaStreamUrl(it) }
-            when {
-                mediaType == Constants.MEDIA_TYPE_URL && state.mediaUrl != null && onPlayRemoteMedia != null -> {
-                    onPlayRemoteMedia(state.mediaUrl, mediaType)
-                    presenterManager.setCurrentMedia(state.mediaUrl, mediaType)
-                    InstanceLinkLogger.log(
-                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                        mapOf("contentType" to "MEDIA", "resolved" to true, "source" to "url", "positionSync" to false)
-                    )
-                }
-                streamUrl != null && onPlayRemoteMedia != null -> {
-                    val type = mediaType ?: Constants.MEDIA_TYPE_LOCAL
-                    onPlayRemoteMedia(streamUrl, type)
-                    presenterManager.setCurrentMedia(streamUrl, type)
-                    InstanceLinkLogger.log(
-                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                        mapOf("contentType" to "MEDIA", "resolved" to true, "source" to "stream", "positionSync" to false)
-                    )
-                }
-                else -> InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    // Media launched outside the primary's schedule has no stream mapping
-                    // (LiveStateDto.mediaId comes from its schedule-item → path map).
-                    mapOf("contentType" to "MEDIA", "resolved" to false, "reason" to "no_media_id")
-                )
-            }
-        }
-        Presenting.CANVAS -> {
-            val scene = state.sceneId?.let { id -> localScenes.find { it.id == id } }
-            if (scene != null) {
-                presenterManager.setActiveScene(scene)
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "CANVAS", "resolved" to true)
-                )
-            } else {
-                // Id-match only: scene content isn't fetchable over the link — mirroring works
-                // when the same scenes.json exists on both instances. Mode still switches.
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf(
-                        "contentType" to "CANVAS", "resolved" to false,
-                        "reason" to "scene_not_found_locally", "sceneName" to state.sceneName
-                    )
-                )
-            }
-        }
-        Presenting.QA -> {
-            val questionId = state.questionId
-            val questionText = state.questionText
-            if (questionId != null && questionText != null) {
-                presenterManager.setDisplayedQuestion(
-                    Question(
-                        id = questionId,
-                        text = questionText,
-                        timestamp = System.currentTimeMillis(),
-                        status = QuestionStatus.APPROVED
-                    )
-                )
-                InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "QA", "resolved" to true))
-            } else {
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "QA", "resolved" to false, "reason" to "no_question_in_state")
-                )
-            }
-        }
-        Presenting.DICTIONARY -> {
-            val entry = state.dictionaryEntry
-            val word = state.dictionaryWord
-            when {
-                entry != null -> {
-                    presenterManager.setDisplayedDictionaryEntry(entry)
-                    InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "DICTIONARY", "resolved" to true))
-                }
-                word != null -> {
-                    // Old primary that doesn't carry the full entry — show what we have.
-                    presenterManager.setDisplayedDictionaryEntry(
-                        StrongsEntry(number = "", word = word, transliteration = "", pronunciation = "", definition = "")
-                    )
-                    InstanceLinkLogger.log(
-                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                        mapOf("contentType" to "DICTIONARY", "resolved" to true, "partial" to true)
-                    )
-                }
-                else -> InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "DICTIONARY", "resolved" to false, "reason" to "no_word_in_state")
-                )
-            }
-        }
+        Presenting.PICTURES -> applyRemotePictures(state, presenterManager, instanceLinkViewModel)
+        Presenting.LOWER_THIRD -> applyRemoteLowerThird(state, presenterManager, instanceLinkViewModel)
+        Presenting.MEDIA -> applyRemoteMedia(state, presenterManager, instanceLinkViewModel, onPlayRemoteMedia)
+        Presenting.CANVAS -> applyRemoteCanvas(state, presenterManager, localScenes)
+        Presenting.QA -> applyRemoteQa(state, presenterManager)
+        Presenting.DICTIONARY -> applyRemoteDictionary(state, presenterManager)
         else -> {
             // presentation: mirrored via its own dedicated broadcast (remotePresentationSlide
             // collector); stt: no caption feed exists to mirror. Mode still switches below.
@@ -783,4 +568,265 @@ internal fun addScheduleItem(
         else -> return false
     }
     return true
+}
+
+
+/** The BIBLE half of [applyRemoteLiveState]: either this instance's own wording, or the primary's. */
+private fun applyRemoteBible(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+    bibleSyncMode: BibleSyncMode,
+    localPrimaryBible: Bible?,
+) {
+    val codeBook = state.verseCodeBook
+    val codeChapter = state.verseCodeChapter
+    val codeVerse = state.verseCodeVerse
+    val hasFullCode = codeBook != null && codeChapter != null && codeVerse != null
+    if (bibleSyncMode == BibleSyncMode.REFERENCE_ONLY && hasFullCode) {
+        // Reference-only: never touch a downloaded file — resolve the SAME canonical verse in
+        // this instance's own independently-configured (possibly different-language) Bible via
+        // Bible.getVerseDetailsByCode, so the follower shows its own translation's wording, not
+        // the primary's. If this Bible has no verse at that code (versification mismatch, or no
+        // local bible configured), there's nothing sensible to show — quietly no-op.
+        val result = localPrimaryBible?.getVerseDetailsByCode(codeBook, codeChapter, codeVerse)
+        if (result != null) {
+            presenterManager.setSelectedVerses(
+                listOf(
+                    SelectedVerse(
+                        bibleAbbreviation = localPrimaryBible.getBibleAbbreviation(),
+                        bibleName = localPrimaryBible.getBibleTitle(),
+                        bookName = result.bookName,
+                        chapter = result.displayChapter,
+                        verseNumber = result.displayVerse,
+                        verseText = result.verseText,
+                        verseRange = state.verseRange ?: ""
+                    )
+                )
+            )
+            InstanceLinkLogger.log(
+                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                mapOf("contentType" to "BIBLE", "resolved" to true, "mode" to "reference_only")
+            )
+        } else {
+            InstanceLinkLogger.log(
+                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                mapOf(
+                    "contentType" to "BIBLE", "resolved" to false, "mode" to "reference_only",
+                    "reason" to if (localPrimaryBible == null) "no_local_bible_loaded" else "verse_code_not_found"
+                )
+            )
+        }
+    } else if (state.bookName != null) {
+        // Full replica: the primary's own wording, verbatim.
+        // setSelectedVerses (plural), not setSelectedVerse — only the plural setter feeds the
+        // selectedVerses -> displayedVerses bridging LaunchedEffect that BiblePresenter actually
+        // renders from; the singular setter alone leaves the screen blank despite the mode
+        // correctly switching to BIBLE.
+        presenterManager.setSelectedVerses(
+            listOf(
+                SelectedVerse(
+                    bookName = state.bookName,
+                    chapter = state.chapter ?: 0,
+                    verseNumber = state.verseNumber ?: 0,
+                    verseText = state.verseText ?: "",
+                    verseRange = state.verseRange ?: ""
+                )
+            )
+        )
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "BIBLE", "resolved" to true, "mode" to "full_replica")
+        )
+    } else {
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "BIBLE", "resolved" to false, "reason" to "no_book_name_in_state")
+        )
+    }
+}
+
+private suspend fun applyRemotePictures(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+    instanceLinkViewModel: InstanceLinkViewModel,
+) {
+    val folderId = state.pictureFolderId
+    val index = state.pictureIndex
+    if (folderId != null && index != null) {
+        val cacheFile = File(instanceLinkPictureCacheDir, "${folderId}_$index.jpg")
+        if (!cacheFile.exists()) {
+            val bytes = instanceLinkViewModel.fetchPictureImageBytes(folderId, index)
+            if (bytes != null) {
+                // Temp-file + rename: this apply can be cancelled mid-write by a newer
+                // live state (collectLatest) — a truncated file must never land under the
+                // final name, or the exists() cache gate would trust it forever.
+                val tmp = File(cacheFile.parentFile, "${cacheFile.name}.tmp")
+                tmp.writeBytes(bytes)
+                if (!tmp.renameTo(cacheFile)) tmp.delete()
+                if (!cacheFile.exists()) {
+                    InstanceLinkLogger.log(
+                        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                        mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "cache_write_failed")
+                    )
+                    return
+                }
+            } else {
+                InstanceLinkLogger.log(
+                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                    mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "fetch_failed")
+                )
+                return
+            }
+        }
+        presenterManager.setSelectedImagePath(cacheFile.absolutePath)
+        InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "PICTURES", "resolved" to true))
+    } else {
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "missing_folder_id_or_index")
+        )
+    }
+}
+
+private suspend fun applyRemoteMedia(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+    instanceLinkViewModel: InstanceLinkViewModel,
+    onPlayRemoteMedia: ((url: String, type: String) -> Unit)?,
+) {
+    // No position/transport sync in this pass: LiveStateDto carries which media is live,
+    // not where playback is — a follower starts the same media from the top.
+    val mediaType = state.mediaType
+    val streamUrl = state.mediaId?.let { instanceLinkViewModel.mediaStreamUrl(it) }
+    when {
+        mediaType == Constants.MEDIA_TYPE_URL && state.mediaUrl != null && onPlayRemoteMedia != null -> {
+            onPlayRemoteMedia(state.mediaUrl, mediaType)
+            presenterManager.setCurrentMedia(state.mediaUrl, mediaType)
+            InstanceLinkLogger.log(
+                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                mapOf("contentType" to "MEDIA", "resolved" to true, "source" to "url", "positionSync" to false)
+            )
+        }
+        streamUrl != null && onPlayRemoteMedia != null -> {
+            val type = mediaType ?: Constants.MEDIA_TYPE_LOCAL
+            onPlayRemoteMedia(streamUrl, type)
+            presenterManager.setCurrentMedia(streamUrl, type)
+            InstanceLinkLogger.log(
+                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                mapOf("contentType" to "MEDIA", "resolved" to true, "source" to "stream", "positionSync" to false)
+            )
+        }
+        else -> InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            // Media launched outside the primary's schedule has no stream mapping
+            // (LiveStateDto.mediaId comes from its schedule-item → path map).
+            mapOf("contentType" to "MEDIA", "resolved" to false, "reason" to "no_media_id")
+        )
+    }
+}
+
+private suspend fun applyRemoteLowerThird(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+    instanceLinkViewModel: InstanceLinkViewModel,
+) {
+    val name = state.lowerThirdName
+    if (name != null) {
+        val bytes = instanceLinkViewModel.fetchLowerThirdJson(name)
+        if (bytes != null) {
+            presenterManager.setLottieContent(
+                String(bytes, Charsets.UTF_8), pauseAtFrame = false, pauseFrame = -1f,
+                pauseDurationMs = 2000L, presetName = name
+            )
+            InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "LOWER_THIRD", "resolved" to true))
+        } else {
+            InstanceLinkLogger.log(
+                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                mapOf("contentType" to "LOWER_THIRD", "resolved" to false, "reason" to "fetch_failed")
+            )
+        }
+    } else {
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "LOWER_THIRD", "resolved" to false, "reason" to "no_name_in_state")
+        )
+    }
+}
+
+
+private fun applyRemoteCanvas(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+    localScenes: List<Scene>,
+) {
+    val scene = state.sceneId?.let { id -> localScenes.find { it.id == id } }
+    if (scene != null) {
+        presenterManager.setActiveScene(scene)
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "CANVAS", "resolved" to true)
+        )
+    } else {
+        // Id-match only: scene content isn't fetchable over the link — mirroring works
+        // when the same scenes.json exists on both instances. Mode still switches.
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf(
+                "contentType" to "CANVAS", "resolved" to false,
+                "reason" to "scene_not_found_locally", "sceneName" to state.sceneName
+            )
+        )
+    }
+}
+
+private fun applyRemoteQa(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+) {
+    val questionId = state.questionId
+    val questionText = state.questionText
+    if (questionId != null && questionText != null) {
+        presenterManager.setDisplayedQuestion(
+            Question(
+                id = questionId,
+                text = questionText,
+                timestamp = System.currentTimeMillis(),
+                status = QuestionStatus.APPROVED
+            )
+        )
+        InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "QA", "resolved" to true))
+    } else {
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "QA", "resolved" to false, "reason" to "no_question_in_state")
+        )
+    }
+}
+
+private fun applyRemoteDictionary(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+) {
+    val entry = state.dictionaryEntry
+    val word = state.dictionaryWord
+    when {
+        entry != null -> {
+            presenterManager.setDisplayedDictionaryEntry(entry)
+            InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "DICTIONARY", "resolved" to true))
+        }
+        word != null -> {
+            // Old primary that doesn't carry the full entry — show what we have.
+            presenterManager.setDisplayedDictionaryEntry(
+                StrongsEntry(number = "", word = word, transliteration = "", pronunciation = "", definition = "")
+            )
+            InstanceLinkLogger.log(
+                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+                mapOf("contentType" to "DICTIONARY", "resolved" to true, "partial" to true)
+            )
+        }
+        else -> InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "DICTIONARY", "resolved" to false, "reason" to "no_word_in_state")
+        )
+    }
 }
