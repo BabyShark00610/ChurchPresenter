@@ -29,6 +29,13 @@ import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.churchpresenter.app.churchpresenter.server.LottieRenderCache
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
+private const val WATCHDOG_INTERVAL_MS = 5_000L
+private const val PLAYER_SETTLE_MS = 100L
+private const val FRAME_INTERVAL_MS = 33L
+private const val TICK_INTERVAL_MS = 1000L
+private const val SECONDS_PER_HOUR = 3600
+private const val SECONDS_PER_MINUTE = 60
+
 class PresenterManager {
 
     private val preRenderScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -115,7 +122,7 @@ class PresenterManager {
     fun identifyBrowserSourceOutput(index: Int) {
         _browserSourceIdentifying.value = _browserSourceIdentifying.value + index
         preRenderScope.launch {
-            delay(5_000L)
+            delay(WATCHDOG_INTERVAL_MS)
             _browserSourceIdentifying.value = _browserSourceIdentifying.value - index
         }
     }
@@ -503,7 +510,7 @@ class PresenterManager {
         while (true) {
             val player = presentationPlayer
             if (player == null) {
-                delay(100)
+                delay(PLAYER_SETTLE_MS)
                 continue
             }
             withFrameNanos { now ->
@@ -513,7 +520,7 @@ class PresenterManager {
             }
             if (!player.isAnimating(System.nanoTime())) {
                 // Settled: keep the last frame, poll for the next advance/slide change.
-                delay(33)
+                delay(FRAME_INTERVAL_MS)
             }
         }
     }
@@ -760,7 +767,7 @@ class PresenterManager {
                 if (remaining <= 0) break
                 _timerRemainingSeconds.value = remaining
                 pushAnnouncementTextIfLive(AnnouncementsViewModel.formatTimer(remaining))
-                delay(1000L)
+                delay(TICK_INTERVAL_MS)
             }
             _timerRemainingSeconds.value = 0
             _timerRunning.value = false
@@ -784,7 +791,7 @@ class PresenterManager {
                 val elapsed = (java.time.Instant.now().epochSecond - startEpochSecond).toInt().coerceAtLeast(0)
                 _timerRemainingSeconds.value = elapsed
                 pushAnnouncementTextIfLive(AnnouncementsViewModel.formatTimer(elapsed))
-                delay(1000L)
+                delay(TICK_INTERVAL_MS)
             }
         }
     }
@@ -802,7 +809,7 @@ class PresenterManager {
                 val remaining = if (diff > 0) diff else diff + 86400
                 _timerRemainingSeconds.value = remaining
                 pushAnnouncementTextIfLive(AnnouncementsViewModel.formatTimer(remaining))
-                delay(1000L)
+                delay(TICK_INTERVAL_MS)
             }
         }
     }
@@ -816,7 +823,7 @@ class PresenterManager {
             while (true) {
                 val text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern(formatPattern))
                 pushAnnouncementTextIfLive(text)
-                delay(1000L)
+                delay(TICK_INTERVAL_MS)
             }
         }
     }
@@ -846,7 +853,7 @@ class PresenterManager {
                 Constants.TIMER_MODE_COUNT_UP -> startAnnouncementCountUp(0)
                 Constants.TIMER_MODE_CLOCK -> startAnnouncementSpecificTime(targetHour, targetMinute, targetSecond)
                 Constants.TIMER_MODE_CLOCK_DISPLAY -> startAnnouncementClockDisplay(liveClockFormat)
-                else -> startAnnouncementCountdown(timerHours * 3600 + timerMinutes * 60 + timerSeconds, timerExpiredText)
+                else -> startAnnouncementCountdown(timerHours * SECONDS_PER_HOUR + timerMinutes * SECONDS_PER_MINUTE + timerSeconds, timerExpiredText)
             }
         }
         _announcementTickerLive.value = true

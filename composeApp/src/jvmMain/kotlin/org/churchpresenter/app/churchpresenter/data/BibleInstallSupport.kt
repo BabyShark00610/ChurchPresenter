@@ -23,6 +23,11 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 import kotlin.random.Random
 
+private const val JITTER_MIN = 0.8
+private const val JITTER_MAX = 1.2
+private const val HTTP_OK = 200
+private const val MAX_CAUSE_DEPTH = 4
+
 /**
  * The mechanics every Bible source shares: fetch an archive, prove it arrived intact, unpack it,
  * and put the finished module in place without ever endangering the one already installed.
@@ -106,7 +111,7 @@ internal object BibleInstallSupport {
      */
     internal fun downloadRetryDelayMs(attempt: Int, floorMs: Long = DEFAULT_DOWNLOAD_RETRY_FLOOR_MS): Long {
         val base = (floorMs shl attempt.coerceIn(0, 4)).coerceAtMost(MAX_DOWNLOAD_RETRY_DELAY_MS)
-        return (base * Random.nextDouble(0.8, 1.2)).toLong().coerceAtLeast(floorMs)
+        return (base * Random.nextDouble(JITTER_MIN, JITTER_MAX)).toLong().coerceAtLeast(floorMs)
     }
 
     /**
@@ -211,7 +216,7 @@ internal object BibleInstallSupport {
                 }
                 if (status !in 200..299) return DownloadResult(status, written)
                 // 206 is normalised away — callers only ever ask whether the bytes arrived.
-                return DownloadResult(200, written)
+                return DownloadResult(HTTP_OK, written)
             } catch (e: IOException) {
                 lastFailure = e
                 stalledAttempts = if (written > resumeFrom) 0 else stalledAttempts + 1
@@ -248,7 +253,7 @@ internal object BibleInstallSupport {
         this is SocketTimeoutException ||
             this is HttpRequestTimeoutException ||
             this is TruncatedBodyException ||
-            (depth < 4 && cause?.isStall(depth + 1) == true)
+            (depth < MAX_CAUSE_DEPTH && cause?.isStall(depth + 1) == true)
 
     data class DownloadResult(val status: Int, val bytesWritten: Long)
 

@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+private const val DEFAULT_BEZEL_COLOR = 0xFF2B2B2B
+private const val DEFAULT_SCREEN_COLOR = 0xFF1A1A1A
+
 /**
  * A TV/monitor-styled mockup of the output screen: a bezel, an inset screen area for [content],
  * and a small stand underneath. Used by settings previews that show where on the output screen
@@ -25,8 +28,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun TvScreenBox(
     modifier: Modifier = Modifier,
-    bezelColor: Color = Color(0xFF2B2B2B),
-    screenColor: Color = Color(0xFF1A1A1A),
+    bezelColor: Color = Color(DEFAULT_BEZEL_COLOR),
+    screenColor: Color = Color(DEFAULT_SCREEN_COLOR),
     content: @Composable BoxScope.() -> Unit = {}
 ) {
     // `modifier` (which may carry a RowScope/ColumnScope weight from the caller) must land on this

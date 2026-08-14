@@ -83,6 +83,14 @@ import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 
+private const val MAX_ANGLE_DEGREES = 360f
+private const val PERCENT_SCALE = 100f
+private const val MIN_RENDER_WIDTH = 320
+private const val MAX_RENDER_WIDTH = 3840
+private const val MIN_RENDER_HEIGHT = 240
+private const val MAX_RENDER_HEIGHT = 2160
+private const val MAX_FPS = 60
+
 /**
  * The scene sources that come from a file, a URL or plain typing: image, text, colour, video
  * and browser.
@@ -312,10 +320,10 @@ internal fun ColorProperties(source: SceneSource.ColorSource, onUpdate: (SceneSo
         PropertySlider("${stringResource(Res.string.canvas_color_2)} ${stringResource(Res.string.canvas_opacity)}", source.gradientColor2Opacity, 0f, 1f) { v ->
             onUpdate(source.copy(gradientColor2Opacity = v))
         }
-        PropertySliderWithInput(stringResource(Res.string.canvas_angle), source.gradientAngle, 0f, 360f, "°") { v ->
+        PropertySliderWithInput(stringResource(Res.string.canvas_angle), source.gradientAngle, 0f, MAX_ANGLE_DEGREES, "°") { v ->
             onUpdate(source.copy(gradientAngle = v))
         }
-        PropertySliderWithInput(stringResource(Res.string.position), source.gradientPosition * 100f, 0f, 100f, "%") { v ->
+        PropertySliderWithInput(stringResource(Res.string.position), source.gradientPosition * PERCENT_SCALE, 0f, PERCENT_SCALE, "%") { v ->
             onUpdate(source.copy(gradientPosition = (v / 100f).coerceIn(0f, 1f)))
         }
     }
@@ -405,14 +413,14 @@ internal fun BrowserProperties(source: SceneSource.BrowserSource, onUpdate: (Sce
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         PropertyTextField(stringResource(Res.string.canvas_render_width), source.renderWidth.toString(), Modifier.weight(1f)) { v ->
-            v.toIntOrNull()?.let { onUpdate(source.copy(renderWidth = it.coerceIn(320, 3840))) }
+            v.toIntOrNull()?.let { onUpdate(source.copy(renderWidth = it.coerceIn(MIN_RENDER_WIDTH, MAX_RENDER_WIDTH))) }
         }
         PropertyTextField(stringResource(Res.string.canvas_render_height), source.renderHeight.toString(), Modifier.weight(1f)) { v ->
-            v.toIntOrNull()?.let { onUpdate(source.copy(renderHeight = it.coerceIn(240, 2160))) }
+            v.toIntOrNull()?.let { onUpdate(source.copy(renderHeight = it.coerceIn(MIN_RENDER_HEIGHT, MAX_RENDER_HEIGHT))) }
         }
     }
     PropertyTextField(stringResource(Res.string.canvas_fps), source.fps.toString()) { v ->
-        v.toIntOrNull()?.let { onUpdate(source.copy(fps = it.coerceIn(1, 60))) }
+        v.toIntOrNull()?.let { onUpdate(source.copy(fps = it.coerceIn(1, MAX_FPS))) }
     }
     LabeledCheckbox(
         checked = source.forceTransparent,

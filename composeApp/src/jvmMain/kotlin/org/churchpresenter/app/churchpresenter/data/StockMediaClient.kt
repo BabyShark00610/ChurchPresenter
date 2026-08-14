@@ -8,6 +8,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -163,10 +164,10 @@ object StockMediaClient {
                 }
             }
 
-            if (response.status.value == 401 || response.status.value == 403) {
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 return@withContext SearchOutcome.InvalidKey
             }
-            if (response.status.value == 429) {
+            if (response.status == HttpStatusCode.TooManyRequests) {
                 return@withContext SearchOutcome.RateLimited
             }
             if (response.status.value !in 200..299) {

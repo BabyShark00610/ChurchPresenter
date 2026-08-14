@@ -33,6 +33,14 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
+private const val MILLIS_PER_SECOND = 1000.0
+private const val DEFAULT_CANVAS_WIDTH = 1920
+private const val DEFAULT_CANVAS_HEIGHT = 1080
+private const val FOOTER_POINTER_BYTES = 8
+private const val FPS_SCALE = 100
+private const val INT_BYTES = 4
+private const val UNIFORM_FRAME_MAX_BYTES = 16
+
 /**
  * Disk cache of lower-third lottie animations pre-rendered to raw ARGB frames — the single
  * render pass shared by every consumer. Desktop playback streams frames straight out of the
@@ -132,14 +140,14 @@ object LottieRenderCache {
         val ip = obj["ip"]?.jsonPrimitive?.double ?: 0.0
         val op = obj["op"]?.jsonPrimitive?.double ?: return null
         if (fr <= 0.0 || op <= ip) null
-        else (((op - ip) / fr) * 1000.0).toLong().coerceAtLeast(1L)
+        else (((op - ip) / fr) * MILLIS_PER_SECOND).toLong().coerceAtLeast(1L)
     } catch (_: Exception) {
         null
     }
 
     /** Frame count for a clip of this lottie at the given fps, or null if the JSON has no timing. */
     fun clipFrameCount(lottieJson: String, fps: Double): Int? =
-        lottieDurationMs(lottieJson)?.let { ((it / 1000.0) * fps).toInt().coerceAtLeast(1) }
+        lottieDurationMs(lottieJson)?.let { ((it / MILLIS_PER_SECOND) * fps).toInt().coerceAtLeast(1) }
 
     // ── Variant / size policy ──────────────────────────────────────────────────
 
@@ -158,7 +166,7 @@ object LottieRenderCache {
     private const val MAX_CANVAS_DIMENSION = 1920
 
     private fun clampedCanvas(lottieJson: String): Pair<Int, Int> {
-        val (w, h) = lottieCanvasSize(lottieJson) ?: (1920 to 1080)
+        val (w, h) = lottieCanvasSize(lottieJson) ?: (DEFAULT_CANVAS_WIDTH to DEFAULT_CANVAS_HEIGHT)
         return clampCanvasSize(w, h)
     }
 
@@ -336,7 +344,7 @@ object LottieRenderCache {
                 height = raf.readInt()
                 fpsX100 = raf.readInt()
                 frameCount = raf.readInt()
-                raf.seek(raf.length() - 8)
+                raf.seek(raf.length() - FOOTER_POINTER_BYTES)
                 val footerStart = raf.readLong()
                 raf.seek(footerStart)
                 frameOffsets = LongArray(frameCount) { raf.readLong() }
@@ -401,7 +409,7 @@ object LottieRenderCache {
                 out.writeByte(0) // flags — reserved
                 out.writeInt(v.width)
                 out.writeInt(v.height)
-                out.writeInt(if (v.clip) (v.fps * 100).toInt() else 0)
+                out.writeInt(if (v.clip) (v.fps * FPS_SCALE).toInt() else 0)
                 val frames = if (v.clip) v.frameCount else 1
                 out.writeInt(frames)
                 var pos = HEADER_LEN
@@ -415,7 +423,7 @@ object LottieRenderCache {
                         offsets[i] = pos
                         out.writeInt(enc.size)
                         out.write(enc)
-                        pos += 4 + enc.size
+                        pos += INT_BYTES + enc.size
                         maxEncodedSize = maxOf(maxEncodedSize, enc.size)
                         progress.value = (i + 1).toFloat() / frames
                     }
@@ -424,7 +432,7 @@ object LottieRenderCache {
                 out.writeLong(pos)
                 // A fully uniform frame RLE-encodes to a single 8-byte record — if every
                 // frame did, the off-screen capture almost certainly produced blanks
-                if (maxEncodedSize <= 16) {
+                if (maxEncodedSize <= UNIFORM_FRAME_MAX_BYTES) {
                     System.err.println("[LottieRenderCache] WARNING: all frames of $key are uniform — captures may be blank")
                 }
             }
@@ -489,7 +497,7 @@ object LottieRenderCache {
         val buf = ByteBuffer.wrap(payload)
         val out = IntArray(pixelCount)
         var o = 0
-        while (buf.remaining() >= 4 && o < pixelCount) {
+        while (buf.remaining() >= INT_BYTES && o < pixelCount) {
             val count = buf.int
             if (count > 0) {
                 val value = buf.int

@@ -6,6 +6,16 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.charset.StandardCharsets
 
+private const val MIN_SHORTENABLE_WORD_LENGTH = 3
+private const val MAX_ACRONYM_WORDS = 4
+private const val SHORT_WORD_MAX_LENGTH = 4
+private const val SHORT_WORD_TRUNCATED_LENGTH = 3
+private const val SHORT_TITLE_MAX_LENGTH = 5
+private const val REGEX_GROUP_THIRD = 3
+private const val TITLE_PREFIX_LENGTH = 8
+private const val CHAPTER_KEY_BOOK_SHIFT = 20
+private const val CHAPTER_KEY_CHAPTER_MASK = 0xFFFFFL
+
 data class ChapterResult(val previewIds: List<String>, val verses: List<String>)
 
 /** A parenthesised aside in a module title: "King James Version (KJV)", "… (Public Domain)". */
@@ -77,15 +87,15 @@ class Bible {
             // "1 Corinthians", "2 Samuel" — the numeral is the whole point of the name.
             words.size >= 2 && words[0].all { it.isDigit() } ->
                 "${words[0]} ${shortenWord(words[1])}"
-            else -> words.firstOrNull { it.length > 3 }?.let(::shortenWord)
-                ?: words.take(4).joinToString("") { it.first().uppercase() }
+            else -> words.firstOrNull { it.length > MIN_SHORTENABLE_WORD_LENGTH }?.let(::shortenWord)
+                ?: words.take(MAX_ACRONYM_WORDS).joinToString("") { it.first().uppercase() }
         }
     }
 
     /** One word shortened: kept whole at three characters or fewer, else its first three or four. */
     private fun shortenWord(word: String): String = when {
-        word.length <= 4 -> word
-        else -> word.take(3)
+        word.length <= SHORT_WORD_MAX_LENGTH -> word
+        else -> word.take(SHORT_WORD_TRUNCATED_LENGTH)
     }
 
     /**
@@ -114,14 +124,14 @@ class Bible {
                 // If title is short (like "RSV" or "KJV"), use it as-is — minus any punctuation
                 // riding along with it, so "KJV." does not label every verse "KJV.".
                 val loneWord = words.singleOrNull()?.filter { it.isLetterOrDigit() }
-                if (loneWord != null && loneWord.isNotEmpty() && loneWord.length <= 5) {
+                if (loneWord != null && loneWord.isNotEmpty() && loneWord.length <= SHORT_TITLE_MAX_LENGTH) {
                     return loneWord
                 }
 
                 // Generate abbreviation from title words
                 return words.mapNotNull { word ->
                     word.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()
-                }.take(4).joinToString("")
+                }.take(MAX_ACRONYM_WORDS).joinToString("")
             }
         }
 
@@ -165,7 +175,7 @@ class Bible {
                             val bookId = m.groupValues[1].toInt()
                             headerOrder.add(bookId)
                             parsedBookNames[bookId] = m.groupValues[2].trim()
-                            parsedChapterCounts[bookId] = m.groupValues[3].toInt()
+                            parsedChapterCounts[bookId] = m.groupValues[REGEX_GROUP_THIRD].toInt()
                         }
                     }
             }
@@ -242,7 +252,7 @@ class Bible {
 
                     // Extract Bible title from ##Title: line
                     if (line.startsWith("##Title:")) {
-                        bibleTitle = line.substring(8).trim()
+                        bibleTitle = line.substring(TITLE_PREFIX_LENGTH).trim()
                         return@forEachLine
                     }
 
@@ -411,7 +421,7 @@ class Bible {
     }
 
     /** Encodes (bookId, chapterNum) as a single Long key for the HashMap. */
-    private fun chapterKey(book: Int, chapter: Int): Long = book.toLong().shl(20) or chapter.toLong()
+    private fun chapterKey(book: Int, chapter: Int): Long = book.toLong().shl(CHAPTER_KEY_BOOK_SHIFT) or chapter.toLong()
 
     private fun buildChapterIndex() {
         chapterIndex.clear()
@@ -600,7 +610,7 @@ class Bible {
      */
     fun parseVerseCode(verseId: String): Triple<Int, Int, Int>? {
         val m = Regex("B(\\d{3})C(\\d{3})V(\\d{3})").matchEntire(verseId) ?: return null
-        return Triple(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
+        return Triple(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[REGEX_GROUP_THIRD].toInt())
     }
 
     /**
@@ -639,8 +649,8 @@ class Bible {
         val displayBook: Int
         val displayChapter: Int
         if (displayKey != null) {
-            displayBook = (displayKey shr 20).toInt()
-            displayChapter = (displayKey and 0xFFFFF).toInt()
+            displayBook = (displayKey shr CHAPTER_KEY_BOOK_SHIFT).toInt()
+            displayChapter = (displayKey and CHAPTER_KEY_CHAPTER_MASK).toInt()
         } else {
             displayBook = codeBook
             displayChapter = codeChapter

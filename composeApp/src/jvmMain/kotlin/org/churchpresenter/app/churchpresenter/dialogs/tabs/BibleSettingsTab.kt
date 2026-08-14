@@ -116,6 +116,8 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
+private const val COLUMN_WEIGHT = 0.48f
+
 /** [ActionIconButton]'s own default size, which the reorder buttons take and their gaps stand in for. */
 private val REORDER_BUTTON_SIZE = 34.dp
 
@@ -141,7 +143,7 @@ fun BibleSettingsTab(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 400.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 LeftColumn(
@@ -153,7 +155,7 @@ fun BibleSettingsTab(
                 )
             }
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 400.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val translations = settings.bibleSettings.translationList()

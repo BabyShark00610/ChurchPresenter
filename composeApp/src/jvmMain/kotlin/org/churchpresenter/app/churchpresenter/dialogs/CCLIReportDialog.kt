@@ -152,6 +152,21 @@ import javax.swing.filechooser.FileNameExtensionFilter
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 
+private const val LAST_HOUR = 23
+private const val LAST_MINUTE = 59
+private const val LAST_SECOND = 59
+private const val PRESET_LAST_30_DAYS = 30
+private const val PRESET_LAST_90_DAYS = 90
+private const val PRESET_INDEX_LAST_YEAR = 3
+private const val PRESET_INDEX_ALL_TIME = 4
+private const val DECEMBER = 12
+private const val DECEMBER_LAST_DAY = 31
+private const val TOP_CHART_ENTRIES = 12
+private const val AXIS_TICK_COUNT = 4
+private const val TOOLTIP_VERTICAL_OFFSET_DP = 6
+private const val MIN_BAR_FRACTION = 0.004f
+private const val PILL_CORNER_PERCENT = 50
+
 
 @Composable
 fun CCLIReportDialog(
@@ -227,7 +242,7 @@ internal fun CCLIReportContent(
     fun fromMs(): Long = LocalDate.of(fromYear, fromMonth, fromDay.coerceAtMost(LocalDate.of(fromYear, fromMonth, 1).lengthOfMonth()))
         .atStartOfDay(zone).toInstant().toEpochMilli()
     fun toMs(): Long = LocalDate.of(toYear, toMonth, toDay.coerceAtMost(LocalDate.of(toYear, toMonth, 1).lengthOfMonth()))
-        .atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
+        .atTime(LAST_HOUR, LAST_MINUTE, LAST_SECOND).atZone(zone).toInstant().toEpochMilli()
 
     var songs by remember { mutableStateOf(emptyList<SongSummary>()) }
     var verses by remember { mutableStateOf(emptyList<VerseSummary>()) }
@@ -284,10 +299,10 @@ internal fun CCLIReportContent(
                     // Preset buttons
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         PresetButton(stringResource(Res.string.ccli_preset_30d), active = activePreset == 0) {
-                            activePreset = 0; applyPreset(30)
+                            activePreset = 0; applyPreset(PRESET_LAST_30_DAYS)
                         }
                         PresetButton(stringResource(Res.string.ccli_preset_90d), active = activePreset == 1) {
-                            activePreset = 1; applyPreset(90)
+                            activePreset = 1; applyPreset(PRESET_LAST_90_DAYS)
                         }
                         PresetButton(stringResource(Res.string.ccli_preset_this_year), active = activePreset == 2) {
                             activePreset = 2
@@ -295,12 +310,12 @@ internal fun CCLIReportContent(
                             toYear = today.year; toMonth = today.monthValue; toDay = today.dayOfMonth
                         }
                         PresetButton(stringResource(Res.string.ccli_preset_last_year), active = activePreset == 3) {
-                            activePreset = 3
+                            activePreset = PRESET_INDEX_LAST_YEAR
                             fromYear = today.year - 1; fromMonth = 1; fromDay = 1
-                            toYear = today.year - 1; toMonth = 12; toDay = 31
+                            toYear = today.year - 1; toMonth = DECEMBER; toDay = DECEMBER_LAST_DAY
                         }
                         PresetButton(stringResource(Res.string.ccli_preset_all_time), active = activePreset == 4) {
-                            activePreset = 4; applyPreset(null)
+                            activePreset = PRESET_INDEX_ALL_TIME; applyPreset(null)
                         }
                     }
                     // Date pickers
@@ -445,7 +460,7 @@ internal fun SongsReportContent(songs: List<SongSummary>) {
                 subtitle = stringResource(Res.string.ccli_songs_summary, songs.size, totalPlays)
             )
             TopItemsChart(
-                data = songs.take(12).map { it.title to it.count },
+                data = songs.take(TOP_CHART_ENTRIES).map { it.title to it.count },
                 accent = primary,
                 modifier = Modifier.fillMaxSize()
             )
@@ -488,7 +503,7 @@ internal fun BibleReportContent(verses: List<VerseSummary>) {
                 subtitle = stringResource(Res.string.ccli_bible_summary, verses.size, totalPlays)
             )
             TopItemsChart(
-                data = byBook.take(12),
+                data = byBook.take(TOP_CHART_ENTRIES),
                 accent = secondary,
                 modifier = Modifier.fillMaxSize()
             )
@@ -794,9 +809,9 @@ private fun ActivityBarChart(
                 modifier = Modifier.width(30.dp).fillMaxHeight().padding(bottom = 4.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                for (i in 4 downTo 0) {
+                for (i in AXIS_TICK_COUNT downTo 0) {
                     Text(
-                        "${(maxTotal * i / 4)}",
+                        "${(maxTotal * i / AXIS_TICK_COUNT)}",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         color = labelColor,
                         textAlign = TextAlign.End,
@@ -847,7 +862,7 @@ private fun ActivityBarChart(
                             },
                             tooltipPlacement = TooltipPlacement.ComponentRect(
                                 anchor = Alignment.TopCenter,
-                                offset = DpOffset(0.dp, (-6).dp)
+                                offset = DpOffset(0.dp, (-TOOLTIP_VERTICAL_OFFSET_DP).dp)
                             )
                         ) {
                             Row(
@@ -859,7 +874,7 @@ private fun ActivityBarChart(
                                     Box(
                                         modifier = Modifier
                                             .width(barWidth)
-                                            .fillMaxHeight(songFrac.coerceIn(0.004f, 1f))
+                                            .fillMaxHeight(songFrac.coerceIn(MIN_BAR_FRACTION, 1f))
                                             .clip(barCorner)
                                             .background(songBrush)
                                     )
@@ -868,7 +883,7 @@ private fun ActivityBarChart(
                                     Box(
                                         modifier = Modifier
                                             .width(barWidth)
-                                            .fillMaxHeight(verseFrac.coerceIn(0.004f, 1f))
+                                            .fillMaxHeight(verseFrac.coerceIn(MIN_BAR_FRACTION, 1f))
                                             .clip(barCorner)
                                             .background(verseBrush)
                                     )
@@ -1011,7 +1026,7 @@ private fun PresetButton(label: String, active: Boolean, onClick: () -> Unit) {
     val contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
     if (active) {
         Button(
-            shape = RoundedCornerShape(50),
+            shape = RoundedCornerShape(PILL_CORNER_PERCENT),
             onClick = onClick,
             contentPadding = contentPadding,
             modifier = Modifier.height(32.dp)
@@ -1020,7 +1035,7 @@ private fun PresetButton(label: String, active: Boolean, onClick: () -> Unit) {
         }
     } else {
         OutlinedButton(
-            shape = RoundedCornerShape(50),
+            shape = RoundedCornerShape(PILL_CORNER_PERCENT),
             onClick = onClick,
             contentPadding = contentPadding,
             modifier = Modifier.height(32.dp)

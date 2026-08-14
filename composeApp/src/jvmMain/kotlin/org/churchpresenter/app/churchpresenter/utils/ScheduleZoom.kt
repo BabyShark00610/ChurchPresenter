@@ -1,5 +1,10 @@
 package org.churchpresenter.app.churchpresenter.utils
 
+private const val EXTRA_COMPACT_MAX_PERCENT = 60
+private const val COMPACT_MAX_PERCENT = 90
+private const val NORMAL_MAX_PERCENT = 120
+private const val DETAILED_MAX_PERCENT = 175
+
 /**
  * The schedule card density ladder: five fixed rungs rather than a continuous zoom -- Compact,
  * Normal and Detailed, plus one step smaller and one step larger than those. The two outer rungs
@@ -25,10 +30,10 @@ internal enum class ScheduleDensity(val percent: Int) {
  * moves; the two outer rungs are only reachable by stepping past the ends with the +/- controls.
  */
 internal fun scheduleDensityFor(percent: Int): ScheduleDensity = when {
-    percent <= 60 -> ScheduleDensity.EXTRA_COMPACT
-    percent <= 90 -> ScheduleDensity.COMPACT
-    percent < 120 -> ScheduleDensity.NORMAL
-    percent <= 175 -> ScheduleDensity.DETAILED
+    percent <= EXTRA_COMPACT_MAX_PERCENT -> ScheduleDensity.EXTRA_COMPACT
+    percent <= COMPACT_MAX_PERCENT -> ScheduleDensity.COMPACT
+    percent < NORMAL_MAX_PERCENT -> ScheduleDensity.NORMAL
+    percent <= DETAILED_MAX_PERCENT -> ScheduleDensity.DETAILED
     else -> ScheduleDensity.EXTRA_DETAILED
 }
 

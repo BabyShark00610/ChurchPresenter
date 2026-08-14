@@ -3,6 +3,9 @@ package org.churchpresenter.app.churchpresenter.models
 import kotlinx.serialization.Serializable
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
+private const val TEXT_PREVIEW_CHARS = 50
+private const val TITLE_PREVIEW_CHARS = 60
+
 @Serializable
 sealed class ScheduleItem {
     abstract val id: String
@@ -134,7 +137,7 @@ sealed class ScheduleItem {
                 }
             }
         } else {
-            "${text.take(50)}${if (text.length > 50) "…" else ""}"
+            "${text.take(TEXT_PREVIEW_CHARS)}${if (text.length > TEXT_PREVIEW_CHARS) "…" else ""}"
         }
     ) : ScheduleItem()
 
@@ -175,5 +178,5 @@ sealed class ScheduleItem {
  * both sides have to derive it the same way or the row and the title drift apart.
  */
 internal fun websiteDisplayText(title: String): String =
-    "${title.take(60)}${if (title.length > 60) "…" else ""}"
+    "${title.take(TITLE_PREVIEW_CHARS)}${if (title.length > TITLE_PREVIEW_CHARS) "…" else ""}"
 

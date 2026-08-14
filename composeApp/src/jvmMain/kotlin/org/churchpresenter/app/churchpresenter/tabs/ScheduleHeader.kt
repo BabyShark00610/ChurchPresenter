@@ -96,6 +96,10 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
 
+private const val MENU_OFFSET_DP = 8
+private const val DASH_ON_PX = 6f
+private const val DASH_OFF_PX = 4f
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ScheduleHeader(
@@ -339,7 +343,7 @@ internal fun ScheduleRowActionButton(
         tooltipPlacement = TooltipPlacement.ComponentRect(
             anchor = Alignment.CenterStart,
             alignment = Alignment.CenterStart,
-            offset = DpOffset((-8).dp, 0.dp)
+            offset = DpOffset((-MENU_OFFSET_DP).dp, 0.dp)
         ),
         tooltip = {
             Surface(
@@ -392,7 +396,7 @@ internal fun ScheduleAddFilesButton(onClick: () -> Unit, modifier: Modifier = Mo
                 drawContent()
                 drawRoundRect(
                     color = borderColor,
-                    style = Stroke(width = strokeWidthPx, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))),
+                    style = Stroke(width = strokeWidthPx, pathEffect = PathEffect.dashPathEffect(floatArrayOf(DASH_ON_PX, DASH_OFF_PX))),
                     cornerRadius = CornerRadius(cornerRadiusPx)
                 )
             }

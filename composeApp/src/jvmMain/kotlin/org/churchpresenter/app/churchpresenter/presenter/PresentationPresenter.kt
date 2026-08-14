@@ -20,6 +20,10 @@ import presentation.engine.model.Direction
 import presentation.engine.model.LayerState
 import presentation.engine.model.TransitionType
 
+private const val REVEAL_RIGHT = 2
+private const val REVEAL_BOTTOM = 3
+private const val CENTER_FRACTION = 0.5f
+
 /**
  * Output renderer for presentations. Draws the animated [frame] (per-layer bitmaps with live
  * alpha/transform/clip from the timeline evaluator) when playback is active; otherwise falls
@@ -122,15 +126,15 @@ private fun DrawScope.drawTransition(frame: PresentationFrame, transition: Trans
                 Direction.UP -> floatArrayOf(0f, h * (1f - p), w, h)
                 else -> floatArrayOf(0f, 0f, w, h * p) // DOWN and default
             }
-            clipRect(reveal[0], reveal[1], reveal[2], reveal[3]) { drawLayerGroup(frame, frame.layers) }
+            clipRect(reveal[0], reveal[1], reveal[REVEAL_RIGHT], reveal[REVEAL_BOTTOM]) { drawLayerGroup(frame, frame.layers) }
         }
         TransitionType.SPLIT -> {
             drawLayerGroup(frame, transition.fromLayers)
             val horizontalBands = transition.direction != Direction.LEFT && transition.direction != Direction.RIGHT
             if (horizontalBands) {
-                clipRect(0f, h * (0.5f - p / 2f), w, h * (0.5f + p / 2f)) { drawLayerGroup(frame, frame.layers) }
+                clipRect(0f, h * (CENTER_FRACTION - p / 2f), w, h * (CENTER_FRACTION + p / 2f)) { drawLayerGroup(frame, frame.layers) }
             } else {
-                clipRect(w * (0.5f - p / 2f), 0f, w * (0.5f + p / 2f), h) { drawLayerGroup(frame, frame.layers) }
+                clipRect(w * (CENTER_FRACTION - p / 2f), 0f, w * (CENTER_FRACTION + p / 2f), h) { drawLayerGroup(frame, frame.layers) }
             }
         }
         TransitionType.NONE -> drawLayerGroup(frame, frame.layers)

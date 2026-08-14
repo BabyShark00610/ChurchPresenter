@@ -88,6 +88,13 @@ import java.nio.file.Path
 import java.text.SimpleDateFormat
 import java.util.Date
 
+private const val FALLBACK_DRAG_ITEM_HEIGHT = 50f
+private const val DRAGGED_ITEM_ALPHA = 0.35f
+private const val DRAG_TARGET_Z_INDEX = 5f
+private const val DRAGGED_ITEM_Z_INDEX = 10f
+private const val DRAGGED_ITEM_SCALE = 1.04f
+private const val DRAGGED_ITEM_ELEVATION = 20f
+
 data class ScheduleTabActions(
     val newSchedule: () -> Unit = {},
     val openSchedule: () -> Unit = {},
@@ -312,7 +319,7 @@ fun ScheduleTab(
                                     draggingFromIndex = index
                                     isDragActive = true
                                     dropTargetIndex = index
-                                    dragItemHeight = itemInfo?.size?.toFloat() ?: 50f
+                                    dragItemHeight = itemInfo?.size?.toFloat() ?: FALLBACK_DRAG_ITEM_HEIGHT
                                     dragCursorY = if (itemInfo != null) {
                                         itemInfo.offset + itemInfo.size / 2f
                                     } else lastPos.y
@@ -424,7 +431,7 @@ fun ScheduleTab(
                             .fillMaxWidth()
                             .animateItem()
                             .padding(bottom = 3.dp)
-                            .alpha(if (isDraggingThis) 0.35f else 1f)
+                            .alpha(if (isDraggingThis) DRAGGED_ITEM_ALPHA else 1f)
                             .reorderGesture(index, requireShift = true)
                     ) {
                         ScheduleItemRow(
@@ -481,7 +488,7 @@ fun ScheduleTab(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .height(DELETE_ZONE_HEIGHT)
-                        .zIndex(5f)
+                        .zIndex(DRAG_TARGET_Z_INDEX)
                         .background(
                             MaterialTheme.colorScheme.error.copy(alpha = if (isOverDeleteZone) 0.9f else 0.25f),
                             RoundedCornerShape(4.dp)
@@ -509,12 +516,12 @@ fun ScheduleTab(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zIndex(10f)
+                            .zIndex(DRAGGED_ITEM_Z_INDEX)
                             .graphicsLayer {
                                 translationY = dragCursorY - dragItemHeight / 2
-                                scaleX = 1.04f
-                                scaleY = 1.04f
-                                shadowElevation = 20f
+                                scaleX = DRAGGED_ITEM_SCALE
+                                scaleY = DRAGGED_ITEM_SCALE
+                                shadowElevation = DRAGGED_ITEM_ELEVATION
                             }
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh, CARD_SHAPE)
                             .padding(horizontal = 12.dp, vertical = 8.dp),

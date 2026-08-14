@@ -88,6 +88,9 @@ import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZoneSty
 import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
 
+private const val PREVIEW_WIDTH_FRACTION = 0.9f
+private const val BOTTOM_MIDDLE_WEIGHT = 0.8f
+
 @Composable
 fun StageMonitorSettingsTab(
     settings: AppSettings,
@@ -297,7 +300,7 @@ private fun StageMonitorLayoutPreviewSection(sm: StageMonitorSettings) {
 
     SettingsSection(title = stringResource(Res.string.stage_monitor_layout_section)) {
         TvScreenBox(
-            modifier = Modifier.fillMaxWidth(0.9f).height(200.dp)
+            modifier = Modifier.fillMaxWidth(PREVIEW_WIDTH_FRACTION).height(200.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -306,7 +309,7 @@ private fun StageMonitorLayoutPreviewSection(sm: StageMonitorSettings) {
                 }
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_LEFT), modifier = Modifier.weight(1f))
-                    ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_MIDDLE), modifier = Modifier.weight(0.8f))
+                    ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_MIDDLE), modifier = Modifier.weight(BOTTOM_MIDDLE_WEIGHT))
                     ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_RIGHT), modifier = Modifier.weight(1f))
                 }
             }

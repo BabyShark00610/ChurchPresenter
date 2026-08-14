@@ -24,6 +24,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
+private const val MAX_UPLOAD_MB = 200
+private const val BYTES_PER_MB = 1024 * 1024
+
 /**
  * Routes serving presentation catalogues and rendered slide images.
  *
@@ -68,11 +71,11 @@ internal fun Route.presentationRoutes(
                     val resolvedId = _scheduleItemToPresentationId[id] ?: id
                     val dto = _presentationCatalogs[resolvedId]
                     if (dto == null) {
-                        server.logRest("/api/presentations/{id}", 404, "not_found_or_not_yet_rendered")
+                        server.logRest("/api/presentations/{id}", HttpStatusCode.NotFound.value, "not_found_or_not_yet_rendered")
                         call.respond(HttpStatusCode.NotFound, "Presentation not found or not yet rendered")
                         return@get
                     }
-                    server.logRest("/api/presentations/{id}", 200)
+                    server.logRest("/api/presentations/{id}", HttpStatusCode.OK.value)
                     call.respond(dto)
                 }
 
@@ -87,16 +90,16 @@ internal fun Route.presentationRoutes(
                     val resolvedId = _scheduleItemToPresentationId[id] ?: id
                     val slides = _slideBytes[resolvedId]
                     if (slides == null) {
-                        server.logRest("/api/presentations/{id}/slides/{index}", 404, "presentation_not_found")
+                        server.logRest("/api/presentations/{id}/slides/{index}", HttpStatusCode.NotFound.value, "presentation_not_found")
                         call.respond(HttpStatusCode.NotFound, "Presentation not found")
                         return@get
                     }
                     if (index < 0 || index >= slides.size) {
-                        server.logRest("/api/presentations/{id}/slides/{index}", 404, "slide_index_out_of_range")
+                        server.logRest("/api/presentations/{id}/slides/{index}", HttpStatusCode.NotFound.value, "slide_index_out_of_range")
                         call.respond(HttpStatusCode.NotFound, "Slide index out of range")
                         return@get
                     }
-                    server.logRest("/api/presentations/{id}/slides/{index}", 200)
+                    server.logRest("/api/presentations/{id}/slides/{index}", HttpStatusCode.OK.value)
                     call.respondBytes(slides[index], ContentType.Image.JPEG)
                 }
 
@@ -153,7 +156,7 @@ internal fun Route.presentationRoutes(
                     }
                     try {
                         val contentLength = call.request.headers["Content-Length"]?.toLongOrNull() ?: 0L
-                        if (contentLength > 200 * 1024 * 1024) { // 200 MB limit
+                        if (contentLength > MAX_UPLOAD_MB * BYTES_PER_MB) {
                             call.respond(HttpStatusCode.PayloadTooLarge, """{"error":"file too large (max 200 MB)"}""")
                             return@post
                         }

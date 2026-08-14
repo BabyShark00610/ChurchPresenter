@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.churchpresenter.app.churchpresenter.utils.Utils.parseHexColor
 
+private const val CHECKERBOARD_COLOR = 0xFFCCCCCC
+
 @Composable
 fun ColorPickerField(
     color: String,
@@ -92,8 +94,8 @@ fun ColorPickerField(
                     Canvas(modifier = Modifier.matchParentSize()) {
                         val sq = size.width / 2
                         drawRect(Color.White)
-                        drawRect(Color(0xFFCCCCCC), topLeft = Offset(0f, sq), size = Size(sq, sq))
-                        drawRect(Color(0xFFCCCCCC), topLeft = Offset(sq, 0f), size = Size(sq, sq))
+                        drawRect(Color(CHECKERBOARD_COLOR), topLeft = Offset(0f, sq), size = Size(sq, sq))
+                        drawRect(Color(CHECKERBOARD_COLOR), topLeft = Offset(sq, 0f), size = Size(sq, sq))
                     }
                 } else {
                     Box(modifier = Modifier.matchParentSize().background(currentColor))

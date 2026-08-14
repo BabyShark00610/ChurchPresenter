@@ -24,6 +24,8 @@ import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.ic_playlist_add
 import org.jetbrains.compose.resources.painterResource
 
+private const val DIMMED_ALPHA = 0.5f
+
 /**
  * Uniform action-row icon button used across every tab's primary action row
  * (Go Live, Add to Schedule, and their row-mates). Mirrors the LowerThird tab's look:
@@ -103,7 +105,7 @@ fun GoLiveButton(
         enabled = enabled,
         containerColor = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
-        modifier = if (dimmed) modifier.alpha(0.5f) else modifier
+        modifier = if (dimmed) modifier.alpha(DIMMED_ALPHA) else modifier
     )
 }
 

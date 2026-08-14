@@ -17,6 +17,20 @@ import kotlinx.coroutines.flow.StateFlow
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 
+private const val MAX_NULL_FRAMES_BEFORE_CLEAR = 30
+private const val DECKLINK_POLL_INTERVAL_MS = 16L
+private const val MAX_CONSECUTIVE_FAILURES = 5
+private const val DEVICE_RELEASE_DELAY_MS = 500L
+private const val RETRY_DELAY_MS = 2000L
+private const val RESTART_DELAY_MS = 1000L
+private const val DIMENSION_POLL_ATTEMPTS = 50
+private const val DIMENSION_POLL_INTERVAL_MS = 100L
+private const val PROCESS_KILL_TIMEOUT_S = 3L
+private const val ALPHA_SHIFT = 24
+private const val RED_SHIFT = 16
+private const val GREEN_SHIFT = 8
+private const val BGRA_BYTES_PER_PIXEL = 4
+
 /**
  * Shared camera frame cache — ensures only one capture process runs per device,
  * even when multiple composable instances (canvas preview + presenter output)
@@ -167,12 +181,12 @@ object SharedCameraFrameCache {
                 }
             } else {
                 nullCount++
-                if (nullCount > 30 && entry.frame.value != null) {
+                if (nullCount > MAX_NULL_FRAMES_BEFORE_CLEAR && entry.frame.value != null) {
                     entry.frame.value = null  // no signal — clear display
                 }
             }
 
-            delay(16) // ~60fps polling
+            delay(DECKLINK_POLL_INTERVAL_MS) // ~60fps polling
         }
     }
 
@@ -188,13 +202,13 @@ object SharedCameraFrameCache {
         }
 
         var consecutiveFailures = 0
-        while (currentCoroutineContext().isActive && consecutiveFailures < 5) {
+        while (currentCoroutineContext().isActive && consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
             // Kill any lingering process and wait for the OS to release the device
             val old = entry.ffmpegProcess
             if (old != null) {
                 withContext(Dispatchers.IO) { killFfmpegProcess(old) }
                 entry.ffmpegProcess = null
-                delay(500)
+                delay(DEVICE_RELEASE_DELAY_MS)
             }
 
             System.err.println("[Camera] Opening device (attempt ${consecutiveFailures + 1}): ${command.joinToString(" ")}")
@@ -239,10 +253,10 @@ object SharedCameraFrameCache {
 
                 // Wait for dimensions (up to 5 seconds)
                 var dims: Pair<Int, Int>? = null
-                repeat(50) {
+                repeat(DIMENSION_POLL_ATTEMPTS) {
                     dims = videoDims.get()
                     if (dims != null) break
-                    delay(100)
+                    delay(DIMENSION_POLL_INTERVAL_MS)
                 }
                 val resolved = dims
                 if (resolved == null) {
@@ -311,14 +325,14 @@ object SharedCameraFrameCache {
 
             if (framesProduced) {
                 consecutiveFailures = 0
-                delay(1000)
+                delay(RESTART_DELAY_MS)
             } else {
                 consecutiveFailures++
-                delay(2000)
+                delay(RETRY_DELAY_MS)
             }
         }
 
-        if (consecutiveFailures >= 5) {
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             System.err.println("[Camera] Giving up after $consecutiveFailures consecutive failures")
             CrashReporter.reportWarning(
                 "Camera: Giving up on device after $consecutiveFailures consecutive ffmpeg failures",
@@ -390,8 +404,8 @@ internal fun bgraBytesToArgbPixels(frameBuf: ByteArray, pixelBuf: IntArray) {
         val g = frameBuf[bi + 1].toInt() and 0xFF
         val r = frameBuf[bi + 2].toInt() and 0xFF
         val a = frameBuf[bi + 3].toInt() and 0xFF
-        pixelBuf[pi] = (a shl 24) or (r shl 16) or (g shl 8) or b
-        bi += 4
+        pixelBuf[pi] = (a shl ALPHA_SHIFT) or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
+        bi += BGRA_BYTES_PER_PIXEL
     }
 }
 
@@ -405,17 +419,17 @@ internal fun killFfmpegProcess(process: Process) {
                 val pid = process.pid()
                 ProcessBuilder("taskkill", "/F", "/T", "/PID", pid.toString())
                     .redirectErrorStream(true).start()
-                    .waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
             } catch (_: Throwable) {}
             try {
                 ProcessBuilder("taskkill", "/F", "/IM", "ffmpeg.exe")
                     .redirectErrorStream(true).start()
-                    .waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
             } catch (_: Throwable) {}
         } else {
             process.destroyForcibly()
         }
-        process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+        process.waitFor(PROCESS_KILL_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS)
     } catch (_: Throwable) {
         process.destroyForcibly()
     }

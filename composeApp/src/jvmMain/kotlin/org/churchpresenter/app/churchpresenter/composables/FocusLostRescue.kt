@@ -35,6 +35,12 @@ import java.awt.Toolkit
 import java.awt.Window as AwtWindow
 import java.awt.event.WindowEvent
 
+private const val FOCUS_SETTLE_MS = 300L
+private const val FOCUS_WAIT_TIMEOUT_MS = 1500
+private const val FOCUS_POLL_INTERVAL_MS = 50
+private const val RESCUE_ATTEMPTS = 10
+private const val RESCUE_INTERVAL_MS = 100L
+
 /**
  * Focus-lost rescue for tabs whose keyboard shortcuts (arrow keys, clicker keys) only work
  * while something inside the tab holds keyboard focus. Detects BOTH in-window focus loss
@@ -98,7 +104,7 @@ class FocusLostRescueState internal constructor(
         val w = hostWindow ?: return
         if (w.isFocused || resyncJob?.isActive == true) return
         resyncJob = scope.launch {
-            delay(300)
+            delay(FOCUS_SETTLE_MS)
             if (!w.isFocused) {
                 val queue = Toolkit.getDefaultToolkit().systemEventQueue
                 queue.postEvent(WindowEvent(w, WindowEvent.WINDOW_ACTIVATED))
@@ -125,9 +131,9 @@ class FocusLostRescueState internal constructor(
         scope.launch {
             val w = hostWindow ?: return@launch
             var waitedMs = 0
-            while (!w.isFocused && waitedMs < 1500) {
-                delay(50)
-                waitedMs += 50
+            while (!w.isFocused && waitedMs < FOCUS_WAIT_TIMEOUT_MS) {
+                delay(FOCUS_POLL_INTERVAL_MS.toLong())
+                waitedMs += FOCUS_POLL_INTERVAL_MS
             }
             if (w.isFocused) {
                 EventQueue.invokeLater {
@@ -172,9 +178,9 @@ fun rememberFocusLostRescue(
     LaunchedEffect(state.windowFocused) {
         if (state.windowFocused && !state.tabHasFocus && state.active) {
             state.restoreAwtFocusOwner()
-            repeat(10) {
+            repeat(RESCUE_ATTEMPTS) {
                 requester.requestFocus()
-                delay(100)
+                delay(RESCUE_INTERVAL_MS)
                 if (state.tabHasFocus) return@LaunchedEffect
             }
         }

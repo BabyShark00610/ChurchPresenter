@@ -46,6 +46,8 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLException
 import kotlin.random.Random
 
+private const val FAILURE_LOG_INTERVAL = 10
+
 enum class InstanceLinkStatus { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 
 /**
@@ -196,7 +198,7 @@ class InstanceLinkClient(
             } catch (e: Exception) {
                 consecutiveFailures++
                 System.err.println("InstanceLink: connect to ws://$host:$port${Constants.ENDPOINT_WS} failed — ${e.message}")
-                if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0) {
+                if (consecutiveFailures == 1 || consecutiveFailures % FAILURE_LOG_INTERVAL == 0) {
                     CrashReporter.reportWarning(
                         "InstanceLink: connection failed — ${e.message}",
                         tags = mapOf(

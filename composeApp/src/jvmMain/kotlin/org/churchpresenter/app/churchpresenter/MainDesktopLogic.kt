@@ -23,6 +23,9 @@ import org.churchpresenter.app.churchpresenter.tabs.Tabs
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import java.io.File
 
+private const val MILLIS_PER_SECOND = 1000
+private const val HEX_RADIX = 16
+
 /**
  * The decisions the root composable makes, held apart from the composable that makes them.
  *
@@ -315,7 +318,7 @@ internal fun parseVerseRangeEnd(verseRange: String, verseNumber: Int): Int? {
 }
 
 internal fun retrySecondsLeft(nextRetryAtMs: Long?, nowMs: Long): Long? =
-    nextRetryAtMs?.let { ((it - nowMs) / 1000).coerceAtLeast(0) }
+    nextRetryAtMs?.let { ((it - nowMs) / MILLIS_PER_SECOND).coerceAtLeast(0) }
 
 internal fun findLottiePresetFile(files: List<File>?, presetLabel: String, presetId: String): File? =
     files?.find { it.nameWithoutExtension == presetLabel || it.nameWithoutExtension == presetId }
@@ -440,7 +443,7 @@ internal fun isPanelRendered(collapsed: Boolean, visibleFraction: Float): Boolea
 internal fun canDisconnectInstanceLink(status: InstanceLinkStatus): Boolean =
     status != InstanceLinkStatus.DISCONNECTED
 
-internal fun stableFileId(file: File): String = file.absolutePath.hashCode().toUInt().toString(16)
+internal fun stableFileId(file: File): String = file.absolutePath.hashCode().toUInt().toString(HEX_RADIX)
 
 internal fun tabForScheduleItem(item: ScheduleItem): Tabs? = when (item) {
     is ScheduleItem.SongItem -> Tabs.SONGS

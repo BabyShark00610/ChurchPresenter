@@ -44,6 +44,8 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
+private const val HANDLE_MIDPOINT = 0.5f
+
 data class SnapLine(
     val orientation: SnapOrientation,
     val position: Float // normalized 0-1
@@ -478,7 +480,7 @@ internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<Resize
         val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
         t.copy(x = t.x + dx, y = t.y + dy, width = t.width - dx, height = t.height - dy)
     },
-    ResizeHandleDef(0.5f, 0f, Cursor.N_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(HANDLE_MIDPOINT, 0f, Cursor.N_RESIZE_CURSOR) { t, d ->
         val dy = d.y / canvasHeight
         t.copy(y = t.y + dy, height = t.height - dy)
     },
@@ -486,11 +488,11 @@ internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<Resize
         val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
         t.copy(y = t.y + dy, width = t.width + dx, height = t.height - dy)
     },
-    ResizeHandleDef(0f, 0.5f, Cursor.W_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(0f, HANDLE_MIDPOINT, Cursor.W_RESIZE_CURSOR) { t, d ->
         val dx = d.x / canvasWidth
         t.copy(x = t.x + dx, width = t.width - dx)
     },
-    ResizeHandleDef(1f, 0.5f, Cursor.E_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(1f, HANDLE_MIDPOINT, Cursor.E_RESIZE_CURSOR) { t, d ->
         val dx = d.x / canvasWidth
         t.copy(width = t.width + dx)
     },
@@ -498,7 +500,7 @@ internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<Resize
         val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
         t.copy(x = t.x + dx, width = t.width - dx, height = t.height + dy)
     },
-    ResizeHandleDef(0.5f, 1f, Cursor.S_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(HANDLE_MIDPOINT, 1f, Cursor.S_RESIZE_CURSOR) { t, d ->
         val dy = d.y / canvasHeight
         t.copy(height = t.height + dy)
     },

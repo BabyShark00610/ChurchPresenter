@@ -51,6 +51,11 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 
+private const val ALPHA_SHIFT = 24
+private const val OPAQUE_ALPHA = 0xFF
+private const val MIN_CROSSFADE_MS = 100
+private const val NANOS_PER_MILLI = 1_000_000L
+
 /**
  * Renders a Browser Source output's live content off-screen (no window, no JCEF — same
  * [ImageComposeScene] technique as [LowerThirdOffscreenRenderer]) and encodes changed frames
@@ -246,7 +251,7 @@ class BrowserSourceVideoRenderer(
             // immediately; a fully opaque frame (pictures, slides, video) costs one linear scan.
             var fullyOpaque = true
             for (px in argb) {
-                if (px ushr 24 != 0xFF) {
+                if (px ushr ALPHA_SHIFT != OPAQUE_ALPHA) {
                     fullyOpaque = false
                     break
                 }
@@ -273,7 +278,7 @@ class BrowserSourceVideoRenderer(
         ): Int = maxOf(
             if (bibleCrossfadeEnabled) bibleTransitionDurationMs else 0,
             if (songCrossfadeEnabled) songTransitionDurationMs else 0
-        ).coerceAtLeast(100)
+        ).coerceAtLeast(MIN_CROSSFADE_MS)
 
         /** Fades only when a crossfade is enabled AND neither the outgoing nor incoming mode is NONE. */
         internal fun isScreenCrossfadeActive(
@@ -383,7 +388,7 @@ class BrowserSourceVideoRenderer(
                         lastSeenSubscriberCount = subscriberCount
                         // Keep the virtual animation clock on real time so a client that connects
                         // after a long park doesn't resume mid-animation at a stale timestamp.
-                        timeNanos += IDLE_POLL_MS * 1_000_000L
+                        timeNanos += IDLE_POLL_MS * NANOS_PER_MILLI
                         delay(IDLE_POLL_MS)
                         continue
                     }

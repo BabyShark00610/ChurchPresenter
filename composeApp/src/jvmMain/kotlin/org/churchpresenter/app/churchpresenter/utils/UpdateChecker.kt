@@ -19,6 +19,15 @@ import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.time.Duration.Companion.seconds
 
+private const val HOURS_PER_DAY = 24L
+private const val MINUTES_PER_HOUR = 60
+private const val SECONDS_PER_MINUTE = 60
+private const val MILLIS_PER_SECOND = 1000
+private const val CONNECT_TIMEOUT_MS = 5_000
+private const val READ_TIMEOUT_MS = 5_000
+private const val HTTP_OK = 200
+private const val RELEASE_NOTES_MAX_CHARS = 500
+
 data class UpdateInfo(
     val latestVersion: String,
     val releaseUrl: String,
@@ -50,7 +59,7 @@ enum class UpdateCheckInterval(private val days: Int?) {
         val intervalDays = days ?: return false
         if (intervalDays == 0) return true
         val elapsedMillis = System.currentTimeMillis() - lastCheckedAtMillis
-        return elapsedMillis >= intervalDays * 24L * 60 * 60 * 1000
+        return elapsedMillis >= intervalDays * HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLIS_PER_SECOND
     }
 }
 
@@ -100,10 +109,10 @@ object UpdateChecker {
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("User-Agent", "ChurchPresenter/${BuildConfig.APP_VERSION}")
-            connection.connectTimeout = 5_000
-            connection.readTimeout = 5_000
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
 
-            if (connection.responseCode != 200) return null
+            if (connection.responseCode != HTTP_OK) return null
 
             val body = connection.inputStream.bufferedReader().readText()
             connection.disconnect()
@@ -148,7 +157,7 @@ object UpdateChecker {
         return UpdateInfo(
             latestVersion = latestVersion,
             releaseUrl = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: RELEASES_URL,
-            releaseNotes = (obj["body"]?.jsonPrimitive?.contentOrNull ?: "").take(500),
+            releaseNotes = (obj["body"]?.jsonPrimitive?.contentOrNull ?: "").take(RELEASE_NOTES_MAX_CHARS),
             downloadUrl = downloadUrl,
             isPrerelease = isPrerelease
         )
@@ -212,8 +221,8 @@ object UpdateChecker {
                 // form-like (or absent) content type; JSON passes it.
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("User-Agent", "ChurchPresenter/${BuildConfig.APP_VERSION}")
-                connection.connectTimeout = 5_000
-                connection.readTimeout = 5_000
+                connection.connectTimeout = CONNECT_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
                 connection.responseCode // send the request
                 connection.disconnect()
                 true

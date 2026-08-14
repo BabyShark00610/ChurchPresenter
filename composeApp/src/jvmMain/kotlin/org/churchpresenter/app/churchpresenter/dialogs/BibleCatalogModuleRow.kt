@@ -54,6 +54,8 @@ import org.churchpresenter.app.churchpresenter.data.InstallPhase
 import org.churchpresenter.app.churchpresenter.data.Testament
 import org.jetbrains.compose.resources.stringResource
 
+private const val BADGE_CHARS = 3
+
 @Composable
 internal fun ModuleRow(
     module: BibleModule,
@@ -211,7 +213,7 @@ internal fun ModuleAvatar(module: BibleModule) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = module.identifier.take(3).uppercase(),
+                text = module.identifier.take(BADGE_CHARS).uppercase(),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
