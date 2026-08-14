@@ -137,6 +137,22 @@ object SharedCameraFrameCache {
 
     // ── DeckLink capture ────────────────────────────────────────────
 
+    /** Puts one polled DeckLink frame on screen; false when the poll returned no usable frame. */
+    private suspend fun showDeckLinkFrame(frameData: IntArray?, entry: CacheEntry, first: Boolean): Boolean {
+        if (frameData == null || frameData.size <= 2) return false
+        val w = frameData[0]
+        val h = frameData[1]
+        if (w <= 0 || h <= 0) return false
+        val img = withContext(Dispatchers.IO) {
+            val bi = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+            bi.setRGB(0, 0, w, h, frameData, 2, w)
+            bi
+        }
+        entry.frame.value = img.toComposeImageBitmap()
+        if (first) System.err.println("[DeckLink Input] First frame: ${w}x${h}")
+        return true
+    }
+
     private suspend fun runDeckLinkCapture(source: SceneSource.CameraSource, entry: CacheEntry) {
         System.err.println("[DeckLink Input] Opening device ${source.deckLinkIndex}, " +
             "format: ${source.videoFormat.ifEmpty { "auto" }}, connection: ${source.videoConnection}")
@@ -164,22 +180,9 @@ object SharedCameraFrameCache {
                 DeckLinkManager.getInputFrame(source.deckLinkIndex)
             }
 
-            if (frameData != null && frameData.size > 2) {
-                val w = frameData[0]
-                val h = frameData[1]
-                if (w > 0 && h > 0) {
-                    val img = withContext(Dispatchers.IO) {
-                        val bi = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
-                        bi.setRGB(0, 0, w, h, frameData, 2, w)
-                        bi
-                    }
-                    entry.frame.value = img.toComposeImageBitmap()
-                    frameCount++
-                    nullCount = 0
-                    if (frameCount == 1) {
-                        System.err.println("[DeckLink Input] First frame: ${w}x${h}")
-                    }
-                }
+            if (showDeckLinkFrame(frameData, entry, first = frameCount == 0)) {
+                frameCount++
+                nullCount = 0
             } else {
                 nullCount++
                 if (nullCount > MAX_NULL_FRAMES_BEFORE_CLEAR && entry.frame.value != null) {

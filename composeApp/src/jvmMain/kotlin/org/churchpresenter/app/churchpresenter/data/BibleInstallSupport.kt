@@ -238,15 +238,27 @@ internal object BibleInstallSupport {
         FileOutputStream(destination, append).use { out ->
             var endOfBody = false
             while (!endOfBody) {
-                val read = channel.readAvailable(buffer, 0, buffer.size)
-                if (read == -1) endOfBody = true
-                if (read > 0) {
-                    out.write(buffer, 0, read)
-                    state.written += read
-                    if (state.total > 0) reportProgress(state, onProgress)
-                }
+                endOfBody = !writeChunk(channel, buffer, out, state, onProgress)
             }
         }
+    }
+
+    /** Writes one read's worth of bytes; false once the channel is exhausted. */
+    private suspend fun writeChunk(
+        channel: ByteReadChannel,
+        buffer: ByteArray,
+        out: FileOutputStream,
+        state: DownloadState,
+        onProgress: (Float) -> Unit,
+    ): Boolean {
+        val read = channel.readAvailable(buffer, 0, buffer.size)
+        if (read == -1) return false
+        if (read > 0) {
+            out.write(buffer, 0, read)
+            state.written += read
+            if (state.total > 0) reportProgress(state, onProgress)
+        }
+        return true
     }
 
     /** Only ever forward: a restart from zero must not rewind the bar. */
