@@ -30,6 +30,8 @@ import java.nio.file.StandardWatchEventKinds
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 
+private const val MAX_RESCAN_ATTEMPTS = 3
+
 /** How long to wait before re-reading a file whose first decode failed. */
 private const val THUMBNAIL_RETRY_MS = 120L
 
@@ -465,7 +467,7 @@ class PicturesViewModel(
                         )
                         registered = true
                     } catch (e: java.io.IOException) {
-                        if (++attempt >= 3 || !folder.isDirectory) {
+                        if (++attempt >= MAX_RESCAN_ATTEMPTS || !folder.isDirectory) {
                             watchService.close()
                             return@launch
                         }

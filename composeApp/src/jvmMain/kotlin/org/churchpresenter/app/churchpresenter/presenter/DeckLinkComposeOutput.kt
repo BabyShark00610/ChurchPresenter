@@ -41,6 +41,13 @@ import java.awt.Dimension
 import javax.swing.JFrame
 import javax.swing.SwingUtilities
 
+private const val OPEN_RETRY_ATTEMPTS = 3
+private const val OPEN_RETRY_DELAY_MS = 100L
+private const val OPAQUE_ALPHA = 0xFF
+private const val ALPHA_SHIFT = 24
+private const val RED_SHIFT = 16
+private const val GREEN_SHIFT = 8
+
 /**
  * Renders Compose content to a DeckLink device using ComposePanel + SkiaLayer.screenshot().
  *
@@ -211,10 +218,10 @@ fun DeckLinkComposeOutput(
             // before DisableVideoOutput is called.
             try {
                 val blackPixels = IntArray(w * h)
-                repeat(3) {
+                repeat(OPEN_RETRY_ATTEMPTS) {
                     DeckLinkManager.sendFrame(deviceIndex, blackPixels, w, h)
                 }
-                Thread.sleep(100)
+                Thread.sleep(OPEN_RETRY_DELAY_MS)
             } catch (_: Exception) {}
             DeckLinkManager.close(deviceIndex)
             SwingUtilities.invokeLater {
@@ -236,7 +243,7 @@ internal fun convertToKeySignal(pixels: IntArray) {
         val g = (pixels[i] shr 8) and 0xFF
         val b = pixels[i] and 0xFF
         val key = maxOf(r, g, b)
-        pixels[i] = (0xFF shl 24) or (key shl 16) or (key shl 8) or key
+        pixels[i] = (OPAQUE_ALPHA shl ALPHA_SHIFT) or (key shl RED_SHIFT) or (key shl GREEN_SHIFT) or key
     }
 }
 
@@ -251,6 +258,6 @@ internal fun skiaBgraToArgbPixels(byteBuf: ByteArray, pixels: IntArray, pixelCou
         val g = byteBuf[off + 1].toInt() and 0xFF
         val r = byteBuf[off + 2].toInt() and 0xFF
         val a = byteBuf[off + 3].toInt() and 0xFF
-        pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        pixels[i] = (a shl ALPHA_SHIFT) or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b
     }
 }

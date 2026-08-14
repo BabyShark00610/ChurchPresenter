@@ -8,6 +8,17 @@ import java.time.format.DateTimeFormatterBuilder
 import java.time.format.FormatStyle
 import java.util.Locale
 
+private const val SRGB_LINEAR_THRESHOLD = 0.03928
+private const val SRGB_LINEAR_DIVISOR = 12.92
+private const val SRGB_GAMMA_OFFSET = 0.055
+private const val SRGB_GAMMA_DIVISOR = 1.055
+private const val SRGB_GAMMA_EXPONENT = 2.4
+private const val LUMINANCE_RED = 0.2126
+private const val LUMINANCE_GREEN = 0.7152
+private const val LUMINANCE_BLUE = 0.0722
+private const val HEX_ARGB_LENGTH = 8
+private const val HEX_RGB_LENGTH = 6
+
 object Utils {
 
     /** The installed font families — see [SystemFonts], which enumerates them once per process. */
@@ -38,9 +49,12 @@ object Utils {
     private fun relativeLuminance(color: Color): Double {
         fun channel(c: Float): Double {
             val cs = c.toDouble()
-            return if (cs <= 0.03928) cs / 12.92 else Math.pow((cs + 0.055) / 1.055, 2.4)
+            return if (cs <= SRGB_LINEAR_THRESHOLD) cs / SRGB_LINEAR_DIVISOR
+            else Math.pow((cs + SRGB_GAMMA_OFFSET) / SRGB_GAMMA_DIVISOR, SRGB_GAMMA_EXPONENT)
         }
-        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+        return LUMINANCE_RED * channel(color.red) +
+            LUMINANCE_GREEN * channel(color.green) +
+            LUMINANCE_BLUE * channel(color.blue)
     }
 
     /** WCAG 2 contrast ratio between two colors — 1:1 (identical) up to 21:1 (black on white). */
@@ -70,14 +84,14 @@ object Utils {
         return try {
             val cleanHex = hexColor.removePrefix("#")
             when (cleanHex.length) {
-                8 -> {
+                HEX_ARGB_LENGTH -> {
                     val alpha = cleanHex.substring(0, 2).toInt(16)
                     val red = cleanHex.substring(2, 4).toInt(16)
                     val green = cleanHex.substring(4, 6).toInt(16)
                     val blue = cleanHex.substring(6, 8).toInt(16)
                     Color(red, green, blue, alpha)
                 }
-                6 -> {
+                HEX_RGB_LENGTH -> {
                     val red = cleanHex.substring(0, 2).toInt(16)
                     val green = cleanHex.substring(2, 4).toInt(16)
                     val blue = cleanHex.substring(4, 6).toInt(16)

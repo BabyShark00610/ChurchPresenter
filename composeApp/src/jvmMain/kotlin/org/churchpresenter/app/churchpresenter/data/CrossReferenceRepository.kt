@@ -10,6 +10,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
+private const val MILLION = 1_000_000
+private const val REF_KEY_LENGTH = 9
+private const val BOOK_DIGITS = 3
+private const val CHAPTER_END = 6
+
 /** One scripture reference, in canonical numbering (books 1-39 OT, 40-66 NT). */
 data class CrossRef(
     val bookId: Int,
@@ -122,24 +127,30 @@ class CrossReferenceRepository(
 /** The app-wide instance. The dataset is immutable, so one copy serves every caller. */
 internal val sharedCrossReferences: CrossReferenceRepository by lazy { CrossReferenceRepository() }
 
+private const val THOUSAND = 1_000
+
 private fun refKey(bookId: Int, chapter: Int, verse: Int) =
-    bookId * 1_000_000 + chapter * 1_000 + verse
+    bookId * MILLION + chapter * THOUSAND + verse
 
 /** `"043003016"` → its index key, or null if the key is not the expected nine digits. */
 private fun parseKey(key: String): Int? {
-    if (key.length != 9 || !key.all { it.isDigit() }) return null
-    return refKey(key.substring(0, 3).toInt(), key.substring(3, 6).toInt(), key.substring(6).toInt())
+    if (key.length != REF_KEY_LENGTH || !key.all { it.isDigit() }) return null
+    return refKey(
+        key.substring(0, BOOK_DIGITS).toInt(),
+        key.substring(BOOK_DIGITS, CHAPTER_END).toInt(),
+        key.substring(CHAPTER_END).toInt()
+    )
 }
 
 /** `"019033006-009"` → `CrossRef(19, 33, 6, 9)`; `"045005008"` → a single verse. */
 private fun parseTarget(target: String): CrossRef? {
     val start = target.substringBefore('-')
-    if (start.length != 9 || !start.all { it.isDigit() }) return null
+    if (start.length != REF_KEY_LENGTH || !start.all { it.isDigit() }) return null
     val end = target.substringAfter('-', "").takeIf { it.isNotEmpty() }?.toIntOrNull()
     return CrossRef(
-        bookId = start.substring(0, 3).toInt(),
-        chapter = start.substring(3, 6).toInt(),
-        verse = start.substring(6).toInt(),
+        bookId = start.substring(0, BOOK_DIGITS).toInt(),
+        chapter = start.substring(BOOK_DIGITS, CHAPTER_END).toInt(),
+        verse = start.substring(CHAPTER_END).toInt(),
         endVerse = end,
     )
 }
@@ -215,7 +226,7 @@ internal fun aggregateCrossRefs(perVerse: List<List<CrossRef>>, limit: Int): Lis
     val groups = LinkedHashMap<Long, Group>()
     perVerse.forEachIndexed { sourceIndex, refs ->
         for (ref in refs) {
-            val group = groups.getOrPut(ref.bookId.toLong() * 1_000 + ref.chapter) { Group() }
+            val group = groups.getOrPut(ref.bookId.toLong() * THOUSAND + ref.chapter) { Group() }
             group.start = minOf(group.start, ref.verse)
             group.end = maxOf(group.end, ref.endVerse ?: ref.verse)
             group.sources.add(sourceIndex)
@@ -224,8 +235,8 @@ internal fun aggregateCrossRefs(perVerse: List<List<CrossRef>>, limit: Int): Lis
 
     return groups.entries
         .map { (key, group) ->
-            val bookId = (key / 1_000).toInt()
-            val chapter = (key % 1_000).toInt()
+            val bookId = (key / THOUSAND).toInt()
+            val chapter = (key % THOUSAND).toInt()
             PassageRef(
                 bookId = bookId,
                 chapter = chapter,

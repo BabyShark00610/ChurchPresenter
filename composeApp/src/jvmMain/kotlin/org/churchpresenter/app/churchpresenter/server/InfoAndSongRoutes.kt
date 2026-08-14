@@ -85,7 +85,7 @@ internal fun Route.infoAndSongRoutes(
                 get("${Constants.ENDPOINT_SONGS}/{identifier}") {
                     if (!server.checkApiKey(call)) return@get
                     val identifier = call.parameters["identifier"] ?: run {
-                        server.logRest("/api/songs/{identifier}", 400, "missing_identifier")
+                        server.logRest("/api/songs/{identifier}", HttpStatusCode.BadRequest.value, "missing_identifier")
                         call.respond(HttpStatusCode.BadRequest, """{"error":"missing identifier"}""")
                         return@get
                     }
@@ -106,11 +106,11 @@ internal fun Route.infoAndSongRoutes(
                         }
                     }
                     if (song == null) {
-                        server.logRest("/api/songs/{identifier}", 404, "song_not_found")
+                        server.logRest("/api/songs/{identifier}", HttpStatusCode.NotFound.value, "song_not_found")
                         call.respond(HttpStatusCode.NotFound, """{"error":"song not found"}""")
                         return@get
                     }
-                    server.logRest("/api/songs/{identifier}", 200)
+                    server.logRest("/api/songs/{identifier}", HttpStatusCode.OK.value)
                     call.respond(buildSongDetail(song))
                 }
 

@@ -106,6 +106,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.skia.Image as SkiaImage
 
+private const val PILL_CORNER_PERCENT = 50
+
 /**
  * Lets the operator pick a Planning Center Services plan and import its songs (matched against
  * the local library, or added on the spot via [EditSongDialog]) and section headers (as schedule
@@ -580,9 +582,9 @@ internal fun PlanningCenterImportDialogContent(
                                                 // for expand/collapse (see isExpandable above).
                                                 Box(
                                                     modifier = Modifier
-                                                        .clip(RoundedCornerShape(50))
+                                                        .clip(RoundedCornerShape(PILL_CORNER_PERCENT))
                                                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(50))
+                                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(PILL_CORNER_PERCENT))
                                                         .padding(horizontal = 12.dp, vertical = 5.dp)
                                                 ) {
                                                     Text(
@@ -825,7 +827,7 @@ private fun attachmentExtensionIcon(ext: String): ImageVector = when (ext) {
 private fun MatchedTag() {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(RoundedCornerShape(PILL_CORNER_PERCENT))
             .background(MaterialTheme.semantic.successContainer)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {

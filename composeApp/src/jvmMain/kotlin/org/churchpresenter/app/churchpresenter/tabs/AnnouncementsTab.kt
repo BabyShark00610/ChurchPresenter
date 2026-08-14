@@ -177,6 +177,15 @@ import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val POSITION_GRID_COLUMNS = 3
+private const val POSITION_TILE_ASPECT_ABBREV = 1.5f
+private const val POSITION_TILE_ASPECT_FULL = 3f
+private const val HOURS_PER_HALF_DAY = 12
+private const val HOUR_WRAP_OFFSET = 11
+private const val HOURS_PER_DAY = 24
+private const val MAX_SECOND = 59
+private const val MILLIS_PER_SECOND_F = 1000f
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AnnouncementsTab(
@@ -488,7 +497,7 @@ fun AnnouncementsTab(
                     BoxWithConstraints(modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()) {
                         val useAbbrev = maxWidth / 3 < 80.dp
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            positions.chunked(3).forEach { rowItems ->
+                            positions.chunked(POSITION_GRID_COLUMNS).forEach { rowItems ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -501,7 +510,7 @@ fun AnnouncementsTab(
                                         Box(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .aspectRatio(if (useAbbrev) 1.5f else 3f)
+                                                .aspectRatio(if (useAbbrev) POSITION_TILE_ASPECT_ABBREV else POSITION_TILE_ASPECT_FULL)
                                                 .clip(RoundedCornerShape(3.dp))
                                                 .background(
                                                     if (isSelected) MaterialTheme.colorScheme.primary
@@ -553,7 +562,7 @@ fun AnnouncementsTab(
                         val use24Hour = Utils.isSystemUsing24HourFormat()
                         val targetIsPm = viewModel.targetHour >= 12
                         fun displayHour(hour24: Int): Int =
-                            if (use24Hour) hour24 else ((hour24 + 11) % 12) + 1
+                            if (use24Hour) hour24 else ((hour24 + HOUR_WRAP_OFFSET) % HOURS_PER_HALF_DAY) + 1
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -650,7 +659,7 @@ fun AnnouncementsTab(
                                 TimerColumn(secText, secLabel,
                                     onIncrement = { viewModel.stepTimerSeconds(1); viewModel.saveToSettings(onSettingsChange) },
                                     onDecrement = { viewModel.stepTimerSeconds(-1); viewModel.saveToSettings(onSettingsChange) },
-                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); secText = d; d.toIntOrNull()?.let { viewModel.setTimerSeconds(it.coerceIn(0, 59)); viewModel.saveToSettings(onSettingsChange) } }
+                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); secText = d; d.toIntOrNull()?.let { viewModel.setTimerSeconds(it.coerceIn(0, MAX_SECOND)); viewModel.saveToSettings(onSettingsChange) } }
                                 )
                             }
                         } else if (viewModel.timerMode == Constants.TIMER_MODE_CLOCK) {
@@ -698,14 +707,14 @@ fun AnnouncementsTab(
                                 TimerColumn(tSecText, secLabel,
                                     onIncrement = { viewModel.stepTargetSecond(1); viewModel.saveToSettings(onSettingsChange) },
                                     onDecrement = { viewModel.stepTargetSecond(-1); viewModel.saveToSettings(onSettingsChange) },
-                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); tSecText = d; d.toIntOrNull()?.let { viewModel.setTargetSecond(it.coerceIn(0, 59)); viewModel.saveToSettings(onSettingsChange) } }
+                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); tSecText = d; d.toIntOrNull()?.let { viewModel.setTargetSecond(it.coerceIn(0, MAX_SECOND)); viewModel.saveToSettings(onSettingsChange) } }
                                 )
                                 if (!use24Hour) {
                                     sepBox()
                                     AmPmToggle(
                                         isPm = targetIsPm,
                                         onToggle = {
-                                            viewModel.setTargetHour((viewModel.targetHour + 12) % 24)
+                                            viewModel.setTargetHour((viewModel.targetHour + HOURS_PER_HALF_DAY) % HOURS_PER_DAY)
                                             viewModel.saveToSettings(onSettingsChange)
                                         }
                                     )
@@ -1123,7 +1132,7 @@ fun AnnouncementsTab(
                                 viewModel.saveToSettings(onSettingsChange)
                             },
                             valueRange = sliderMin..sliderMax,
-                            trailingLabel = "${"%.1f".format((sliderSum - durationMs) / 1000f)}s",
+                            trailingLabel = "${"%.1f".format((sliderSum - durationMs) / MILLIS_PER_SECOND_F)}s",
                             modifier = Modifier.weight(1f)
                         )
                     }

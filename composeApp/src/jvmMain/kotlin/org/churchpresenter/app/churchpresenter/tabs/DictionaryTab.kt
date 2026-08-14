@@ -122,6 +122,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val DEFINITION_PREVIEW_CHARS = 200
+
 @Composable
 fun DictionaryTab(
     modifier: Modifier = Modifier,
@@ -891,8 +893,8 @@ private fun InterlinearWordChip(
                             )
                         }
                         Text(
-                            text = entry.definition.take(200).let {
-                                if (entry.definition.length > 200) "$it…" else it
+                            text = entry.definition.take(DEFINITION_PREVIEW_CHARS).let {
+                                if (entry.definition.length > DEFINITION_PREVIEW_CHARS) "$it…" else it
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.inverseOnSurface,

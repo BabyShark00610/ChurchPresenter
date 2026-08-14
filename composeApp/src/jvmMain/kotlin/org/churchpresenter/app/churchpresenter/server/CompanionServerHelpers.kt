@@ -3,6 +3,10 @@ package org.churchpresenter.app.churchpresenter.server
 import io.ktor.http.ContentType
 import java.net.NetworkInterface
 
+private const val FIRST_PRINTABLE_CHAR = 0x20
+private const val IFACE_RANK_WIFI = 3
+private const val IFACE_RANK_OTHER = 10
+
 /**
  * Small pure helpers used by `CompanionServer` and its route groups. None of them read server
  * state, so they live here rather than as members.
@@ -15,7 +19,7 @@ internal fun jsonEscape(s: String): String = buildString {
             c == '\n' -> append("\\n")
             c == '\r' -> append("\\r")
             c == '\t' -> append("\\t")
-            c.code < 0x20 -> append("\\u%04x".format(c.code))
+            c.code < FIRST_PRINTABLE_CHAR -> append("\\u%04x".format(c.code))
             else -> append(c)
         }
     }
@@ -52,9 +56,9 @@ internal fun localIpAddress(): String {
                     name.startsWith("eth")  -> 0   // Linux wired
                     name == "en0"           -> 1   // macOS primary (usually wired on desktops)
                     name.startsWith("en")   -> 2   // macOS secondary (WiFi is typically en1+)
-                    name.startsWith("wlan") -> 3   // Linux WiFi
-                    name.startsWith("wifi") -> 3
-                    else                    -> 10  // VPNs, bridges, docker, etc.
+                    name.startsWith("wlan") -> IFACE_RANK_WIFI   // Linux WiFi
+                    name.startsWith("wifi") -> IFACE_RANK_WIFI
+                    else                    -> IFACE_RANK_OTHER  // VPNs, bridges, docker, etc.
                 }
             })
             .flatMap { iface -> iface.inetAddresses.asSequence() }

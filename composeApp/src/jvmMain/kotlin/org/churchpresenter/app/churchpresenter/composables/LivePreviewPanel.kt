@@ -97,6 +97,11 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val PREVIEW_BACKGROUND = 0xFF121212
+private const val LIVE_BADGE_COLOR = 0xFF2196F3
+private const val LOCK_BADGE_COLOR = 0xFFFFC107
+private const val AUDIO_LEVEL_COLOR = 0xFF4CAF50
+
 /**
  * A scaled-down preview of whatever is currently live on the presenter windows.
  * Shows one preview per configured display, each respecting its screen assignment.
@@ -460,7 +465,7 @@ private fun SingleDisplayPreview(
                 )
             } else {
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color(0xFF121212)),
+                    modifier = Modifier.fillMaxSize().background(Color(PREVIEW_BACKGROUND)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -497,7 +502,7 @@ private fun SingleDisplayPreview(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(4.dp)
-                    .background(Color(0xFF2196F3), RoundedCornerShape(3.dp))
+                    .background(Color(LIVE_BADGE_COLOR), RoundedCornerShape(3.dp))
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             )
         }
@@ -514,7 +519,7 @@ private fun SingleDisplayPreview(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 4.dp, bottom = if (screenAssignment.hasKeyOutput) 24.dp else 4.dp)
-                        .background(Color(0xFFFFC107), RoundedCornerShape(3.dp))
+                        .background(Color(LOCK_BADGE_COLOR), RoundedCornerShape(3.dp))
                         .padding(horizontal = 5.dp, vertical = 2.dp)
                 )
             }
@@ -533,7 +538,7 @@ private fun SingleDisplayPreview(
                     .padding(2.dp)
                     .size(24.dp),
                 colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = if (lockedMode != null) Color(0xFFFFC107) else Color.White.copy(alpha = 0.5f)
+                    contentColor = if (lockedMode != null) Color(LOCK_BADGE_COLOR) else Color.White.copy(alpha = 0.5f)
                 )
             ) {
                 Icon(
@@ -600,7 +605,7 @@ private fun AnimatedEqualizer() {
                 modifier = Modifier
                     .width(3.dp)
                     .fillMaxHeight(heightFraction.value)
-                    .background(Color(0xFF4CAF50), RoundedCornerShape(1.dp))
+                    .background(Color(AUDIO_LEVEL_COLOR), RoundedCornerShape(1.dp))
             )
         }
     }

@@ -48,6 +48,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
 
+private const val COLUMN_WEIGHT = 0.48f
+
 @Composable
 fun DictionarySettingsTab(
     settings: AppSettings,
@@ -66,7 +68,7 @@ fun DictionarySettingsTab(
         ) {
             // Left column: Word + Definition
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 360.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 360.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
             // Word section
@@ -188,7 +190,7 @@ fun DictionarySettingsTab(
 
             // Right column: Reference + KJV + Card Background + Transitions
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 360.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 360.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Reference & Transliteration

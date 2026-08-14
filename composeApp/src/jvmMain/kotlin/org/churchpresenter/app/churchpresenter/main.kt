@@ -147,6 +147,11 @@ import org.churchpresenter.app.churchpresenter.server.shouldMirrorRemoteOutput
 import org.churchpresenter.app.churchpresenter.server.shouldUseRemoteContent
 import org.churchpresenter.app.churchpresenter.server.withAnnouncement
 
+private const val MILLIS_PER_MINUTE = 60_000L
+private const val CRASH_REPORT_RETRY_MS = 15_000L
+private const val OPTIONS_TAB_BACKGROUND = 3
+private const val UPDATE_CHECK_DELAY_MS = 5_000L
+
 private const val CURRENT_EULA_VERSION = 1
 
 private var singleInstanceSocket: java.net.ServerSocket? = null
@@ -227,7 +232,7 @@ fun main() {
 
     val sessionStartedAt = System.currentTimeMillis()
     Runtime.getRuntime().addShutdownHook(Thread {
-        UsageEvents.recordSessionMinutes(((System.currentTimeMillis() - sessionStartedAt) / 60_000L).toInt())
+        UsageEvents.recordSessionMinutes(((System.currentTimeMillis() - sessionStartedAt) / MILLIS_PER_MINUTE).toInt())
     })
 
     val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -1121,7 +1126,7 @@ fun main() {
                                             )
                                         }
                                         LaunchedEffect(Unit) {
-                                            delay(15_000)
+                                            delay(CRASH_REPORT_RETRY_MS)
                                             showBanner = false
                                         }
                                     }
@@ -1237,7 +1242,7 @@ fun main() {
                                     },
                                     onScheduleItemSelected = { itemId -> selectedScheduleItemId = itemId },
                                     onShowSettings = { openOptionsDialog(0) },
-                                    onShowBackgroundSettings = { openOptionsDialog(3) },
+                                    onShowBackgroundSettings = { openOptionsDialog(OPTIONS_TAB_BACKGROUND) },
                                     onSettingsChange = { updateFn ->
                                         appSettings = updateFn(appSettings)
                                         settingsManager.saveSettings(appSettings)
@@ -1375,7 +1380,7 @@ fun main() {
                                     onIdentifyScreen = {
                                         identifyingScreen = true
                                         coroutineScope.launch {
-                                            delay(5_000L)
+                                            delay(UPDATE_CHECK_DELAY_MS)
                                             identifyingScreen = false
                                         }
                                     },

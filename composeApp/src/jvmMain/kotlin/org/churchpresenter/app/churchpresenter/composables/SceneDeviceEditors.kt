@@ -45,6 +45,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 
+private const val MIN_CAPTURE_INTERVAL_MS = 33f
+private const val MAX_CAPTURE_INTERVAL_MS = 1000f
+
 /**
  * The scene sources that come from hardware or another window: a camera and a screen capture.
  */
@@ -259,7 +262,7 @@ internal fun ScreenCaptureProperties(source: SceneSource.ScreenCaptureSource, on
             v.toIntOrNull()?.let { onUpdate(source.copy(captureHeight = it.coerceAtLeast(1))) }
         }
     }
-    PropertySliderWithInput(stringResource(Res.string.canvas_capture_interval), source.captureInterval.toFloat(), 33f, 1000f, "ms") { v ->
+    PropertySliderWithInput(stringResource(Res.string.canvas_capture_interval), source.captureInterval.toFloat(), MIN_CAPTURE_INTERVAL_MS, MAX_CAPTURE_INTERVAL_MS, "ms") { v ->
         onUpdate(source.copy(captureInterval = v.toInt()))
     }
 }

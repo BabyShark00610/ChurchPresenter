@@ -16,6 +16,10 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+private const val ALPHA_SHIFT = 24
+private const val BYTE_MASK = 0xFF
+private const val MIN_VISIBLE_ALPHA = 8
+
 /**
  * One decoded lower-third frame, ready to draw. [imageBitmap] is what output windows
  * render; the backing native [skiaBitmap] is owned and closed by [LottieFrameStream].
@@ -146,7 +150,7 @@ class LottieFrameStream(
         var i = 0
         while (i < frame.size) {
             sampled++
-            if ((frame[i] ushr 24) and 0xFF > 8) opaqueCount++
+            if ((frame[i] ushr ALPHA_SHIFT) and BYTE_MASK > MIN_VISIBLE_ALPHA) opaqueCount++
             i += sampleStep
         }
         return opaqueCount.toFloat() / sampled < BLANK_OPAQUE_FRACTION

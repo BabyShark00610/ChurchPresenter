@@ -172,6 +172,14 @@ import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val STEP_BIBLE = 3
+private const val STEP_SONGS = 4
+private const val STEP_PROJECTION = 5
+private const val STEP_VLC = 6
+private const val STEP_READY = 7
+private const val ACTIVE_STEP_TINT = 0.4f
+private const val MODE_COLUMN_SPAN = 3
+
 private const val TOTAL_STEPS = 8
 
 @Composable
@@ -302,11 +310,11 @@ internal fun SetupWizardContent(
                                     onThemeSelected = onThemeSelected
                                 )
                                 2 -> WelcomeStep()
-                                3 -> BibleStep(onOpenSettings = onOpenSettings)
-                                4 -> SongsStep(onOpenSettings = onOpenSettings)
-                                5 -> ProjectionStep(onOpenSettings = onOpenSettings)
-                                6 -> VlcStep()
-                                7 -> ReadyStep()
+                                STEP_BIBLE -> BibleStep(onOpenSettings = onOpenSettings)
+                                STEP_SONGS -> SongsStep(onOpenSettings = onOpenSettings)
+                                STEP_PROJECTION -> ProjectionStep(onOpenSettings = onOpenSettings)
+                                STEP_VLC -> VlcStep()
+                                STEP_READY -> ReadyStep()
                             }
                         }
                     }
@@ -396,7 +404,7 @@ private fun StepIconBadge(icon: ImageVector) {
                 Brush.linearGradient(
                     listOf(
                         MaterialTheme.colorScheme.surfaceVariant,
-                        lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, 0.4f)
+                        lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, ACTIVE_STEP_TINT)
                     )
                 )
             )
@@ -559,7 +567,7 @@ private fun WelcomeStep() {
                     Brush.linearGradient(
                         listOf(
                             MaterialTheme.colorScheme.surfaceVariant,
-                            lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, 0.4f)
+                            lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, ACTIVE_STEP_TINT)
                         )
                     )
                 )
@@ -1140,7 +1148,7 @@ private fun ProjectionModeHint() {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.width(modeColW * 3)
+                    modifier = Modifier.width(modeColW * MODE_COLUMN_SPAN)
                 )
                 Row {
                     listOf(

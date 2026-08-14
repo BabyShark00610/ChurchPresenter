@@ -56,6 +56,9 @@ import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDef
 import org.jetbrains.skia.Image
 import java.io.File
 
+private const val SHADOW_OFFSET_PX = 6f
+private const val INDICATOR_REPEAT_COUNT = 3
+
 @Composable
 fun SongPresenter(
     modifier: Modifier = Modifier,
@@ -307,7 +310,7 @@ fun SongPresenter(
             val alpha = (opacity / 100f).coerceIn(0f, 1f)
             return Shadow(
                 color = base.copy(alpha = alpha),
-                offset = Offset(6f * scaleFactor * mul, 6f * scaleFactor * mul),
+                offset = Offset(SHADOW_OFFSET_PX * scaleFactor * mul, SHADOW_OFFSET_PX * scaleFactor * mul),
                 blurRadius = 12f * scaleFactor * mul
             )
         }
@@ -737,7 +740,7 @@ fun SongPresenter(
                         val indicatorPad = " ".repeat(ss.endOfSongIndicatorSpacing)
                         val indicatorText = "$indicatorPad*$indicatorPad"
                         Row(modifier = Modifier.fillMaxWidth().alpha(indicatorAlpha), horizontalArrangement = Arrangement.Center) {
-                            repeat(3) { Text(text = indicatorText, fontSize = scaledLyricsFontSize, color = lyricsColor, style = lyricsTextStyleScaled) }
+                            repeat(INDICATOR_REPEAT_COUNT) { Text(text = indicatorText, fontSize = scaledLyricsFontSize, color = lyricsColor, style = lyricsTextStyleScaled) }
                         }
                     }
 

@@ -52,6 +52,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val NANOS_PER_MILLI = 1_000_000
+
 @Composable
 internal fun PresenterWindows(
     screens: Array<GraphicsDevice>,
@@ -125,7 +127,7 @@ internal fun PresenterWindows(
                 }
                 if (elapsedMs >= grandTotalMs) break
                 val nowNanos = withFrameNanos { it }
-                elapsedMs = ((nowNanos - startNanos) / 1_000_000).coerceAtMost(grandTotalMs)
+                elapsedMs = ((nowNanos - startNanos) / NANOS_PER_MILLI).coerceAtMost(grandTotalMs)
             }
             val finalFrameCount = presenterManager.lottieFrameCount.value
             if (finalFrameCount != null) {

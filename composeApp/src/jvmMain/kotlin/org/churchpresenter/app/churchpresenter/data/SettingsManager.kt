@@ -18,6 +18,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
+private const val VERSION_HIDDEN_TABS = 5
+private const val VERSION_SCREEN_ASSIGNMENTS = 6
+
 /** The three placement-field prefixes used throughout companionSatelliteConnections[] entries
  * (tabRows, leftSidebarRows, rightSidebarRows, etc.) — shared by the migrations below. */
 private val CompanionSurfacePlacementPrefixes = listOf("tab", "leftSidebar", "rightSidebar")
@@ -129,8 +132,8 @@ class SettingsManager {
             if (toVersion > fromVersion) migrated = step(migrated)
         }
         var settings = jsonFormat.decodeFromString<AppSettings>(migrated)
-        if (fromVersion < 5) settings = migrateHiddenTabs(settings, raw)
-        if (fromVersion < 6) {
+        if (fromVersion < VERSION_HIDDEN_TABS) settings = migrateHiddenTabs(settings, raw)
+        if (fromVersion < VERSION_SCREEN_ASSIGNMENTS) {
             // The primary/secondary bible pair became an ordered list of any length. Typed rather
             // than raw, because the conversion is a field-by-field restructure the data class
             // already knows how to do. The old fields are left in the document on purpose so a

@@ -37,6 +37,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
 
+private const val COLUMN_WEIGHT = 0.48f
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongSettingsTab(
@@ -60,7 +62,7 @@ fun SongSettingsTab(
 
             Column(
                 modifier = Modifier
-                    .weight(0.48f)
+                    .weight(COLUMN_WEIGHT)
                     .widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -77,7 +79,7 @@ fun SongSettingsTab(
 
             Column(
                 modifier = Modifier
-                    .weight(0.48f)
+                    .weight(COLUMN_WEIGHT)
                     .widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {

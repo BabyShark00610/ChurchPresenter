@@ -21,6 +21,10 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
+private const val HTTP_OK = 200
+private const val TUNNEL_READY_TIMEOUT_MS = 30_000L
+private const val TUNNEL_POLL_INTERVAL_MS = 200L
+
 sealed class TunnelStatus {
     data object Idle : TunnelStatus()
     data object Downloading : TunnelStatus()
@@ -124,7 +128,7 @@ class TunnelManager {
             .build()
 
         val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
-        if (response.statusCode() != 200) {
+        if (response.statusCode() != HTTP_OK) {
             throw IOException("Download failed (HTTP ${response.statusCode()})")
         }
 
@@ -202,9 +206,9 @@ class TunnelManager {
         }
 
         // Wait up to 30s for URL to appear
-        withTimeoutOrNull(30_000) {
+        withTimeoutOrNull(TUNNEL_READY_TIMEOUT_MS) {
             while (_tunnelUrl.value == null && monitorJob?.isActive == true) {
-                delay(200)
+                delay(TUNNEL_POLL_INTERVAL_MS)
             }
         }
 

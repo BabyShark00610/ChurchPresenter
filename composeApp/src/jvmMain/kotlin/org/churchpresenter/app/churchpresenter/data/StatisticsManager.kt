@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import org.apache.poi.hssf.usermodel.HSSFWorkbook
 import org.apache.poi.ss.usermodel.FillPatternType
 import org.apache.poi.ss.usermodel.IndexedColors
+import org.apache.poi.ss.usermodel.Row
 
 
 // ── Aggregate statistics (existing, all-time) ─────────────────────────────────
@@ -99,13 +100,27 @@ data class ActivityPoint(
 
 internal enum class ActivityGranularity { WEEKLY, MONTHLY, YEARLY }
 
+private const val WEEKLY_MAX_DAYS = 90
+private const val MONTHLY_MAX_DAYS = 730
+
+private fun Row.writeCells(vararg values: Any) {
+    values.forEachIndexed { col, value ->
+        val cell = createCell(col)
+        when (value) {
+            is Double -> cell.setCellValue(value)
+            is String -> cell.setCellValue(value)
+            else -> cell.setCellValue(value.toString())
+        }
+    }
+}
+
 /** Chooses the activity-chart bucket size from the selected range: up to ~3 months → weekly, up to
  *  ~2 years → monthly, longer → yearly. */
 internal fun activityGranularityFor(rangeMs: Long): ActivityGranularity {
     val dayMs = 86_400_000L
     return when {
-        rangeMs <= 90 * dayMs -> ActivityGranularity.WEEKLY
-        rangeMs <= 730 * dayMs -> ActivityGranularity.MONTHLY
+        rangeMs <= WEEKLY_MAX_DAYS * dayMs -> ActivityGranularity.WEEKLY
+        rangeMs <= MONTHLY_MAX_DAYS * dayMs -> ActivityGranularity.MONTHLY
         else -> ActivityGranularity.YEARLY
     }
 }
@@ -387,11 +402,10 @@ class StatisticsManager {
             .forEach { (_, entries) ->
                 entries.sortedByDescending { it.count }.forEachIndexed { rank, entry ->
                     val row = songsSheet.createRow(rowIndex++)
-                    row.createCell(0).setCellValue((rank + 1).toDouble())
-                    row.createCell(1).setCellValue(entry.songbook)
-                    row.createCell(2).setCellValue(entry.songNumber.toDouble())
-                    row.createCell(3).setCellValue(entry.title)
-                    row.createCell(4).setCellValue(entry.count.toDouble())
+                    row.writeCells(
+                        (rank + 1).toDouble(), entry.songbook, entry.songNumber.toDouble(),
+                        entry.title, entry.count.toDouble()
+                    )
                 }
             }
         for (column in 0..4) songsSheet.autoSizeColumn(column)
@@ -407,12 +421,10 @@ class StatisticsManager {
             .forEach { (_, entries) ->
                 entries.sortedByDescending { it.count }.forEachIndexed { rank, entry ->
                     val row = versesSheet.createRow(rowIndex++)
-                    row.createCell(0).setCellValue((rank + 1).toDouble())
-                    row.createCell(1).setCellValue(entry.bibleName)
-                    row.createCell(2).setCellValue(entry.bookName)
-                    row.createCell(3).setCellValue(entry.chapter.toDouble())
-                    row.createCell(4).setCellValue(entry.verseNumber.toDouble())
-                    row.createCell(5).setCellValue(entry.count.toDouble())
+                    row.writeCells(
+                        (rank + 1).toDouble(), entry.bibleName, entry.bookName,
+                        entry.chapter.toDouble(), entry.verseNumber.toDouble(), entry.count.toDouble()
+                    )
                 }
             }
         for (column in 0..5) versesSheet.autoSizeColumn(column)
@@ -453,15 +465,11 @@ class StatisticsManager {
             }
         getAllSongsInRange(fromMs, toMs).forEachIndexed { rank, song ->
             val row = songsSheet.createRow(rowIndex++)
-            row.createCell(0).setCellValue((rank + 1).toDouble())
-            row.createCell(1).setCellValue(song.title)
-            row.createCell(2).setCellValue(song.author)
-            row.createCell(3).setCellValue(song.songbook)
-            row.createCell(4).setCellValue(song.songNumber.toDouble())
-            row.createCell(5).setCellValue(song.ccliNumber)
-            row.createCell(6).setCellValue(song.count.toDouble())
-            row.createCell(7).setCellValue(dateFmt.format(Date(song.firstUsed)))
-            row.createCell(8).setCellValue(dateFmt.format(Date(song.lastUsed)))
+            row.writeCells(
+                (rank + 1).toDouble(), song.title, song.author, song.songbook,
+                song.songNumber.toDouble(), song.ccliNumber, song.count.toDouble(),
+                dateFmt.format(Date(song.firstUsed)), dateFmt.format(Date(song.lastUsed))
+            )
         }
         for (column in 0..8) songsSheet.autoSizeColumn(column)
 
@@ -474,14 +482,11 @@ class StatisticsManager {
             }
         getAllVersesInRange(fromMs, toMs).forEachIndexed { rank, verse ->
             val row = versesSheet.createRow(rowIndex++)
-            row.createCell(0).setCellValue((rank + 1).toDouble())
-            row.createCell(1).setCellValue(verse.bibleName)
-            row.createCell(2).setCellValue(verse.bookName)
-            row.createCell(3).setCellValue(verse.chapter.toDouble())
-            row.createCell(4).setCellValue(verse.verseNumber.toDouble())
-            row.createCell(5).setCellValue(verse.count.toDouble())
-            row.createCell(6).setCellValue(dateFmt.format(Date(verse.firstUsed)))
-            row.createCell(7).setCellValue(dateFmt.format(Date(verse.lastUsed)))
+            row.writeCells(
+                (rank + 1).toDouble(), verse.bibleName, verse.bookName, verse.chapter.toDouble(),
+                verse.verseNumber.toDouble(), verse.count.toDouble(),
+                dateFmt.format(Date(verse.firstUsed)), dateFmt.format(Date(verse.lastUsed))
+            )
         }
         for (column in 0..7) versesSheet.autoSizeColumn(column)
 
@@ -494,10 +499,10 @@ class StatisticsManager {
             }
         getActivityByPeriod(fromMs, toMs).forEach { pt ->
             val row = actSheet.createRow(rowIndex++)
-            row.createCell(0).setCellValue(pt.label)
-            row.createCell(1).setCellValue(pt.songCount.toDouble())
-            row.createCell(2).setCellValue(pt.verseCount.toDouble())
-            row.createCell(3).setCellValue((pt.songCount + pt.verseCount).toDouble())
+            row.writeCells(
+                pt.label, pt.songCount.toDouble(), pt.verseCount.toDouble(),
+                (pt.songCount + pt.verseCount).toDouble()
+            )
         }
         for (column in 0..3) actSheet.autoSizeColumn(column)
 
