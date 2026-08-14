@@ -311,7 +311,7 @@ private suspend fun uploadClipFrames(
         // Wait for the clip to finish playing, then turn the key off automatically. The mutex is
         // released between the two use() calls so other operations can proceed.
         if (key.on) {
-            delay((frameCount.toLong() * MILLIS_PER_SECOND) / fps.toLong())
+            delay(if (fps > 0.0) ((frameCount.toDouble() * MILLIS_PER_SECOND) / fps).toLong() else 0L)
             AtemConnectionManager.use(atem.host, atem.port, needsState = false) { client ->
                 client.setKeyOnAir(key.useDsk, key.mixEffect, key.keyer, false)
             }
