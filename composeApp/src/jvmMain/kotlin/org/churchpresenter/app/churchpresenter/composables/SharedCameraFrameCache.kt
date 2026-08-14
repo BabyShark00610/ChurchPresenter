@@ -137,22 +137,6 @@ object SharedCameraFrameCache {
 
     // ── DeckLink capture ────────────────────────────────────────────
 
-    /** Puts one polled DeckLink frame on screen; false when the poll returned no usable frame. */
-    private suspend fun showDeckLinkFrame(frameData: IntArray?, entry: CacheEntry, first: Boolean): Boolean {
-        if (frameData == null || frameData.size <= 2) return false
-        val w = frameData[0]
-        val h = frameData[1]
-        if (w <= 0 || h <= 0) return false
-        val img = withContext(Dispatchers.IO) {
-            val bi = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
-            bi.setRGB(0, 0, w, h, frameData, 2, w)
-            bi
-        }
-        entry.frame.value = img.toComposeImageBitmap()
-        if (first) System.err.println("[DeckLink Input] First frame: ${w}x${h}")
-        return true
-    }
-
     private suspend fun runDeckLinkCapture(source: SceneSource.CameraSource, entry: CacheEntry) {
         System.err.println("[DeckLink Input] Opening device ${source.deckLinkIndex}, " +
             "format: ${source.videoFormat.ifEmpty { "auto" }}, connection: ${source.videoConnection}")
@@ -180,9 +164,22 @@ object SharedCameraFrameCache {
                 DeckLinkManager.getInputFrame(source.deckLinkIndex)
             }
 
-            if (showDeckLinkFrame(frameData, entry, first = frameCount == 0)) {
-                frameCount++
-                nullCount = 0
+            if (frameData != null && frameData.size > 2) {
+                val w = frameData[0]
+                val h = frameData[1]
+                if (w > 0 && h > 0) {
+                    val img = withContext(Dispatchers.IO) {
+                        val bi = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+                        bi.setRGB(0, 0, w, h, frameData, 2, w)
+                        bi
+                    }
+                    entry.frame.value = img.toComposeImageBitmap()
+                    frameCount++
+                    nullCount = 0
+                    if (frameCount == 1) {
+                        System.err.println("[DeckLink Input] First frame: ${w}x${h}")
+                    }
+                }
             } else {
                 nullCount++
                 if (nullCount > MAX_NULL_FRAMES_BEFORE_CLEAR && entry.frame.value != null) {
@@ -209,7 +206,19 @@ object SharedCameraFrameCache {
         val stderrLines = mutableListOf<String>()
         val videoDims = java.util.concurrent.atomic.AtomicReference<Pair<Int, Int>?>(null)
         val stderrJob = CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
-            drainFfmpegStderr(process, stderrLines, videoDims)
+            try {
+                process.errorStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        synchronized(stderrLines) {
+                            stderrLines.add(line)
+                            if (stderrLines.size > STDERR_TAIL_LINES) stderrLines.removeAt(0)
+                        }
+                        if (videoDims.get() == null) {
+                            parseFfmpegVideoDimensions(line)?.let { videoDims.set(it) }
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
         }
 
         val resolved = awaitVideoDimensions(videoDims)
@@ -243,32 +252,6 @@ object SharedCameraFrameCache {
             }
         }
         return frameCount > 0
-    }
-
-    private fun drainFfmpegStderr(
-        process: Process,
-        stderrLines: MutableList<String>,
-        videoDims: java.util.concurrent.atomic.AtomicReference<Pair<Int, Int>?>,
-    ) {
-        try {
-            process.errorStream.bufferedReader().useLines { lines ->
-                lines.forEach { line -> noteStderrLine(line, stderrLines, videoDims) }
-            }
-        } catch (_: Throwable) {}
-    }
-
-    private fun noteStderrLine(
-        line: String,
-        stderrLines: MutableList<String>,
-        videoDims: java.util.concurrent.atomic.AtomicReference<Pair<Int, Int>?>,
-    ) {
-        synchronized(stderrLines) {
-            stderrLines.add(line)
-            if (stderrLines.size > STDERR_TAIL_LINES) stderrLines.removeAt(0)
-        }
-        if (videoDims.get() == null) {
-            parseFfmpegVideoDimensions(line)?.let { videoDims.set(it) }
-        }
     }
 
     /** Waits up to five seconds for ffmpeg to announce the stream's size. */
@@ -324,7 +307,9 @@ object SharedCameraFrameCache {
 
     private suspend fun runFfmpegCapture(source: SceneSource.CameraSource, entry: CacheEntry) {
         val path = source.devicePath
-        System.err.println("[Camera] Starting camera capture for device: $path, format: ${source.videoFormat.ifEmpty { "auto" }}")
+        System.err.println(
+            "[Camera] Starting camera capture for device: $path, format: ${source.videoFormat.ifEmpty { "auto" }}"
+        )
 
         val command = buildFfmpegCommand(source) ?: run {
             System.err.println("[Camera] Unknown device path scheme: $path")
@@ -341,7 +326,9 @@ object SharedCameraFrameCache {
                 delay(DEVICE_RELEASE_DELAY_MS)
             }
 
-            System.err.println("[Camera] Opening device (attempt ${consecutiveFailures + 1}): ${command.joinToString(" ")}")
+            System.err.println(
+                "[Camera] Opening device (attempt ${consecutiveFailures + 1}): ${command.joinToString(" ")}"
+            )
             val process = withContext(Dispatchers.IO) {
                 try {
                     ProcessBuilder(command).redirectErrorStream(false).start()

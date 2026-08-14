@@ -489,7 +489,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val knownStills = lastKnownState?.stillSlots
         if (!knownStills.isNullOrEmpty() && knownStills.none { it.index == slot }) {
             // 1-based in messages to match ATEM Software Control's numbering
-            throw Exception("Still slot ${slot + 1} does not exist on this ATEM (available: 1–${knownStills.maxOf { it.index } + 1})")
+            throw Exception(
+                "Still slot ${slot + 1} does not exist on this ATEM (available: 1–${knownStills.maxOf { it.index } + 1})"
+            )
         }
 
         opMutex.withLock {
@@ -532,7 +534,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val knownClips = lastKnownState?.clipSlots
         if (!knownClips.isNullOrEmpty() && knownClips.none { it.index == slot }) {
             // 1-based in messages to match ATEM Software Control's numbering
-            throw Exception("Clip slot ${slot + 1} does not exist on this ATEM (available: 1–${knownClips.maxOf { it.index } + 1})")
+            throw Exception(
+                "Clip slot ${slot + 1} does not exist on this ATEM (available: 1–${knownClips.maxOf { it.index } + 1})"
+            )
         }
         val storeId = slot + 1   // clip stores are 1-based; store 0 is the still pool
 
@@ -540,7 +544,12 @@ class AtemClient(val host: String, val port: Int = 9910) {
             // Drop any buffered clip-store state from before this upload so a later readiness wait
             // (awaitClipReady) only reacts to MPCS updates produced by this upload.
             pendingCommands.removeAll { it.first == "MPCS" }
-            sendCommandAndWait("LOCK", buildLockPayload(storeId, locked = true), "LKOB", timeout = CMD_TIMEOUT_MS.toLong())
+            sendCommandAndWait(
+                "LOCK",
+                buildLockPayload(storeId, locked = true),
+                "LKOB",
+                timeout = CMD_TIMEOUT_MS.toLong()
+            )
             try {
                 // Clear the clip slot before uploading new frames
                 sendCommandAndWait(
@@ -640,19 +649,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
                         sendCommand("FTFD", buildFileDescriptionPayload(transferId, name, hash))
                         descriptionSent = true
                     }
-                    // ATEM grants chunkCount chunks of chunkSize bytes (rounded down to 8)
-                    val chunkSize = if (payload.size < FTCD_MIN_SIZE) 0
-                        else (u16(payload, OFFSET_FTCD_CHUNK_SIZE) / CHUNK_SIZE_ALIGNMENT) * CHUNK_SIZE_ALIGNMENT
-                    val chunkCount = if (payload.size < FTCD_MIN_SIZE) 0
-                        else u16(payload, OFFSET_FTCD_CHUNK_COUNT)
-                    var sent = 0
-                    while (chunkSize > 0 && sent < chunkCount && bytesSent < data.size) {
-                        val len = chunkLengthAt(dataBuf, data.size, bytesSent, chunkSize)
-                        sendCommand("FTDa", buildDataChunkPayload(transferId, data, bytesSent, len))
-                        bytesSent += len
-                        sent++
-                    }
-                    if (chunkSize > 0) onProgress(bytesSent.toFloat() / data.size)
+                    bytesSent = sendGrantedChunks(payload, transferId, data, dataBuf, bytesSent, onProgress)
                 }
                 "FTDC" -> return
                 "FTDE" -> {
@@ -672,6 +669,52 @@ class AtemClient(val host: String, val port: Int = 9910) {
         }
     }
 
+
+    /**
+     * Sends as much of [data] as this FTCD grant allows, and returns the new total sent.
+     *
+     * ATEM grants chunkCount chunks of chunkSize bytes (rounded down to 8).
+     */
+    private fun sendGrantedChunks(
+        payload: ByteArray,
+        transferId: Int,
+        data: ByteArray,
+        dataBuf: java.nio.ByteBuffer,
+        alreadySent: Int,
+        onProgress: (Float) -> Unit,
+    ): Int {
+        val chunkSize = if (payload.size < FTCD_MIN_SIZE) 0
+            else (u16(payload, OFFSET_FTCD_CHUNK_SIZE) / CHUNK_SIZE_ALIGNMENT) * CHUNK_SIZE_ALIGNMENT
+        val chunkCount = if (payload.size < FTCD_MIN_SIZE) 0 else u16(payload, OFFSET_FTCD_CHUNK_COUNT)
+        var bytesSent = alreadySent
+        var sent = 0
+        while (chunkSize > 0 && sent < chunkCount && bytesSent < data.size) {
+            val len = chunkLengthAt(dataBuf, data.size, bytesSent, chunkSize)
+            sendCommand("FTDa", buildDataChunkPayload(transferId, data, bytesSent, len))
+            bytesSent += len
+            sent++
+        }
+        if (chunkSize > 0) onProgress(bytesSent.toFloat() / data.size)
+        return bytesSent
+    }
+
+    /**
+     * How much to put in the next chunk: never ending mid RLE block, so the length is shortened
+     * when an RLE header starts 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit).
+     */
+    private fun chunkLengthAt(dataBuf: java.nio.ByteBuffer, dataSize: Int, bytesSent: Int, chunkSize: Int): Int {
+        val len = minOf(chunkSize, dataSize - bytesSent)
+        if (bytesSent + len >= dataSize) return len
+        val endsOnHeader = { back: Int ->
+            len >= back && dataBuf.getLong(bytesSent + len - back) == AtemFrameEncoder.RLE_HEADER
+        }
+        return when {
+            endsOnHeader(RLE_WORD_BYTES) -> len - RLE_WORD_BYTES
+            endsOnHeader(RLE_TWO_WORDS_BYTES) -> len - RLE_TWO_WORDS_BYTES
+            else -> len
+        }
+    }
+
     /**
      * The failure for an FTDE the transfer cannot retry past. Clip frames after index 0 usually
      * fail because the device's clip pool ran out of capacity, which is worth saying outright.
@@ -687,28 +730,6 @@ class AtemClient(val host: String, val port: Int = 9910) {
             Exception("ATEM stayed busy uploading $what after $retries retries$hint")
         } else {
             Exception("ATEM rejected $what (error code $code)$hint")
-        }
-    }
-
-    /**
-     * How much to put in the next chunk: never ending mid RLE block, so the length is shortened
-     * when an RLE header starts 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit).
-     */
-    private fun chunkLengthAt(
-        dataBuf: java.nio.ByteBuffer,
-        dataSize: Int,
-        bytesSent: Int,
-        chunkSize: Int,
-    ): Int {
-        val len = minOf(chunkSize, dataSize - bytesSent)
-        if (bytesSent + len >= dataSize) return len
-        val endsOnHeader = { back: Int ->
-            len >= back && dataBuf.getLong(bytesSent + len - back) == AtemFrameEncoder.RLE_HEADER
-        }
-        return when {
-            endsOnHeader(RLE_WORD_BYTES) -> len - RLE_WORD_BYTES
-            endsOnHeader(RLE_TWO_WORDS_BYTES) -> len - RLE_TWO_WORDS_BYTES
-            else -> len
         }
     }
 
@@ -974,7 +995,17 @@ class AtemClient(val host: String, val port: Int = 9910) {
             }
             (0 until mixEffectCount).map { byMe[it] ?: 0 }
         } else emptyList()
-        return AtemState(fps, mode, parseStillSlots(m), parseClipSlots(m), clipMaxFrames, unassigned, mixEffectCount, keyersPerMe, downstreamKeyers)
+        return AtemState(
+            fps,
+            mode,
+            parseStillSlots(m),
+            parseClipSlots(m),
+            clipMaxFrames,
+            unassigned,
+            mixEffectCount,
+            keyersPerMe,
+            downstreamKeyers
+        )
     }
 
     /**
