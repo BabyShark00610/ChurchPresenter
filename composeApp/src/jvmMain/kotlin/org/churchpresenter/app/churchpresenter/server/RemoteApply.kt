@@ -233,7 +233,8 @@ internal suspend fun applyRemoteLiveState(
                 mapOf("contentType" to "WEBSITE", "resolved" to (state.websiteUrl != null))
             )
         }
-        Presenting.PICTURES -> applyRemotePictures(state, presenterManager, instanceLinkViewModel)
+        Presenting.PICTURES ->
+            if (!applyRemotePictures(state, presenterManager, instanceLinkViewModel)) return
         Presenting.LOWER_THIRD -> applyRemoteLowerThird(state, presenterManager, instanceLinkViewModel)
         Presenting.MEDIA -> applyRemoteMedia(state, presenterManager, instanceLinkViewModel, onPlayRemoteMedia)
         Presenting.CANVAS -> applyRemoteCanvas(state, presenterManager, localScenes)
@@ -649,7 +650,7 @@ private suspend fun applyRemotePictures(
     state: LiveStateDto,
     presenterManager: PresenterManager,
     instanceLinkViewModel: InstanceLinkViewModel,
-) {
+): Boolean {
     val folderId = state.pictureFolderId
     val index = state.pictureIndex
     if (folderId != null && index != null) {
@@ -668,14 +669,14 @@ private suspend fun applyRemotePictures(
                         InstanceLinkLogSide.FOLLOWER, "apply_live_state",
                         mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "cache_write_failed")
                     )
-                    return
+                    return false
                 }
             } else {
                 InstanceLinkLogger.log(
                     InstanceLinkLogSide.FOLLOWER, "apply_live_state",
                     mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "fetch_failed")
                 )
-                return
+                return false
             }
         }
         presenterManager.setSelectedImagePath(cacheFile.absolutePath)
@@ -686,6 +687,7 @@ private suspend fun applyRemotePictures(
             mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "missing_folder_id_or_index")
         )
     }
+    return true
 }
 
 private suspend fun applyRemoteMedia(
