@@ -550,7 +550,7 @@ class SongsViewModel(
      * previous one. When the section it lands on has no chords of its own, that section's words
      * become the rest of the chart, so the chart is never just the intro with the verse missing.
      */
-    private fun foldChordOnlySections(sections: List<LyricSection>): List<LyricSection> {
+    internal fun foldChordOnlySections(sections: List<LyricSection>): List<LyricSection> {
         val carried = mutableListOf<String>()
         val out = mutableListOf<LyricSection>()
 

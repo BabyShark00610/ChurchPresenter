@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -32,6 +33,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -409,6 +411,137 @@ class CompanionServerQaTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.array().isEmpty(), "the voting page has to load between sessions too")
+    }
+
+    // ── Behind a proxy ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `two phones behind the same tunnel are told apart by their forwarded address`() {
+        openSession()
+        server.qaCooldownSeconds = 3_600
+
+        val first = runBlocking {
+            client.post(url("/api/qa/submit")) {
+                header("CF-Connecting-IP", "203.0.113.10")
+                setBody("""{"text":"First phone"}""")
+            }
+        }
+        val second = runBlocking {
+            client.post(url("/api/qa/submit")) {
+                header("CF-Connecting-IP", "203.0.113.11")
+                setBody("""{"text":"Second phone"}""")
+            }
+        }
+
+        assertEquals(HttpStatusCode.OK, first.status)
+        assertEquals(
+            HttpStatusCode.OK,
+            second.status,
+            "with the tunnel on every request shares one socket address; the cooldown must key on the forwarded one",
+        )
+    }
+
+    @Test
+    fun `a forwarded chain is keyed on the phone at its head`() {
+        openSession()
+        server.qaCooldownSeconds = 3_600
+
+        val first = runBlocking {
+            client.post(url("/api/qa/submit")) {
+                header("X-Forwarded-For", "203.0.113.20, 70.41.3.18")
+                setBody("""{"text":"First phone"}""")
+            }
+        }
+        val again = runBlocking {
+            client.post(url("/api/qa/submit")) {
+                header("X-Forwarded-For", "203.0.113.20, 198.51.100.7")
+                setBody("""{"text":"Same phone again"}""")
+            }
+        }
+
+        assertEquals(HttpStatusCode.OK, first.status)
+        assertEquals(
+            HttpStatusCode.TooManyRequests,
+            again.status,
+            "only the first hop identifies the phone; a changed proxy must not reset its cooldown",
+        )
+    }
+
+    @Test
+    fun `a vote is attributed to the forwarded address rather than the tunnel`() {
+        val qa = openSession()
+        server.qaVotingEnabled = true
+        val id = submit("Where is the nursery?").obj().str("id")
+        qa.approveQuestion(id)
+
+        val voted = runBlocking {
+            client.post(url("/api/qa/vote")) {
+                header("CF-Connecting-IP", "203.0.113.30")
+                setBody("""{"questionId":"$id","direction":"up"}""")
+            }
+        }
+
+        assertEquals(HttpStatusCode.OK, voted.status)
+        assertEquals("up", qa.getVoteDirection(id, "203.0.113.30"))
+        assertNull(qa.getVoteDirection(id, "127.0.0.1"), "the vote must not be recorded against the tunnel")
+    }
+
+    @Test
+    fun `the approved list marks which way this phone already voted`() {
+        val qa = openSession()
+        server.qaVotingEnabled = true
+        val id = submit("Where is the nursery?").obj().str("id")
+        qa.approveQuestion(id)
+        qa.voteForQuestion(id, "203.0.113.40", "down")
+
+        val mine = runBlocking {
+            client.get(url("/api/qa/approved")) { header("CF-Connecting-IP", "203.0.113.40") }
+        }.array()
+        val theirs = runBlocking {
+            client.get(url("/api/qa/approved")) { header("CF-Connecting-IP", "203.0.113.41") }
+        }.array()
+
+        assertEquals("down", mine[0].jsonObject.str("voted"))
+        assertTrue(theirs[0].jsonObject.getValue("voted") is JsonNull)
+    }
+
+    @Test
+    fun `a question with quotes and newlines survives the hand-built voting json`() {
+        val qa = openSession()
+        server.qaVotingEnabled = true
+        val id = submit("plain").obj().str("id")
+        qa.editQuestion(id, "He said \"hi\"\nthen left")
+        qa.approveQuestion(id)
+
+        val listed = get("/api/qa/approved").array()
+
+        assertEquals("He said \"hi\"\nthen left", listed[0].jsonObject.str("text"))
+    }
+
+    // ── The pages a phone loads ─────────────────────────────────────────────────
+
+    @Test
+    fun `the submission page is served as html`() {
+        val page = get("/qa")
+
+        assertEquals(HttpStatusCode.OK, page.status)
+        assertTrue(page.text().contains("<html", ignoreCase = true))
+    }
+
+    @Test
+    fun `the admin page is served as html`() {
+        val page = get("/qa/admin")
+
+        assertEquals(HttpStatusCode.OK, page.status)
+        assertTrue(page.text().contains("<html", ignoreCase = true))
+    }
+
+    @Test
+    fun `the voting page is served as html`() {
+        val page = get("/qa/vote")
+
+        assertEquals(HttpStatusCode.OK, page.status)
+        assertTrue(page.text().contains("<html", ignoreCase = true))
     }
 
     // ── The moderation queue ────────────────────────────────────────────────────

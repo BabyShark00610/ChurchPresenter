@@ -324,6 +324,7 @@ class CompanionServer {
     private val _schedule = MutableStateFlow<List<ScheduleItemDto>>(emptyList())
     /** Snapshot of whatever is currently live — see [LiveStateDto]. */
     private val _liveState = MutableStateFlow<LiveStateDto?>(null)
+    internal val liveState: StateFlow<LiveStateDto?> = _liveState.asStateFlow()
     /** Device IDs of currently-connected WS clients that identified as an Instance Link follower
      *  (as opposed to a regular mobile/browser companion client) — see [Constants.HEADER_CLIENT_ROLE]. */
     private val _connectedInstanceLinkFollowers = MutableStateFlow<Set<String>>(emptySet())

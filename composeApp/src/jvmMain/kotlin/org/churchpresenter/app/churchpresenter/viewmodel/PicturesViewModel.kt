@@ -505,13 +505,13 @@ class PicturesViewModel(
 
 
     /** Applies one watch event to the image list; true when the list actually changed. */
-    private fun CoroutineScope.applyWatchEvent(kind: WatchEvent.Kind<*>, file: File): Boolean = when (kind) {
+    internal fun CoroutineScope.applyWatchEvent(kind: WatchEvent.Kind<*>, file: File): Boolean = when (kind) {
         StandardWatchEventKinds.ENTRY_CREATE -> addWatchedImage(file)
         StandardWatchEventKinds.ENTRY_DELETE -> removeWatchedImage(file)
         else -> false
     }
 
-    private fun CoroutineScope.addWatchedImage(file: File): Boolean {
+    internal fun CoroutineScope.addWatchedImage(file: File): Boolean {
         // isActive gates the add: cancellation is cooperative, so a watcher cancelled by
         // clearImages() can still be mid-pollEvents() here — an add now would land in _images
         // after the reload and duplicate a path.
@@ -531,7 +531,7 @@ class PicturesViewModel(
         return true
     }
 
-    private fun removeWatchedImage(file: File): Boolean {
+    internal fun removeWatchedImage(file: File): Boolean {
         val idx = _images.indexOf(file)
         if (idx < 0) return false
         _images.removeAt(idx)

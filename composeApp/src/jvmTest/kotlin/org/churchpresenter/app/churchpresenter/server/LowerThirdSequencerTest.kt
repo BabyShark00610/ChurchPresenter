@@ -133,4 +133,26 @@ class LowerThirdSequencerTest {
         collector.cancel()
         assertEquals("idle", LowerThirdSequencer.status.value)
     }
+
+    @Test
+    fun `a second lower third preempts the first and leaves its own name running`() = runBlocking {
+        LowerThirdSequencer.run(
+            name = "First", json = "{}", durationMs = 0L, pauseAtFrame = false, pauseDurationMs = 0L,
+            mixEffect = null, keyer = null, atem = noAtem, autoEnd = false
+        )
+        LowerThirdSequencer.run(
+            name = "Second", json = "{}", durationMs = 0L, pauseAtFrame = false, pauseDurationMs = 0L,
+            mixEffect = null, keyer = null, atem = noAtem, autoEnd = false
+        )
+
+        assertEquals("running:Second", LowerThirdSequencer.status.value)
+    }
+
+    @Test
+    fun `stopping when nothing is running is still idle`() = runBlocking {
+        LowerThirdSequencer.stop()
+        LowerThirdSequencer.stop()
+
+        assertEquals("idle", LowerThirdSequencer.status.value)
+    }
 }
