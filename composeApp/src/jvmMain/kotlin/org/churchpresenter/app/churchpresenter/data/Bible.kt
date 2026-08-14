@@ -165,11 +165,11 @@ class Bible {
                 Files.newBufferedReader(path, StandardCharsets.UTF_8)
             }
             reader.use { r ->
-                for (rawLine in r.lineSequence()) {
-                    val line = rawLine.trimEnd('\r', '\n')
-                    if (line.startsWith("##")) continue
-                    if (line.startsWith("-----") || line.startsWith("B")) break
-                    if (line.isNotEmpty()) {
+                r.lineSequence()
+                    .map { it.trimEnd('\r', '\n') }
+                    .takeWhile { !it.startsWith("-----") && !it.startsWith("B") }
+                    .filter { it.isNotEmpty() && !it.startsWith("##") }
+                    .forEach { line ->
                         val m = bookHeaderRegex.matchEntire(line)
                         if (m != null) {
                             val bookId = m.groupValues[1].toInt()
@@ -178,7 +178,6 @@ class Bible {
                             parsedChapterCounts[bookId] = m.groupValues[REGEX_GROUP_THIRD].toInt()
                         }
                     }
-                }
             }
         } catch (e: Exception) {
             recordLoadFailure(e, resourcePath, parsedAnything = headerOrder.isNotEmpty())
@@ -399,8 +398,7 @@ class Bible {
         }
         // Then: any books found in verse data but missing from header
         for (b in 1..maxBook) {
-            if (b in headerBookIds) continue
-            if (!bookChapterMap.containsKey(b)) continue
+            if (b in headerBookIds || !bookChapterMap.containsKey(b)) continue
             val chapterCount = bookChapterMap[b]?.maxOrNull() ?: 0
             val name = when {
                 bookNames.size >= b -> bookNames[b - 1]
@@ -727,24 +725,27 @@ class Bible {
                 var title: String? = null
                 var hasOld = false
                 var hasNew = false
-                var scanned = 0
                 reader.use { r ->
-                    for (rawLine in r.lineSequence()) {
-                        if (++scanned > maxLines) break
-                        val line = rawLine.trimEnd('\r', '\n')
-                        if (line.startsWith("##Title:")) {
-                            // The converter writes a TAB after the colon and hand-made modules often
-                            // write a space, so the separator is trimmed rather than counted.
-                            title = line.removePrefix("##Title:").trim()
-                            continue
+                    r.lineSequence()
+                        .take(maxLines)
+                        .map { it.trimEnd('\r', '\n') }
+                        .takeWhile { !it.startsWith("-----") && !it.startsWith("B") }
+                        .forEach { line ->
+                            when {
+                                // The converter writes a TAB after the colon and hand-made modules
+                                // often write a space, so the separator is trimmed, not counted.
+                                line.startsWith("##Title:") -> title = line.removePrefix("##Title:").trim()
+                                line.startsWith("##") || line.isEmpty() -> Unit
+                                else -> {
+                                    val bookId = bookHeaderRegex.matchEntire(line)
+                                        ?.groupValues?.get(1)?.toIntOrNull()
+                                    if (bookId != null) {
+                                        if (bookId in OLD_TESTAMENT_BOOK_IDS) hasOld = true
+                                        if (bookId in NEW_TESTAMENT_BOOK_IDS) hasNew = true
+                                    }
+                                }
+                            }
                         }
-                        if (line.startsWith("##")) continue
-                        if (line.startsWith("-----") || line.startsWith("B")) break
-                        if (line.isEmpty()) continue
-                        val bookId = bookHeaderRegex.matchEntire(line)?.groupValues?.get(1)?.toIntOrNull() ?: continue
-                        if (bookId in OLD_TESTAMENT_BOOK_IDS) hasOld = true
-                        if (bookId in NEW_TESTAMENT_BOOK_IDS) hasNew = true
-                    }
                 }
                 return TranslationSummary(title, hasOld, hasNew)
             } catch (_: Exception) {

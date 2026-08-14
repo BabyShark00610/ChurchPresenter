@@ -629,9 +629,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
 
         while (true) {
             val (cmd, payload) = waitForAnyCommand(setOf("FTCD", "FTDC", "FTDE"), CMD_TIMEOUT_MS.toLong())
-            if (payload.size < 2) continue
             // Ignore messages that belong to other transfers
-            val cmdTransferId = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
+            val cmdTransferId = if (payload.size < 2) null
+                else ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
             if (cmdTransferId != transferId) continue
 
             when (cmd) {
@@ -640,13 +640,13 @@ class AtemClient(val host: String, val port: Int = 9910) {
                         sendCommand("FTFD", buildFileDescriptionPayload(transferId, name, hash))
                         descriptionSent = true
                     }
-                    if (payload.size < FTCD_MIN_SIZE) continue
                     // ATEM grants chunkCount chunks of chunkSize bytes (rounded down to 8)
-                    val chunkSize = (u16(payload, OFFSET_FTCD_CHUNK_SIZE) / CHUNK_SIZE_ALIGNMENT) * CHUNK_SIZE_ALIGNMENT
-                    val chunkCount = u16(payload, OFFSET_FTCD_CHUNK_COUNT)
-                    if (chunkSize <= 0) continue
+                    val chunkSize = if (payload.size < FTCD_MIN_SIZE) 0
+                        else (u16(payload, OFFSET_FTCD_CHUNK_SIZE) / CHUNK_SIZE_ALIGNMENT) * CHUNK_SIZE_ALIGNMENT
+                    val chunkCount = if (payload.size < FTCD_MIN_SIZE) 0
+                        else u16(payload, OFFSET_FTCD_CHUNK_COUNT)
                     var sent = 0
-                    while (sent < chunkCount && bytesSent < data.size) {
+                    while (chunkSize > 0 && sent < chunkCount && bytesSent < data.size) {
                         var len = minOf(chunkSize, data.size - bytesSent)
                         // Don't end a chunk mid RLE block: shorten if an RLE header starts
                         // 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit)
@@ -665,7 +665,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
                         bytesSent += len
                         sent++
                     }
-                    onProgress(bytesSent.toFloat() / data.size)
+                    if (chunkSize > 0) onProgress(bytesSent.toFloat() / data.size)
                 }
                 "FTDC" -> return
                 "FTDE" -> {

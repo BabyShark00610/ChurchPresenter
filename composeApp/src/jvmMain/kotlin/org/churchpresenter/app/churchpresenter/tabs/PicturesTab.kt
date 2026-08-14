@@ -804,8 +804,9 @@ fun PicturesTab(
                                     awaitPointerEventScope {
                                         while (true) {
                                             val pressEvent = awaitPointerEvent(PointerEventPass.Initial)
-                                            if (pressEvent.type != PointerEventType.Press) continue
-                                            if (!pressEvent.keyboardModifiers.isShiftPressed) continue
+                                            if (pressEvent.type != PointerEventType.Press ||
+                                                !pressEvent.keyboardModifiers.isShiftPressed
+                                            ) continue
 
                                             pressEvent.changes.forEach { it.consume() }
                                             val startPos = pressEvent.changes.first().position

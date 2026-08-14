@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -124,39 +125,42 @@ object UpdateChecker {
     internal fun selectUpdate(body: String, includePrereleases: Boolean, currentVersion: String): UpdateCheckResult {
         return try {
             // GitHub returns releases sorted by created_at descending.
-            val releases = json.parseToJsonElement(body).jsonArray
-            for (rel in releases) {
-                val obj = rel.jsonObject
-                if (obj["draft"]?.jsonPrimitive?.booleanOrNull == true) continue
-                val isPrerelease = obj["prerelease"]?.jsonPrimitive?.booleanOrNull == true
-                if (isPrerelease && !includePrereleases) continue
-
-                val urls = (obj["assets"]?.jsonArray ?: continue)
-                    .mapNotNull { it.jsonObject["browser_download_url"]?.jsonPrimitive?.contentOrNull }
-                // Skip releases that have no installer for the detected OS.
-                val downloadUrl = selectDownloadUrl(urls) ?: continue
-
-                // First OS-matching release = latest build available for this OS.
-                val latestVersion = (obj["tag_name"]?.jsonPrimitive?.contentOrNull ?: continue)
-                    .removePrefix("v")
-                return if (isNewerVersion(latestVersion, currentVersion)) {
-                    UpdateCheckResult.Available(
-                        UpdateInfo(
-                            latestVersion = latestVersion,
-                            releaseUrl = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: RELEASES_URL,
-                            releaseNotes = (obj["body"]?.jsonPrimitive?.contentOrNull ?: "").take(RELEASE_NOTES_MAX_CHARS),
-                            downloadUrl = downloadUrl,
-                            isPrerelease = isPrerelease
-                        )
-                    )
-                } else {
-                    UpdateCheckResult.UpToDate
-                }
+            // First OS-matching release = latest build available for this OS.
+            val candidate = json.parseToJsonElement(body).jsonArray
+                .firstNotNullOfOrNull { installableRelease(it.jsonObject, includePrereleases) }
+                ?: return UpdateCheckResult.UpToDate
+            if (isNewerVersion(candidate.latestVersion, currentVersion)) {
+                UpdateCheckResult.Available(candidate)
+            } else {
+                UpdateCheckResult.UpToDate
             }
-            UpdateCheckResult.UpToDate
         } catch (_: Exception) {
             UpdateCheckResult.UpToDate
         }
+    }
+
+    /**
+     * The release as an [UpdateInfo], or null when it is a draft, a pre-release the caller does not
+     * want, or carries no installer for the detected OS.
+     */
+    private fun installableRelease(obj: JsonObject, includePrereleases: Boolean): UpdateInfo? {
+        if (obj["draft"]?.jsonPrimitive?.booleanOrNull == true) return null
+        val isPrerelease = obj["prerelease"]?.jsonPrimitive?.booleanOrNull == true
+        if (isPrerelease && !includePrereleases) return null
+
+        val urls = (obj["assets"]?.jsonArray ?: return null)
+            .mapNotNull { it.jsonObject["browser_download_url"]?.jsonPrimitive?.contentOrNull }
+        val downloadUrl = selectDownloadUrl(urls) ?: return null
+        val latestVersion = (obj["tag_name"]?.jsonPrimitive?.contentOrNull ?: return null)
+            .removePrefix("v")
+
+        return UpdateInfo(
+            latestVersion = latestVersion,
+            releaseUrl = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: RELEASES_URL,
+            releaseNotes = (obj["body"]?.jsonPrimitive?.contentOrNull ?: "").take(RELEASE_NOTES_MAX_CHARS),
+            downloadUrl = downloadUrl,
+            isPrerelease = isPrerelease
+        )
     }
 
     private fun selectDownloadUrl(urls: List<String>): String? {
