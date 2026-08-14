@@ -37,6 +37,15 @@ internal fun Route.qaRoutes(
     json: Json,
     scope: CoroutineScope,
 ) {
+    qaPublicRoutes(server, json)
+    qaModerationRoutes(server, json, scope)
+    qaAdminActionRoutes(server, json, scope)
+}
+
+private fun Route.qaPublicRoutes(
+    server: CompanionServer,
+    json: Json,
+) {
                 get("/qa") {
                     call.respondText(qaSubmissionPageHtml(), ContentType.Text.Html)
                 }
@@ -93,6 +102,13 @@ internal fun Route.qaRoutes(
                 }
 
                 // Public: voting page
+    qaVotingRoutes(server, json)
+}
+
+private fun Route.qaVotingRoutes(
+    server: CompanionServer,
+    json: Json,
+) {
                 get("/qa/vote") {
                     call.respondText(qaVotingPageHtml(), ContentType.Text.Html)
                 }
@@ -160,6 +176,14 @@ internal fun Route.qaRoutes(
                 }
 
                 // Admin: check password
+}
+
+
+private fun Route.qaModerationRoutes(
+    server: CompanionServer,
+    json: Json,
+    scope: CoroutineScope,
+) {
                 post("/api/qa/auth") {
                     if (!server.checkQaAdmin(call)) return@post
                     if (!server.checkQaAdminConnect(call)) return@post
@@ -203,6 +227,15 @@ internal fun Route.qaRoutes(
                 }
 
                 // Admin: edit question text
+    qaQuestionEditRoutes(server, json, scope)
+    qaQuestionStateRoutes(server, scope)
+}
+
+private fun Route.qaQuestionEditRoutes(
+    server: CompanionServer,
+    json: Json,
+    scope: CoroutineScope,
+) {
                 post("/api/qa/questions/{id}/edit") {
                     if (!server.checkQaAdmin(call)) return@post
                     val id = call.parameters["id"] ?: run {
@@ -255,6 +288,12 @@ internal fun Route.qaRoutes(
                 }
 
                 // Admin: mark question as done
+}
+
+private fun Route.qaQuestionStateRoutes(
+    server: CompanionServer,
+    scope: CoroutineScope,
+) {
                 post("/api/qa/questions/{id}/done") {
                     if (!server.checkQaAdmin(call)) return@post
                     val id = call.parameters["id"] ?: run {
@@ -296,6 +335,12 @@ internal fun Route.qaRoutes(
                 }
 
                 // Admin: delete question
+    qaQuestionDeleteRoutes(server)
+}
+
+private fun Route.qaQuestionDeleteRoutes(
+    server: CompanionServer,
+) {
                 delete("/api/qa/questions/{id}") {
                     if (!server.checkQaAdmin(call)) return@delete
                     val id = call.parameters["id"] ?: run {
@@ -322,6 +367,15 @@ internal fun Route.qaRoutes(
                 }
 
                 // Admin: add question (admin-created)
+}
+
+
+
+private fun Route.qaAdminActionRoutes(
+    server: CompanionServer,
+    json: Json,
+    scope: CoroutineScope,
+) {
                 post("/api/qa/add") {
                     if (!server.checkQaAdmin(call)) return@post
                     val body = call.receiveText()
@@ -376,3 +430,4 @@ internal fun Route.qaRoutes(
                     call.respondText("""{"ok":true}""", ContentType.Application.Json)
                 }
 }
+
