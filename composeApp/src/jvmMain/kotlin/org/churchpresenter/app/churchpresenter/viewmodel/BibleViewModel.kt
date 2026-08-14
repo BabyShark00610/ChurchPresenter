@@ -27,6 +27,7 @@ import java.io.File
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 
 private const val MAX_HISTORY_ENTRIES = 50
+private const val ASCII_LIMIT = 128
 
 class BibleViewModel(
     internal var appSettings: AppSettings,
@@ -591,7 +592,7 @@ class BibleViewModel(
     }
 
     private fun booksNamedInEnglish(query: String): List<String> {
-        if (!query.all { it.isLetter() && it.code < 128 }) return emptyList()
+        if (!query.all { it.isLetter() && it.code < ASCII_LIMIT }) return emptyList()
         val bible = _primaryBible.value ?: return emptyList()
         return STANDARD_ENGLISH_BOOKS
             .mapIndexedNotNull { index, englishName ->

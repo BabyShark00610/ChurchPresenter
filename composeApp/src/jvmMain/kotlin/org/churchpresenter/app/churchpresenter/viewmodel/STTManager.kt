@@ -450,7 +450,7 @@ class STTManager {
             .GET()
             .build()
         val statusResponse = client.send(statusRequest, HttpResponse.BodyHandlers.ofString())
-        if (statusResponse.statusCode() != 200) return null
+        if (statusResponse.statusCode() != HTTP_OK) return null
         return JSONObject(statusResponse.body()).optJSONObject("state")?.stringOrNull("db_name")
     }
 
