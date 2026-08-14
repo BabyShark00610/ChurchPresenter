@@ -130,6 +130,10 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.foundation.layout.RowScope
 
+private const val REBUILD_CLICK_WINDOW_MS = 800
+private const val REBUILD_CLICK_COUNT = 3
+private const val SCROLL_SETTLE_MS = 100L
+
 /**
  * The song list down the left of the Songs tab: search and filters, the resizable and reorderable
  * table, and the favourites panel beneath it.
@@ -319,10 +323,10 @@ fun DragHandle(colId: String, onDrag: (Float) -> Unit, onDragEnd: () -> Unit) {
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
                         val now = System.currentTimeMillis()
-                        if (now - rebuildClickTime > 800) rebuildClickCount = 0
+                        if (now - rebuildClickTime > REBUILD_CLICK_WINDOW_MS) rebuildClickCount = 0
                         rebuildClickCount++
                         rebuildClickTime = now
-                        if (rebuildClickCount >= 3) {
+                        if (rebuildClickCount >= REBUILD_CLICK_COUNT) {
                             rebuildClickCount = 0
                             onReloadSongs()
                         }
@@ -591,7 +595,7 @@ fun DragHandle(colId: String, onDrag: (Float) -> Unit, onDragEnd: () -> Unit) {
 
             LaunchedEffect(selectedSongIndex, filteredSongs.size) {
                 if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    delay(100)
+                    delay(SCROLL_SETTLE_MS)
                     lazyListState.animateScrollToItem(selectedSongIndex)
                 }
             }

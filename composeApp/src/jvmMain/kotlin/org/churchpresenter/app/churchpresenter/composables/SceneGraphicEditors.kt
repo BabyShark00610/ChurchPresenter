@@ -72,6 +72,14 @@ import churchpresenter.composeapp.generated.resources.pause
 import org.churchpresenter.app.churchpresenter.models.SceneSource
 import androidx.compose.foundation.layout.PaddingValues
 
+private const val MAX_STROKE_WIDTH = 20f
+private const val MAX_ANGLE_DEGREES = 360f
+private const val PERCENT_SCALE = 100f
+private const val MIN_FONT_SIZE = 8
+private const val MAX_FONT_SIZE = 500
+private const val MAX_TARGET_HOUR = 99
+private const val MAX_MINUTE_OR_SECOND = 59
+
 /**
  * The scene sources the app draws itself: shapes, a clock, and a QR code.
  */
@@ -121,7 +129,7 @@ internal fun ShapeProperties(source: SceneSource.ShapeSource, onUpdate: (SceneSo
     if (isStrokeOnly || source.showStroke) {
         PropertySliderWithInput(
             stringResource(Res.string.canvas_shape_stroke_width),
-            source.strokeWidth, 1f, 20f, "px"
+            source.strokeWidth, 1f, MAX_STROKE_WIDTH, "px"
         ) { v ->
             onUpdate(source.copy(strokeWidth = v))
         }
@@ -147,10 +155,10 @@ internal fun ShapeProperties(source: SceneSource.ShapeSource, onUpdate: (SceneSo
             PropertySlider("${stringResource(Res.string.canvas_color_2)} ${stringResource(Res.string.canvas_opacity)}", source.gradientColor2Opacity, 0f, 1f) { v ->
                 onUpdate(source.copy(gradientColor2Opacity = v))
             }
-            PropertySliderWithInput(stringResource(Res.string.canvas_angle), source.gradientAngle, 0f, 360f, "\u00B0") { v ->
+            PropertySliderWithInput(stringResource(Res.string.canvas_angle), source.gradientAngle, 0f, MAX_ANGLE_DEGREES, "\u00B0") { v ->
                 onUpdate(source.copy(gradientAngle = v))
             }
-            PropertySliderWithInput(stringResource(Res.string.position), source.gradientPosition * 100f, 0f, 100f, "%") { v ->
+            PropertySliderWithInput(stringResource(Res.string.position), source.gradientPosition * PERCENT_SCALE, 0f, PERCENT_SCALE, "%") { v ->
                 onUpdate(source.copy(gradientPosition = (v / 100f).coerceIn(0f, 1f)))
             }
         }
@@ -207,7 +215,7 @@ internal fun ClockProperties(source: SceneSource.ClockSource, onUpdate: (SceneSo
         spacing = 4.dp,
     )
     PropertyTextField(stringResource(Res.string.canvas_clock_font_size), source.fontSize.toString()) { v ->
-        v.toIntOrNull()?.let { onUpdate(source.copy(fontSize = it.coerceIn(8, 500))) }
+        v.toIntOrNull()?.let { onUpdate(source.copy(fontSize = it.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE))) }
     }
     ColorPickerField(
         color = source.fontColor,
@@ -221,13 +229,13 @@ internal fun ClockProperties(source: SceneSource.ClockSource, onUpdate: (SceneSo
     )
     if (source.mode == "countdown") {
         PropertyTextField(stringResource(Res.string.canvas_clock_target_hour), source.targetHour.toString()) { v ->
-            v.toIntOrNull()?.let { onUpdate(source.copy(targetHour = it.coerceIn(0, 99))) }
+            v.toIntOrNull()?.let { onUpdate(source.copy(targetHour = it.coerceIn(0, MAX_TARGET_HOUR))) }
         }
         PropertyTextField(stringResource(Res.string.canvas_clock_target_minute), source.targetMinute.toString()) { v ->
-            v.toIntOrNull()?.let { onUpdate(source.copy(targetMinute = it.coerceIn(0, 59))) }
+            v.toIntOrNull()?.let { onUpdate(source.copy(targetMinute = it.coerceIn(0, MAX_MINUTE_OR_SECOND))) }
         }
         PropertyTextField(stringResource(Res.string.canvas_clock_target_second), source.targetSecond.toString()) { v ->
-            v.toIntOrNull()?.let { onUpdate(source.copy(targetSecond = it.coerceIn(0, 59))) }
+            v.toIntOrNull()?.let { onUpdate(source.copy(targetSecond = it.coerceIn(0, MAX_MINUTE_OR_SECOND))) }
         }
 
         val totalSeconds = source.targetHour * 3600 + source.targetMinute * 60 + source.targetSecond

@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 
+private const val KEY_SETTLE_MS = 800L
+
 /**
  * Routes for lower-third triggers and the ATEM upstream/downstream key.
  *
@@ -48,16 +50,16 @@ internal fun Route.lowerThirdAndAtemRoutes(
                     val rawName = call.parameters["name"] ?: ""
                     val file = server.atem.lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
                     if (file == null) {
-                        server.logRest("/api/lowerthirds/{name}/json", 404, "lower_third_not_found")
+                        server.logRest("/api/lowerthirds/{name}/json", HttpStatusCode.NotFound.value, "lower_third_not_found")
                         call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
                         return@get
                     }
                     val ltJson = try { file.readText() } catch (_: Exception) {
-                        server.logRest("/api/lowerthirds/{name}/json", 500, "could_not_read_lottie_file")
+                        server.logRest("/api/lowerthirds/{name}/json", HttpStatusCode.InternalServerError.value, "could_not_read_lottie_file")
                         call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
                         return@get
                     }
-                    server.logRest("/api/lowerthirds/{name}/json", 200)
+                    server.logRest("/api/lowerthirds/{name}/json", HttpStatusCode.OK.value)
                     call.respondText(ltJson, ContentType.Application.Json)
                 }
 
@@ -132,7 +134,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
                                 if (keyOn) client.setKeyOnAir(useDsk, mixEffect, keyer, true)
                             }
                             AtemUploadStatus.complete(uploadId)
-                            kotlinx.coroutines.delay(800)
+                            kotlinx.coroutines.delay(KEY_SETTLE_MS)
                             AtemUploadStatus.clear(uploadId)
                         } catch (e: Exception) {
                             System.err.println("[CompanionServer] ATEM still upload failed for '$name': ${e.message}")
@@ -222,7 +224,7 @@ internal fun Route.lowerThirdAndAtemRoutes(
                                 if (keyOn) client.setKeyOnAir(useDsk, mixEffect, keyer, true)
                             }
                             AtemUploadStatus.complete(uploadId)
-                            kotlinx.coroutines.delay(800)
+                            kotlinx.coroutines.delay(KEY_SETTLE_MS)
                             AtemUploadStatus.clear(uploadId)
                             // Wait for the clip to finish playing, then turn the key off automatically.
                             // Mutex is released between the two use() calls so other operations can proceed.

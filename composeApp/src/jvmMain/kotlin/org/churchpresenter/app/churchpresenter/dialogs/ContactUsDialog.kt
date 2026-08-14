@@ -70,6 +70,8 @@ import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.net.URI
 
+private const val SENT_CONFIRMATION_MS = 1500L
+
 internal sealed interface SendStatus {
     data object Idle : SendStatus
     data object Sending : SendStatus
@@ -191,7 +193,7 @@ fun ContactUsDialog(
                         selectedType.second, name, email, message, errorText, networkText, rateLimitedText
                     )
                     if (status == SendStatus.Sent) {
-                        delay(1500)
+                        delay(SENT_CONFIRMATION_MS)
                         onDismiss()
                     }
                 }

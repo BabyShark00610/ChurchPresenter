@@ -7,6 +7,8 @@ import org.churchpresenter.app.churchpresenter.server.CompanionServer
 import org.churchpresenter.app.churchpresenter.viewmodel.MediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 
+private const val SEEK_SETTLE_MS = 500L
+
 /**
  * Wires a companion device's Media tab to the desktop's own player: what a phone's transport
  * controls do here, and what the desktop reports back as the media state changes.
@@ -49,7 +51,7 @@ internal fun MediaRemoteWiring(
                 )
                 wasLoaded = false
             }
-            delay(500)
+            delay(SEEK_SETTLE_MS)
         }
     }
     // Media transport controls from a companion remote (mobile Media tab).

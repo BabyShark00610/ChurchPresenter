@@ -114,6 +114,8 @@ import java.io.File
 import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 
+private const val PREVIEW_DEBOUNCE_MS = 800L
+
 @Composable
 fun BackgroundSettingsTab(
     settings: AppSettings,
@@ -868,7 +870,7 @@ private suspend fun uploadBackgroundToAtem(atemSettings: AtemSettings, imagePath
             client.disconnect()
         }
         AtemUploadStatus.complete(id)
-        delay(800)
+        delay(PREVIEW_DEBOUNCE_MS)
         AtemUploadStatus.clear(id)
     } catch (e: Exception) {
         AtemUploadStatus.fail(id, e.message)

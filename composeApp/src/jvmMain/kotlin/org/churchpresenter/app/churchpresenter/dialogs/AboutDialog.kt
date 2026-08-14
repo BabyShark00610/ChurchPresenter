@@ -75,6 +75,8 @@ import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.writeText
 
+private const val GRADIENT_DARKEN = 0.45f
+
 @Composable
 fun AboutDialog(
     isVisible: Boolean,
@@ -131,7 +133,7 @@ internal fun AboutDialogContent(
                         .background(
                             Brush.linearGradient(
                                 listOf(
-                                    lerp(MaterialTheme.colorScheme.primary, Color.Black, 0.45f),
+                                    lerp(MaterialTheme.colorScheme.primary, Color.Black, GRADIENT_DARKEN),
                                     MaterialTheme.colorScheme.primary
                                 )
                             )

@@ -174,7 +174,7 @@ class AnnouncementsViewModel {
     fun setLoopCount(value: Int) { _loopCount.value = value.coerceAtLeast(0) }
 
     private fun totalSeconds(): Int =
-        _timerHours.value * 3600 + _timerMinutes.value * 60 + _timerSeconds.value
+        _timerHours.value * SECONDS_PER_HOUR + _timerMinutes.value * SECONDS_PER_MINUTE + _timerSeconds.value
 
     /**
      * Applies a change to the configured H/M/S duration fields and carries the *delta* over to
@@ -197,14 +197,14 @@ class AnnouncementsViewModel {
 
     fun stepTimerHours(delta: Int) = applyDurationDelta { _timerHours.value = (_timerHours.value + delta).coerceAtLeast(0) }
 
-    fun setTimerMinutes(value: Int) = applyDurationDelta { _timerMinutes.value = value.coerceIn(0, 59) }
+    fun setTimerMinutes(value: Int) = applyDurationDelta { _timerMinutes.value = value.coerceIn(0, MAX_MINUTE) }
 
-    fun setTimerSeconds(value: Int) = applyDurationDelta { _timerSeconds.value = value.coerceIn(0, 59) }
+    fun setTimerSeconds(value: Int) = applyDurationDelta { _timerSeconds.value = value.coerceIn(0, MAX_SECOND) }
 
     fun stepTimerMinutes(delta: Int) = applyDurationDelta {
         val cur = _timerMinutes.value
         if (delta > 0) {
-            if (cur >= 59) {
+            if (cur >= MAX_MINUTE) {
                 _timerMinutes.value = 0
                 _timerHours.value += 1
             } else {
@@ -213,7 +213,7 @@ class AnnouncementsViewModel {
         } else {
             if (cur <= 0) {
                 if (_timerHours.value > 0) {
-                    _timerMinutes.value = 59
+                    _timerMinutes.value = MAX_MINUTE
                     _timerHours.value -= 1
                 }
             } else {
@@ -225,21 +225,21 @@ class AnnouncementsViewModel {
     fun stepTimerSeconds(delta: Int) = applyDurationDelta {
         val cur = _timerSeconds.value
         if (delta > 0) {
-            val next = if (cur >= 55) 0 else ((cur / 5) + 1) * 5
+            val next = if (cur >= LAST_SECOND_STEP) 0 else ((cur / 5) + 1) * 5
             if (next == 0) {
                 _timerSeconds.value = 0
                 val curMin = _timerMinutes.value
-                if (curMin >= 59) { _timerMinutes.value = 0; _timerHours.value += 1 } else { _timerMinutes.value = curMin + 1 }
+                if (curMin >= MAX_MINUTE) { _timerMinutes.value = 0; _timerHours.value += 1 } else { _timerMinutes.value = curMin + 1 }
             } else {
                 _timerSeconds.value = next
             }
         } else {
-            val next = if (cur <= 0) 55 else ((cur - 1) / 5) * 5
+            val next = if (cur <= 0) LAST_SECOND_STEP else ((cur - 1) / 5) * 5
             if (cur <= 0) {
                 if (_timerHours.value > 0 || _timerMinutes.value > 0) {
-                    _timerSeconds.value = 55
+                    _timerSeconds.value = LAST_SECOND_STEP
                     val curMin = _timerMinutes.value
-                    if (curMin <= 0) { _timerMinutes.value = 59; _timerHours.value -= 1 } else { _timerMinutes.value = curMin - 1 }
+                    if (curMin <= 0) { _timerMinutes.value = MAX_MINUTE; _timerHours.value -= 1 } else { _timerMinutes.value = curMin - 1 }
                 }
             } else {
                 _timerSeconds.value = next
@@ -254,7 +254,7 @@ class AnnouncementsViewModel {
         clockPreviewJob?.cancel()
         clockPreviewJob = scope.launch {
             while (true) {
-                delay(1000L)
+                delay(TICK_INTERVAL_MS)
                 if (_timerMode.value == Constants.TIMER_MODE_CLOCK) {
                     _timerRemaining.value = secondsUntilTarget()
                 }
@@ -273,7 +273,7 @@ class AnnouncementsViewModel {
             while (true) {
                 _liveClockText.value = java.time.LocalTime.now()
                     .format(java.time.format.DateTimeFormatter.ofPattern(_liveClockFormat.value))
-                delay(1000L)
+                delay(TICK_INTERVAL_MS)
             }
         }
     }
@@ -326,9 +326,9 @@ class AnnouncementsViewModel {
     private fun secondsUntilTarget(): Int {
         val now = java.time.LocalTime.now()
         val nowSec = now.toSecondOfDay()
-        val targetSec = _targetHour.value * 3600 + _targetMinute.value * 60 + _targetSecond.value
+        val targetSec = _targetHour.value * SECONDS_PER_HOUR + _targetMinute.value * SECONDS_PER_MINUTE + _targetSecond.value
         val diff = targetSec - nowSec
-        return if (diff > 0) diff else diff + 86400
+        return if (diff > 0) diff else diff + SECONDS_PER_DAY
     }
 
     /** Applies a change to the target clock time and keeps the local preview in sync. */
@@ -338,14 +338,14 @@ class AnnouncementsViewModel {
         _timerRemaining.value = secondsUntilTarget()
     }
 
-    fun setTargetHour(value: Int) = applyTargetChange { _targetHour.value = value.coerceIn(0, 23) }
+    fun setTargetHour(value: Int) = applyTargetChange { _targetHour.value = value.coerceIn(0, MAX_HOUR) }
 
     fun stepTargetHour(delta: Int) {
         // Wrap around midnight/noon instead of clamping, so continuing to step past 11 PM/AM flips correctly.
-        setTargetHour(((_targetHour.value + delta) % 24 + 24) % 24)
+        setTargetHour(((_targetHour.value + delta) % HOURS_PER_DAY + HOURS_PER_DAY) % HOURS_PER_DAY)
     }
 
-    fun setTargetMinute(value: Int) = applyTargetChange { _targetMinute.value = value.coerceIn(0, 59) }
+    fun setTargetMinute(value: Int) = applyTargetChange { _targetMinute.value = value.coerceIn(0, MAX_MINUTE) }
 
     fun stepTargetMinute(delta: Int) {
         val cur = _targetMinute.value
@@ -353,25 +353,25 @@ class AnnouncementsViewModel {
         // which left the minute wrapping while the hour stuck (23:59 stepped up to 23:00, 00:00
         // stepped down to 00:59). A countdown aimed at midnight was 23 hours out.
         if (delta > 0) {
-            if (cur >= 59) { _targetMinute.value = 0; stepTargetHour(1) }
+            if (cur >= MAX_MINUTE) { _targetMinute.value = 0; stepTargetHour(1) }
             else setTargetMinute(cur + 1)
         } else {
-            if (cur <= 0) { _targetMinute.value = 59; stepTargetHour(-1) }
+            if (cur <= 0) { _targetMinute.value = MAX_MINUTE; stepTargetHour(-1) }
             else setTargetMinute(cur - 1)
         }
     }
 
-    fun setTargetSecond(value: Int) = applyTargetChange { _targetSecond.value = value.coerceIn(0, 59) }
+    fun setTargetSecond(value: Int) = applyTargetChange { _targetSecond.value = value.coerceIn(0, MAX_SECOND) }
 
     fun stepTargetSecond(delta: Int) {
         val cur = _targetSecond.value
         if (delta > 0) {
-            val next = if (cur >= 55) 0 else ((cur / 5) + 1) * 5
+            val next = if (cur >= LAST_SECOND_STEP) 0 else ((cur / 5) + 1) * 5
             if (next == 0) { _targetSecond.value = 0; stepTargetMinute(1) }
             else setTargetSecond(next)
         } else {
-            val next = if (cur <= 0) 55 else ((cur - 1) / 5) * 5
-            if (cur <= 0) { _targetSecond.value = 55; stepTargetMinute(-1) }
+            val next = if (cur <= 0) LAST_SECOND_STEP else ((cur - 1) / 5) * 5
+            if (cur <= 0) { _targetSecond.value = LAST_SECOND_STEP; stepTargetMinute(-1) }
             else setTargetSecond(next)
         }
     }
@@ -484,10 +484,20 @@ class AnnouncementsViewModel {
     )
 
     companion object {
+        private const val SECONDS_PER_MINUTE = 60
+        private const val SECONDS_PER_HOUR = 3600
+        private const val SECONDS_PER_DAY = 86400
+        private const val HOURS_PER_DAY = 24
+        private const val MAX_HOUR = 23
+        private const val MAX_MINUTE = 59
+        private const val MAX_SECOND = 59
+        private const val LAST_SECOND_STEP = 55
+        private const val TICK_INTERVAL_MS = 1000L
+
         fun formatTimer(remaining: Int): String {
-            val h = remaining / 3600
-            val m = (remaining % 3600) / 60
-            val s = remaining % 60
+            val h = remaining / SECONDS_PER_HOUR
+            val m = (remaining % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
+            val s = remaining % SECONDS_PER_MINUTE
             return if (h > 0) "%d:%02d:%02d".format(h, m, s)
             else "%02d:%02d".format(m, s)
         }

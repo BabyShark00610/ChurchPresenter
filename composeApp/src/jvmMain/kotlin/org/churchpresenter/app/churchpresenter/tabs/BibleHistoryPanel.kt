@@ -54,6 +54,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+private const val SELECTION_BAR_WIDTH = 4f
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BibleHistoryPanel(
@@ -112,7 +114,7 @@ internal fun BibleHistoryPanel(
                                         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
                                     .drawBehind {
-                                        if (idx == selectedIndex) drawRect(color = markerColor, size = Size(4f, size.height))
+                                        if (idx == selectedIndex) drawRect(color = markerColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                                     }
                                     .initialPassCombinedClickable(
                                         onClick = { onEntryClick(idx) },

@@ -10,6 +10,8 @@ import javax.swing.JFrame
 import javax.swing.SwingUtilities
 import javax.swing.filechooser.FileNameExtensionFilter
 
+private const val FOCUS_RETRY_ATTEMPTS = 6
+
 
 object SwingFileChooser : FileChooser() {
 
@@ -65,7 +67,7 @@ object SwingFileChooser : FileChooser() {
         }
         // 2. IDE / development run: walk up from working directory to find appResources
         var dir = File(System.getProperty("user.dir"))
-        repeat(6) {
+        repeat(FOCUS_RETRY_ATTEMPTS) {
             val candidate = File(dir, "composeApp/src/jvmMain/appResources/common/icon-32.png")
             if (candidate.exists()) return ImageIO.read(candidate)
             dir = dir.parentFile ?: return@repeat

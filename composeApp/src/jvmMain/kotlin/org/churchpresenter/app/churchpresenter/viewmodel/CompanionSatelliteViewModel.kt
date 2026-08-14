@@ -20,6 +20,10 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image as SkiaImage
 import java.util.concurrent.ConcurrentHashMap
 
+private const val ALPHA_BYTE_OFFSET = 3
+private const val RGB_BYTES_PER_PIXEL = 3
+private const val ARGB_BYTES_PER_PIXEL = 4
+
 /**
  * Owns every configured [CompanionSatelliteClient] connection to Bitfocus Companion instances on
  * the network, so ChurchPresenter can act as a Satellite-style surface: show Companion's own
@@ -250,9 +254,9 @@ class CompanionSatelliteViewModel {
             argb[dst] = rgb[src + 2]
             argb[dst + 1] = rgb[src + 1]
             argb[dst + 2] = rgb[src]
-            argb[dst + 3] = 0xFF.toByte()
-            src += 3
-            dst += 4
+            argb[dst + ALPHA_BYTE_OFFSET] = 0xFF.toByte()
+            src += RGB_BYTES_PER_PIXEL
+            dst += ARGB_BYTES_PER_PIXEL
         }
         val bitmap = Bitmap()
         bitmap.allocN32Pixels(size, size)

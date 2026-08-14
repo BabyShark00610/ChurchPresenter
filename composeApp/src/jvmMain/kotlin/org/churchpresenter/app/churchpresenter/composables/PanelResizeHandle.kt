@@ -25,6 +25,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import java.awt.Cursor
 
+private const val GRIP_DOT_COUNT = 3
+
 /** The strip's width, and the size of its grip dots. */
 private val HANDLE_WIDTH = 16.dp
 private val DOT_SIZE = 3.dp
@@ -113,5 +115,5 @@ private fun GripDots(color: Color, modifier: Modifier) {
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) { repeat(3) { Box(Modifier.size(DOT_SIZE).background(color, CircleShape)) } }
+    ) { repeat(GRIP_DOT_COUNT) { Box(Modifier.size(DOT_SIZE).background(color, CircleShape)) } }
 }

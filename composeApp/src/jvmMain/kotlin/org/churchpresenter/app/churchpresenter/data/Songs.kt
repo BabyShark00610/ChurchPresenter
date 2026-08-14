@@ -8,6 +8,12 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Paths
 
+private const val MIN_SPS_FILE_BYTES = 16
+private const val SPS_MIN_FIELDS = 6
+private const val SQLITE_COL_TUNE = 3
+private const val SQLITE_COL_AUTHOR = 4
+private const val SQLITE_COL_COMPOSER = 5
+
 
 class Songs {
     private val items = mutableStateListOf<SongItem>()
@@ -20,7 +26,7 @@ class Songs {
     fun loadFromSpsAppend(resourcePath: String) {
         // Detect SQLite format (Mac SongPresenter uses SQLite databases for .sps files)
         val spsFile = java.io.File(resourcePath)
-        if (spsFile.exists() && spsFile.length() >= 16) {
+        if (spsFile.exists() && spsFile.length() >= MIN_SPS_FILE_BYTES) {
             val header = ByteArray(16)
             spsFile.inputStream().use { it.read(header) }
             if (String(header, Charsets.US_ASCII).startsWith("SQLite format 3")) {
@@ -70,7 +76,7 @@ class Songs {
 
                 // Parse song entry
                 val parts = line.split("#\$#")
-                if (parts.size >= 6) {
+                if (parts.size >= SPS_MIN_FIELDS) {
                     val number = parts[0]
                     val title = parts[1]
                     val categoryId = parts[2].trim() // This is the category/songbook ID
@@ -124,9 +130,9 @@ class Songs {
                         number = row.getString(0).trim(),
                         title = row.getString(1).trim(),
                         songbook = songbookName,
-                        tune = row.getString(3).trim(),
-                        author = row.getString(4).trim(),
-                        composer = row.getString(5).trim(),
+                        tune = row.getString(SQLITE_COL_TUNE).trim(),
+                        author = row.getString(SQLITE_COL_AUTHOR).trim(),
+                        composer = row.getString(SQLITE_COL_COMPOSER).trim(),
                         lyrics = lyrics
                     )
                 )
@@ -352,7 +358,7 @@ class Songs {
                 if (line.startsWith("##") || line.isBlank()) continue
 
                 val parts = line.split("#\$#")
-                if (parts.size >= 6) {
+                if (parts.size >= SPS_MIN_FIELDS) {
                     val number = parts[0]
                     val title = parts[1]
 

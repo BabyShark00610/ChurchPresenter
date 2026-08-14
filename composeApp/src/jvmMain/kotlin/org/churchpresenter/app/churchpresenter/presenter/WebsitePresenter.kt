@@ -35,6 +35,10 @@ import javax.swing.Timer
 import kotlinx.coroutines.delay
 import java.lang.invoke.MethodHandles
 
+private const val ASCII_MAX = 128
+private const val AUDIO_INIT_DELAY_MS = 2000L
+private const val AUDIO_RETRY_DELAY_MS = 5000L
+
 /**
  * Manages a single CefApp instance for the entire application.
  * Must call [init] once at startup before any WebView is used.
@@ -217,7 +221,7 @@ object CefManager {
             // Best-effort telemetry: distinguish the accented-path theory from the
             // VC++-runtime theory at a glance in Sentry. Never let telemetry throw.
             runCatching {
-                CrashReporter.setTag("jcef.path_ascii", installDir.path.all { it.code < 128 }.toString())
+                CrashReporter.setTag("jcef.path_ascii", installDir.path.all { it.code < ASCII_MAX }.toString())
                 CrashReporter.setContext("jcef", mapOf(
                     "installDir" to installDir.path,
                     "os" to (System.getProperty("os.name") ?: ""),
@@ -466,10 +470,10 @@ fun WebsitePresenter(
     // New streams may appear as the user navigates to pages with audio/video.
     LaunchedEffect(audioDeviceId) {
         if (audioDeviceId.isNotBlank()) {
-            delay(2000) // Wait for initial audio streams
+            delay(AUDIO_INIT_DELAY_MS) // Wait for initial audio streams
             while (true) {
                 CefManager.routeAudioToDevice(audioDeviceId)
-                delay(5000)
+                delay(AUDIO_RETRY_DELAY_MS)
             }
         }
     }

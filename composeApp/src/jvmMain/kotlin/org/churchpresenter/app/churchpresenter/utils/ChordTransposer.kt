@@ -22,6 +22,8 @@ data class ChordSegment(val chord: String, val text: String)
  */
 object ChordTransposer {
 
+    private const val SEMITONES = 12
+
     private val SHARP_NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
     private val FLAT_NAMES = listOf("C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B")
 
@@ -83,11 +85,11 @@ object ChordTransposer {
     fun prefersFlats(key: String): Boolean = pitchOf(key)?.let { prefersFlats(it) } == true
 
     /** Whether the key on a pitch class is written with flats — see [FLAT_KEYS]. */
-    fun prefersFlats(pitch: Int): Boolean = ((pitch % 12) + 12) % 12 in FLAT_KEYS
+    fun prefersFlats(pitch: Int): Boolean = ((pitch % SEMITONES) + SEMITONES) % SEMITONES in FLAT_KEYS
 
     /** Names a pitch class, spelling it with flats or sharps as [flats] asks. */
     fun nameOf(pitch: Int, flats: Boolean): String {
-        val i = ((pitch % 12) + 12) % 12
+        val i = ((pitch % SEMITONES) + SEMITONES) % SEMITONES
         return if (flats) FLAT_NAMES[i] else SHARP_NAMES[i]
     }
 

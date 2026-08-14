@@ -18,6 +18,8 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
+private const val MILLIS_PER_SECOND = 1000L
+
 @Serializable
 private data class QAState(
     val questions: List<QuestionDto> = emptyList(),
@@ -88,7 +90,7 @@ class QAManager {
         if (clientIp.isNotEmpty() && cooldownSeconds > 0) {
             val now = System.currentTimeMillis()
             val lastTime = _lastSubmission[clientIp]
-            if (lastTime != null && (now - lastTime) < cooldownSeconds * 1000L) return@synchronized null
+            if (lastTime != null && (now - lastTime) < cooldownSeconds * MILLIS_PER_SECOND) return@synchronized null
             _lastSubmission[clientIp] = now
         }
 
@@ -284,7 +286,7 @@ class QAManager {
         if (clientIp.isEmpty() || cooldownSeconds <= 0) return false
         val now = System.currentTimeMillis()
         val lastTime = _lastSubmission[clientIp] ?: return false
-        return (now - lastTime) < cooldownSeconds * 1000L
+        return (now - lastTime) < cooldownSeconds * MILLIS_PER_SECOND
     }
 
     // ── Persistence ─────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.Dispatchers
@@ -145,7 +146,7 @@ object PlanningCenterClient {
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody(body)
             }
-            if (response.status.value == 400 || response.status.value == 401) {
+            if (response.status == HttpStatusCode.BadRequest || response.status == HttpStatusCode.Unauthorized) {
                 return@withContext TokenOutcome.InvalidCredentials
             }
             if (response.status.value !in 200..299) {
@@ -192,7 +193,7 @@ object PlanningCenterClient {
             val response = http.get(ME_URL) {
                 header("Authorization", "Bearer $accessToken")
             }
-            if (response.status.value == 401 || response.status.value == 403) {
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 return@withContext PersonOutcome.Unauthorized
             }
             if (response.status.value !in 200..299) {
@@ -280,7 +281,7 @@ object PlanningCenterClient {
                 header("Authorization", "Bearer $accessToken")
                 parameter("per_page", 100)
             }
-            if (response.status.value == 401 || response.status.value == 403) {
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 return@withContext ServiceTypesOutcome.Unauthorized
             }
             if (response.status.value !in 200..299) {
@@ -321,7 +322,7 @@ object PlanningCenterClient {
                 parameter("order", "sort_date")
                 parameter("per_page", 25)
             }
-            if (response.status.value == 401 || response.status.value == 403) {
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 return@withContext PlansOutcome.Unauthorized
             }
             if (response.status.value !in 200..299) {
@@ -368,7 +369,7 @@ object PlanningCenterClient {
                     parameter("include", "song")
                     parameter("per_page", 200)
                 }
-                if (response.status.value == 401 || response.status.value == 403) {
+                if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                     return@withContext PlanItemsOutcome.Unauthorized
                 }
                 if (response.status.value !in 200..299) {
@@ -434,7 +435,7 @@ object PlanningCenterClient {
                 val response = http.get("$SERVICES_BASE_URL/songs/$songId/arrangements/$arrangementId") {
                     header("Authorization", "Bearer $accessToken")
                 }
-                if (response.status.value == 401 || response.status.value == 403) {
+                if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                     return@withContext ArrangementOutcome.Unauthorized
                 }
                 if (response.status.value !in 200..299) {
@@ -512,7 +513,7 @@ object PlanningCenterClient {
                 header("Authorization", "Bearer $accessToken")
                 parameter("per_page", 50)
             }
-            if (response.status.value == 401 || response.status.value == 403) {
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 return@withContext AttachmentsOutcome.Unauthorized
             }
             if (response.status.value !in 200..299) {
@@ -560,7 +561,7 @@ object PlanningCenterClient {
                 val response = http.post("$SERVICES_BASE_URL/attachments/$attachmentId/open") {
                     header("Authorization", "Bearer $accessToken")
                 }
-                if (response.status.value == 401 || response.status.value == 403) {
+                if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                     return@withContext AttachmentUrlOutcome.Unauthorized
                 }
                 if (response.status.value !in 200..299) {

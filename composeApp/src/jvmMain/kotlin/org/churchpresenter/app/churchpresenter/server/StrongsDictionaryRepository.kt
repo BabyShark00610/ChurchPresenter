@@ -11,6 +11,12 @@ import org.churchpresenter.app.churchpresenter.data.InterlinearRepository
 import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
+private const val MAX_SEARCH_RESULTS = 500
+private const val MAX_OCCURRENCE_RESULTS = 200
+private const val REF_BOOK_END = 3
+private const val REF_CHAPTER_END = 6
+private const val REF_VERSE_END = 9
+
 /**
  * Wire model returned by the dictionary REST endpoints — the bundled [StrongsEntry]
  * enriched with the live occurrence count (from the interlinear index) and the
@@ -164,7 +170,7 @@ object StrongsDictionaryRepository {
                     .thenBy { it.numericValue }
             )
         }
-        return matched.take(limit.coerceIn(1, 500)).map { it.toDto() }
+        return matched.take(limit.coerceIn(1, MAX_SEARCH_RESULTS)).map { it.toDto() }
     }
 
     /**
@@ -189,15 +195,15 @@ object StrongsDictionaryRepository {
         // index, but "Appears in" lists each verse once (and total counts verses).
         val refs = interlinear.getVersesForEntry(number.trim().uppercase()).map { it.ref }.distinct()
         val ordered = orderRefsByScope(refs, book, chapter, verse)
-        return refs.size to ordered.take(limit.coerceIn(1, 200))
+        return refs.size to ordered.take(limit.coerceIn(1, MAX_OCCURRENCE_RESULTS))
     }
 
     internal fun orderRefsByScope(refs: List<String>, book: Int?, chapter: Int?, verse: Int?): List<String> {
         if (book == null) return refs
         val (inScope, rest) = refs.partition { ref ->
-            ref.substring(0, 3).toInt() == book &&
-                (chapter == null || ref.substring(3, 6).toInt() == chapter) &&
-                (verse == null || ref.substring(6, 9).toInt() == verse)
+            ref.substring(0, REF_BOOK_END).toInt() == book &&
+                (chapter == null || ref.substring(REF_BOOK_END, REF_CHAPTER_END).toInt() == chapter) &&
+                (verse == null || ref.substring(REF_CHAPTER_END, REF_VERSE_END).toInt() == verse)
         }
         return inScope + rest
     }
