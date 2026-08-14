@@ -96,17 +96,17 @@ object CrosswordDecoder {
 
     /** `"1 ACROSS 3 5"` → the clue key and its (row, col) origin, or null if the line is malformed. */
     private fun parseLayoutLine(line: String): Pair<Pair<Int, CrosswordDirection>, Pair<Int, Int>>? {
-        val parts = line.split(" ")
-        if (parts.size != CLUE_LINE_FIELDS) return null
-        val num = parts[0].toIntOrNull() ?: return null
+        val parts = line.split(" ").takeIf { it.size == CLUE_LINE_FIELDS } ?: return null
+        val num = parts[0].toIntOrNull()
         val dir = when (parts[1].uppercase()) {
             "ACROSS" -> CrosswordDirection.ACROSS
             "DOWN" -> CrosswordDirection.DOWN
-            else -> return null
+            else -> null
         }
-        val row = parts[2].toIntOrNull() ?: return null
-        val col = parts[3].toIntOrNull() ?: return null
-        return (num to dir) to (row to col)
+        if (num == null || dir == null) return null
+        val row = parts[2].toIntOrNull()
+        val col = parts[3].toIntOrNull()
+        return if (row != null && col != null) (num to dir) to (row to col) else null
     }
 
     /** `"1. Clue text | ANSWER"` → the clue, or null if the line is malformed or has no answer. */
