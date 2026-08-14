@@ -68,7 +68,8 @@ class PresenterTransitionAnimationTest {
         manager.setSelectedImagePath("/tmp/second.jpg")
 
         waitUntil("the crossfade finished") {
-            manager.pictureTransitionAlpha.value == 1f &&
+            manager.displayedImagePath.value == "/tmp/second.jpg" &&
+                manager.pictureTransitionAlpha.value == 1f &&
                 manager.previousDisplayedImagePath.value == null
         }
         assertEquals("/tmp/second.jpg", manager.displayedImagePath.value)
@@ -80,7 +81,11 @@ class PresenterTransitionAnimationTest {
 
         manager.setSelectedImagePath("/tmp/second.jpg")
 
-        waitUntil("the slide finished") { manager.pictureSlideOffset.value == 1f }
+        waitUntil("the slide finished") {
+            manager.displayedImagePath.value == "/tmp/second.jpg" &&
+                manager.pictureSlideOffset.value == 1f &&
+                manager.previousDisplayedImagePath.value == null
+        }
         assertEquals("/tmp/second.jpg", manager.displayedImagePath.value)
         assertNull(manager.previousDisplayedImagePath.value)
         assertEquals(1f, manager.pictureTransitionAlpha.value)
@@ -92,7 +97,11 @@ class PresenterTransitionAnimationTest {
 
         manager.setSelectedImagePath("/tmp/second.jpg")
 
-        waitUntil("the slide finished") { manager.pictureSlideOffset.value == 1f }
+        waitUntil("the slide finished") {
+            manager.displayedImagePath.value == "/tmp/second.jpg" &&
+                manager.pictureSlideOffset.value == 1f &&
+                manager.previousDisplayedImagePath.value == null
+        }
         assertEquals("/tmp/second.jpg", manager.displayedImagePath.value)
         assertNull(manager.previousDisplayedImagePath.value)
     }
@@ -133,7 +142,9 @@ class PresenterTransitionAnimationTest {
         manager.setSelectedSlide(second)
 
         waitUntil("the crossfade finished") {
-            manager.slideTransitionAlpha.value == 1f && manager.previousDisplayedSlide.value == null
+            manager.displayedSlide.value === second &&
+                manager.slideTransitionAlpha.value == 1f &&
+                manager.previousDisplayedSlide.value == null
         }
         assertTrue(manager.displayedSlide.value === second)
     }
@@ -146,7 +157,11 @@ class PresenterTransitionAnimationTest {
 
         manager.setSelectedSlide(second)
 
-        waitUntil("the slide finished") { manager.slideSlideOffset.value == 1f }
+        waitUntil("the slide finished") {
+            manager.displayedSlide.value === second &&
+                manager.slideSlideOffset.value == 1f &&
+                manager.previousDisplayedSlide.value == null
+        }
         assertTrue(manager.displayedSlide.value === second)
         assertNull(manager.previousDisplayedSlide.value)
     }

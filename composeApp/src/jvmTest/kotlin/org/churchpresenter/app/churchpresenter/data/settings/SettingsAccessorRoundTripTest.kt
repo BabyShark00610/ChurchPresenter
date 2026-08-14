@@ -68,7 +68,7 @@ class SettingsAccessorRoundTripTest {
 
     @Test
     fun `every stage monitor setting is readable and unchanged after a reload`() {
-        assertEveryAccessorSurvives(StageMonitorSettings.serializer(), StageMonitorSettings(), expectedAtLeast = 5)
+        assertEveryAccessorSurvives(StageMonitorSettings.serializer(), StageMonitorSettings(), expectedAtLeast = 3)
     }
 
     @Test

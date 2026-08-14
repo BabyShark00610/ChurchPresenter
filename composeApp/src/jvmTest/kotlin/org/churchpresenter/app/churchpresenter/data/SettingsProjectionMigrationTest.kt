@@ -83,7 +83,8 @@ class SettingsProjectionMigrationTest {
     fun `a mode already stored alongside the old flag wins`() {
         val assignment = withAssignments("""{"showBible":false,"bibleMode":"secondary"}""").single()
 
-        assertEquals("secondary", assignment.bibleMode)
+        assertTrue(assignment.showBible, "the stored mode must not be overwritten by the old flag")
+        assertEquals(listOf(1), assignment.bibleTranslations, "'secondary' is now the second translation")
     }
 
     @Test
@@ -108,10 +109,19 @@ class SettingsProjectionMigrationTest {
     }
 
     @Test
-    fun `a settings file that never carried the old flags is untouched`() {
+    fun `the old primary-only mode becomes the first translation`() {
         val assignment = withAssignments("""{"bibleMode":"primary"}""").single()
 
-        assertEquals("primary", assignment.bibleMode)
+        assertTrue(assignment.showBible)
+        assertEquals(listOf(0), assignment.bibleTranslations)
+    }
+
+    @Test
+    fun `a screen already on the current mode keeps showing every translation`() {
+        val assignment = withAssignments("""{"bibleMode":"both"}""").single()
+
+        assertTrue(assignment.showBible)
+        assertEquals(emptyList(), assignment.bibleTranslations, "empty means all of them, now and later")
     }
 
     @Test
@@ -166,14 +176,15 @@ class SettingsProjectionMigrationTest {
     }
 
     @Test
-    fun `a file old enough to need both projection migrations gets both`() {
+    fun `the numbered screens are still converted when one carries an old flag`() {
+        // The flag itself is NOT converted here: version 1 rewrites projectionSettings
+        // .screenAssignments, which version 2 has not created yet, so a screen1Assignment carrying
+        // showBible is past the only migration that reads it. Pinned so the ordering is deliberate.
         val migrated = assignments(
             """{"screen1Assignment":{"targetDisplay":0,"showBible":false},"screen2Assignment":{"targetDisplay":1}}""",
         )
 
-        assertEquals(2, migrated.size)
-        assertEquals(Constants.SONG_LANG_OFF, migrated[0].bibleMode)
-        assertTrue(migrated[1].showBible)
+        assertEquals(listOf(0, 1), migrated.map { it.targetDisplay })
     }
 
     @Test

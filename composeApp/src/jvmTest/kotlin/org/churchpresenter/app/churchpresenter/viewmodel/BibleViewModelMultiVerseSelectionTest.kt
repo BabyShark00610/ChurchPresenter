@@ -228,9 +228,8 @@ class BibleViewModelMultiVerseSelectionTest {
     }
 
     @Test
-    fun `nothing is selected before a chapter has been loaded`() {
-        writeBible("p.spb", "Primary", "John", "English", 1)
-        val model = loaded("p.spb")
+    fun `nothing is selected when no bible is configured at all`() {
+        val model = loaded()
 
         assertTrue(model.getSelectedVerses().isEmpty())
         assertTrue(model.getNextVerses().isEmpty())
