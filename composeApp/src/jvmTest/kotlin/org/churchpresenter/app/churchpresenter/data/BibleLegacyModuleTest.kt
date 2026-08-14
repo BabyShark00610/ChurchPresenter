@@ -477,6 +477,66 @@ class BibleLegacyModuleTest {
     }
 
     @Test
+    fun `a parenthesised abbreviation in the title is not turned into a bracket`() {
+        val b = bible(
+            """
+            ##Title: King James Version (KJV)
+            1 Genesis 1
+            -----
+            B001C001V001 1 1 1 In the beginning.
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            "KJV",
+            b.getBibleAbbreviation(),
+            "the bracket used to become the fourth initial, labelling every verse 'KJV('",
+        )
+    }
+
+    @Test
+    fun `a parenthesised aside that is not the abbreviation is dropped too`() {
+        val b = bible(
+            """
+            ##Title: New International Version (UK)
+            1 Genesis 1
+            -----
+            B001C001V001 1 1 1 In the beginning.
+            """.trimIndent(),
+        )
+
+        assertEquals("NIV", b.getBibleAbbreviation())
+    }
+
+    @Test
+    fun `a title that is only a parenthesised abbreviation still names itself`() {
+        val b = bible(
+            """
+            ##Title: (KJV)
+            1 Genesis 1
+            -----
+            B001C001V001 1 1 1 In the beginning.
+            """.trimIndent(),
+        )
+
+        assertEquals("KJV", b.getBibleAbbreviation(), "stripping the aside must not leave nothing")
+    }
+
+    @Test
+    fun `punctuation between title words never reaches the abbreviation`() {
+        val b = bible(
+            """
+            ##Title: Holy Bible - King James
+            1 Genesis 1
+            -----
+            B001C001V001 1 1 1 In the beginning.
+            """.trimIndent(),
+        )
+
+        assertEquals("HBKJ", b.getBibleAbbreviation(), "the dash used to be an initial of its own")
+    }
+
+    @Test
     fun `a module whose title is already an abbreviation keeps it`() {
         val b = bible(
             """
