@@ -55,21 +55,16 @@ class SongFileParser {
             var composer = ""
             var tune = ""
             var ccli = ""
-            var inHeader = false
-            var headerEndIndex = 0
+            val headerStart = lines.indexOfFirst { it.trim() == "---" }
+            val headerClose = if (headerStart < 0) -1 else
+                lines.subList(headerStart + 1, lines.size).indexOfFirst { it.trim() == "---" }
+                    .takeIf { it >= 0 }?.plus(headerStart + 1) ?: -1
+            val headerEndIndex = if (headerClose < 0) 0 else headerClose + 1
 
-            for (i in lines.indices) {
-                val line = lines[i].trim()
-                if (line == "---") {
-                    if (!inHeader) {
-                        inHeader = true
-                        continue
-                    } else {
-                        headerEndIndex = i + 1
-                        break
-                    }
-                }
-                if (inHeader) {
+            if (headerStart >= 0) {
+                val headerBody = lines.subList(headerStart + 1, if (headerClose < 0) lines.size else headerClose)
+                for (raw in headerBody) {
+                    val line = raw.trim()
                     val colonIndex = line.indexOf(':')
                     if (colonIndex > 0) {
                         val key = line.substring(0, colonIndex).trim().lowercase()
@@ -102,29 +97,23 @@ class SongFileParser {
                     trimmed.equals("[Primary]", ignoreCase = true) -> {
                         currentSection = "primary"
                         currentTarget = primaryLyrics
-                        continue
                     }
                     trimmed.equals("[Secondary]", ignoreCase = true) -> {
                         currentSection = "secondary"
                         currentTarget = secondaryLyrics
-                        continue
                     }
-                }
-
-                if (currentSection != null && currentTarget != null) {
-                    // Check for title line right after section tag
-                    if (trimmed.startsWith("title:", ignoreCase = true)) {
+                    currentSection == null || currentTarget == null -> Unit
+                    // Title line right after the section tag
+                    trimmed.startsWith("title:", ignoreCase = true) -> {
                         val titleValue = trimmed.substring(6).trim()
                         if (currentSection == "primary") {
                             primaryTitle = titleValue
                         } else {
                             secondaryTitle = titleValue
                         }
-                        continue
                     }
-
-                    // Add lyric lines (including section headers like [Verse 1], empty lines, etc.)
-                    currentTarget.add(line)
+                    // Lyric lines (including section headers like [Verse 1], empty lines, etc.)
+                    else -> currentTarget.add(line)
                 }
             }
 

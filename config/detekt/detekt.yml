@@ -28,7 +28,7 @@ style:
   ReturnCount:
     active: false
   LoopWithTooManyJumpStatements:
-    active: false
+    active: true
   UnusedPrivateMember:
     active: true
 

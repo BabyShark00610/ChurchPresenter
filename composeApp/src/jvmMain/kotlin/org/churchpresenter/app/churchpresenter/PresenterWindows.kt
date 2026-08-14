@@ -162,109 +162,232 @@ internal fun PresenterWindows(
     )
     val devFallbackCount = devFallbackWindowCount(devWindowedFallback, proj.devWindowCount)
     for (i in 0 until (windowCount + devFallbackCount)) {
-        if (isFallbackWindowSlot(devWindowedFallback, i, windowCount)) {
-            val fallbackIndex = fallbackSlotIndex(i, windowCount)
-            val screenAssignment = proj.getAssignment(fallbackIndex)
-            val effectiveMode = effectiveOutputMode(screenLocks, fallbackIndex, presentingMode)
-            val fallbackWindowState = remember(fallbackIndex) {
+        val isFallback = isFallbackWindowSlot(devWindowedFallback, i, windowCount)
+        val slotIndex = if (isFallback) fallbackSlotIndex(i, windowCount) else i
+        val screenAssignment = proj.getAssignment(slotIndex)
+        val effectiveMode = effectiveOutputMode(screenLocks, slotIndex, presentingMode)
+
+        when {
+            isFallback -> {
+                val fallbackIndex = slotIndex
+                val fallbackWindowState = remember(fallbackIndex) {
+                    WindowState(
+                        width = 960.dp,
+                        height = 540.dp,
+                        position = WindowPosition(
+                            x = devFallbackWindowOffsetDp(fallbackIndex).dp,
+                            y = devFallbackWindowOffsetDp(fallbackIndex).dp,
+                        ),
+                    )
+                }
+                Window(
+                    visible = showPresenterWindow,
+                    title = stringResource(Res.string.presenter_view_title, fallbackIndex + 1),
+                    icon = painterResource(Res.drawable.ic_app_icon),
+                    onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
+                    state = fallbackWindowState,
+                    undecorated = false,
+                    resizable = true,
+                    alwaysOnTop = presenterManager.devWindowAlwaysOnTop.value,
+                ) {
+                    presenterOutputContent(screenAssignment, effectiveMode, fallbackIndex + 1)
+                }
+            }
+
+            isDeckLinkPrimaryOutput(screenAssignment) -> {
+                if (showPresenterWindow && screenAssignment.targetDisplay >= 0) {
+                    val deckLinkRole = screenAssignment.primaryOutputRole
+                    DeckLinkComposeOutput(
+                        deviceIndex = screenAssignment.targetDisplay,
+                        outputRole = deckLinkRole,
+                        appSettings = appSettings,
+                        mediaViewModel = mediaViewModel,
+                        isLowerThird = screenAssignment.isLowerThird,
+                    ) {
+                        var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
+                        val screenCrossfadeActive = isScreenCrossfadeActive(
+                            appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                        )
+                        if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
+                        Crossfade(
+                            targetState = effectiveMode,
+                            animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()
+                        ) { mode ->
+                        PresenterModeContent(
+                            mode = mode,
+                            screenAssignment = screenAssignment,
+                            presenterManager = presenterManager,
+                            appSettings = appSettings,
+                            mediaViewModel = mediaViewModel,
+                            sttManager = sttManager,
+                            serverUrl = serverUrl,
+                            qaDisplayUrl = qaDisplayUrl,
+                            lottieComposition = lottieComposition,
+                            clearAnnouncementOnFinish = clearAnnouncementOnFinish,
+                            outputRole = deckLinkRole,
+                            showBg = showsOutputBackground(screenAssignment),
+                            showBackgroundOverride = true,
+                        )
+                        }
+                    }
+                }
+
+                if (showPresenterWindow && hasDeckLinkKeyOutput(screenAssignment)) {
+                    DeckLinkComposeOutput(
+                        deviceIndex = screenAssignment.keyTargetDisplay,
+                        outputRole = Constants.OUTPUT_ROLE_KEY,
+                        appSettings = appSettings,
+                        mediaViewModel = mediaViewModel,
+                        isLowerThird = screenAssignment.isLowerThird,
+                    ) {
+                        var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
+                        val screenCrossfadeActive = isScreenCrossfadeActive(
+                            appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                        )
+                        if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
+                        Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
+                        PresenterModeContent(
+                            mode = mode,
+                            screenAssignment = screenAssignment,
+                            presenterManager = presenterManager,
+                            appSettings = appSettings,
+                            mediaViewModel = mediaViewModel,
+                            sttManager = sttManager,
+                            serverUrl = serverUrl,
+                            qaDisplayUrl = qaDisplayUrl,
+                            lottieComposition = lottieComposition,
+                            clearAnnouncementOnFinish = clearAnnouncementOnFinish,
+                            outputRole = Constants.OUTPUT_ROLE_KEY,
+                            showBg = showsOutputBackground(screenAssignment),
+                            showBackgroundOverride = true,
+                        )
+                        }
+                    }
+                }
+
+                if (showPresenterWindow && hasScreenKeyOutput(screenAssignment)) {
+                    val keyScreenIndex = keyOutputScreenIndex(
+                        findScreenIndexByBounds(
+                            screens,
+                            screenAssignment.keyTargetBoundsX,
+                            screenAssignment.keyTargetBoundsY,
+                            screenAssignment.keyTargetBoundsW,
+                            screenAssignment.keyTargetBoundsH
+                        ),
+                        screenAssignment.keyTargetDisplay,
+                    )
+                    if (isScreenIndexValid(keyScreenIndex, screens.size)) {
+                        val keyWindowState = remember(i, keyScreenIndex) {
+                            val b = screens[keyScreenIndex].defaultConfiguration.bounds
+                            WindowState(
+                                placement = WindowPlacement.Floating,
+                                position = WindowPosition(b.x.dp, b.y.dp),
+                                width = b.width.dp,
+                                height = b.height.dp
+                            )
+                        }
+
+                        Window(
+                            visible = true,
+                            title = "Key Output ${i + 1}",
+                            icon = painterResource(Res.drawable.ic_app_icon),
+                            onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
+                            state = keyWindowState,
+                            undecorated = true,
+                            resizable = false,
+                            alwaysOnTop = true,
+                        ) {
+                            CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
+                                PresenterScreen(
+                                    modifier = Modifier.fillMaxSize(),
+                                    appSettings = appSettings,
+                                    outputRole = Constants.OUTPUT_ROLE_KEY
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
+                                        val screenCrossfadeActive = isScreenCrossfadeActive(
+                                            appSettings.bibleSettings, appSettings.songSettings,
+                                            effectiveMode, prevEffectiveMode,
+                                        )
+                                        if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
+                                        Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
+                        PresenterModeContent(
+                            mode = mode,
+                            screenAssignment = screenAssignment,
+                            presenterManager = presenterManager,
+                            appSettings = appSettings,
+                            mediaViewModel = mediaViewModel,
+                            sttManager = sttManager,
+                            serverUrl = serverUrl,
+                            qaDisplayUrl = qaDisplayUrl,
+                            lottieComposition = lottieComposition,
+                            clearAnnouncementOnFinish = clearAnnouncementOnFinish,
+                            outputRole = Constants.OUTPUT_ROLE_KEY,
+                            showBg = showsOutputBackground(screenAssignment),
+                            showBackgroundOverride = true,
+                        )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            else -> {
+
+            val targetScreenIndex = if (hasNoPrimaryTarget(screenAssignment)) null
+                else primaryOutputScreenIndex(
+                matchedByBounds = findScreenIndexByBounds(
+                    screens,
+                    screenAssignment.targetBoundsX,
+                    screenAssignment.targetBoundsY,
+                    screenAssignment.targetBoundsW,
+                    screenAssignment.targetBoundsH
+                ),
+                savedDisplay = screenAssignment.targetDisplay,
+                screenCount = screens.size,
+                positionalFallback = availableScreens.getOrNull(i),
+                )
+
+            if (targetScreenIndex == null || !isScreenIndexValid(targetScreenIndex, screens.size)) continue
+
+            val showBg = showsOutputBackground(screenAssignment)
+
+            val primaryRole = screenAssignment.primaryOutputRole
+
+            val windowState = remember(i) {
+                val b = screens[targetScreenIndex].defaultConfiguration.bounds
                 WindowState(
-                    width = 960.dp,
-                    height = 540.dp,
-                    position = WindowPosition(
-                        x = devFallbackWindowOffsetDp(fallbackIndex).dp,
-                        y = devFallbackWindowOffsetDp(fallbackIndex).dp,
-                    ),
+                    placement = WindowPlacement.Floating,
+                    position = WindowPosition(b.x.dp, b.y.dp),
+                    width = b.width.dp,
+                    height = b.height.dp
                 )
             }
+
+            LaunchedEffect(targetScreenIndex) {
+                val b = screens[targetScreenIndex].defaultConfiguration.bounds
+                windowState.position = WindowPosition(b.x.dp, b.y.dp)
+                windowState.size = DpSize(b.width.dp, b.height.dp)
+            }
+
+            val presenterTitle = stringResource(Res.string.presenter_view_title, i + 1)
             Window(
                 visible = showPresenterWindow,
-                title = stringResource(Res.string.presenter_view_title, fallbackIndex + 1),
+                title = presenterTitle,
                 icon = painterResource(Res.drawable.ic_app_icon),
                 onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-                state = fallbackWindowState,
-                undecorated = false,
-                resizable = true,
-                alwaysOnTop = presenterManager.devWindowAlwaysOnTop.value,
+                state = windowState,
+                undecorated = true,
+                resizable = false,
+                alwaysOnTop = true,
             ) {
-                presenterOutputContent(screenAssignment, effectiveMode, fallbackIndex + 1)
-            }
-            continue
-        }
-        val screenAssignment = proj.getAssignment(i)
-        val effectiveMode = effectiveOutputMode(screenLocks, i, presentingMode)
-
-        if (isDeckLinkPrimaryOutput(screenAssignment)) {
-            if (showPresenterWindow && screenAssignment.targetDisplay >= 0) {
-                val deckLinkRole = screenAssignment.primaryOutputRole
-                DeckLinkComposeOutput(
-                    deviceIndex = screenAssignment.targetDisplay,
-                    outputRole = deckLinkRole,
-                    appSettings = appSettings,
-                    mediaViewModel = mediaViewModel,
-                    isLowerThird = screenAssignment.isLowerThird,
-                ) {
-                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                    Crossfade(
-                        targetState = effectiveMode,
-                        animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()
-                    ) { mode ->
-                    PresenterModeContent(
-                        mode = mode,
-                        screenAssignment = screenAssignment,
-                        presenterManager = presenterManager,
-                        appSettings = appSettings,
-                        mediaViewModel = mediaViewModel,
-                        sttManager = sttManager,
-                        serverUrl = serverUrl,
-                        qaDisplayUrl = qaDisplayUrl,
-                        lottieComposition = lottieComposition,
-                        clearAnnouncementOnFinish = clearAnnouncementOnFinish,
-                        outputRole = deckLinkRole,
-                        showBg = showsOutputBackground(screenAssignment),
-                        showBackgroundOverride = true,
-                    )
-                    }
-                }
+                presenterOutputContent(screenAssignment, effectiveMode, i + 1)
             }
 
-            if (showPresenterWindow && hasDeckLinkKeyOutput(screenAssignment)) {
-                DeckLinkComposeOutput(
-                    deviceIndex = screenAssignment.keyTargetDisplay,
-                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                    appSettings = appSettings,
-                    mediaViewModel = mediaViewModel,
-                    isLowerThird = screenAssignment.isLowerThird,
-                ) {
-                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                    Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    PresenterModeContent(
-                        mode = mode,
-                        screenAssignment = screenAssignment,
-                        presenterManager = presenterManager,
-                        appSettings = appSettings,
-                        mediaViewModel = mediaViewModel,
-                        sttManager = sttManager,
-                        serverUrl = serverUrl,
-                        qaDisplayUrl = qaDisplayUrl,
-                        lottieComposition = lottieComposition,
-                        clearAnnouncementOnFinish = clearAnnouncementOnFinish,
-                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                        showBg = showsOutputBackground(screenAssignment),
-                        showBackgroundOverride = true,
-                    )
-                    }
-                }
-            }
-
-            if (showPresenterWindow && hasScreenKeyOutput(screenAssignment)) {
+            if (screenAssignment.hasKeyOutput && !isDeckLinkKeyOutput(screenAssignment)) {
                 val keyScreenIndex = keyOutputScreenIndex(
                     findScreenIndexByBounds(
                         screens,
@@ -286,9 +409,10 @@ internal fun PresenterWindows(
                         )
                     }
 
+                    val keyOutputTitle = stringResource(Res.string.key_output_title, i + 1)
                     Window(
-                        visible = true,
-                        title = "Key Output ${i + 1}",
+                        visible = showPresenterWindow,
+                        title = keyOutputTitle,
                         icon = painterResource(Res.drawable.ic_app_icon),
                         onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
                         state = keyWindowState,
@@ -302,7 +426,17 @@ internal fun PresenterWindows(
                                 appSettings = appSettings,
                                 outputRole = Constants.OUTPUT_ROLE_KEY
                             ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .onPreviewKeyEvent { keyEvent ->
+                                            if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
+                                                mediaViewModel.pause()
+                                                presenterManager.requestClearDisplay()
+                                                true
+                                            } else false
+                                        }
+                                ) {
                                     var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
                                     val screenCrossfadeActive = isScreenCrossfadeActive(
                                         appSettings.bibleSettings, appSettings.songSettings,
@@ -310,195 +444,63 @@ internal fun PresenterWindows(
                                     )
                                     if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
                                     Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    PresenterModeContent(
-                        mode = mode,
-                        screenAssignment = screenAssignment,
-                        presenterManager = presenterManager,
-                        appSettings = appSettings,
-                        mediaViewModel = mediaViewModel,
-                        sttManager = sttManager,
-                        serverUrl = serverUrl,
-                        qaDisplayUrl = qaDisplayUrl,
-                        lottieComposition = lottieComposition,
-                        clearAnnouncementOnFinish = clearAnnouncementOnFinish,
-                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                        showBg = showsOutputBackground(screenAssignment),
-                        showBackgroundOverride = true,
-                    )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            continue
-        }
-
-        if (hasNoPrimaryTarget(screenAssignment)) continue
-
-        val targetScreenIndex = primaryOutputScreenIndex(
-            matchedByBounds = findScreenIndexByBounds(
-                screens,
-                screenAssignment.targetBoundsX,
-                screenAssignment.targetBoundsY,
-                screenAssignment.targetBoundsW,
-                screenAssignment.targetBoundsH
-            ),
-            savedDisplay = screenAssignment.targetDisplay,
-            screenCount = screens.size,
-            positionalFallback = availableScreens.getOrNull(i),
-        ) ?: continue
-
-        if (!isScreenIndexValid(targetScreenIndex, screens.size)) continue
-
-        val showBg = showsOutputBackground(screenAssignment)
-
-        val primaryRole = screenAssignment.primaryOutputRole
-
-        val windowState = remember(i) {
-            val b = screens[targetScreenIndex].defaultConfiguration.bounds
-            WindowState(
-                placement = WindowPlacement.Floating,
-                position = WindowPosition(b.x.dp, b.y.dp),
-                width = b.width.dp,
-                height = b.height.dp
-            )
-        }
-
-        LaunchedEffect(targetScreenIndex) {
-            val b = screens[targetScreenIndex].defaultConfiguration.bounds
-            windowState.position = WindowPosition(b.x.dp, b.y.dp)
-            windowState.size = DpSize(b.width.dp, b.height.dp)
-        }
-
-        val presenterTitle = stringResource(Res.string.presenter_view_title, i + 1)
-        Window(
-            visible = showPresenterWindow,
-            title = presenterTitle,
-            icon = painterResource(Res.drawable.ic_app_icon),
-            onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-            state = windowState,
-            undecorated = true,
-            resizable = false,
-            alwaysOnTop = true,
-        ) {
-            presenterOutputContent(screenAssignment, effectiveMode, i + 1)
-        }
-
-        if (screenAssignment.hasKeyOutput && !isDeckLinkKeyOutput(screenAssignment)) {
-            val keyScreenIndex = keyOutputScreenIndex(
-                findScreenIndexByBounds(
-                    screens,
-                    screenAssignment.keyTargetBoundsX,
-                    screenAssignment.keyTargetBoundsY,
-                    screenAssignment.keyTargetBoundsW,
-                    screenAssignment.keyTargetBoundsH
-                ),
-                screenAssignment.keyTargetDisplay,
-            )
-            if (isScreenIndexValid(keyScreenIndex, screens.size)) {
-                val keyWindowState = remember(i, keyScreenIndex) {
-                    val b = screens[keyScreenIndex].defaultConfiguration.bounds
-                    WindowState(
-                        placement = WindowPlacement.Floating,
-                        position = WindowPosition(b.x.dp, b.y.dp),
-                        width = b.width.dp,
-                        height = b.height.dp
-                    )
-                }
-
-                val keyOutputTitle = stringResource(Res.string.key_output_title, i + 1)
-                Window(
-                    visible = showPresenterWindow,
-                    title = keyOutputTitle,
-                    icon = painterResource(Res.drawable.ic_app_icon),
-                    onCloseRequest = { presenterManager.setShowPresenterWindow(false) },
-                    state = keyWindowState,
-                    undecorated = true,
-                    resizable = false,
-                    alwaysOnTop = true,
-                ) {
-                    CompositionLocalProvider(LocalMediaViewModel provides mediaViewModel) {
-                        PresenterScreen(
-                            modifier = Modifier.fillMaxSize(),
+                        PresenterModeContent(
+                            mode = mode,
+                            screenAssignment = screenAssignment,
+                            presenterManager = presenterManager,
                             appSettings = appSettings,
-                            outputRole = Constants.OUTPUT_ROLE_KEY
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .onPreviewKeyEvent { keyEvent ->
-                                        if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
-                                            mediaViewModel.pause()
-                                            presenterManager.requestClearDisplay()
-                                            true
-                                        } else false
+                            mediaViewModel = mediaViewModel,
+                            sttManager = sttManager,
+                            serverUrl = serverUrl,
+                            qaDisplayUrl = qaDisplayUrl,
+                            lottieComposition = lottieComposition,
+                            clearAnnouncementOnFinish = clearAnnouncementOnFinish,
+                            outputRole = Constants.OUTPUT_ROLE_KEY,
+                            showBg = showBg,
+                            showBackgroundOverride = true,
+                        )
                                     }
-                            ) {
-                                var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                                val screenCrossfadeActive = isScreenCrossfadeActive(
-                                    appSettings.bibleSettings, appSettings.songSettings,
-                                    effectiveMode, prevEffectiveMode,
-                                )
-                                if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                                Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    PresenterModeContent(
-                        mode = mode,
-                        screenAssignment = screenAssignment,
-                        presenterManager = presenterManager,
-                        appSettings = appSettings,
-                        mediaViewModel = mediaViewModel,
-                        sttManager = sttManager,
-                        serverUrl = serverUrl,
-                        qaDisplayUrl = qaDisplayUrl,
-                        lottieComposition = lottieComposition,
-                        clearAnnouncementOnFinish = clearAnnouncementOnFinish,
-                        outputRole = Constants.OUTPUT_ROLE_KEY,
-                        showBg = showBg,
-                        showBackgroundOverride = true,
-                    )
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if (!isDeckLinkPrimaryOutput(screenAssignment) && hasDeckLinkKeyOutput(screenAssignment)) {
-            if (showPresenterWindow) {
-                DeckLinkComposeOutput(
-                    deviceIndex = screenAssignment.keyTargetDisplay,
-                    outputRole = Constants.OUTPUT_ROLE_KEY,
-                    appSettings = appSettings,
-                    mediaViewModel = mediaViewModel,
-                    isLowerThird = screenAssignment.isLowerThird,
-                ) {
-                    var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
-                    val screenCrossfadeActive = isScreenCrossfadeActive(
-                        appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
-                    )
-                    if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
-                    Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
-                    PresenterModeContent(
-                        mode = mode,
-                        screenAssignment = screenAssignment,
-                        presenterManager = presenterManager,
+            if (!isDeckLinkPrimaryOutput(screenAssignment) && hasDeckLinkKeyOutput(screenAssignment)) {
+                if (showPresenterWindow) {
+                    DeckLinkComposeOutput(
+                        deviceIndex = screenAssignment.keyTargetDisplay,
+                        outputRole = Constants.OUTPUT_ROLE_KEY,
                         appSettings = appSettings,
                         mediaViewModel = mediaViewModel,
-                        sttManager = sttManager,
-                        serverUrl = serverUrl,
-                        qaDisplayUrl = qaDisplayUrl,
-                        lottieComposition = lottieComposition,
-                        clearAnnouncementOnFinish = clearAnnouncementOnFinish,
-                        outputRole = primaryRole,
-                        showBg = showBg,
-                        showBackgroundOverride = true,
-                    )
+                        isLowerThird = screenAssignment.isLowerThird,
+                    ) {
+                        var prevEffectiveMode by remember { mutableStateOf(effectiveMode) }
+                        val screenCrossfadeActive = isScreenCrossfadeActive(
+                            appSettings.bibleSettings, appSettings.songSettings, effectiveMode, prevEffectiveMode,
+                        )
+                        if (effectiveMode != prevEffectiveMode) prevEffectiveMode = effectiveMode
+                        Crossfade(targetState = effectiveMode, animationSpec = if (screenCrossfadeActive) tween(modeCrossfadeDuration) else snap()) { mode ->
+                        PresenterModeContent(
+                            mode = mode,
+                            screenAssignment = screenAssignment,
+                            presenterManager = presenterManager,
+                            appSettings = appSettings,
+                            mediaViewModel = mediaViewModel,
+                            sttManager = sttManager,
+                            serverUrl = serverUrl,
+                            qaDisplayUrl = qaDisplayUrl,
+                            lottieComposition = lottieComposition,
+                            clearAnnouncementOnFinish = clearAnnouncementOnFinish,
+                            outputRole = primaryRole,
+                            showBg = showBg,
+                            showBackgroundOverride = true,
+                        )
+                        }
                     }
                 }
+            }
             }
         }
     }

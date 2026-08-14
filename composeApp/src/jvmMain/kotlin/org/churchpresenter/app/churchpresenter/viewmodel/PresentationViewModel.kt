@@ -217,13 +217,19 @@ class PresentationViewModel(private val appSettings: AppSettings? = null) {
             try {
                 for (index in 0 until slideCount) {
                     val slideFile = File(cacheDir, "slide_%04d.jpg".format(index))
-                    if (!slideFile.exists()) {
-                        val bytes = fetchBytes(index) ?: continue
-                        val tmp = File(cacheDir, "${slideFile.name}.tmp")
-                        tmp.writeBytes(bytes)
-                        if (!tmp.renameTo(slideFile)) { tmp.delete(); continue }
+                    var cached = slideFile.exists()
+                    if (!cached) {
+                        val bytes = fetchBytes(index)
+                        if (bytes != null) {
+                            val tmp = File(cacheDir, "${slideFile.name}.tmp")
+                            tmp.writeBytes(bytes)
+                            cached = tmp.renameTo(slideFile)
+                            if (!cached) tmp.delete()
+                        }
                     }
-                    withContext(Dispatchers.Main) { _slideFiles.add(slideFile); _slideNotes.add("") }
+                    if (cached) {
+                        withContext(Dispatchers.Main) { _slideFiles.add(slideFile); _slideNotes.add("") }
+                    }
                 }
                 if (_slideFiles.isNotEmpty()) {
                     withContext(Dispatchers.Main) { _loadGeneration.value++ }

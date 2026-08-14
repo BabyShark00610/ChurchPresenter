@@ -43,20 +43,27 @@ internal fun applyRevealBudget(segments: List<STTSegment>, revealed: Int): List<
     val revealedSegments = ArrayList<STTSegment>(segments.size)
     var used = 0
     var first = true
-    for (segment in segments) {
+    val visible = segments.filter { normalizeSegmentText(it.text).isNotEmpty() }
+    var index = 0
+    var exhausted = false
+    while (index < visible.size && !exhausted) {
+        val segment = visible[index]
         val text = normalizeSegmentText(segment.text)
-        if (text.isEmpty()) continue
         val separator = if (first) 0 else 1
         val budget = revealed - used - separator
-        if (budget <= 0) break
-        if (budget >= text.length) {
-            revealedSegments.add(segment)
-            used += separator + text.length
-            first = false
-        } else {
-            revealedSegments.add(segment.copy(text = text.take(budget)))
-            break
+        when {
+            budget <= 0 -> exhausted = true
+            budget < text.length -> {
+                revealedSegments.add(segment.copy(text = text.take(budget)))
+                exhausted = true
+            }
+            else -> {
+                revealedSegments.add(segment)
+                used += separator + text.length
+                first = false
+            }
         }
+        index++
     }
     return revealedSegments
 }
