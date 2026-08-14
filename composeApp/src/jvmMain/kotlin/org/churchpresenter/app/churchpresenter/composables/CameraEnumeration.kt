@@ -135,15 +135,12 @@ internal fun parseDshowFormats(output: String): List<CameraFormat> {
     val sizePattern = Regex("""s=(\d+)x(\d+)""")
     val fpsPattern = Regex("""fps=(\d+)""")
     for (line in output.lines()) {
-        if (!line.contains("s=")) continue
-        val sizeMatch = sizePattern.find(line) ?: continue
-        val fpsMatches = fpsPattern.findAll(line).toList()
-        if (fpsMatches.isEmpty()) continue
-        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
-        for (fm in fpsMatches) {
-            val fps = fm.groupValues[1].toIntOrNull() ?: continue
-            formats.add(Triple(w, h, fps))
+        val sizeMatch = if (line.contains("s=")) sizePattern.find(line) else null
+        val w = sizeMatch?.groupValues?.get(1)?.toIntOrNull()
+        val h = sizeMatch?.groupValues?.get(2)?.toIntOrNull()
+        if (w == null || h == null) continue
+        fpsPattern.findAll(line).forEach { fm ->
+            fm.groupValues[1].toIntOrNull()?.let { formats.add(Triple(w, h, it)) }
         }
     }
     return formats.toSortedFormats()
@@ -164,9 +161,10 @@ internal fun parseV4l2Formats(output: String): List<CameraFormat> {
     val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
     val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
     for (line in output.lines()) {
-        val sizeMatch = sizePattern.find(line) ?: continue
-        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
+        val sizeMatch = sizePattern.find(line)
+        val w = sizeMatch?.groupValues?.get(1)?.toIntOrNull()
+        val h = sizeMatch?.groupValues?.get(2)?.toIntOrNull()
+        if (w == null || h == null) continue
         val fps = fpsPattern.find(line)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
         formats.add(Triple(w, h, fps))
     }
@@ -207,9 +205,10 @@ internal fun parseAvfoundationFormats(output: String): List<CameraFormat> {
     val sizePattern = Regex("""(\d{3,5})x(\d{3,5})""")
     val fpsPattern = Regex("""(\d+(?:\.\d+)?)\s*fps""")
     for (line in output.lines()) {
-        val sizeMatch = sizePattern.find(line) ?: continue
-        val w = sizeMatch.groupValues[1].toIntOrNull() ?: continue
-        val h = sizeMatch.groupValues[2].toIntOrNull() ?: continue
+        val sizeMatch = sizePattern.find(line)
+        val w = sizeMatch?.groupValues?.get(1)?.toIntOrNull()
+        val h = sizeMatch?.groupValues?.get(2)?.toIntOrNull()
+        if (w == null || h == null) continue
         val fps = fpsPattern.find(line)?.groupValues?.get(1)?.toDoubleOrNull()?.toInt() ?: 30
         formats.add(Triple(w, h, fps))
     }

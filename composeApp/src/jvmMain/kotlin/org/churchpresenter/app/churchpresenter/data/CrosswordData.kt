@@ -84,36 +84,38 @@ object CrosswordDecoder {
                 line.equals("ACROSS:", ignoreCase = true) -> { direction = CrosswordDirection.ACROSS; inLayout = false }
                 line.equals("DOWN:", ignoreCase = true) -> { direction = CrosswordDirection.DOWN; inLayout = false }
                 line.equals("LAYOUT:", ignoreCase = true) -> inLayout = true
-                inLayout -> {
-                    val parts = line.split(" ")
-                    if (parts.size == 4) {
-                        val num = parts[0].toIntOrNull() ?: continue
-                        val dir = when (parts[1].uppercase()) {
-                            "ACROSS" -> CrosswordDirection.ACROSS
-                            "DOWN"   -> CrosswordDirection.DOWN
-                            else     -> continue
-                        }
-                        val row = parts[2].toIntOrNull() ?: continue
-                        val col = parts[3].toIntOrNull() ?: continue
-                        layout[num to dir] = row to col
-                    }
-                }
-                else -> {
-                    val dir = direction ?: continue
-                    val dotIdx = line.indexOf('.')
-                    val pipeIdx = line.lastIndexOf('|')
-                    if (dotIdx < 0 || pipeIdx < 0 || pipeIdx <= dotIdx) continue
-                    val number = line.substring(0, dotIdx).trim().toIntOrNull() ?: continue
-                    val clueText = line.substring(dotIdx + 1, pipeIdx).trim()
-                    val answer = line.substring(pipeIdx + 1).trim().uppercase()
-                    if (answer.isNotBlank()) {
-                        clues.add(CrosswordClue(number, dir, clueText, answer))
-                    }
-                }
+                inLayout -> parseLayoutLine(line)?.let { (key, position) -> layout[key] = position }
+                else -> direction?.let { dir -> parseClueLine(line, dir)?.let { clues.add(it) } }
             }
         }
         return if (clues.isEmpty()) null
         else Triple(title, clues, if (layout.isEmpty()) null else layout)
+    }
+
+    /** `"1 ACROSS 3 5"` → the clue key and its (row, col) origin, or null if the line is malformed. */
+    private fun parseLayoutLine(line: String): Pair<Pair<Int, CrosswordDirection>, Pair<Int, Int>>? {
+        val parts = line.split(" ")
+        if (parts.size != 4) return null
+        val num = parts[0].toIntOrNull() ?: return null
+        val dir = when (parts[1].uppercase()) {
+            "ACROSS" -> CrosswordDirection.ACROSS
+            "DOWN" -> CrosswordDirection.DOWN
+            else -> return null
+        }
+        val row = parts[2].toIntOrNull() ?: return null
+        val col = parts[3].toIntOrNull() ?: return null
+        return (num to dir) to (row to col)
+    }
+
+    /** `"1. Clue text | ANSWER"` → the clue, or null if the line is malformed or has no answer. */
+    private fun parseClueLine(line: String, dir: CrosswordDirection): CrosswordClue? {
+        val dotIdx = line.indexOf('.')
+        val pipeIdx = line.lastIndexOf('|')
+        if (dotIdx < 0 || pipeIdx < 0 || pipeIdx <= dotIdx) return null
+        val number = line.substring(0, dotIdx).trim().toIntOrNull() ?: return null
+        val clueText = line.substring(dotIdx + 1, pipeIdx).trim()
+        val answer = line.substring(pipeIdx + 1).trim().uppercase()
+        return if (answer.isBlank()) null else CrosswordClue(number, dir, clueText, answer)
     }
 }
 

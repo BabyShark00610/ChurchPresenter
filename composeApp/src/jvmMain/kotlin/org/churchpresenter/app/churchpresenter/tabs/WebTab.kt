@@ -650,13 +650,14 @@ fun WebTab(
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()
-                                        if (sendMouse == null) continue
-                                        if (imageSize.width <= 0 || imageSize.height <= 0) continue
                                         val comp = liveBrowser.getUIComponent()
-                                        if (!comp.isShowing || comp.width <= 0 || comp.height <= 0) continue
+                                        val pos = event.changes.firstOrNull()?.position
+                                        val compReady = comp.isShowing && comp.width > 0 && comp.height > 0
+                                        val sizeReady = imageSize.width > 0 && imageSize.height > 0
+                                        val ready = compReady && sizeReady
+                                        if (sendMouse == null || pos == null || !ready) continue
                                         val scaleX = comp.width.toFloat() / imageSize.width
                                         val scaleY = comp.height.toFloat() / imageSize.height
-                                        val pos = event.changes.firstOrNull()?.position ?: continue
                                         val bx = (pos.x * scaleX).toInt().coerceIn(0, comp.width - 1)
                                         val by = (pos.y * scaleY).toInt().coerceIn(0, comp.height - 1)
                                         when (event.type) {
@@ -700,19 +701,21 @@ fun WebTab(
                                             }
                                             PointerEventType.Move -> {
                                                 val now = System.currentTimeMillis()
-                                                if (now - lastMoveTime < 50) continue // Throttle to ~20fps
-                                                lastMoveTime = now
-                                                SwingUtilities.invokeLater {
-                                                    try {
-                                                        if (!comp.isShowing) return@invokeLater
-                                                        sendMouse.invoke(liveBrowser, MouseEvent(
-                                                            comp, MouseEvent.MOUSE_MOVED,
-                                                            now, 0, bx, by, 0, false
-                                                        ))
-                                                    } catch (_: Exception) {}
+                                                // Throttle to ~20fps
+                                                if (now - lastMoveTime >= 50) {
+                                                    lastMoveTime = now
+                                                    SwingUtilities.invokeLater {
+                                                        try {
+                                                            if (!comp.isShowing) return@invokeLater
+                                                            sendMouse.invoke(liveBrowser, MouseEvent(
+                                                                comp, MouseEvent.MOUSE_MOVED,
+                                                                now, 0, bx, by, 0, false
+                                                            ))
+                                                        } catch (_: Exception) {}
+                                                    }
                                                 }
                                             }
-                                            else -> continue
+                                            else -> Unit
                                         }
                                     }
                                 }
@@ -724,43 +727,45 @@ fun WebTab(
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()
-                                        if (event.type != PointerEventType.Scroll) continue
-                                        if (sendWheel == null) continue
                                         val comp = liveBrowser.getUIComponent()
-                                        if (!comp.isShowing || comp.width <= 0 || comp.height <= 0) continue
-                                        if (imageSize.width <= 0 || imageSize.height <= 0) continue
+                                        val change = event.changes.firstOrNull()
+                                        val compReady = comp.isShowing && comp.width > 0 && comp.height > 0
+                                        val sizeReady = imageSize.width > 0 && imageSize.height > 0
+                                        val ready = compReady && sizeReady &&
+                                            event.type == PointerEventType.Scroll
+                                        if (sendWheel == null || change == null || !ready) continue
                                         val scaleX = comp.width.toFloat() / imageSize.width
                                         val scaleY = comp.height.toFloat() / imageSize.height
-                                        val change = event.changes.firstOrNull() ?: continue
                                         val pos = change.position
                                         val scroll = change.scrollDelta
                                         val bx = (pos.x * scaleX).toInt().coerceIn(0, comp.width - 1)
                                         val by = (pos.y * scaleY).toInt().coerceIn(0, comp.height - 1)
                                         val vRotation = -(scroll.y * 15).toInt().coerceIn(-100, 100)
                                         val hRotation = -(scroll.x * 15).toInt().coerceIn(-100, 100)
-                                        if (vRotation == 0 && hRotation == 0) continue
-                                        SwingUtilities.invokeLater {
-                                            try {
-                                                if (!comp.isShowing) return@invokeLater
-                                                if (vRotation != 0) {
-                                                    sendWheel.invoke(liveBrowser, MouseWheelEvent(
-                                                        comp, MouseWheelEvent.MOUSE_WHEEL,
-                                                        System.currentTimeMillis(), 0, bx, by,
-                                                        0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL,
-                                                        1, vRotation
-                                                    ))
-                                                }
-                                                if (hRotation != 0) {
-                                                    sendWheel.invoke(liveBrowser, MouseWheelEvent(
-                                                        comp, MouseWheelEvent.MOUSE_WHEEL,
-                                                        System.currentTimeMillis(),
-                                                        InputEvent.SHIFT_DOWN_MASK,
-                                                        bx, by,
-                                                        0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL,
-                                                        1, hRotation
-                                                    ))
-                                                }
-                                            } catch (_: Exception) {}
+                                        if (vRotation != 0 || hRotation != 0) {
+                                            SwingUtilities.invokeLater {
+                                                try {
+                                                    if (!comp.isShowing) return@invokeLater
+                                                    if (vRotation != 0) {
+                                                        sendWheel.invoke(liveBrowser, MouseWheelEvent(
+                                                            comp, MouseWheelEvent.MOUSE_WHEEL,
+                                                            System.currentTimeMillis(), 0, bx, by,
+                                                            0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL,
+                                                            1, vRotation
+                                                        ))
+                                                    }
+                                                    if (hRotation != 0) {
+                                                        sendWheel.invoke(liveBrowser, MouseWheelEvent(
+                                                            comp, MouseWheelEvent.MOUSE_WHEEL,
+                                                            System.currentTimeMillis(),
+                                                            InputEvent.SHIFT_DOWN_MASK,
+                                                            bx, by,
+                                                            0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL,
+                                                            1, hRotation
+                                                        ))
+                                                    }
+                                                } catch (_: Exception) {}
+                                            }
                                         }
                                     }
                                 }

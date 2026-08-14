@@ -802,7 +802,7 @@ internal fun linuxWindowBoundsFrom(title: String, run: CommandRunner): Rectangle
 
     for (wid in windowIds) {
         val nameOutput = run(listOf("xprop", "-id", wid, "_NET_WM_NAME"), 0L).output
-        val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1) ?: continue
+        val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1)
         if (name != title) continue
 
         val bounds = parseXwininfoBounds(run(listOf("xwininfo", "-id", wid), 0L).output)

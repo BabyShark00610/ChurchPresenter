@@ -184,19 +184,20 @@ internal object BibleInstallSupport {
                     val channel = response.bodyAsChannel()
                     val buffer = ByteArray(COPY_BUFFER_BYTES)
                     FileOutputStream(destination, append).use { out ->
-                        while (true) {
+                        var endOfBody = false
+                        while (!endOfBody) {
                             val read = channel.readAvailable(buffer, 0, buffer.size)
-                            if (read <= 0) {
-                                if (read == -1) break else continue
-                            }
-                            out.write(buffer, 0, read)
-                            written += read
-                            if (total > 0) {
-                                val fraction = (written.toFloat() / total).coerceIn(0f, 1f) * DOWNLOAD_END
-                                // Only ever forward: a restart from zero must not rewind the bar.
-                                if (fraction > highest) {
-                                    highest = fraction
-                                    onProgress(fraction)
+                            if (read == -1) endOfBody = true
+                            if (read > 0) {
+                                out.write(buffer, 0, read)
+                                written += read
+                                if (total > 0) {
+                                    val fraction = (written.toFloat() / total).coerceIn(0f, 1f) * DOWNLOAD_END
+                                    // Only ever forward: a restart from zero must not rewind the bar.
+                                    if (fraction > highest) {
+                                        highest = fraction
+                                        onProgress(fraction)
+                                    }
                                 }
                             }
                         }

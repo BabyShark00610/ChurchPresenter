@@ -39,6 +39,13 @@ import kotlin.test.assertTrue
  * off a real socket against a real server — `start()` builds its own Netty server rather than
  * exposing a separable Ktor module.
  */
+private fun liveStatePayloadOf(frame: Frame, json: Json): JsonObject? {
+    val text = (frame as? Frame.Text)?.readText() ?: return null
+    val obj = runCatching { json.parseToJsonElement(text) as JsonObject }.getOrNull() ?: return null
+    if (obj["type"]?.jsonPrimitive?.content != Constants.WS_EVENT_LIVE_STATE_CHANGED) return null
+    return json.parseToJsonElement(obj["payload"]!!.jsonPrimitive.content) as JsonObject
+}
+
 class CompanionServerLiveStateTest {
 
     private lateinit var client: HttpClient
@@ -126,16 +133,18 @@ class CompanionServerLiveStateTest {
         var payload: JsonObject? = null
         withTimeoutOrNull(quietMs + 10_000) {
             client.webSocket(urlString = "ws://127.0.0.1:$port${Constants.ENDPOINT_WS}") {
-                while (true) {
-                    val frame = withTimeoutOrNull(quietMs) { incoming.receive() } ?: break
-                    if (frame is Frame.Text) {
-                        val obj = runCatching { json.parseToJsonElement(frame.readText()) as JsonObject }
-                            .getOrNull() ?: continue
-                        if (obj["type"]?.jsonPrimitive?.content == Constants.WS_EVENT_LIVE_STATE_CHANGED) {
+                var done = false
+                while (!done) {
+                    val frame = withTimeoutOrNull(quietMs) { incoming.receive() }
+                    val obj = (frame as? Frame.Text)
+                        ?.let { runCatching { json.parseToJsonElement(it.readText()) as JsonObject }.getOrNull() }
+                    when {
+                        frame == null -> done = true
+                        obj?.get("type")?.jsonPrimitive?.content == Constants.WS_EVENT_LIVE_STATE_CHANGED -> {
                             payload = json.parseToJsonElement(
                                 obj["payload"]!!.jsonPrimitive.content
                             ) as JsonObject
-                            break
+                            done = true
                         }
                     }
                 }
@@ -295,29 +304,19 @@ class CompanionServerLiveStateTest {
                 // Read the snapshot out of the way, ending on the marker — which is also the
                 // positive signal that this session is registered for broadcasts, so pushing the
                 // change now cannot race the registration.
-                while (true) {
-                    val frame = incoming.receive()
-                    if (frame !is Frame.Text) continue
-                    val obj = runCatching { json.parseToJsonElement(frame.readText()) as JsonObject }
-                        .getOrNull() ?: continue
-                    if (obj["type"]?.jsonPrimitive?.content != Constants.WS_EVENT_LIVE_STATE_CHANGED) continue
-                    val payload = json.parseToJsonElement(
-                        obj["payload"]!!.jsonPrimitive.content
-                    ) as JsonObject
-                    if (synced(payload)) break
+                var done = false
+                while (!done) {
+                    val payload = liveStatePayloadOf(incoming.receive(), json)
+                    if (payload != null && synced(payload)) done = true
                 }
                 change()
-                while (true) {
-                    val frame = incoming.receive()
-                    if (frame !is Frame.Text) continue
-                    val obj = runCatching { json.parseToJsonElement(frame.readText()) as JsonObject }
-                        .getOrNull() ?: continue
-                    if (obj["type"]?.jsonPrimitive?.content != Constants.WS_EVENT_LIVE_STATE_CHANGED) continue
-                    val payload = json.parseToJsonElement(
-                        obj["payload"]!!.jsonPrimitive.content
-                    ) as JsonObject
-                    received += payload
-                    if (until(payload)) break
+                var collected = false
+                while (!collected) {
+                    val payload = liveStatePayloadOf(incoming.receive(), json)
+                    if (payload != null) {
+                        received += payload
+                        if (until(payload)) collected = true
+                    }
                 }
             }
         }

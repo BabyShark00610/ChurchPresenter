@@ -697,16 +697,18 @@ internal fun PlanningCenterImportDialogContent(
                                 val pco = entry.pco
                                 when (pco.itemType) {
                                     "song" -> {
-                                        if (!entry.selected) continue
-                                        val songId = entry.matchedSongId ?: continue
-                                        val parts = songId.split("::", limit = 2)
-                                        val songbook = parts.getOrNull(0) ?: ""
-                                        val songNumber = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                                        onAddSong(songNumber, pco.songTitle ?: pco.title, songbook, songId)
+                                        val songId = entry.matchedSongId.takeIf { entry.selected }
+                                        if (songId != null) {
+                                            val parts = songId.split("::", limit = 2)
+                                            val songbook = parts.getOrNull(0) ?: ""
+                                            val songNumber = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                                            onAddSong(songNumber, pco.songTitle ?: pco.title, songbook, songId)
+                                        }
                                     }
                                     "header" -> {
-                                        if (!entry.selected) continue
-                                        onAddLabel(pco.title, defaultHeaderTextColor, defaultHeaderBackgroundColor)
+                                        if (entry.selected) {
+                                            onAddLabel(pco.title, defaultHeaderTextColor, defaultHeaderBackgroundColor)
+                                        }
                                     }
                                     "item" -> {
                                         // Scripture and attachment checkboxes are independent of

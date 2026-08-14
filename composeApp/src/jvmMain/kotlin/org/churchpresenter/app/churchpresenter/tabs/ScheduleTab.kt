@@ -286,8 +286,9 @@ fun ScheduleTab(
                     awaitPointerEventScope {
                         while (true) {
                             val pressEvent = awaitPointerEvent(PointerEventPass.Initial)
-                            if (pressEvent.type != PointerEventType.Press) continue
-                            if (requireShift && !pressEvent.keyboardModifiers.isShiftPressed) continue
+                            if (pressEvent.type != PointerEventType.Press ||
+                                (requireShift && !pressEvent.keyboardModifiers.isShiftPressed)
+                            ) continue
                             if (requireShift) pressEvent.changes.forEach { it.consume() }
 
                             var lastPos = pressEvent.changes.first().position
@@ -337,26 +338,27 @@ fun ScheduleTab(
                                     }
                                     dragging = false
                                 } else if (event.type == PointerEventType.Move) {
-                                    val pos = event.changes.firstOrNull()?.position ?: continue
-                                    val deltaY = (pos - lastPos).y
-                                    lastPos = pos
-                                    if (!armed) {
-                                        travelled += abs(deltaY)
-                                        continue
-                                    }
-                                    dragCursorY += deltaY
+                                    val pos = event.changes.firstOrNull()?.position
+                                    val deltaY = if (pos != null) (pos - lastPos).y else 0f
+                                    if (pos != null) lastPos = pos
 
-                                    val hit = dragDropTarget(
-                                        cursorY = dragCursorY,
-                                        listHeightPx = listHeightPx,
-                                        deleteZonePx = deleteZonePx,
-                                        visibleItems = listState.layoutInfo.visibleItemsInfo.map {
-                                            DragItemGeometry(it.index, it.offset, it.size)
-                                        },
-                                    )
-                                    isOverDeleteZone = hit.overDeleteZone
-                                    if (!hit.overDeleteZone) {
-                                        hit.targetIndex?.let { dropTargetIndex = it }
+                                    if (pos != null && !armed) {
+                                        travelled += abs(deltaY)
+                                    } else if (pos != null) {
+                                        dragCursorY += deltaY
+
+                                        val hit = dragDropTarget(
+                                            cursorY = dragCursorY,
+                                            listHeightPx = listHeightPx,
+                                            deleteZonePx = deleteZonePx,
+                                            visibleItems = listState.layoutInfo.visibleItemsInfo.map {
+                                                DragItemGeometry(it.index, it.offset, it.size)
+                                            },
+                                        )
+                                        isOverDeleteZone = hit.overDeleteZone
+                                        if (!hit.overDeleteZone) {
+                                            hit.targetIndex?.let { dropTargetIndex = it }
+                                        }
                                     }
                                 }
                             }

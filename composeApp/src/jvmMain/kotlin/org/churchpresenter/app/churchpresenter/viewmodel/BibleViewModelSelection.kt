@@ -27,8 +27,8 @@ internal fun BibleViewModel.getSelectedVerses(): List<SelectedVerse> {
         val parallelBookIds = MutableList(parallelTexts.size) { bookId }
 
         for (idx in sortedIndices) {
-            val verse = _verses.value.getOrNull(idx) ?: continue
-            val vNum = verseNumberOf(verse) ?: continue
+            val vNum = _verses.value.getOrNull(idx)?.let(::verseNumberOf) ?: continue
+            val verse = _verses.value[idx]
             verseNumbers.add(vNum)
 
             val primaryText = verseTextOf(verse)

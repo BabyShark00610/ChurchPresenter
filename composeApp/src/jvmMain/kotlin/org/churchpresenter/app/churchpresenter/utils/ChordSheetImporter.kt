@@ -93,36 +93,35 @@ object ChordSheetImporter {
 
         while (index < lines.size) {
             val line = lines[index]
+            val marker = if (URL.matches(line)) null else sectionMarkerOf(line) { verses + 1 }
 
-            if (URL.matches(line)) {
-                index++
-                continue
-            }
+            when {
+                URL.matches(line) -> index++
 
-            val marker = sectionMarkerOf(line) { verses + 1 }
-            if (marker != null) {
-                if (marker.startsWith("[Verse")) verses++
-                if (out.isNotEmpty() && out.last().isNotBlank()) out.add("")
-                out.add(marker)
-                index++
-                continue
-            }
-
-            if (isChordLine(line)) {
-                val next = lines.getOrNull(index + 1)
-                val isLyricLine = next != null && next.isNotBlank() && !isChordLine(next)
-            if (isLyricLine && sectionMarkerOf(next) { 0 } == null) {
-                    out.add(merge(line, next))
-                    index += 2
-                } else {
-                    out.add(anchors(line).joinToString(" ") { "[${it.second}]" })
+                marker != null -> {
+                    if (marker.startsWith("[Verse")) verses++
+                    if (out.isNotEmpty() && out.last().isNotBlank()) out.add("")
+                    out.add(marker)
                     index++
                 }
-                continue
-            }
 
-            out.add(line.trimEnd())
-            index++
+                isChordLine(line) -> {
+                    val next = lines.getOrNull(index + 1)
+                    val isLyricLine = next != null && next.isNotBlank() && !isChordLine(next)
+                    if (isLyricLine && sectionMarkerOf(next) { 0 } == null) {
+                        out.add(merge(line, next))
+                        index += 2
+                    } else {
+                        out.add(anchors(line).joinToString(" ") { "[${it.second}]" })
+                        index++
+                    }
+                }
+
+                else -> {
+                    out.add(line.trimEnd())
+                    index++
+                }
+            }
         }
 
         // Collapse the runs of blank lines the section breaks can leave behind.

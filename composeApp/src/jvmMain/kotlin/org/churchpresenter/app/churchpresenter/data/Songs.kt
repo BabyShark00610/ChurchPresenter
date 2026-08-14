@@ -344,29 +344,18 @@ class Songs {
             }
 
             val lines = Files.readAllLines(path, StandardCharsets.UTF_8).toMutableList()
-            var songUpdated = false
-
-            for (i in lines.indices) {
-                val line = lines[i]
-
-                if (line.startsWith("##") || line.isBlank()) continue
-
+            val matchIndex = lines.indexOfFirst { line ->
+                if (line.startsWith("##") || line.isBlank()) return@indexOfFirst false
                 val parts = line.split("#\$#")
-                if (parts.size >= 6) {
-                    val number = parts[0]
-                    val title = parts[1]
+                parts.size >= 6 && parts[0] == originalSong.number && parts[1] == originalSong.title
+            }
+            val songUpdated = matchIndex >= 0
 
-                    if (number == originalSong.number && title == originalSong.title) {
-                        val lyricsText = formatLyricsForSps(updatedSong.lyrics)
-                        val categoryId = if (parts.size >= 3) parts[2] else ""
-
-                        val updatedLine = "${updatedSong.number}#\$#${updatedSong.title}#\$#$categoryId#\$#${updatedSong.tune}#\$#${updatedSong.author}#\$#${updatedSong.composer}#\$#$lyricsText"
-
-                        lines[i] = updatedLine
-                        songUpdated = true
-                        break
-                    }
-                }
+            if (songUpdated) {
+                val parts = lines[matchIndex].split("#\$#")
+                val lyricsText = formatLyricsForSps(updatedSong.lyrics)
+                val categoryId = if (parts.size >= 3) parts[2] else ""
+                lines[matchIndex] = "${updatedSong.number}#\$#${updatedSong.title}#\$#$categoryId#\$#${updatedSong.tune}#\$#${updatedSong.author}#\$#${updatedSong.composer}#\$#$lyricsText"
             }
 
             if (songUpdated) {

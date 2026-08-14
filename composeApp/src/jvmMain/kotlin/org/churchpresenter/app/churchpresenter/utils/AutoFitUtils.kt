@@ -94,24 +94,16 @@ fun calculateAutoFitForAllSections(
             // Check both primary and secondary lines so bilingual text also fits
             val lineSets = if (section.secondaryLines.isNotEmpty())
                 listOf(section.lines, section.secondaryLines) else listOf(section.lines)
-            for (lines in lineSets) {
-                if (lines.isEmpty()) continue
-                var sectionHeight = 0
-                for (line in lines) {
-                    val result = textMeasurer.measure(
-                        text = line,
+            for (lines in lineSets.filter { it.isNotEmpty() }) {
+                val measured = lines.map {
+                    textMeasurer.measure(
+                        text = it,
                         style = style,
                         constraints = unconstrainedConstraints,
                         density = referenceDensity
-                    )
-                    // Check width: line must fit without wrapping
-                    if (result.size.width > availableWidth) {
-                        fits = false
-                        break
-                    }
-                    sectionHeight += result.size.height
+                    ).size
                 }
-                if (!fits) break
+                var sectionHeight = measured.sumOf { it.height }
                 // Reserve space for end-of-song indicator on the last section
                 if (includeEndIndicator && sectionIdx == sections.lastIndex) {
                     val lineHeight = textMeasurer.measure(
@@ -123,8 +115,9 @@ fun calculateAutoFitForAllSections(
                     // Spacer (4px reference) + indicator line height
                     sectionHeight += 4 + lineHeight
                 }
-                // Check height: all lines of this section must fit
-                if (sectionHeight > effectiveHeight) {
+                // Every line must fit on one row without wrapping, and all of them together
+                // must fit the available height
+                if (measured.any { it.width > availableWidth } || sectionHeight > effectiveHeight) {
                     fits = false
                     break
                 }
