@@ -124,62 +124,63 @@ internal class PresentationStore(
      * JPEGs are reused directly (any resolution); otherwise the deck is rendered here — into the
      * same shared cache, so a later tab open at the default width hits it too.
      */
+    private fun slidesForServer(file: File): Pair<List<ByteArray>, List<String>>? =
+        slideDiskCache.lookup(file, renderWidthPx = null)
+            ?.let { cached -> cached.slideFiles.map { it.readBytes() } to cached.notes }
+            ?: renderSlidesForServer(file)
+
+    private fun renderSlidesForServer(file: File): Pair<List<ByteArray>, List<String>>? {
+        // The Presentation tab is rendering this very deck into the shared entry. Starting
+        // a second render here would take the entry away from it mid-deck, so leave it be:
+        // the client's 404-retry path comes back once the tab's render has committed.
+        if (slideDiskCache.isWriting(file)) return null
+        val deck = when (val result = PresentationLoader.load(file)) {
+            is LoadResult.Failure -> {
+                CrashReporter.reportWarning(
+                    "Presentation: No slides extracted from ${file.extension.lowercase()} file (server)",
+                    tags = mapOf(
+                        "subsystem" to "presentation",
+                        "file.type" to file.extension.lowercase(),
+                        "failure.reason" to result.error.name.lowercase()
+                    )
+                )
+                return null
+            }
+            is LoadResult.Success -> result.deck
+        }
+        val writer = slideDiskCache.beginWrite(file, deck.format, DeckRasterizer.DEFAULT_TARGET_WIDTH_PX)
+        var committed = false
+        return try {
+            val jpegSlides = CrashReporter.trace("server.render", "Server render presentation") {
+                DeckRasterizer(deck).use { rasterizer ->
+                    deck.slides.map { slide ->
+                        val slideFile = writer.putSlide(
+                            index = slide.index,
+                            image = rasterizer.renderFinalFrame(slide.index),
+                            note = slide.notes,
+                            fidelity = slide.fidelity,
+                            hasTimeline = slide.timeline != null
+                        )
+                        slideFile.readBytes()
+                    }
+                }
+            }
+            writer.commit()
+            committed = true
+            jpegSlides to deck.slides.map { it.notes }
+        } catch (superseded: SlideCacheSupersededException) {
+            // A tab render took the entry over after this one started; it finishes the job.
+            null
+        } finally {
+            if (!committed) writer.abort()
+        }
+    }
+
     internal fun renderPresentationForServer(presentationId: String, filePath: String) {
         val file = File(filePath)
         if (!file.exists()) return
         try {
-            val jpegSlides: List<ByteArray>
-            val notes: List<String>
-            val cached = slideDiskCache.lookup(file, renderWidthPx = null)
-            if (cached != null) {
-                jpegSlides = cached.slideFiles.map { it.readBytes() }
-                notes = cached.notes
-            } else {
-                // The Presentation tab is rendering this very deck into the shared entry. Starting
-                // a second render here would take the entry away from it mid-deck, so leave it be:
-                // the client's 404-retry path comes back once the tab's render has committed.
-                if (slideDiskCache.isWriting(file)) return
-                val deck = when (val result = PresentationLoader.load(file)) {
-                    is LoadResult.Failure -> {
-                        CrashReporter.reportWarning(
-                            "Presentation: No slides extracted from ${file.extension.lowercase()} file (server)",
-                            tags = mapOf(
-                                "subsystem" to "presentation",
-                                "file.type" to file.extension.lowercase(),
-                                "failure.reason" to result.error.name.lowercase()
-                            )
-                        )
-                        return
-                    }
-                    is LoadResult.Success -> result.deck
-                }
-                notes = deck.slides.map { it.notes }
-                val writer = slideDiskCache.beginWrite(file, deck.format, DeckRasterizer.DEFAULT_TARGET_WIDTH_PX)
-                var committed = false
-                try {
-                    jpegSlides = CrashReporter.trace("server.render", "Server render presentation") {
-                        DeckRasterizer(deck).use { rasterizer ->
-                            deck.slides.map { slide ->
-                                val slideFile = writer.putSlide(
-                                    index = slide.index,
-                                    image = rasterizer.renderFinalFrame(slide.index),
-                                    note = slide.notes,
-                                    fidelity = slide.fidelity,
-                                    hasTimeline = slide.timeline != null
-                                )
-                                slideFile.readBytes()
-                            }
-                        }
-                    }
-                    writer.commit()
-                    committed = true
-                } catch (superseded: SlideCacheSupersededException) {
-                    // A tab render took the entry over after this one started; it finishes the job.
-                    return
-                } finally {
-                    if (!committed) writer.abort()
-                }
-            }
+            val (jpegSlides, notes) = slidesForServer(file) ?: return
             if (jpegSlides.isEmpty()) return
             cacheSlideBytes(presentationId, jpegSlides)
             _presentationFilePaths[presentationId] = filePath

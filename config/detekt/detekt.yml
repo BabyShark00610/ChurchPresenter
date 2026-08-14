@@ -26,7 +26,9 @@ style:
     ignoreEnums: true
     ignoreRanges: true
   ReturnCount:
-    active: false
+    active: true
+    max: 3
+    excludeGuardClauses: true
   LoopWithTooManyJumpStatements:
     active: true
   UnusedPrivateMember:

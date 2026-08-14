@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.viewmodel
 
 import kotlinx.coroutines.flow.first
+import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 
 /**
@@ -155,18 +156,23 @@ internal fun BibleViewModel.getNextVerses(): List<SelectedVerse> {
         return buildNextVerseList(bookId, _selectedChapter.value, verseNumber, verseTextOf(verse))
     }
 
+    return firstVersesOfNextChapter()
+}
+
+private fun BibleViewModel.firstVersesOfNextChapter(): List<SelectedVerse> {
     val bible = _primaryBible.value ?: return emptyList()
-    var nextBookIndex = _selectedBookIndex.value
-    var nextChapter = _selectedChapter.value + 1
-    if (nextChapter > bible.getChapterCount(nextBookIndex)) {
-        nextBookIndex += 1
-        nextChapter = 1
-        if (nextBookIndex >= _books.value.size) return emptyList()
-    }
+    val (nextBookIndex, nextChapter) = nextChapterPosition(bible) ?: return emptyList()
     val nextBookId = bible.getBookId(nextBookIndex)
     val firstVerse = bible.getChapter(nextBookId, nextChapter).verses.firstOrNull() ?: return emptyList()
     val verseNumber = verseNumberOf(firstVerse) ?: return emptyList()
     return buildNextVerseList(nextBookId, nextChapter, verseNumber, verseTextOf(firstVerse))
+}
+
+private fun BibleViewModel.nextChapterPosition(bible: Bible): Pair<Int, Int>? {
+    val bookIndex = _selectedBookIndex.value
+    val chapter = _selectedChapter.value + 1
+    if (chapter <= bible.getChapterCount(bookIndex)) return bookIndex to chapter
+    return (bookIndex + 1).takeIf { it < _books.value.size }?.let { it to 1 }
 }
 
 internal fun BibleViewModel.buildNextVerseList(bookId: Int, chapter: Int, verseNumber: Int, verseText: String): List<SelectedVerse> {

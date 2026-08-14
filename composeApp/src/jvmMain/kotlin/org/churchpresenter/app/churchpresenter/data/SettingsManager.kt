@@ -12,6 +12,7 @@ import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -242,11 +243,14 @@ class SettingsManager {
         return result
     }
 
+    private fun parseSettingsRoot(raw: String): JsonObject? =
+        try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { null }
+
     /** Schema version 1. Converts old showBible:false/showSongs:false booleans to
      * bibleMode:"off"/songMode:"off" strings. */
     private fun migrateScreenAssignmentModes(raw: String): String {
         if (!raw.contains("\"showBible\"") && !raw.contains("\"showSongs\"")) return raw
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val proj = root["projectionSettings"]?.jsonObject ?: return raw
         val assignments = proj["screenAssignments"]?.jsonArray ?: return raw
         var changed = false
@@ -284,7 +288,7 @@ class SettingsManager {
      * [migrateCompanionSatelliteRowColumnRangeBackToCount].) */
     private fun migrateCompanionSatelliteStartPage(raw: String): String {
         if (!raw.contains("\"companionSatelliteConnections\"")) return raw
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val connections = root["companionSatelliteConnections"]?.jsonArray ?: return raw
         val renames = mapOf("rows" to "tabRows", "columns" to "tabColumns", "bitmapSize" to "tabBitmapSize")
         var changed = false
@@ -320,7 +324,7 @@ class SettingsManager {
      * rows=N — identical count to what was already configured, just without the (unreliable) offset. */
     private fun migrateCompanionSatelliteRowColumnRangeBackToCount(raw: String): String {
         if (!raw.contains("\"companionSatelliteConnections\"")) return raw
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val connections = root["companionSatelliteConnections"]?.jsonArray ?: return raw
         var changed = false
         val rangeKeys = CompanionSurfacePlacementPrefixes.flatMap { prefix ->
@@ -366,7 +370,7 @@ class SettingsManager {
 
     /** Schema version 2. Migrates old screen1-4Assignment fields to screenAssignments list. */
     private fun migrateProjectionSettings(raw: String): String {
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val proj = root["projectionSettings"]?.jsonObject ?: return raw
         if ("screenAssignments" in proj) return raw // already new format
 

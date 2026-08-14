@@ -291,6 +291,45 @@ object SharedBrowserFrameCache {
 
     // ── CDP Browser Lifecycle ──────────────────────────────────────
 
+    /** The CDP connection to the freshly launched browser, or null once the failure is reported. */
+    private suspend fun connectCdp(entry: CacheEntry, port: Int): CdpConnection? {
+        if (!waitForCdpReady(port, timeoutMs = 15000)) {
+            System.err.println("[BrowserSource] CDP did not become ready in time")
+            CrashReporter.reportWarning(
+                "BrowserSource: CDP did not become ready in time",
+                tags = mapOf("subsystem" to "browser-source")
+            )
+            entry.error.value = "Browser failed to start"
+            return null
+        }
+        System.err.println("[BrowserSource] CDP ready on port $port")
+        return openCdpWebSocket(port)
+    }
+
+    private suspend fun openCdpWebSocket(port: Int): CdpConnection? {
+        val wsUrl = withContext(Dispatchers.IO) { getPageWebSocketUrl(port) }
+        if (wsUrl == null) {
+            System.err.println("[BrowserSource] Could not get page WebSocket URL")
+            CrashReporter.reportWarning(
+                "BrowserSource: Could not get page WebSocket URL",
+                tags = mapOf("subsystem" to "browser-source")
+            )
+            return null
+        }
+        System.err.println("[BrowserSource] Connecting WebSocket: $wsUrl")
+        val cdp = CdpConnection()
+        val connected = withContext(Dispatchers.IO) { cdp.connect(wsUrl) }
+        if (!connected) {
+            System.err.println("[BrowserSource] WebSocket connection failed")
+            CrashReporter.reportWarning(
+                "BrowserSource: WebSocket connection to CDP failed",
+                tags = mapOf("subsystem" to "browser-source")
+            )
+            return null
+        }
+        return cdp
+    }
+
     private suspend fun startBrowser(
         entry: CacheEntry,
         url: String,
@@ -344,44 +383,8 @@ object SharedBrowserFrameCache {
             } catch (_: Throwable) {}
         }
 
-        // Wait for CDP to be ready
-        val ready = waitForCdpReady(port, timeoutMs = 15000)
-        if (!ready) {
-            System.err.println("[BrowserSource] CDP did not become ready in time")
-            CrashReporter.reportWarning(
-                "BrowserSource: CDP did not become ready in time",
-                tags = mapOf("subsystem" to "browser-source")
-            )
-            entry.error.value = "Browser failed to start"
-            killProcess(process)
-            entry.browserProcess = null
-            return
-        }
-        System.err.println("[BrowserSource] CDP ready on port $port")
-
-        // Get the page's WebSocket URL
-        val wsUrl = withContext(Dispatchers.IO) { getPageWebSocketUrl(port) }
-        if (wsUrl == null) {
-            System.err.println("[BrowserSource] Could not get page WebSocket URL")
-            CrashReporter.reportWarning(
-                "BrowserSource: Could not get page WebSocket URL",
-                tags = mapOf("subsystem" to "browser-source")
-            )
-            killProcess(process)
-            entry.browserProcess = null
-            return
-        }
-        System.err.println("[BrowserSource] Connecting WebSocket: $wsUrl")
-
-        // Connect WebSocket
-        val cdp = CdpConnection()
-        val connected = withContext(Dispatchers.IO) { cdp.connect(wsUrl) }
-        if (!connected) {
-            System.err.println("[BrowserSource] WebSocket connection failed")
-            CrashReporter.reportWarning(
-                "BrowserSource: WebSocket connection to CDP failed",
-                tags = mapOf("subsystem" to "browser-source")
-            )
+        val cdp = connectCdp(entry, port)
+        if (cdp == null) {
             killProcess(process)
             entry.browserProcess = null
             return

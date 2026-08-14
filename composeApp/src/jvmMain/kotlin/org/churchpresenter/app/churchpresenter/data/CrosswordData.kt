@@ -96,17 +96,17 @@ object CrosswordDecoder {
 
     /** `"1 ACROSS 3 5"` → the clue key and its (row, col) origin, or null if the line is malformed. */
     private fun parseLayoutLine(line: String): Pair<Pair<Int, CrosswordDirection>, Pair<Int, Int>>? {
-        val parts = line.split(" ")
-        if (parts.size != CLUE_LINE_FIELDS) return null
-        val num = parts[0].toIntOrNull() ?: return null
+        val parts = line.split(" ").takeIf { it.size == CLUE_LINE_FIELDS } ?: return null
+        val num = parts[0].toIntOrNull()
         val dir = when (parts[1].uppercase()) {
             "ACROSS" -> CrosswordDirection.ACROSS
             "DOWN" -> CrosswordDirection.DOWN
-            else -> return null
+            else -> null
         }
-        val row = parts[2].toIntOrNull() ?: return null
-        val col = parts[3].toIntOrNull() ?: return null
-        return (num to dir) to (row to col)
+        if (num == null || dir == null) return null
+        val row = parts[2].toIntOrNull()
+        val col = parts[3].toIntOrNull()
+        return if (row != null && col != null) (num to dir) to (row to col) else null
     }
 
     /** `"1. Clue text | ANSWER"` → the clue, or null if the line is malformed or has no answer. */
@@ -244,18 +244,24 @@ object CrosswordLayoutEngine {
         var hasIntersection = false
         for (i in word.indices) {
             val (r, c) = if (dir == CrosswordDirection.ACROSS) row to col + i else row + i to col
-            val existing = grid[r to c]
-            if (existing != null) {
-                if (existing != word[i]) return false  // letter conflict
-                hasIntersection = true
-            } else {
-                // No parallel adjacency — perpendicular neighbours must be empty
-                val n1 = if (dir == CrosswordDirection.ACROSS) r - 1 to c else r to c - 1
-                val n2 = if (dir == CrosswordDirection.ACROSS) r + 1 to c else r to c + 1
-                if (grid.containsKey(n1) || grid.containsKey(n2)) return false
-            }
+            if (blocksLetter(grid, r, c, word[i], dir)) return false
+            if (grid.containsKey(r to c)) hasIntersection = true
         }
         return hasIntersection  // must share at least one letter with an existing word
+    }
+
+    private fun blocksLetter(
+        grid: Map<Pair<Int, Int>, Char>,
+        r: Int, c: Int,
+        letter: Char,
+        dir: CrosswordDirection
+    ): Boolean {
+        val existing = grid[r to c]
+        if (existing != null) return existing != letter  // letter conflict
+        // No parallel adjacency — perpendicular neighbours must be empty
+        val n1 = if (dir == CrosswordDirection.ACROSS) r - 1 to c else r to c - 1
+        val n2 = if (dir == CrosswordDirection.ACROSS) r + 1 to c else r to c + 1
+        return grid.containsKey(n1) || grid.containsKey(n2)
     }
 
     internal fun renderGrid(

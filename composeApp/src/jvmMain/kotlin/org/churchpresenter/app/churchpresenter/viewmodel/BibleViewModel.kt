@@ -27,6 +27,7 @@ import java.io.File
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 
 private const val MAX_HISTORY_ENTRIES = 50
+private const val ASCII_LIMIT = 128
 
 class BibleViewModel(
     internal var appSettings: AppSettings,
@@ -584,43 +585,21 @@ class BibleViewModel(
 
     fun getFilteredBooks(): List<String> {
         val query = _bookSearchQuery.value
+        if (query.isEmpty()) return _books.value
 
-        if (query.isEmpty()) {
-            return _books.value
-        }
+        return _books.value.filter { it.contains(query, ignoreCase = true) }
+            .ifEmpty { booksNamedInEnglish(query) }
+    }
 
-        val directMatch = _books.value.filter {
-            it.contains(query, ignoreCase = true)
-        }
-
-        if (directMatch.isNotEmpty()) {
-            return directMatch
-        }
-
-        val isLatin = query.all { it.isLetter() && it.code < 128 }
-
-        if (!isLatin) {
-            return emptyList()
-        }
-
-        val matchingBookIds = STANDARD_ENGLISH_BOOKS.mapIndexedNotNull { index, englishName ->
-            if (englishName.contains(query, ignoreCase = true)) {
-                index + 1
-            } else {
-                null
+    private fun booksNamedInEnglish(query: String): List<String> {
+        if (!query.all { it.isLetter() && it.code < ASCII_LIMIT }) return emptyList()
+        val bible = _primaryBible.value ?: return emptyList()
+        return STANDARD_ENGLISH_BOOKS
+            .mapIndexedNotNull { index, englishName ->
+                (index + 1).takeIf { englishName.contains(query, ignoreCase = true) }
             }
-        }
-
-        if (matchingBookIds.isEmpty()) {
-            return emptyList()
-        }
-
-        val bible = _primaryBible.value
-        val mappedResults = matchingBookIds.mapNotNull { bookId ->
-            bible?.getBookName(bookId)
-        }.filter { it in _books.value }
-
-        return mappedResults
+            .mapNotNull { bookId -> bible.getBookName(bookId) }
+            .filter { it in _books.value }
     }
 
     fun getFilteredChapters(): List<String> {

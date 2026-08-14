@@ -216,23 +216,23 @@ class BibleEngineClient(
 
     private fun handleMessage(raw: String) {
         val obj = runCatching { JSONObject(raw) }.getOrNull() ?: return
-        val type = obj.optString("type")
-        if (type == "engine_status") {
-            // The engine's real upstream STT health (broadcast on transitions and replayed to
-            // late joiners). sttConfigured=false means a deliberate WS-input-only engine — treat
-            // its STT link as fine so the UI doesn't flag a non-error.
-            val configured = obj.optBoolean("sttConfigured", true)
-            _engineSttConnected.value = if (!configured) true else obj.optBoolean("sttConnected", false)
-            return
-        }
-        if (type == "version_detected") {
-            onVersion(
+        when (val type = obj.optString("type")) {
+            "engine_status" -> {
+                // The engine's real upstream STT health (broadcast on transitions and replayed to
+                // late joiners). sttConfigured=false means a deliberate WS-input-only engine — treat
+                // its STT link as fine so the UI doesn't flag a non-error.
+                val configured = obj.optBoolean("sttConfigured", true)
+                _engineSttConnected.value = if (!configured) true else obj.optBoolean("sttConnected", false)
+            }
+            "version_detected" -> onVersion(
                 if (obj.isNull("version")) null
                 else obj.optString("version").takeIf { it.isNotEmpty() }
             )
-            return
+            else -> if (type.startsWith("scripture.")) handleScripture(obj)
         }
-        if (!type.startsWith("scripture.")) return
+    }
+
+    private fun handleScripture(obj: JSONObject) {
         val ref = obj.optJSONObject("reference") ?: return
         val bookId = ref.optInt("bookId", -1)
         if (bookId < 0) return
