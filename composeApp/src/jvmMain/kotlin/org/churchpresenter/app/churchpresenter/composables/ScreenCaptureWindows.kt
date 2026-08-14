@@ -8,8 +8,6 @@ import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
 private const val HEX_RADIX = 16
 private const val WINDOW_LINE_FIELDS = 4
 
-internal data class WindowInfo(val title: String, val id: Long)
-
 internal fun listOpenWindows(): List<WindowInfo> =
     openWindowsFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
 

@@ -15,13 +15,6 @@ private const val SCORE_CONTAINS = 60
  * acting on it.
  */
 
-internal data class SmartReference(
-    val bookIndex: Int,
-    val chapter: Int?,
-    val verseStart: Int?,
-    val verseEnd: Int?
-)
-
 internal fun BibleViewModel.canonicalBookIdToIndex(canonicalId: Int): Int? =
     _primaryBible.value?.getDisplayIndexForBookId(canonicalId)?.takeIf { it in _books.value.indices }
 

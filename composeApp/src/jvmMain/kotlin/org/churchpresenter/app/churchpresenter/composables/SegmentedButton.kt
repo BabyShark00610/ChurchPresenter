@@ -26,20 +26,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-data class SegmentedButtonItem<T>(
-    val value: T,
-    val label: String,
-    val tooltip: String? = null,
-    val icon: ImageVector? = null
-)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -186,4 +178,3 @@ private fun <T> SegmentedButtonGrid(
         }
     }
 }
-

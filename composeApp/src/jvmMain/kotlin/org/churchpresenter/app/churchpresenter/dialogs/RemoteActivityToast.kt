@@ -60,18 +60,6 @@ import churchpresenter.composeapp.generated.resources.instance_link_follower_bad
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * Describes an auto-approved remote action that should be surfaced as a toast
- * so the operator knows what was done on their behalf.
- */
-data class RemoteActivityNotification(
-    val type: RemoteEventType,
-    val title: String,
-    val detail: String = "",
-    val clientId: String = "",
-    val clientLabel: String = ""
-)
-
 internal const val TOAST_AUTO_DISMISS_MS = 10_000L
 
 /**
@@ -293,4 +281,3 @@ private fun RemoteActivityToast(
         }
     }
 }
-

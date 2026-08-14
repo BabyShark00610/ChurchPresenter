@@ -68,7 +68,7 @@ naming:
     ignoreAnnotated: ['Composable']
     excludes: ['**/test/**', '**/jvmTest/**', '**/X11WindowCapture.kt']
   MatchingDeclarationName:
-    active: false
+    active: true
 
 exceptions:
   TooGenericExceptionCaught:
