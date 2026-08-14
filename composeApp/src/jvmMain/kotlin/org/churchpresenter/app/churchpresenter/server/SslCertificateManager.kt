@@ -66,7 +66,7 @@ object SslCertificateManager {
     /** DER-encoded CA certificate — served at GET /ca.crt for mobile installation. */
     val caCertFile: File = File(baseDir, "ca.crt")
 
-    private val CA_ALIAS     = "church-presenter-ca"
+    private const val CA_ALIAS = "church-presenter-ca"
     private val SERVER_ALIAS = Constants.SSL_KEY_ALIAS
     private val PASSWORD     = Constants.SSL_KEYSTORE_PASSWORD.toCharArray()
 
@@ -127,9 +127,10 @@ object SslCertificateManager {
                 val key  = ks.getKey(CA_ALIAS, PASSWORD) as? PrivateKey
                 val cert = ks.getCertificate(CA_ALIAS) as? X509Certificate
                 // Only reuse the CA if it already uses ECDSA — migrate away from old RSA keystores
-                if (key != null && cert != null && key.algorithm == "EC" &&
-                    cert.notAfter.after(Date.from(Instant.now().plus(30, ChronoUnit.DAYS)))) {
-                    return key to cert
+                if (key != null && cert != null) {
+                    val stillUsable = key.algorithm == "EC" &&
+                        cert.notAfter.after(Date.from(Instant.now().plus(30, ChronoUnit.DAYS)))
+                    if (stillUsable) return key to cert
                 }
             } catch (e: Exception) {
                 System.err.println("[SslCertificateManager] Existing CA keystore unreadable, regenerating: ${e.message}")
@@ -183,9 +184,11 @@ object SslCertificateManager {
                 val key  = ks.getKey(SERVER_ALIAS, PASSWORD) as? PrivateKey
                 val cert = ks.getCertificate(SERVER_ALIAS) as? X509Certificate
                 // Only reuse the server cert if it already uses ECDSA — migrate RSA keystores
-                if (key != null && cert != null && key.algorithm == "EC" &&
-                    cert.notAfter.after(Date.from(Instant.now().plus(30, ChronoUnit.DAYS))) &&
-                    serverHost in extractSanNames(cert)) return ks
+                if (key != null && cert != null) {
+                    val stillUsable = key.algorithm == "EC" &&
+                        cert.notAfter.after(Date.from(Instant.now().plus(30, ChronoUnit.DAYS)))
+                    if (stillUsable && serverHost in extractSanNames(cert)) return ks
+                }
             } catch (_: Exception) { /* fall through */ }
             serverKeystoreFile.delete()
         }

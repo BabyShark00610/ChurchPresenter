@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.data.Bible
-import org.churchpresenter.app.churchpresenter.data.StrongsEntry
 import org.churchpresenter.app.churchpresenter.utils.Constants
 
 /**
@@ -29,7 +28,6 @@ internal fun Route.bibleAndDictionaryRoutes(
     server: CompanionServer,
     _bible: MutableStateFlow<Bible?>,
     _bibleCatalog: MutableStateFlow<BibleCatalogResponse?>,
-    _presentationCatalog: MutableStateFlow<PresentationCatalogResponse>,
     json: Json,
     scope: CoroutineScope,
 ) {

@@ -83,7 +83,6 @@ import org.churchpresenter.app.churchpresenter.presenter.STTPresenter
 import org.churchpresenter.app.churchpresenter.presenter.QAQRCodePresenter
 import org.churchpresenter.app.churchpresenter.presenter.ScenePresenter
 import org.churchpresenter.app.churchpresenter.presenter.PresentationPresenter
-import org.churchpresenter.app.churchpresenter.presenter.SlidePresenter
 import org.churchpresenter.app.churchpresenter.presenter.SongPresenter
 import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -392,7 +391,7 @@ private fun SingleDisplayPreview(
                                 )
                             Presenting.MEDIA ->
                                 if (mediaViewModel != null && !mediaViewModel.isAudioFile) {
-                                    MediaPresenter(modifier = Modifier.fillMaxSize(), audioEnabled = false, transitionAlpha = mediaTransitionAlpha)
+                                    MediaPresenter(modifier = Modifier.fillMaxSize(), transitionAlpha = mediaTransitionAlpha)
                                 }
                             Presenting.LOWER_THIRD ->
                                 LowerThirdPresenter(
@@ -558,9 +557,8 @@ private fun SingleDisplayPreview(
         )
 
         // Animated audio indicator — only when presenting and media is playing
-        if (effectiveMode != Presenting.NONE
-            && mediaViewModel != null && mediaViewModel.isLoaded && mediaViewModel.isPlaying
-        ) {
+        val mediaAudible = mediaViewModel != null && mediaViewModel.isLoaded && mediaViewModel.isPlaying
+        if (effectiveMode != Presenting.NONE && mediaAudible) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

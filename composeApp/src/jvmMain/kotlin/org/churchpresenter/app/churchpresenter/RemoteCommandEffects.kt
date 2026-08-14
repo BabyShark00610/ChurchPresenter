@@ -8,13 +8,11 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.Flow
 
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
-import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.RecentPresentationFiles
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.server.SelectBibleVerseRequest
-import org.churchpresenter.app.churchpresenter.tabs.PicturesTab
 import org.churchpresenter.app.churchpresenter.tabs.Tabs
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
@@ -41,8 +39,6 @@ internal fun RemoteCommandEffects(
     presentationViewModel: PresentationViewModel,
     bibleViewModel: BibleViewModel,
     presenterManager: PresenterManager,
-    selectedPictureItem: ScheduleItem.PictureItem?,
-    selectedPresentationItem: ScheduleItem.PresentationItem?,
     onSongItemVersionBump: () -> Unit,
     resolveImageFile: ((folderId: String, index: Int) -> File?)?,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
@@ -179,7 +175,6 @@ LaunchedEffect(selectBibleVerseFlow) {
 
         // Resolve bookId from book name using the primary Bible's book list
         val bookIndex = primaryBible?.getBooks()?.let { resolveBookIndex(it, req.bookName) } ?: -1
-        val bookId = resolveBookIdOrZero(bookIndex) { primaryBible?.getBookId(it) }
 
         val resolved = bibleViewModel.getVersesForDisplay(req.bookName, req.chapter, req.verseNumber)
         val verses = remoteSelectedVerses(

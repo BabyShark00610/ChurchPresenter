@@ -3,7 +3,6 @@
 package org.churchpresenter.app.churchpresenter.composables
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -404,7 +403,7 @@ class SourcePropertiesClockTest {
         sourcePanel(countdown(id, minutes = 3)) { _ ->
             onNodeWithText("Start").performScrollTo().performClick()
             waitForIdle()
-            TimerStateManager.tick(id, 180)
+            TimerStateManager.tick(id)
             waitForIdle()
 
             onNodeWithText("Reset").performScrollTo().performClick()
@@ -425,7 +424,7 @@ class SourcePropertiesClockTest {
             onNodeWithText("Start").performScrollTo().performClick()
             waitForIdle()
 
-            TimerStateManager.tick(id, 60)
+            TimerStateManager.tick(id)
             waitForIdle()
 
             onNodeWithText("00:00:59").assertExists("the panel observes the shared timer, not its own copy")

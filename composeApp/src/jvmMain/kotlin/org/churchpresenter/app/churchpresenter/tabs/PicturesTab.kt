@@ -62,7 +62,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +72,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -257,7 +255,6 @@ fun PicturesTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit = {},
     viewModel: PicturesViewModel = remember { PicturesViewModel(appSettings) }
 ) {
-    val scope = rememberCoroutineScope()
     val folderDialogTitle = stringResource(Res.string.select_image_folder_dialog)
 
 

@@ -23,7 +23,6 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.TestSingletons
@@ -125,7 +124,6 @@ internal fun scheduleTab(
                         onSelectedItemChanged = { reports.selectionChanges += it },
                         onActionsReady = { reports.actions = it },
                         onAddLabel = { reports.addLabelRequests++ },
-                        onAddWebsite = { reports.addWebsiteRequests++ },
                         onPresentSong = { reports.presented += it },
                         onPresentBible = { reports.presented += it },
                         onPresentWebsite = { reports.presented += it },
