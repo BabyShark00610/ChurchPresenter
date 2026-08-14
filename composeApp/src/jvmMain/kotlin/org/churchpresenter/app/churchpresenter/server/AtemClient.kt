@@ -647,20 +647,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
                         else u16(payload, OFFSET_FTCD_CHUNK_COUNT)
                     var sent = 0
                     while (chunkSize > 0 && sent < chunkCount && bytesSent < data.size) {
-                        var len = minOf(chunkSize, data.size - bytesSent)
-                        // Don't end a chunk mid RLE block: shorten if an RLE header starts
-                        // 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit)
-                        if (bytesSent + len < data.size) {
-                            if (len >= RLE_WORD_BYTES &&
-                                dataBuf.getLong(bytesSent + len - RLE_WORD_BYTES) == AtemFrameEncoder.RLE_HEADER
-                            ) {
-                                len -= RLE_WORD_BYTES
-                            } else if (len >= RLE_TWO_WORDS_BYTES &&
-                                dataBuf.getLong(bytesSent + len - RLE_TWO_WORDS_BYTES) == AtemFrameEncoder.RLE_HEADER
-                            ) {
-                                len -= RLE_TWO_WORDS_BYTES
-                            }
-                        }
+                        val len = chunkLengthAt(dataBuf, data.size, bytesSent, chunkSize)
                         sendCommand("FTDa", buildDataChunkPayload(transferId, data, bytesSent, len))
                         bytesSent += len
                         sent++
@@ -670,29 +657,58 @@ class AtemClient(val host: String, val port: Int = 9910) {
                 "FTDC" -> return
                 "FTDE" -> {
                     val code = payload.getOrNull(OFFSET_FTDE_CODE)?.toInt()?.and(BYTE_MASK) ?: -1
-                    if (code == FTDE_CODE_RETRY && retries < MAX_TRANSFER_RETRIES) {
-                        // Code 1 = "retry": the ATEM is busy (e.g. still clearing the clip
-                        // pool after CMPC). Back off briefly, then restart the same transfer.
-                        retries++
-                        bytesSent = 0
-                        descriptionSent = false
-                        Thread.sleep(RETRY_BACKOFF_MS)
-                        sendCommand("FTSD", buildUploadRequestPayload(transferId, storeId, frameIndex, frame.rawLen))
-                    } else {
-                        // Clip frames past index 0 usually fail because the device's clip
-                        // pool ran out of frame capacity — surface an actionable hint
-                        val what = if (name == null) "clip frame $frameIndex" else "still"
-                        val hint = if (name == null && frameIndex > 0)
-                            " — the clip may exceed the ATEM's clip pool capacity; try a shorter duration or lower fps"
-                        else ""
-                        if (code == FTDE_CODE_RETRY) {
-                            throw Exception("ATEM stayed busy uploading $what after $retries retries$hint")
-                        } else {
-                            throw Exception("ATEM rejected $what (error code $code)$hint")
-                        }
+                    if (code != FTDE_CODE_RETRY || retries >= MAX_TRANSFER_RETRIES) {
+                        throw transferRejected(code, name, frameIndex, retries)
                     }
+                    // Code 1 = "retry": the ATEM is busy (e.g. still clearing the clip pool after
+                    // CMPC). Back off briefly, then restart the same transfer.
+                    retries++
+                    bytesSent = 0
+                    descriptionSent = false
+                    Thread.sleep(RETRY_BACKOFF_MS)
+                    sendCommand("FTSD", buildUploadRequestPayload(transferId, storeId, frameIndex, frame.rawLen))
                 }
             }
+        }
+    }
+
+    /**
+     * The failure for an FTDE the transfer cannot retry past. Clip frames after index 0 usually
+     * fail because the device's clip pool ran out of capacity, which is worth saying outright.
+     */
+    private fun transferRejected(code: Int, name: String?, frameIndex: Int, retries: Int): Exception {
+        val what = if (name == null) "clip frame $frameIndex" else "still"
+        val hint = if (name == null && frameIndex > 0) {
+            " — the clip may exceed the ATEM's clip pool capacity; try a shorter duration or lower fps"
+        } else {
+            ""
+        }
+        return if (code == FTDE_CODE_RETRY) {
+            Exception("ATEM stayed busy uploading $what after $retries retries$hint")
+        } else {
+            Exception("ATEM rejected $what (error code $code)$hint")
+        }
+    }
+
+    /**
+     * How much to put in the next chunk: never ending mid RLE block, so the length is shortened
+     * when an RLE header starts 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit).
+     */
+    private fun chunkLengthAt(
+        dataBuf: java.nio.ByteBuffer,
+        dataSize: Int,
+        bytesSent: Int,
+        chunkSize: Int,
+    ): Int {
+        val len = minOf(chunkSize, dataSize - bytesSent)
+        if (bytesSent + len >= dataSize) return len
+        val endsOnHeader = { back: Int ->
+            len >= back && dataBuf.getLong(bytesSent + len - back) == AtemFrameEncoder.RLE_HEADER
+        }
+        return when {
+            endsOnHeader(RLE_WORD_BYTES) -> len - RLE_WORD_BYTES
+            endsOnHeader(RLE_TWO_WORDS_BYTES) -> len - RLE_TWO_WORDS_BYTES
+            else -> len
         }
     }
 

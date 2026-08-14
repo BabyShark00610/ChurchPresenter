@@ -336,26 +336,7 @@ internal fun applyHighlighting(
     }
     // Build per-character color array then construct contiguous runs (no overlapping spans)
     val colors = Array(text.length) { baseColor }
-    for (hw in highlightedWords) {
-        if (hw.word.isBlank()) continue
-        try {
-            val highlightColor = Utils.parseHexColor(hw.color)
-            val wb = "(?<![\\p{L}\\p{N}])"
-            val we = "(?![\\p{L}\\p{N}])"
-            val rawPattern = if (hw.isRegex) {
-                "$wb(?:${hw.word})$we"
-            } else {
-                val escaped = Regex.escape(hw.word)
-                "$wb$escaped$we"
-            }
-            var flags = java.util.regex.Pattern.UNICODE_CHARACTER_CLASS
-            if (!hw.caseSensitive) flags = flags or java.util.regex.Pattern.CASE_INSENSITIVE or java.util.regex.Pattern.UNICODE_CASE
-            val regex = java.util.regex.Pattern.compile(rawPattern, flags).toRegex()
-            regex.findAll(text).forEach { match ->
-                for (j in match.range) colors[j] = highlightColor
-            }
-        } catch (_: Exception) {}
-    }
+    highlightedWords.forEach { paintWord(it, text, colors) }
     return buildAnnotatedString {
         var i = 0
         while (i < text.length) {
@@ -365,4 +346,22 @@ internal fun applyHighlighting(
             withStyle(SpanStyle(color = color)) { append(text.substring(start, i)) }
         }
     }
+}
+
+/** Paints every whole-word match of [hw] into [colors]; a pattern that won't compile is skipped. */
+private fun paintWord(hw: HighlightedWord, text: String, colors: Array<Color>) {
+    if (hw.word.isBlank()) return
+    try {
+        val highlightColor = Utils.parseHexColor(hw.color)
+        val wb = "(?<![\\p{L}\\p{N}])"
+        val we = "(?![\\p{L}\\p{N}])"
+        val rawPattern = if (hw.isRegex) "$wb(?:${hw.word})$we" else "$wb${Regex.escape(hw.word)}$we"
+        var flags = java.util.regex.Pattern.UNICODE_CHARACTER_CLASS
+        if (!hw.caseSensitive) {
+            flags = flags or java.util.regex.Pattern.CASE_INSENSITIVE or java.util.regex.Pattern.UNICODE_CASE
+        }
+        java.util.regex.Pattern.compile(rawPattern, flags).toRegex().findAll(text).forEach { match ->
+            for (j in match.range) colors[j] = highlightColor
+        }
+    } catch (_: Exception) {}
 }

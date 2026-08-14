@@ -21,6 +21,8 @@ data class ChapterResult(val previewIds: List<String>, val verses: List<String>)
 /** A parenthesised aside in a module title: "King James Version (KJV)", "… (Public Domain)". */
 private val PARENTHESISED_ASIDE = Regex("\\([^)]*\\)")
 
+private val SPB_BOOK_HEADER_REGEX = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
+
 /**
  * Why a module could not be read, in whole or in part.
  *
@@ -144,39 +146,45 @@ class Bible {
      * Stops as soon as the separator line or first verse is encountered.
      * Call this first to show the book list immediately, then call loadFromSpb() for full data.
      */
+    private fun collectBookHeader(
+        line: String,
+        headerOrder: MutableList<Int>,
+        parsedBookNames: MutableMap<Int, String>,
+        parsedChapterCounts: MutableMap<Int, Int>,
+    ) {
+        val m = SPB_BOOK_HEADER_REGEX.matchEntire(line) ?: return
+        val bookId = m.groupValues[1].toInt()
+        headerOrder.add(bookId)
+        parsedBookNames[bookId] = m.groupValues[2].trim()
+        parsedChapterCounts[bookId] = m.groupValues[REGEX_GROUP_THIRD].toInt()
+    }
+
+    private fun openHeaderReader(resourcePath: String): java.io.BufferedReader {
+        val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
+        if (inputStream != null) return inputStream.bufferedReader(StandardCharsets.UTF_8)
+        val path = Paths.get(resourcePath)
+        if (!Files.exists(path)) {
+            throw FileNotFoundException(
+                "loadBooksOnly: module not found on classpath or filesystem: $resourcePath"
+            )
+        }
+        return Files.newBufferedReader(path, StandardCharsets.UTF_8)
+    }
+
     fun loadBooksOnly(resourcePath: String) {
         books.clear()
         loadError = null
-        val bookHeaderRegex = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
         val headerOrder = mutableListOf<Int>()
         val parsedBookNames = mutableMapOf<Int, String>()
         val parsedChapterCounts = mutableMapOf<Int, Int>()
         try {
-            val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
-            val reader = if (inputStream != null) {
-                inputStream.bufferedReader(StandardCharsets.UTF_8)
-            } else {
-                val path = Paths.get(resourcePath)
-                if (!Files.exists(path)) {
-                    throw FileNotFoundException(
-                        "loadBooksOnly: module not found on classpath or filesystem: $resourcePath"
-                    )
-                }
-                Files.newBufferedReader(path, StandardCharsets.UTF_8)
-            }
-            reader.use { r ->
+            openHeaderReader(resourcePath).use { r ->
                 r.lineSequence()
                     .map { it.trimEnd('\r', '\n') }
                     .takeWhile { !it.startsWith("-----") && !it.startsWith("B") }
                     .filter { it.isNotEmpty() && !it.startsWith("##") }
                     .forEach { line ->
-                        val m = bookHeaderRegex.matchEntire(line)
-                        if (m != null) {
-                            val bookId = m.groupValues[1].toInt()
-                            headerOrder.add(bookId)
-                            parsedBookNames[bookId] = m.groupValues[2].trim()
-                            parsedChapterCounts[bookId] = m.groupValues[REGEX_GROUP_THIRD].toInt()
-                        }
+                        collectBookHeader(line, headerOrder, parsedBookNames, parsedChapterCounts)
                     }
             }
         } catch (e: Exception) {
@@ -708,46 +716,52 @@ class Bible {
          * [maxLines] bounds how far in it will look. A caller that only wants the title can pass
          * [TITLE_SCAN_LINE_LIMIT] and skip the book list entirely.
          */
+        private class SummaryScan {
+            var title: String? = null
+            var hasOld = false
+            var hasNew = false
+        }
+
+        private fun scanSummaryLine(line: String, scan: SummaryScan) {
+            // The converter writes a TAB after the colon and hand-made modules often write a
+            // space, so the separator is trimmed, not counted.
+            if (line.startsWith("##Title:")) scan.title = line.removePrefix("##Title:").trim()
+            when (summaryBookId(line)) {
+                in OLD_TESTAMENT_BOOK_IDS -> scan.hasOld = true
+                in NEW_TESTAMENT_BOOK_IDS -> scan.hasNew = true
+                else -> Unit
+            }
+        }
+
+        private fun openSummaryReader(resourcePath: String): java.io.BufferedReader? {
+            val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
+            if (inputStream != null) return inputStream.bufferedReader(StandardCharsets.UTF_8)
+            val path = Paths.get(resourcePath)
+            if (!Files.exists(path)) return null
+            return Files.newBufferedReader(path, StandardCharsets.UTF_8)
+        }
+
+        /** The book id a header line names, or null for metadata, blanks and anything else. */
+        private fun summaryBookId(line: String): Int? {
+            if (line.startsWith("##") || line.isEmpty()) return null
+            return SPB_BOOK_HEADER_REGEX.matchEntire(line)?.groupValues?.get(1)?.toIntOrNull()
+        }
+
         fun readTranslationSummary(
             resourcePath: String,
             maxLines: Int = HEADER_SCAN_LINE_LIMIT,
         ): TranslationSummary? {
             try {
-                val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
-                val reader = if (inputStream != null) {
-                    inputStream.bufferedReader(StandardCharsets.UTF_8)
-                } else {
-                    val path = Paths.get(resourcePath)
-                    if (!Files.exists(path)) return null
-                    Files.newBufferedReader(path, StandardCharsets.UTF_8)
-                }
-                val bookHeaderRegex = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
-                var title: String? = null
-                var hasOld = false
-                var hasNew = false
+                val reader = openSummaryReader(resourcePath) ?: return null
+                val scan = SummaryScan()
                 reader.use { r ->
                     r.lineSequence()
                         .take(maxLines)
                         .map { it.trimEnd('\r', '\n') }
                         .takeWhile { !it.startsWith("-----") && !it.startsWith("B") }
-                        .forEach { line ->
-                            when {
-                                // The converter writes a TAB after the colon and hand-made modules
-                                // often write a space, so the separator is trimmed, not counted.
-                                line.startsWith("##Title:") -> title = line.removePrefix("##Title:").trim()
-                                line.startsWith("##") || line.isEmpty() -> Unit
-                                else -> {
-                                    val bookId = bookHeaderRegex.matchEntire(line)
-                                        ?.groupValues?.get(1)?.toIntOrNull()
-                                    if (bookId != null) {
-                                        if (bookId in OLD_TESTAMENT_BOOK_IDS) hasOld = true
-                                        if (bookId in NEW_TESTAMENT_BOOK_IDS) hasNew = true
-                                    }
-                                }
-                            }
-                        }
+                        .forEach { line -> scanSummaryLine(line, scan) }
                 }
-                return TranslationSummary(title, hasOld, hasNew)
+                return TranslationSummary(scan.title, scan.hasOld, scan.hasNew)
             } catch (_: Exception) {
                 return null
             }

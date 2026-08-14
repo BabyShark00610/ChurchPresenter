@@ -298,44 +298,8 @@ internal suspend fun applyRemoteLiveState(
                 mapOf("contentType" to "WEBSITE", "resolved" to (state.websiteUrl != null))
             )
         }
-        Presenting.PICTURES -> {
-            val folderId = state.pictureFolderId
-            val index = state.pictureIndex
-            if (folderId != null && index != null) {
-                val cacheFile = File(instanceLinkPictureCacheDir, "${folderId}_$index.jpg")
-                if (!cacheFile.exists()) {
-                    val bytes = instanceLinkViewModel.fetchPictureImageBytes(folderId, index)
-                    if (bytes != null) {
-                        // Temp-file + rename: this apply can be cancelled mid-write by a newer
-                        // live state (collectLatest) — a truncated file must never land under the
-                        // final name, or the exists() cache gate would trust it forever.
-                        val tmp = File(cacheFile.parentFile, "${cacheFile.name}.tmp")
-                        tmp.writeBytes(bytes)
-                        if (!tmp.renameTo(cacheFile)) tmp.delete()
-                        if (!cacheFile.exists()) {
-                            InstanceLinkLogger.log(
-                                InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                                mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "cache_write_failed")
-                            )
-                            return
-                        }
-                    } else {
-                        InstanceLinkLogger.log(
-                            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                            mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "fetch_failed")
-                        )
-                        return
-                    }
-                }
-                presenterManager.setSelectedImagePath(cacheFile.absolutePath)
-                InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "apply_live_state", mapOf("contentType" to "PICTURES", "resolved" to true))
-            } else {
-                InstanceLinkLogger.log(
-                    InstanceLinkLogSide.FOLLOWER, "apply_live_state",
-                    mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "missing_folder_id_or_index")
-                )
-            }
-        }
+        Presenting.PICTURES ->
+            if (!applyRemotePictures(state, presenterManager, instanceLinkViewModel)) return
         Presenting.LOWER_THIRD -> {
             val name = state.lowerThirdName
             if (name != null) {
@@ -783,4 +747,56 @@ internal fun addScheduleItem(
         else -> return false
     }
     return true
+}
+
+private suspend fun applyRemotePictures(
+    state: LiveStateDto,
+    presenterManager: PresenterManager,
+    instanceLinkViewModel: InstanceLinkViewModel,
+): Boolean {
+    val folderId = state.pictureFolderId
+    val index = state.pictureIndex
+    if (folderId == null || index == null) {
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "missing_folder_id_or_index")
+        )
+        return true
+    }
+    val cacheFile = File(instanceLinkPictureCacheDir, "${folderId}_$index.jpg")
+    if (!cacheFile.exists() && !cachePictureImage(cacheFile, folderId, index, instanceLinkViewModel)) return false
+    presenterManager.setSelectedImagePath(cacheFile.absolutePath)
+    InstanceLinkLogger.log(
+        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+        mapOf("contentType" to "PICTURES", "resolved" to true)
+    )
+    return true
+}
+
+private suspend fun cachePictureImage(
+    cacheFile: File,
+    folderId: String,
+    index: Int,
+    instanceLinkViewModel: InstanceLinkViewModel,
+): Boolean {
+    val bytes = instanceLinkViewModel.fetchPictureImageBytes(folderId, index)
+    if (bytes == null) {
+        InstanceLinkLogger.log(
+            InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+            mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "fetch_failed")
+        )
+        return false
+    }
+    // Temp-file + rename: this apply can be cancelled mid-write by a newer live state
+    // (collectLatest) — a truncated file must never land under the final name, or the exists()
+    // cache gate would trust it forever.
+    val tmp = File(cacheFile.parentFile, "${cacheFile.name}.tmp")
+    tmp.writeBytes(bytes)
+    if (!tmp.renameTo(cacheFile)) tmp.delete()
+    if (cacheFile.exists()) return true
+    InstanceLinkLogger.log(
+        InstanceLinkLogSide.FOLLOWER, "apply_live_state",
+        mapOf("contentType" to "PICTURES", "resolved" to false, "reason" to "cache_write_failed")
+    )
+    return false
 }

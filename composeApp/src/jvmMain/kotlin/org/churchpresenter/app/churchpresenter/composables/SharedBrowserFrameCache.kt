@@ -198,6 +198,16 @@ object SharedBrowserFrameCache {
 
     // ── Browser Discovery ──────────────────────────────────────────
 
+    /** The executable `which`/`where` reports for [name], when it exists on disk. */
+    private fun browserOnPath(whichCmd: String, name: String): String? = try {
+        val proc = ProcessBuilder(whichCmd, name).redirectErrorStream(true).start()
+        val output = proc.inputStream.bufferedReader().readText().trim()
+        val path = output.lines().firstOrNull()?.trim()
+        if (proc.waitFor() == 0 && !path.isNullOrBlank() && java.io.File(path).exists()) path else null
+    } catch (_: Exception) {
+        null
+    }
+
     internal fun findBrowserExecutable(): String? {
         val osName = System.getProperty("os.name", "").lowercase()
         val isWindows = osName.contains("win")
@@ -239,17 +249,7 @@ object SharedBrowserFrameCache {
         val names = if (isWindows) listOf("msedge.exe", "chrome.exe")
                     else listOf("google-chrome-stable", "google-chrome", "chromium-browser", "chromium", "microsoft-edge-stable")
         val whichCmd = if (isWindows) "where" else "which"
-        for (name in names) {
-            try {
-                val proc = ProcessBuilder(whichCmd, name).redirectErrorStream(true).start()
-                val output = proc.inputStream.bufferedReader().readText().trim()
-                if (proc.waitFor() == 0 && output.isNotBlank()) {
-                    val path = output.lines().first().trim()
-                    if (java.io.File(path).exists()) return path
-                }
-            } catch (_: Exception) {}
-        }
-        return null
+        return names.firstNotNullOfOrNull { name -> browserOnPath(whichCmd, name) }
     }
 
     internal fun findFreePort(): Int {
@@ -393,99 +393,108 @@ object SharedBrowserFrameCache {
         cdp.onUrlChanged = { url -> entry.currentUrl.value = url }
         System.err.println("[BrowserSource] WebSocket connected")
 
-        // Configure viewport and transparency
-        var resp = cdp.sendAsync("Emulation.setDeviceMetricsOverride", buildJsonObject {
-            put("width", renderWidth)
-            put("height", renderHeight)
-            put("deviceScaleFactor", 1)
-            put("mobile", false)
-        })
-        System.err.println("[BrowserSource] setDeviceMetricsOverride: $resp")
+        configurePage(cdp, url, renderWidth, renderHeight, customCss, forceTransparent)
+        runCaptureLoop(entry, cdp, fps)
+    }
 
-        if (forceTransparent) {
-            resp = cdp.sendAsync("Emulation.setDefaultBackgroundColorOverride", buildJsonObject {
-                put("color", buildJsonObject {
-                    put("r", 0)
-                    put("g", 0)
-                    put("b", 0)
-                    put("a", 0)
-                })
+    /** Viewport, transparency and navigation for a freshly connected page. */
+    private suspend fun configurePage(
+        cdp: CdpConnection,
+        url: String,
+        renderWidth: Int,
+        renderHeight: Int,
+        customCss: String,
+        forceTransparent: Boolean,
+    ) {
+    // Configure viewport and transparency
+    var resp = cdp.sendAsync("Emulation.setDeviceMetricsOverride", buildJsonObject {
+        put("width", renderWidth)
+        put("height", renderHeight)
+        put("deviceScaleFactor", 1)
+        put("mobile", false)
+    })
+    System.err.println("[BrowserSource] setDeviceMetricsOverride: $resp")
+
+    if (forceTransparent) {
+        resp = cdp.sendAsync("Emulation.setDefaultBackgroundColorOverride", buildJsonObject {
+            put("color", buildJsonObject {
+                put("r", 0)
+                put("g", 0)
+                put("b", 0)
+                put("a", 0)
             })
-            System.err.println("[BrowserSource] setDefaultBackgroundColorOverride: $resp")
+        })
+        System.err.println("[BrowserSource] setDefaultBackgroundColorOverride: $resp")
+    }
+
+    cdp.sendAsync("Page.enable", null)
+
+    // Navigate to the URL
+    if (url.isNotBlank()) {
+        resp = cdp.sendAsync("Page.navigate", buildJsonObject { put("url", url) })
+        System.err.println("[BrowserSource] Page.navigate($url): $resp")
+
+        // Wait for page to load
+        delay(PAGE_LOAD_SETTLE_MS)
+
+        // Inject transparency CSS
+        if (forceTransparent) {
+            cdp.sendAsync("Runtime.evaluate", buildJsonObject {
+                put("expression", "document.documentElement.style.background='transparent';document.body.style.background='transparent';")
+            })
         }
-
-        cdp.sendAsync("Page.enable", null)
-
-        // Navigate to the URL
-        if (url.isNotBlank()) {
-            resp = cdp.sendAsync("Page.navigate", buildJsonObject { put("url", url) })
-            System.err.println("[BrowserSource] Page.navigate($url): $resp")
-
-            // Wait for page to load
-            delay(PAGE_LOAD_SETTLE_MS)
-
-            // Inject transparency CSS
-            if (forceTransparent) {
-                cdp.sendAsync("Runtime.evaluate", buildJsonObject {
-                    put("expression", "document.documentElement.style.background='transparent';document.body.style.background='transparent';")
-                })
-            }
-            if (customCss.isNotBlank()) {
-                cdp.sendAsync("Runtime.evaluate", buildJsonObject {
-                    put("expression", "var s=document.createElement('style');s.textContent='${escapeForJsStringLiteral(customCss)}';document.head.appendChild(s);")
-                })
-            }
+        if (customCss.isNotBlank()) {
+            cdp.sendAsync("Runtime.evaluate", buildJsonObject {
+                put("expression", "var s=document.createElement('style');s.textContent='${escapeForJsStringLiteral(customCss)}';document.head.appendChild(s);")
+            })
         }
+    }
 
-        // Start capture loop
-        entry.captureIntervalMs = (MILLIS_PER_SECOND / fps.coerceIn(MIN_FPS, MAX_FPS)).coerceAtLeast(MIN_STARTUP_CAPTURE_INTERVAL_MS)
+    }
+
+    /** Screenshots the page at [fps] into the entry until the coroutine is cancelled. */
+    private suspend fun runCaptureLoop(entry: CacheEntry, cdp: CdpConnection, fps: Int) {
+        entry.captureIntervalMs =
+            (MILLIS_PER_SECOND / fps.coerceIn(MIN_FPS, MAX_FPS)).coerceAtLeast(MIN_STARTUP_CAPTURE_INTERVAL_MS)
         System.err.println("[BrowserSource] Starting capture loop at ${fps}fps")
 
         var frameCount = 0
         while (currentCoroutineContext().isActive) {
             try {
-                val response = cdp.sendAsync("Page.captureScreenshot", buildJsonObject {
-                    put("format", "png")
-                })
-
-                val data = response?.get("data")?.jsonPrimitive?.contentOrNull
-                if (data == null) {
-                    if (frameCount == 0) {
-                        if (response == null) {
-                            System.err.println("[BrowserSource] captureScreenshot returned null")
-                        } else {
-                            System.err.println(
-                                "[BrowserSource] captureScreenshot response has no 'data': ${response.keys}"
-                            )
-                        }
-                    }
-                } else {
-                    val pngBytes = withContext(Dispatchers.IO) {
-                        Base64.getDecoder().decode(data)
-                    }
-                    val img = withContext(Dispatchers.IO) {
-                        ImageIO.read(ByteArrayInputStream(pngBytes))
-                    }
-                    if (img != null) {
-                        entry.frame.value = img.toComposeImageBitmap()
-                        frameCount++
-                        if (frameCount == 1) {
-                            System.err.println("[BrowserSource] First frame captured: ${img.width}x${img.height}")
-                        }
-                    } else {
-                        if (frameCount == 0) {
-                            System.err.println("[BrowserSource] ImageIO.read returned null (${pngBytes.size} bytes)")
-                        }
-                    }
-                }
+                if (captureFrame(entry, cdp, first = frameCount == 0)) frameCount++
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                if (frameCount == 0) {
-                    System.err.println("[BrowserSource] Capture error: ${e.message}")
-                }
+                if (frameCount == 0) System.err.println("[BrowserSource] Capture error: ${e.message}")
             }
             delay(entry.captureIntervalMs)
+        }
+    }
+
+    /** Screenshots the page once into [entry]; false when nothing decodable came back. */
+    private suspend fun captureFrame(entry: CacheEntry, cdp: CdpConnection, first: Boolean): Boolean {
+        val response = cdp.sendAsync("Page.captureScreenshot", buildJsonObject { put("format", "png") })
+        val data = response?.get("data")?.jsonPrimitive?.contentOrNull
+        if (data == null) {
+            if (first) reportMissingScreenshot(response)
+            return false
+        }
+        val pngBytes = withContext(Dispatchers.IO) { Base64.getDecoder().decode(data) }
+        val img = withContext(Dispatchers.IO) { ImageIO.read(ByteArrayInputStream(pngBytes)) }
+        if (img == null) {
+            if (first) System.err.println("[BrowserSource] ImageIO.read returned null (${pngBytes.size} bytes)")
+            return false
+        }
+        entry.frame.value = img.toComposeImageBitmap()
+        if (first) System.err.println("[BrowserSource] First frame captured: ${img.width}x${img.height}")
+        return true
+    }
+
+    private fun reportMissingScreenshot(response: JsonObject?) {
+        if (response == null) {
+            System.err.println("[BrowserSource] captureScreenshot returned null")
+        } else {
+            System.err.println("[BrowserSource] captureScreenshot response has no 'data': ${response.keys}")
         }
     }
 

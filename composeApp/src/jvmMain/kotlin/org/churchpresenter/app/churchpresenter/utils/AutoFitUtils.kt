@@ -90,41 +90,12 @@ fun calculateAutoFitForAllSections(
     while (high - low > 1) {
         val mid = (low + high) / 2
         val style = baseStyle.copy(fontSize = mid.sp)
-        var fits = true
-
-        for ((sectionIdx, section) in sections.withIndex()) {
-            // Check both primary and secondary lines so bilingual text also fits
-            val lineSets = if (section.secondaryLines.isNotEmpty())
-                listOf(section.lines, section.secondaryLines) else listOf(section.lines)
-            for (lines in lineSets.filter { it.isNotEmpty() }) {
-                val measured = lines.map {
-                    textMeasurer.measure(
-                        text = it,
-                        style = style,
-                        constraints = unconstrainedConstraints,
-                        density = referenceDensity
-                    ).size
-                }
-                var sectionHeight = measured.sumOf { it.height }
-                // Reserve space for end-of-song indicator on the last section
-                if (includeEndIndicator && sectionIdx == sections.lastIndex) {
-                    val lineHeight = textMeasurer.measure(
-                        text = "* * *",
-                        style = style,
-                        constraints = unconstrainedConstraints,
-                        density = referenceDensity
-                    ).size.height
-                    // Spacer (4px reference) + indicator line height
-                    sectionHeight += SECTION_INDICATOR_SPACER_PX + lineHeight
-                }
-                // Every line must fit on one row without wrapping, and all of them together
-                // must fit the available height
-                if (measured.any { it.width > availableWidth } || sectionHeight > effectiveHeight) {
-                    fits = false
-                    break
-                }
-            }
-            if (!fits) break
+        val fits = sections.withIndex().all { (sectionIdx, section) ->
+            sectionFits(
+                textMeasurer, section, style, unconstrainedConstraints, referenceDensity,
+                availableWidth, effectiveHeight,
+                withEndIndicator = includeEndIndicator && sectionIdx == sections.lastIndex,
+            )
         }
         if (fits) low = mid else high = mid
     }
@@ -205,4 +176,39 @@ fun calculateChordChartFontSize(
         if (fits(mid)) low = mid else high = mid - 1
     }
     return low.coerceAtLeast(MIN_AUTO_FIT_FONT_SIZE)
+}
+
+/** True when every line of [section] fits on one row and the section fits the height. */
+@Suppress("LongParameterList")
+private fun sectionFits(
+    textMeasurer: TextMeasurer,
+    section: LyricSection,
+    style: TextStyle,
+    constraints: Constraints,
+    density: Density,
+    availableWidth: Int,
+    effectiveHeight: Int,
+    withEndIndicator: Boolean,
+): Boolean {
+    // Check both primary and secondary lines so bilingual text also fits
+    val lineSets = if (section.secondaryLines.isNotEmpty()) {
+        listOf(section.lines, section.secondaryLines)
+    } else {
+        listOf(section.lines)
+    }
+    return lineSets.filter { it.isNotEmpty() }.all { lines ->
+        val measured = lines.map {
+            textMeasurer.measure(text = it, style = style, constraints = constraints, density = density).size
+        }
+        // Reserve space for end-of-song indicator on the last section: spacer + indicator height
+        val indicatorHeight = if (withEndIndicator) {
+            SECTION_INDICATOR_SPACER_PX + textMeasurer.measure(
+                text = "* * *", style = style, constraints = constraints, density = density
+            ).size.height
+        } else {
+            0
+        }
+        val sectionHeight = measured.sumOf { it.height } + indicatorHeight
+        measured.none { it.width > availableWidth } && sectionHeight <= effectiveHeight
+    }
 }
