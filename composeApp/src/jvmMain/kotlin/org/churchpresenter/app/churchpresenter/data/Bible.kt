@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets
 
 data class ChapterResult(val previewIds: List<String>, val verses: List<String>)
 
+/** A parenthesised aside in a module title: "King James Version (KJV)", "… (Public Domain)". */
+private val PARENTHESISED_ASIDE = Regex("\\([^)]*\\)")
+
 /**
  * Why a module could not be read, in whole or in part.
  *
@@ -89,21 +92,37 @@ class Bible {
      * Extract Bible version abbreviation from title or filename
      * Examples: "Russian Synodal Translation" -> "RST"
      *           "King James Version" -> "KJV"
+     *           "King James Version (KJV)" -> "KJV"
      *           "ru_RST77.spb" -> "RST77"
+     *
+     * A parenthesised aside is dropped before the initials are taken, and each initial is the
+     * word's first *letter or digit*. Without either step a bracket becomes an initial in its own
+     * right — "King James Version (KJV)" abbreviated to "KJV(", which is what the operator then
+     * saw beside every verse on screen.
      */
     private fun extractBibleAbbreviation(title: String?, filename: String): String {
         // First try to extract from title if available
         if (!title.isNullOrBlank()) {
-            // Look for common patterns: "Version", "Translation", etc.
-            val words = title.trim().split(Regex("\\s+"))
+            // A title that is nothing but an aside — "(KJV)" — still has to name itself, so fall
+            // back to the title with its punctuation stripped rather than to the file name.
+            val cleaned = title.replace(PARENTHESISED_ASIDE, " ").trim()
+                .ifEmpty { title.filter { it.isLetterOrDigit() || it.isWhitespace() }.trim() }
 
-            // If title is short (like "RSV" or "KJV"), use it as-is
-            if (words.size == 1 && words[0].length <= 5) {
-                return words[0]
+            if (cleaned.isNotEmpty()) {
+                val words = cleaned.split(Regex("\\s+"))
+
+                // If title is short (like "RSV" or "KJV"), use it as-is — minus any punctuation
+                // riding along with it, so "KJV." does not label every verse "KJV.".
+                val loneWord = words.singleOrNull()?.filter { it.isLetterOrDigit() }
+                if (loneWord != null && loneWord.isNotEmpty() && loneWord.length <= 5) {
+                    return loneWord
+                }
+
+                // Generate abbreviation from title words
+                return words.mapNotNull { word ->
+                    word.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()
+                }.take(4).joinToString("")
             }
-
-            // Generate abbreviation from title words
-            return words.take(4).map { it.first().uppercase() }.joinToString("")
         }
 
         // Fallback to filename without extension
