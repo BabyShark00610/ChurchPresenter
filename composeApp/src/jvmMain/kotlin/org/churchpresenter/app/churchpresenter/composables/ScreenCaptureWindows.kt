@@ -5,8 +5,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import org.churchpresenter.app.churchpresenter.utils.WindowsWindowCapture
 
-internal data class WindowInfo(val title: String, val id: Long)
-
 internal fun listOpenWindows(): List<WindowInfo> =
     openWindowsFor(System.getProperty("os.name", "").lowercase(), ::readCommandOutput)
 

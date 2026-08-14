@@ -70,13 +70,6 @@ import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.net.URI
 
-internal sealed interface SendStatus {
-    data object Idle : SendStatus
-    data object Sending : SendStatus
-    data object Sent : SendStatus
-    data class Error(val message: String) : SendStatus
-}
-
 /**
  * Builds the submit request from the dialog's current field state, trimming free-text
  * fields the way the server expects. Split out from the [onSend][ContactUsDialog] closure

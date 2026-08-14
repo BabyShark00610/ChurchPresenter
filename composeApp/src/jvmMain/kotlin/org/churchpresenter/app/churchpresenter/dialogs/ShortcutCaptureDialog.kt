@@ -50,14 +50,6 @@ import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import org.churchpresenter.app.churchpresenter.utils.label
 import org.jetbrains.compose.resources.stringResource
 
-/** Test tags for the capture dialog's controls, which have no stable text to locate them by. */
-internal object ShortcutCaptureTags {
-    const val SURFACE = "shortcut_capture_surface"
-    const val PREVIEW = "shortcut_capture_preview"
-    const val CONFLICT = "shortcut_capture_conflict"
-    const val CONFIRM = "shortcut_capture_confirm"
-}
-
 /**
  * The chord a key event should be recorded as, or null to keep waiting.
  *

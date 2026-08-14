@@ -10,7 +10,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
-import kotlinx.serialization.json.Json
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -55,44 +54,7 @@ import churchpresenter.composeapp.generated.resources.label_hex
 import churchpresenter.composeapp.generated.resources.ok
 import churchpresenter.composeapp.generated.resources.recent
 import org.jetbrains.compose.resources.stringResource
-import androidx.compose.runtime.mutableStateListOf
 import kotlin.math.abs
-
-/** Stores recently used colors across all color picker instances, persisted to disk. */
-internal object RecentColors {
-    private const val MAX = 12
-    private val file = java.io.File(System.getProperty("user.home"), ".churchpresenter/recent_colors.json")
-    val colors = mutableStateListOf<String>()
-
-    init { load() }
-
-    fun add(hex: String) {
-        val upper = hex.uppercase()
-        colors.remove(upper)
-        colors.add(0, upper)
-        while (colors.size > MAX) colors.removeLast()
-        save()
-    }
-
-    internal fun load() {
-        try {
-            if (file.exists()) {
-                val json = Json { ignoreUnknownKeys = true }
-                val list = json.decodeFromString<List<String>>(file.readText())
-                colors.clear()
-                colors.addAll(list.take(MAX))
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun save() {
-        try {
-            file.parentFile?.mkdirs()
-            val json = Json { encodeDefaults = true }
-            file.writeText(json.encodeToString(colors.toList()))
-        } catch (_: Exception) {}
-    }
-}
 
 /**
  * A beautiful Compose-native color picker dialog.
@@ -435,4 +397,3 @@ internal fun cpTryParseHex(hex: String): Color? = try {
         else -> null
     }
 } catch (_: Exception) { null }
-
