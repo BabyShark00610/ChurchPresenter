@@ -76,13 +76,13 @@ object WindowsWindowCapture {
     }
 
     internal fun getWindowBoundsWith(user32: User32, hwnd: Long): Rectangle? {
-        return try {
+        return runCatching {
             val hwndPtr = WinDef.HWND(Pointer(hwnd))
             val rect = WinDef.RECT()
             if (user32.GetWindowRect(hwndPtr, rect)) {
                 rectToBounds(rect.left, rect.top, rect.right, rect.bottom)
             } else null
-        } catch (_: Throwable) { null }
+        }.getOrNull()
     }
 
     fun captureWindow(hwnd: Long): BufferedImage? {
@@ -91,46 +91,55 @@ object WindowsWindowCapture {
     }
 
     internal fun captureWindowWith(user32: User32, gdi32: GDI32, hwnd: Long): BufferedImage? {
-        return try {
+        return runCatching {
             val hwndPtr = WinDef.HWND(Pointer(hwnd))
             val rect = WinDef.RECT()
-            if (!user32.GetWindowRect(hwndPtr, rect)) return null
+            if (!user32.GetWindowRect(hwndPtr, rect)) null
+            else printWindowToImage(
+                user32, gdi32, hwndPtr,
+                width = rect.right - rect.left,
+                height = rect.bottom - rect.top
+            )
+        }.getOrNull()
+    }
 
-            val width = rect.right - rect.left
-            val height = rect.bottom - rect.top
-            if (width <= 0 || height <= 0) return null
+    private fun printWindowToImage(
+        user32: User32,
+        gdi32: GDI32,
+        hwndPtr: WinDef.HWND,
+        width: Int,
+        height: Int
+    ): BufferedImage? {
+        if (width <= 0 || height <= 0) return null
+        val hdcWindow = user32.GetDC(hwndPtr) ?: return null
 
-            val hdcWindow = user32.GetDC(hwndPtr)
-            if (hdcWindow == null) return null
+        val hdcMem = gdi32.CreateCompatibleDC(hdcWindow)
+        val hBitmap = gdi32.CreateCompatibleBitmap(hdcWindow, width, height)
+        val hOld = gdi32.SelectObject(hdcMem, hBitmap)
 
-            val hdcMem = gdi32.CreateCompatibleDC(hdcWindow)
-            val hBitmap = gdi32.CreateCompatibleBitmap(hdcWindow, width, height)
-            val hOld = gdi32.SelectObject(hdcMem, hBitmap)
+        // PrintWindow with PW_RENDERFULLCONTENT (0x2) for occluded capture
+        user32.PrintWindow(hwndPtr, hdcMem, 2)
 
-            // PrintWindow with PW_RENDERFULLCONTENT (0x2) for occluded capture
-            user32.PrintWindow(hwndPtr, hdcMem, 2)
+        // Read pixels from bitmap
+        val bmi = WinGDI.BITMAPINFO()
+        bmi.bmiHeader.biSize = bmi.bmiHeader.size()
+        bmi.bmiHeader.biWidth = width
+        bmi.bmiHeader.biHeight = -height // top-down
+        bmi.bmiHeader.biPlanes = 1
+        bmi.bmiHeader.biBitCount = BITS_PER_PIXEL
+        bmi.bmiHeader.biCompression = WinGDI.BI_RGB
 
-            // Read pixels from bitmap
-            val bmi = WinGDI.BITMAPINFO()
-            bmi.bmiHeader.biSize = bmi.bmiHeader.size()
-            bmi.bmiHeader.biWidth = width
-            bmi.bmiHeader.biHeight = -height // top-down
-            bmi.bmiHeader.biPlanes = 1
-            bmi.bmiHeader.biBitCount = BITS_PER_PIXEL
-            bmi.bmiHeader.biCompression = WinGDI.BI_RGB
+        val bufferSize = width.toLong() * height * 4
+        val buffer = Memory(bufferSize)
+        gdi32.GetDIBits(hdcMem, hBitmap, 0, height, buffer, bmi, WinGDI.DIB_RGB_COLORS)
 
-            val bufferSize = width.toLong() * height * 4
-            val buffer = Memory(bufferSize)
-            gdi32.GetDIBits(hdcMem, hBitmap, 0, height, buffer, bmi, WinGDI.DIB_RGB_COLORS)
+        // Cleanup GDI objects
+        gdi32.SelectObject(hdcMem, hOld)
+        gdi32.DeleteObject(hBitmap)
+        gdi32.DeleteDC(hdcMem)
+        user32.ReleaseDC(hwndPtr, hdcWindow)
 
-            // Cleanup GDI objects
-            gdi32.SelectObject(hdcMem, hOld)
-            gdi32.DeleteObject(hBitmap)
-            gdi32.DeleteDC(hdcMem)
-            user32.ReleaseDC(hwndPtr, hdcWindow)
-
-            bgraBufferToImage(buffer, width, height)
-        } catch (_: Throwable) { null }
+        return bgraBufferToImage(buffer, width, height)
     }
 
     internal fun rectToBounds(left: Int, top: Int, right: Int, bottom: Int): Rectangle =

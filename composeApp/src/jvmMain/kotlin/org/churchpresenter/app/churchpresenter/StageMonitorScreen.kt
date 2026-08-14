@@ -235,10 +235,8 @@ fun StageMonitorScreen(
 
     fun contentFor(zone: StageMonitorZone): StageMonitorContentType? {
         val assigned = StageMonitorContentType.entries.filter { sm.zoneFor(it) == zone }
-        if (assigned.isEmpty()) return null
-        assigned.firstOrNull { it in activeTypes }?.let { return it }
-        if (StageMonitorContentType.CLOCK in assigned) return StageMonitorContentType.CLOCK
-        return null
+        return assigned.firstOrNull { it in activeTypes }
+            ?: StageMonitorContentType.CLOCK.takeIf { it in assigned }
     }
 
     val fullScreenContent = contentFor(StageMonitorZone.FULL_SCREEN)

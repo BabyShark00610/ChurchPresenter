@@ -154,23 +154,25 @@ private fun ImageContent(currentImagePath: String?) {
     }
 }
 
+private fun decodePictureBytes(file: File): Image? = try {
+    Image.makeFromEncoded(file.readBytes())
+} catch (_: Exception) {
+    // A HEIC/HEIF that Skia cannot read is transcoded to JPEG first
+    if (file.extension.lowercase() in listOf("heic", "heif")) {
+        HeicDecoder.toJpegBytes(file)?.let { jpegBytes ->
+            try { Image.makeFromEncoded(jpegBytes) } catch (_: Exception) { null }
+        }
+    } else {
+        null
+    }
+}
+
 internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxHeight: Int = 1080): ImageBitmap? {
     return try {
         val file = File(imagePath)
         if (!file.exists()) return null
 
-        val bytes = file.readBytes()
-
-        val originalImage = try {
-            Image.makeFromEncoded(bytes)
-        } catch (e: Exception) {
-            if (file.extension.lowercase() in listOf("heic", "heif")) {
-                val jpegBytes = HeicDecoder.toJpegBytes(file) ?: return null
-                try {
-                    Image.makeFromEncoded(jpegBytes)
-                } catch (_: Exception) { return null }
-            } else return null
-        }
+        val originalImage = decodePictureBytes(file) ?: return null
 
         // Cap at actual screen resolution — no point storing more pixels than the display can show
         val widthScale = maxWidth.toFloat() / originalImage.width

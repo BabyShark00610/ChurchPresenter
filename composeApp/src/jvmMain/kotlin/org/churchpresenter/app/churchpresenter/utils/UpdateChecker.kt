@@ -139,20 +139,25 @@ object UpdateChecker {
         }
     }
 
+    /** The installer for the detected OS among the release's assets, or null when it has none. */
+    private fun installerUrl(obj: JsonObject): String? {
+        val assets = obj["assets"]?.jsonArray ?: return null
+        return selectDownloadUrl(
+            assets.mapNotNull { it.jsonObject["browser_download_url"]?.jsonPrimitive?.contentOrNull }
+        )
+    }
+
     /**
      * The release as an [UpdateInfo], or null when it is a draft, a pre-release the caller does not
      * want, or carries no installer for the detected OS.
      */
     private fun installableRelease(obj: JsonObject, includePrereleases: Boolean): UpdateInfo? {
         if (obj["draft"]?.jsonPrimitive?.booleanOrNull == true) return null
+        val downloadUrl = installerUrl(obj) ?: return null
+        val latestVersion = obj["tag_name"]?.jsonPrimitive?.contentOrNull?.removePrefix("v") ?: return null
+
         val isPrerelease = obj["prerelease"]?.jsonPrimitive?.booleanOrNull == true
         if (isPrerelease && !includePrereleases) return null
-
-        val urls = (obj["assets"]?.jsonArray ?: return null)
-            .mapNotNull { it.jsonObject["browser_download_url"]?.jsonPrimitive?.contentOrNull }
-        val downloadUrl = selectDownloadUrl(urls) ?: return null
-        val latestVersion = (obj["tag_name"]?.jsonPrimitive?.contentOrNull ?: return null)
-            .removePrefix("v")
 
         return UpdateInfo(
             latestVersion = latestVersion,

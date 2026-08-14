@@ -289,15 +289,12 @@ private fun isVlcInstalledOnSystem(): Boolean =
  * trying only where distributions reliably ship the two together.
  */
 internal fun vlcInstalledOn(osName: String, customPath: String, run: CommandRunner): Boolean {
-    if (customPath.isNotBlank()) {
-        val custom = try { Paths.get(customPath) } catch (_: Exception) { null }
-        if (custom != null && dirContainsVlcLib(custom)) return true
-    }
+    val custom = customPath.takeIf { it.isNotBlank() }
+        ?.let { try { Paths.get(it) } catch (_: Exception) { null } }
+    if (custom != null && dirContainsVlcLib(custom)) return true
     if (detectVlcInstallPathFor(osName).isNotBlank()) return true
-    if ("win" !in osName && "mac" !in osName && "darwin" !in osName) {
-        return run(listOf("which", "vlc"), 0L).exitCode == 0
-    }
-    return false
+    val unixLike = "win" !in osName && "mac" !in osName && "darwin" !in osName
+    return unixLike && run(listOf("which", "vlc"), 0L).exitCode == 0
 }
 
 data class VlcAudioDevice(val id: String, val description: String)

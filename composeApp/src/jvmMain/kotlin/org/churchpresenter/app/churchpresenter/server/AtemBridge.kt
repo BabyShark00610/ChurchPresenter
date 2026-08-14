@@ -45,26 +45,39 @@ internal class AtemBridge(private val json: Json) {
     internal fun jsonStr(s: String): String =
         json.encodeToString(kotlinx.serialization.serializer<String>(), s)
 
+    private data class TriggeredLowerThird(val file: File, val json: String, val durationMs: Long)
+
+    /** The lower third named in the request, or null once the failure has been responded with. */
+    private suspend fun loadTriggeredLowerThird(call: ApplicationCall, rawName: String): TriggeredLowerThird? {
+        val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
+        if (file == null) {
+            call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
+            return null
+        }
+        val ltJson = runCatching { file.readText() }.getOrNull()
+        val durationMs = ltJson?.let { LottieRenderCache.lottieDurationMs(it) }
+        return when {
+            ltJson == null -> {
+                call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
+                null
+            }
+            durationMs == null -> {
+                call.respond(HttpStatusCode.UnprocessableEntity, """{"error":"lottie has no timing information"}""")
+                null
+            }
+            else -> TriggeredLowerThird(file, ltJson, durationMs)
+        }
+    }
+
     /** Shared body of the run/show endpoints. */
     internal suspend fun handleLowerThirdTrigger(
         call: ApplicationCall,
         autoEnd: Boolean
     ) {
-        val rawName = call.parameters["name"] ?: ""
-        val file = lowerThirdFiles().firstOrNull { it.nameWithoutExtension.equals(rawName, ignoreCase = true) }
-        if (file == null) {
-            call.respond(HttpStatusCode.NotFound, """{"error":"lower third not found"}""")
-            return
-        }
-        val ltJson = try { file.readText() } catch (_: Exception) {
-            call.respond(HttpStatusCode.InternalServerError, """{"error":"could not read lottie file"}""")
-            return
-        }
-        val durationMs = LottieRenderCache.lottieDurationMs(ltJson)
-        if (durationMs == null) {
-            call.respond(HttpStatusCode.UnprocessableEntity, """{"error":"lottie has no timing information"}""")
-            return
-        }
+        val loaded = loadTriggeredLowerThird(call, call.parameters["name"] ?: "") ?: return
+        val file = loaded.file
+        val ltJson = loaded.json
+        val durationMs = loaded.durationMs
         val atem = _atemSettings ?: AtemSettings()
 
         // Key target: USK (M/E + keyer) or DSK (?keytype / setting) from settings;
@@ -155,16 +168,19 @@ internal class AtemBridge(private val json: Json) {
      */
     internal fun validateKeyTarget(atem: AtemSettings, useDsk: Boolean, mixEffect: Int, keyer: Int): String? {
         if (useDsk) {
-            if (atem.detectedDownstreamKeyers > 0 && keyer !in 0 until atem.detectedDownstreamKeyers)
-                return "DSK ${keyer + 1} does not exist (available: 1-${atem.detectedDownstreamKeyers})"
-            return null
+            val unknownDsk = atem.detectedDownstreamKeyers > 0 &&
+                keyer !in 0 until atem.detectedDownstreamKeyers
+            return "DSK ${keyer + 1} does not exist (available: 1-${atem.detectedDownstreamKeyers})"
+                .takeIf { unknownDsk }
         }
-        if (atem.detectedMixEffects > 0 && mixEffect !in 0 until atem.detectedMixEffects)
-            return "M/E ${mixEffect + 1} does not exist (available: 1-${atem.detectedMixEffects})"
         val keyers = atem.detectedKeyersPerMe.getOrNull(mixEffect)
-        if (keyers != null && keyers > 0 && keyer !in 0 until keyers)
-            return "Key ${keyer + 1} does not exist on M/E ${mixEffect + 1} (available: 1-$keyers)"
-        return null
+        return when {
+            atem.detectedMixEffects > 0 && mixEffect !in 0 until atem.detectedMixEffects ->
+                "M/E ${mixEffect + 1} does not exist (available: 1-${atem.detectedMixEffects})"
+            keyers != null && keyers > 0 && keyer !in 0 until keyers ->
+                "Key ${keyer + 1} does not exist on M/E ${mixEffect + 1} (available: 1-$keyers)"
+            else -> null
+        }
     }
 
     /**
