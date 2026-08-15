@@ -517,7 +517,7 @@ class PicturesViewModel(
 
 
     /** Applies one watch event to the image list; true when the list actually changed. */
-    private fun CoroutineScope.applyWatchEvent(kind: WatchEvent.Kind<*>, file: File): Boolean = when (kind) {
+    internal fun CoroutineScope.applyWatchEvent(kind: WatchEvent.Kind<*>, file: File): Boolean = when (kind) {
         StandardWatchEventKinds.ENTRY_CREATE -> addWatchedImage(file)
         StandardWatchEventKinds.ENTRY_DELETE -> removeWatchedImage(file)
         else -> false

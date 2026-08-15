@@ -150,7 +150,7 @@ class MediaViewModel {
         _currentPosition.value = ms
     }
 
-    private fun deriveTitleFromUrl(url: String): String {
+    internal fun deriveTitleFromUrl(url: String): String {
         return when {
             url.startsWith("http://") || url.startsWith("https://") || url.startsWith("rtsp://") ||
                 url.startsWith("rtp://") || url.startsWith("mms://") || url.startsWith("udp://") ->

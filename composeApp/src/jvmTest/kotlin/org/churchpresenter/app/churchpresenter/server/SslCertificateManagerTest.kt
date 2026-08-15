@@ -1,6 +1,7 @@
 package org.churchpresenter.app.churchpresenter.server
 
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import java.io.File
 import java.nio.file.Files
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
@@ -8,6 +9,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertNotEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -118,5 +120,70 @@ class SslCertificateManagerTest {
             pem.trimStart().startsWith("-----BEGIN CERTIFICATE-----"),
             "Android network-security-config needs a standard PEM block"
         )
+    }
+
+    private val baseDir get() = SslCertificateManager.caCertFile.parentFile
+
+    @Test
+    fun `the server certificate is reused for a host already issued one`() {
+        val first = serverCertFor("192.168.1.60")
+        val second = serverCertFor("192.168.1.60")
+
+        assertEquals(first.serialNumber, second.serialNumber, "reissuing on every start would churn the keystore")
+    }
+
+    @Test
+    fun `a new address gets a certificate naming it`() {
+        val first = serverCertFor("192.168.1.61")
+        val second = serverCertFor("192.168.1.62")
+
+        assertNotEquals(first.serialNumber, second.serialNumber)
+        assertContains(sanNamesOf(second), "192.168.1.62")
+    }
+
+    @Test
+    fun `moving back to a previous address issues a certificate for it again`() {
+        serverCertFor("192.168.1.63")
+        serverCertFor("192.168.1.64")
+
+        assertContains(sanNamesOf(serverCertFor("192.168.1.63")), "192.168.1.63")
+    }
+
+    @Test
+    fun `an unreadable CA keystore is regenerated rather than locking the server out`() {
+        SslCertificateManager.getOrCreateKeyStore("127.0.0.1")
+        val before = assertNotNull(SslCertificateManager.getCaCertFingerprint())
+        File(baseDir, "ca.jks").writeBytes(byteArrayOf(0, 1, 2, 3))
+
+        val chain = SslCertificateManager.getOrCreateKeyStore("127.0.0.1").getCertificateChain(alias)
+
+        val after = assertNotNull(SslCertificateManager.getCaCertFingerprint())
+        assertNotEquals(before, after, "a corrupt CA has to be replaced, not reused")
+        (chain[0] as X509Certificate).verify((chain[1] as X509Certificate).publicKey)
+    }
+
+    @Test
+    fun `an unreadable server keystore is regenerated under the same CA`() {
+        SslCertificateManager.getOrCreateKeyStore("192.168.1.65")
+        val caBefore = assertNotNull(SslCertificateManager.getCaCertBytes())
+        File(baseDir, "server.jks").writeBytes(byteArrayOf(0, 1, 2, 3))
+
+        val sans = sanNamesOf(serverCertFor("192.168.1.65"))
+
+        assertContains(sans, "192.168.1.65")
+        assertTrue(
+            caBefore.contentEquals(assertNotNull(SslCertificateManager.getCaCertBytes())),
+            "only the server cert was damaged; the phones' trust anchor must survive",
+        )
+    }
+
+    @Test
+    fun `regenerating the CA also replaces the server certificate it signed`() {
+        serverCertFor("192.168.1.66")
+        File(baseDir, "ca.jks").delete()
+
+        val chain = SslCertificateManager.getOrCreateKeyStore("192.168.1.66").getCertificateChain(alias)
+
+        (chain[0] as X509Certificate).verify((chain[1] as X509Certificate).publicKey)
     }
 }

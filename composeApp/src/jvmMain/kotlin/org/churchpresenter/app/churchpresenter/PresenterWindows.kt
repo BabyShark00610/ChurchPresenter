@@ -64,6 +64,9 @@ internal fun PresenterWindows(
     serverUrl: String = "",
     qaDisplayUrl: String = "",
     sttManager: STTManager,
+    defaultScreenDevice: () -> GraphicsDevice? = {
+        GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
+    },
 ) {
     val showPresenterWindow by presenterManager.showPresenterWindow
     val presentingMode by presenterManager.presentingMode
@@ -97,52 +100,15 @@ internal fun PresenterWindows(
     val lottieComposition by rememberLottieComposition(key = lottieJsonContent) {
         LottieCompositionSpec.JsonString(lottieJsonContent)
     }
-    LaunchedEffect(lottieComposition, lottiePauseAtFrame, lottiePauseFrame, lottiePauseDurationMs, lottieTrigger) {
-        try {
-            val comp = lottieComposition
-            val initialFrameCount = presenterManager.lottieFrameCount.value
-            val totalDurMs = when {
-                comp != null -> lottieCompositionDurationMs(comp.durationFrames, comp.frameRate)
-                initialFrameCount != null ->
-                    lottiePrerenderDurationMs(initialFrameCount, presenterManager.lottiePrerenderFps.value)
-                else -> return@LaunchedEffect
-            }
-            val hasPause = lottieHasPause(lottiePauseAtFrame, lottiePauseFrame)
-            val pauseAtMs = lottiePauseAtMs(totalDurMs, lottiePauseFrame, hasPause)
-            val grandTotalMs = lottieGrandTotalMs(totalDurMs, hasPause, lottiePauseDurationMs)
-
-            fun progressAt(elapsedMs: Long): Float = lottieProgressAt(
-                elapsedMs, totalDurMs, hasPause, lottiePauseFrame, pauseAtMs, lottiePauseDurationMs,
-            )
-
-            val startNanos = withFrameNanos { it }
-            var elapsedMs = 0L
-            while (true) {
-                val frameCount = presenterManager.lottieFrameCount.value
-                val progress = progressAt(elapsedMs)
-                if (frameCount != null) {
-                    presenterManager.setLottieCurrentFrameIndex(lottieFrameIndexFor(progress, frameCount))
-                } else {
-                    presenterManager.setLottieProgress(progress)
-                }
-                if (elapsedMs >= grandTotalMs) break
-                val nowNanos = withFrameNanos { it }
-                elapsedMs = ((nowNanos - startNanos) / NANOS_PER_MILLI).coerceAtMost(grandTotalMs)
-            }
-            val finalFrameCount = presenterManager.lottieFrameCount.value
-            if (finalFrameCount != null) {
-                presenterManager.setLottieCurrentFrameIndex(finalFrameCount - 1)
-            } else {
-                presenterManager.setLottieProgress(1f)
-            }
-            presenterManager.requestClearDisplay()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            CrashReporter.reportException(e, "Lottie playback LaunchedEffect")
-            throw e
-        }
-    }
+    LottiePlaybackEffect(
+        presenterManager = presenterManager,
+        durationFrames = lottieComposition?.durationFrames,
+        frameRate = lottieComposition?.frameRate,
+        pauseAtFrame = lottiePauseAtFrame,
+        pauseFrame = lottiePauseFrame,
+        pauseDurationMs = lottiePauseDurationMs,
+        trigger = lottieTrigger,
+    )
 
     val presenterOutputContent: @Composable (screenAssignment: ScreenAssignment, effectiveMode: Presenting, screenNumber: Int?) -> Unit = { screenAssignment, effectiveMode, screenNumber ->
         PresenterOutputContent(
@@ -152,8 +118,7 @@ internal fun PresenterWindows(
         )
     }
 
-    val defaultDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
-    val availableScreens = nonPrimaryIndices(screens.toList(), defaultDevice)
+    val availableScreens = nonPrimaryIndices(screens.toList(), defaultScreenDevice())
 
     val deckLinkDeviceCount = deckLinkOutputCount(DeckLinkManager.isAvailable()) { DeckLinkManager.listDevices().size }
     val windowCount = presenterWindowCount(availableScreens.size, deckLinkDeviceCount)
@@ -502,6 +467,64 @@ internal fun PresenterWindows(
                 }
             }
             }
+        }
+    }
+}
+
+@Composable
+internal fun LottiePlaybackEffect(
+    presenterManager: PresenterManager,
+    durationFrames: Float?,
+    frameRate: Float?,
+    pauseAtFrame: Boolean,
+    pauseFrame: Float,
+    pauseDurationMs: Long,
+    trigger: Int,
+) {
+    LaunchedEffect(durationFrames, frameRate, pauseAtFrame, pauseFrame, pauseDurationMs, trigger) {
+        try {
+            val initialFrameCount = presenterManager.lottieFrameCount.value
+            val totalDurMs = when {
+                durationFrames != null && frameRate != null ->
+                    lottieCompositionDurationMs(durationFrames, frameRate)
+                initialFrameCount != null ->
+                    lottiePrerenderDurationMs(initialFrameCount, presenterManager.lottiePrerenderFps.value)
+                else -> return@LaunchedEffect
+            }
+            val hasPause = lottieHasPause(pauseAtFrame, pauseFrame)
+            val pauseAtMs = lottiePauseAtMs(totalDurMs, pauseFrame, hasPause)
+            val grandTotalMs = lottieGrandTotalMs(totalDurMs, hasPause, pauseDurationMs)
+
+            fun progressAt(elapsedMs: Long): Float = lottieProgressAt(
+                elapsedMs, totalDurMs, hasPause, pauseFrame, pauseAtMs, pauseDurationMs,
+            )
+
+            val startNanos = withFrameNanos { it }
+            var elapsedMs = 0L
+            while (true) {
+                val frameCount = presenterManager.lottieFrameCount.value
+                val progress = progressAt(elapsedMs)
+                if (frameCount != null) {
+                    presenterManager.setLottieCurrentFrameIndex(lottieFrameIndexFor(progress, frameCount))
+                } else {
+                    presenterManager.setLottieProgress(progress)
+                }
+                if (elapsedMs >= grandTotalMs) break
+                val nowNanos = withFrameNanos { it }
+                elapsedMs = ((nowNanos - startNanos) / NANOS_PER_MILLI).coerceAtMost(grandTotalMs)
+            }
+            val finalFrameCount = presenterManager.lottieFrameCount.value
+            if (finalFrameCount != null) {
+                presenterManager.setLottieCurrentFrameIndex(finalFrameCount - 1)
+            } else {
+                presenterManager.setLottieProgress(1f)
+            }
+            presenterManager.requestClearDisplay()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CrashReporter.reportException(e, "Lottie playback LaunchedEffect")
+            throw e
         }
     }
 }

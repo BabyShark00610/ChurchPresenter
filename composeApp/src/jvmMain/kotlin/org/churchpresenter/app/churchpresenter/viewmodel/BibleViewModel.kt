@@ -437,7 +437,7 @@ class BibleViewModel(
         }
     }
 
-    private fun parseVerseNumbers(rangeStr: String): List<Int> {
+    internal fun parseVerseNumbers(rangeStr: String): List<Int> {
         val result = mutableListOf<Int>()
         rangeStr.split(",").forEach { part ->
             val trimmed = part.trim()

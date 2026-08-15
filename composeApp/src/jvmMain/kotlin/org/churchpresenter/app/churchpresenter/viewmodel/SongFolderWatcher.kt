@@ -86,7 +86,7 @@ class SongFolderWatcher(
      * True when this event should trigger a reload: a .song file changed, or a songbook folder
      * appeared — in which case the new folder is registered for watching too.
      */
-    private fun isRelevantEvent(
+    internal fun isRelevantEvent(
         event: WatchEvent<*>,
         key: WatchKey,
         watchService: WatchService,
