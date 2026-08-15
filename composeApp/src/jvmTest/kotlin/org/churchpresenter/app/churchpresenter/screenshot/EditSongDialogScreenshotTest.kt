@@ -57,7 +57,7 @@ class EditSongDialogScreenshotTest {
                             chordsVisible = chordsVisible,
                             onChordsVisibleChange = {},
                             onDismiss = {},
-                            onSave = { _, _ -> },
+                            onSave = { },
                         )
                     }
                 }

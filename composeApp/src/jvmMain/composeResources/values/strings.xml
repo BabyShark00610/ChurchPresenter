@@ -1599,10 +1599,17 @@
     <string name="lyrics_scrim_width">Width</string>
 
     <!-- Per-song background -->
-    <string name="song_background_title">Song Background</string>
-    <string name="song_background_menu">Background for this song…</string>
-    <string name="song_background_own">Give this song its own background</string>
-    <string name="song_background_follow_general">This song uses the general song background from Settings.</string>
+
+    <!-- Per-song appearance, edited in the song editor -->
+    <string name="song_pane_appearance">Appearance</string>
+    <string name="song_appearance_intro">Anything left unticked follows the general song settings.</string>
+    <string name="song_appearance_own_font">Own font and size</string>
+    <string name="song_appearance_own_color">Own text colour and style</string>
+    <string name="song_appearance_own_scrim">Own darkening behind text</string>
+    <string name="song_appearance_own_split">Own slide split</string>
+    <string name="song_appearance_own_background">Own background</string>
+    <string name="song_appearance_section_sizes">Font size for individual sections</string>
+    <string name="song_appearance_section_default">auto</string>
     <string name="song_language_both">Both</string>
     <string name="song_language_primary">Primary</string>
     <string name="song_language_secondary">Secondary</string>

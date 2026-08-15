@@ -70,7 +70,8 @@ import org.churchpresenter.app.churchpresenter.composables.initialPassCombinedCl
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.dialogs.EditSongDialog
-import org.churchpresenter.app.churchpresenter.dialogs.SongBackgroundDialog
+import org.churchpresenter.app.churchpresenter.data.settings.SongAppearance
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SongTuning
@@ -166,7 +167,6 @@ fun SongsTab(
     val live = rememberSongLiveState()
 
     // Reset title-slide selection whenever the active song changes
-    LaunchedEffect(selectedSongIndex) { live.titleSlideSelected = false }
 
     // Helper: push current viewModel selection to presenter and track as live.
     // goLive=true marks this call as an explicit "go live" action so statistics are
@@ -542,6 +542,7 @@ fun SongsTab(
 
     // The metronome tempo is only ever read by the stage monitor, so the field that sets it is
     // offered only when there is one configured.
+    val availableFonts = rememberSystemFonts()
     val hasStageMonitorScreen = appSettings.projectionSettings.screenAssignments.any {
         it.displayMode == Constants.DISPLAY_MODE_STAGE_MONITOR
     }
@@ -554,21 +555,29 @@ fun SongsTab(
         existingSongs = viewModel.songsData.value.getSongs(),
         theme = theme,
         tuning = dialogs.editing?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
+        appearance = dialogs.editing?.let { appSettings.songAppearanceFor(it.songId) } ?: SongAppearance.EMPTY,
+        background = dialogs.editing?.let { appSettings.songBackgroundFor(it.songId) },
+        songSettings = appSettings.songSettings,
+        availableFonts = availableFonts,
         showTuningFields = hasStageMonitorScreen,
         chordsVisible = appSettings.songSettings.editorShowChords,
         onChordsVisibleChange = { visible ->
             onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
         },
         onDismiss = { dialogs.closeEditor() },
-        onSave = { updatedSong, tuning ->
+        onSave = { result ->
             dialogs.editing?.let { oldSong ->
                 val wasLive = isPresenting && live.songId == oldSong.songId
-                val success = viewModel.updateSong(oldSong, updatedSong)
+                val success = viewModel.updateSong(oldSong, result.song)
                 if (success) {
-                    onSettingsChangeState.value { s -> s.withTuning(updatedSong.songId, tuning) }
+                    val newId = result.song.songId
+                    onSettingsChangeState.value { s ->
+                        s.withTuning(newId, result.tuning)
+                            .withSongAppearance(newId, result.appearance)
+                            .withSongBackground(newId, result.background)
+                    }
                     dialogs.closeEditor()
-                    dialogs.closeEditor()
-                    if (wasLive) sendEditedSongToPresenter(updatedSong, tuning)
+                    if (wasLive) sendEditedSongToPresenter(result.song, result.tuning)
                 }
             }
         }
@@ -613,26 +622,6 @@ fun SongsTab(
         }
     }
 
-    // Per-song background dialog
-    SongBackgroundDialog(
-        isVisible = dialogs.backgrounding != null,
-        songTitle = dialogs.backgrounding?.let { song ->
-            listOf(song.number, song.title).filter { it.isNotBlank() }.joinToString(" – ")
-        } ?: "",
-        background = dialogs.backgrounding?.let { appSettings.songBackgroundFor(it.songId) },
-        theme = theme,
-        onDismiss = { dialogs.closeBackground() },
-        onSave = { config ->
-            dialogs.backgrounding?.let { song ->
-                onSettingsChangeState.value { s -> s.withSongBackground(song.songId, config) }
-            }
-            dialogs.closeBackground()
-            // No re-push: the presenter resolves the background out of `appSettings` on every
-            // composition, so a song already live picks the new one up as the settings write
-            // propagates. Only the *section* would need re-sending, and it has not changed.
-        }
-    )
-
     // New Song Dialog
     val newSongTemplate = remember {
         val templateLyrics = listOf("[Verse 1]", "", "", "[Chorus]", "", "", "[Verse 2]", "", "", "[Verse 3]", "", "")
@@ -652,16 +641,25 @@ fun SongsTab(
         isNewSong = true,
         theme = theme,
         showTuningFields = hasStageMonitorScreen,
+        songSettings = appSettings.songSettings,
+        availableFonts = availableFonts,
         chordsVisible = appSettings.songSettings.editorShowChords,
         onChordsVisibleChange = { visible ->
             onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
         },
         onDismiss = { dialogs.closeNew() },
-        onSave = { newSong, tuning ->
-            val success = viewModel.createSong(newSong)
+        onSave = { result ->
+            val success = viewModel.createSong(result.song)
             if (success) {
-                if (tuning != SongTuning()) {
-                    onSettingsChangeState.value { s -> s.withTuning(newSong.songId, tuning) }
+                // Only written when they are actually something — otherwise every new song would
+                // leave a default-valued entry behind in three maps.
+                val newId = result.song.songId
+                if (result.tuning != SongTuning() || !result.appearance.isEmpty() || result.background != null) {
+                    onSettingsChangeState.value { s ->
+                        s.withTuning(newId, result.tuning)
+                            .withSongAppearance(newId, result.appearance)
+                            .withSongBackground(newId, result.background)
+                    }
                 }
                 dialogs.closeNew()
             }

@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -47,6 +46,7 @@ import androidx.compose.ui.geometry.Offset
 import kotlin.math.min
 import org.churchpresenter.app.churchpresenter.composables.LoopingVideoBackground
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.withSongAppearance
 
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -85,7 +85,11 @@ fun SongPresenter(
 ) {
     // When languageOverride is set by the per-screen songMode, use it instead of the global setting.
     val isKey = outputRole == Constants.OUTPUT_ROLE_KEY
+    // The song's own look folded over the shared one, ONCE, at the single binding everything else
+    // reads through — see `withSongAppearance`. `appSettings.songSettings` must not be read directly
+    // below this line or the override silently does not apply there.
     val ss = appSettings.songSettings
+        .withSongAppearance(appSettings.songAppearanceFor(lyricSection.songId), isLowerThird)
     val effectiveLangDisplay = if (languageOverride.isNotBlank()) languageOverride else {
         if (lookAheadEnabled) {
             if (isLowerThird) ss.lowerThirdLookAheadLanguageDisplay else ss.lookAheadLanguageDisplay
@@ -189,7 +193,7 @@ fun SongPresenter(
         textDecoration = if (effectiveLyricsUnderline) TextDecoration.Underline else TextDecoration.None,
         shadow = if (effectiveLyricsShadow) lyricsBaseShadow else null
     )
-    val contentAlignment = when (appSettings.songSettings.lyricsAlignment) {
+    val contentAlignment = when (ss.lyricsAlignment) {
         Constants.TOP -> Alignment.TopCenter
         Constants.BOTTOM -> Alignment.BottomCenter
         else -> Alignment.Center
@@ -285,10 +289,10 @@ fun SongPresenter(
     }
 
     // Fade-in on first appearance (covers background + text)
-    val fadeInDuration = appSettings.songSettings.transitionDuration.toInt().coerceAtLeast(100)
-    var enterAlpha by remember { mutableStateOf(if (appSettings.songSettings.fadeIn) 0f else 1f) }
+    val fadeInDuration = ss.transitionDuration.toInt().coerceAtLeast(100)
+    var enterAlpha by remember { mutableStateOf(if (ss.fadeIn) 0f else 1f) }
     LaunchedEffect(Unit) {
-        if (appSettings.songSettings.fadeIn && enterAlpha < 1f) {
+        if (ss.fadeIn && enterAlpha < 1f) {
             val anim = Animatable(0f)
             anim.animateTo(1f, tween(durationMillis = fadeInDuration)) {
                 enterAlpha = this.value
@@ -309,9 +313,17 @@ fun SongPresenter(
                 modifier = Modifier.fillMaxSize().alpha(effectiveOpacity)
             )
         }
-        val density = LocalDensity.current
-        val widthScale = with(density) { maxWidth.toPx() / 1920f }
-        val heightScale = with(density) { maxHeight.toPx() / 1080f }
+        // Measured in dp against the 1920x1080 reference space, NOT in pixels.
+        //
+        // The factor is applied to `.sp` and `.dp` below, which are density-independent, so deriving
+        // it from `toPx()` made it wrong by exactly the display's density: on a monitor at 150%
+        // Windows scaling a 1920px-wide output reports 1920px but only 1280dp, the old form gave a
+        // scale of 1.0, and every glyph and margin came out half again too large. Auto-fit — which
+        // measures at Density(1f) and guarantees a line fits 1728 reference units — was then
+        // overruled at draw time, and long lines spilled past the edge or broke mid-word.
+        // StageMonitorScreen already measures in `.value` for the same reason.
+        val widthScale = maxWidth.value / 1920f
+        val heightScale = maxHeight.value / 1080f
         val scaleFactor = min(widthScale, heightScale).coerceIn(0.5f, 3.0f)
 
         // Scale shadow to be visible at projection resolution
@@ -341,14 +353,14 @@ fun SongPresenter(
         val scaledTitleFontSize = (effectiveTitleFontSize * scaleFactor).sp
         val settingsLyricsFontSize = if (lookAheadEnabled) {
             if (isLowerThird) ss.lowerThirdLookAheadFontSize else ss.lookAheadFontSize
-        } else if (isLowerThird) appSettings.songSettings.lyricsLowerThirdFontSize else appSettings.songSettings.lyricsFontSize
+        } else if (isLowerThird) ss.lyricsLowerThirdFontSize else ss.lyricsFontSize
         val effectiveSongNumberFontSize =
-            if (isLowerThird) appSettings.songSettings.songNumberLowerThirdFontSize else appSettings.songSettings.songNumberFontSize
+            if (isLowerThird) ss.songNumberLowerThirdFontSize else ss.songNumberFontSize
 
         // Auto-fit: compute the largest font size that fits ALL sections without line wrapping.
         // Uses the reference 1920×1080 coordinate space (margins subtracted).
         val autoFitTextMeasurer = rememberTextMeasurer()
-        val autoFitFontSize = remember(allLyricSections, isLowerThird, lookAheadEnabled, languageOverride, appSettings.songSettings, appSettings.projectionSettings) {
+        val autoFitFontSize = remember(allLyricSections, isLowerThird, lookAheadEnabled, languageOverride, ss, appSettings.projectionSettings) {
             if (allLyricSections.isEmpty()) null
             else {
                 val ld = effectiveLangDisplay
@@ -359,16 +371,16 @@ fun SongPresenter(
                         ss.bilingualLayout == Constants.BILINGUAL_TOP_BOTTOM && hasBilingual
 
                 val fullWidth = 1920 - appSettings.projectionSettings.windowLeft - appSettings.projectionSettings.windowRight -
-                        appSettings.songSettings.marginLeft - appSettings.songSettings.marginRight
+                        ss.marginLeft - ss.marginRight
                 // In side-by-side bilingual mode, each column gets half the width
                 val refWidth = if (sideBySide) fullWidth / 2 else fullWidth
                 val fullHeight = if (isLowerThird) {
                     (1080 * appSettings.projectionSettings.lowerThirdHeightPercent / 100) -
                             appSettings.projectionSettings.windowTop - appSettings.projectionSettings.windowBottom -
-                            appSettings.songSettings.marginTop - appSettings.songSettings.marginBottom
+                            ss.marginTop - ss.marginBottom
                 } else {
                     1080 - appSettings.projectionSettings.windowTop - appSettings.projectionSettings.windowBottom -
-                            appSettings.songSettings.marginTop - appSettings.songSettings.marginBottom
+                            ss.marginTop - ss.marginBottom
                 }
                 // In top/bottom bilingual mode, each language gets half the height
                 val refHeight = if (topBottom) fullHeight / 2 else fullHeight
@@ -456,7 +468,10 @@ fun SongPresenter(
                     reservedHeight = reserved,
                     // Only leave room for the marker when it can actually be drawn — with it off,
                     // reserving its height would keep the text a size smaller than it needs to be.
-                    includeEndIndicator = ss.showEndOfSongIndicator
+                    includeEndIndicator = ss.showEndOfSongIndicator,
+                    // Must match the `softWrap` the lyric Text is drawn with, or the size is fitted
+                    // to a layout the presenter is not going to produce.
+                    allowWrap = ss.wordWrap
                 )
             }
         }
@@ -467,17 +482,26 @@ fun SongPresenter(
         } else {
             if (isLowerThird) ss.lyricsLowerThirdFontSizeAutoFit else ss.lyricsFontSizeAutoFit
         }
-        val effectiveLyricsFontSize = if (autoFitEnabled) {
+        // A size set against this section's name beats both the song's size and auto-fit. It has to
+        // beat auto-fit: that is a whole-song calculation producing ONE size for every slide, so
+        // there is no way for it to also honour a section asking to be bigger than the rest.
+        val sectionFontSize = appSettings
+            .songAppearanceFor(lyricSection.songId)
+            ?.sectionFontSize(lyricSection.header)
+            ?.takeIf { !lookAheadEnabled }
+        val effectiveLyricsFontSize = if (sectionFontSize != null) {
+            sectionFontSize
+        } else if (autoFitEnabled) {
             (autoFitFontSize ?: settingsLyricsFontSize).coerceAtMost(settingsLyricsFontSize)
         } else settingsLyricsFontSize
 
         val scaledLyricsFontSize = (effectiveLyricsFontSize * scaleFactor).sp
         val scaledSongNumberFontSize = (effectiveSongNumberFontSize * scaleFactor).sp
 
-        val leftOffSet = ((appSettings.projectionSettings.windowLeft + appSettings.songSettings.marginLeft) * scaleFactor).dp
-        val rightOffSet = ((appSettings.projectionSettings.windowRight + appSettings.songSettings.marginRight) * scaleFactor).dp
-        val topOffSet = ((appSettings.projectionSettings.windowTop + appSettings.songSettings.marginTop) * scaleFactor).dp
-        val bottomOffSet = ((appSettings.projectionSettings.windowBottom + appSettings.songSettings.marginBottom) * scaleFactor).dp
+        val leftOffSet = ((appSettings.projectionSettings.windowLeft + ss.marginLeft) * scaleFactor).dp
+        val rightOffSet = ((appSettings.projectionSettings.windowRight + ss.marginRight) * scaleFactor).dp
+        val topOffSet = ((appSettings.projectionSettings.windowTop + ss.marginTop) * scaleFactor).dp
+        val bottomOffSet = ((appSettings.projectionSettings.windowBottom + ss.marginBottom) * scaleFactor).dp
 
         if (isLowerThird) {
             val lowerThirdFraction = appSettings.projectionSettings.lowerThirdHeightPercent / 100f
@@ -581,7 +605,10 @@ fun SongPresenter(
                     val laLangDisplay = effectiveLangDisplay
                     val laIsLineMode = laDisplayMode == Constants.SONG_DISPLAY_MODE_LINE
 
-                    val isLineMode = displayMode == Constants.SONG_DISPLAY_MODE_LINE
+                    // Never for the title slide: it is a heading and a credit line that belong
+                    // together, not a verse to be dealt out a line at a time.
+                    val isLineMode = displayMode == Constants.SONG_DISPLAY_MODE_LINE &&
+                        section.type != Constants.SECTION_TYPE_TITLE_SLIDE
                     val effectiveLineIndex = if (isLineMode && displayLineIndex < 0) 0 else displayLineIndex
                     // How many lines this surface puts on one slide, and where the cursor's group
                     // starts. At 1 both collapse to the original single-line behaviour.
@@ -719,7 +746,7 @@ fun SongPresenter(
                     // A Row-split side-by-side layout doesn't fit a narrow vertical band — falls
                     // through to the top/bottom bilingual branch below, which already special-cases
                     // isLowerThird (true for vertical too) with a compact stacked layout.
-                    val useSideBySide = appSettings.songSettings.bilingualLayout == Constants.BILINGUAL_SIDE_BY_SIDE && !isLowerThirdVertical
+                    val useSideBySide = ss.bilingualLayout == Constants.BILINGUAL_SIDE_BY_SIDE && !isLowerThirdVertical
 
                     // Look-ahead text style with full font controls
                     val laBaseShadow = Shadow(
@@ -812,7 +839,7 @@ fun SongPresenter(
                             textAlign = lyricsHorizontalAlignment,
                             fontFamily = if (isLookAheadLine) laFontFamily else lyricsFontFamily,
                             fontSize = if (isLookAheadLine) scaledLaFontSize else scaledLyricsFontSize,
-                            softWrap = appSettings.songSettings.wordWrap,
+                            softWrap = ss.wordWrap,
                             text = line,
                             color = if (isLookAheadLine) laColor else lyricsColor,
                             style = if (isLookAheadLine) lookAheadTextStyle else lyricsTextStyleScaled
@@ -860,7 +887,7 @@ fun SongPresenter(
                                         textAlign = lyricsHorizontalAlignment,
                                         fontFamily = laFontFamily,
                                         fontSize = scaledLaFontSize,
-                                        softWrap = appSettings.songSettings.wordWrap,
+                                        softWrap = ss.wordWrap,
                                         text = line,
                                         color = laColor,
                                         style = lookAheadTextStyle

@@ -66,7 +66,7 @@ class SongsViewModelLibraryTest {
     }
 
     private fun viewModel(): SongsViewModel {
-        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false)
+        val vm = SongsViewModel(AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath, titleSlideEnabled = false)), dispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined, enableFolderWatcher = false)
         created.add(vm)
         awaitUntil("songs to load") { vm.filteredSongItems.value.isNotEmpty() }
         return vm

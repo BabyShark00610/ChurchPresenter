@@ -22,6 +22,8 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.models.SongTuning
+import org.churchpresenter.app.churchpresenter.data.settings.BackgroundConfig
+import org.churchpresenter.app.churchpresenter.data.settings.SongAppearance
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -100,6 +102,8 @@ class EditSongContentTest {
     private class Saved {
         var song: SongItem? = null
         var tuning: SongTuning? = null
+        var appearance: SongAppearance? = null
+        var background: BackgroundConfig? = null
         var dismissed = 0
     }
 
@@ -145,7 +149,12 @@ class EditSongContentTest {
                         tuning = tuning,
                         showTuningFields = showTuningFields,
                         onDismiss = { saved.dismissed++ },
-                        onSave = { song, savedTuning -> saved.song = song; saved.tuning = savedTuning },
+                        onSave = { r ->
+                            saved.song = r.song
+                            saved.tuning = r.tuning
+                            saved.appearance = r.appearance
+                            saved.background = r.background
+                        },
                     )
                 }
             }

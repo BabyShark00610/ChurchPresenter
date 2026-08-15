@@ -2,6 +2,7 @@ package org.churchpresenter.app.churchpresenter.viewmodel
 
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,7 +20,12 @@ import kotlin.test.assertTrue
  */
 class LyricSectionsTest {
 
-    private val vm = SongsViewModel(AppSettings())
+    // These tests are about how LYRICS split into sections. The generated title slide is a section
+    // too, and it is on by default, so it is switched off here rather than left to shift every index
+    // asserted on below — `LyricSectionsTitleSlideTest` covers it instead.
+    private val vm = SongsViewModel(
+        AppSettings(songSettings = SongSettings(titleSlideEnabled = false))
+    )
 
     private fun song(
         lyrics: List<String>,

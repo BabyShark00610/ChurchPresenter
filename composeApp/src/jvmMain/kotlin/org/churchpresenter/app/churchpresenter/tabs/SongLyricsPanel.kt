@@ -267,13 +267,9 @@ internal fun RowScope.SongLyricsPanel(
             val titleSlideEnabled = appSettings.songSettings.titleSlideEnabled
             val currentSong = filteredSongs.getOrNull(selectedSongIndex)
 
-            LaunchedEffect(selectedSectionIndex, live.titleSlideSelected) {
-                if (live.titleSlideSelected) {
-                    lyricsListState.animateScrollToItem(0)
-                } else if (selectedSectionIndex >= 0) {
-                    val offset = if (titleSlideEnabled && currentSong != null) 1 else 0
-                    lyricsListState.animateScrollToItem(selectedSectionIndex + offset)
-                }
+            // The title slide is section 0 of the list now, so the row index IS the section index.
+            LaunchedEffect(selectedSectionIndex) {
+                if (selectedSectionIndex >= 0) lyricsListState.animateScrollToItem(selectedSectionIndex)
             }
 
             // Get lyric sections from ViewModel — no parsing in UI
@@ -288,78 +284,6 @@ internal fun RowScope.SongLyricsPanel(
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(12.dp)
             ) {
-                // ── Title slide entry ────────────────────────────────────
-                if (titleSlideEnabled && currentSong != null && sections.isNotEmpty()) {
-                    item {
-                        val titleLine = songTitleLine(
-                            currentSong,
-                            appSettings.songSettings.titleSlideShowSongNumber,
-                        )
-                        val creditLine = songCreditLine(currentSong)
-
-                        fun buildTitleSection() =
-                            titleSlideSection(
-                                currentSong,
-                                appSettings.tuningFor(currentSong.songId),
-                                appSettings.songSettings.titleSlideShowSongNumber,
-                            )
-
-                        fun sendTitleSlide() {
-                            val ts = buildTitleSection()
-                            val allSections = listOf(ts) + lyricSections()
-                            onAllSectionsChanged(allSections)
-                            onSectionIndexChanged(0)
-                            onLineIndexChanged(0)
-                            onSongItemSelected(ts)
-                            live.titleSlideSelected = true
-                            live.songId = currentSong.songId
-                            live.sectionIndex = -1
-                            live.lineIndex = 0
-                        }
-
-                        val contentColor = if (live.titleSlideSelected)
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        else
-                            MaterialTheme.colorScheme.onSurface
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    if (live.titleSlideSelected)
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                    else Color.Transparent
-                                )
-                                .initialPassCombinedClickable(
-                                    onClick = { sendTitleSlide() },
-                                    onDoubleClick = { sendTitleSlide(); onPresenting(Presenting.LYRICS) }
-                                )
-                                .padding(8.dp)
-                        ) {
-                            // Same chip the lyric sections use, so the title slide reads as
-                            // one more entry in the list rather than a differently-styled one.
-                            SectionLabelRow(
-                                label = stringResource(Res.string.song_title_slide),
-                                modifier = Modifier.padding(vertical = 4.dp),
-                            )
-                            Text(
-                                text = titleLine,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = contentColor
-                            )
-                            if (creditLine.isNotBlank()) {
-                                Text(
-                                    text = creditLine,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = contentColor.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
                 // ── Regular lyric sections ───────────────────────────────
                 if (sections.isNotEmpty()) {
                     itemsIndexed(sections) { sectionIndex, section ->
@@ -367,26 +291,24 @@ internal fun RowScope.SongLyricsPanel(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(
-                                    if (!live.titleSlideSelected && sectionIndex == selectedSectionIndex)
+                                    if (sectionIndex == selectedSectionIndex)
                                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                                     else Color.Transparent
                                 )
                                 .finalPassCombinedClickable(
                                     onClick = {
                                         onSectionSelected(sectionIndex)
-                                        live.titleSlideSelected = false
                                         sendToPresenter(isPresenting)
                                     },
                                     onDoubleClick = {
                                         onSectionSelected(sectionIndex)
-                                        live.titleSlideSelected = false
                                         sendToPresenter(true)
                                         onPresenting(Presenting.LYRICS)
                                     }
                                 )
                                 .padding(8.dp)
                         ) {
-                            val textColor = if (!live.titleSlideSelected && sectionIndex == selectedSectionIndex)
+                            val textColor = if (sectionIndex == selectedSectionIndex)
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             else
                                 MaterialTheme.colorScheme.onSurface
@@ -416,7 +338,6 @@ internal fun RowScope.SongLyricsPanel(
                             val lineClickHandler: ((Int) -> Unit)? = if (isPerLineMode) { lineIdx ->
                                 onSectionSelected(sectionIndex)
                                 onLineSelected(lineIdx)
-                                live.titleSlideSelected = false
                                 sendToPresenter(isPresenting)
                             } else null
                             // Double-click on the words goes live too — at the clicked LINE,
@@ -425,7 +346,6 @@ internal fun RowScope.SongLyricsPanel(
                             val lineDoubleClickHandler: ((Int) -> Unit)? = if (isPerLineMode) { lineIdx ->
                                 onSectionSelected(sectionIndex)
                                 onLineSelected(lineIdx)
-                                live.titleSlideSelected = false
                                 sendToPresenter(true)
                                 onPresenting(Presenting.LYRICS)
                             } else null

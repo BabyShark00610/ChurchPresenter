@@ -20,7 +20,7 @@ class SongsViewModelChordFoldingTest {
     fun create() {
         dir = Files.createTempDirectory("cp-chord-fold").toFile()
         model = SongsViewModel(
-            AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)),
+            AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath, titleSlideEnabled = false)),
             dispatcher = Dispatchers.Unconfined,
             ioDispatcher = Dispatchers.Unconfined,
             enableFolderWatcher = false,

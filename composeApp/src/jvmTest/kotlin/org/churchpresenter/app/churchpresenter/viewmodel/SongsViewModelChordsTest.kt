@@ -47,7 +47,7 @@ class SongsViewModelChordsTest {
             target.absolutePath,
         )
         val vm = SongsViewModel(
-            AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath)),
+            AppSettings(songSettings = SongSettings(storageDirectory = dir.absolutePath, titleSlideEnabled = false)),
             dispatcher = Dispatchers.Unconfined,
             ioDispatcher = Dispatchers.Unconfined,
             enableFolderWatcher = false,

@@ -244,6 +244,8 @@ object Constants {
     const val SECTION_TYPE_SONG = "song"
     const val SECTION_TYPE_VERSE = "verse"
     const val SECTION_TYPE_CHORUS = "chorus"
+    /** The generated slide that opens a song: its title, number and credits. */
+    const val SECTION_TYPE_TITLE_SLIDE = "title_slide"
 
     /**
      * The section markers the song editor offers on its Insert row, in the order shown.

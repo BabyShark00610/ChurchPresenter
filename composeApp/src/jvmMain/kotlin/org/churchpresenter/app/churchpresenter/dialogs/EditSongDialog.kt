@@ -119,6 +119,10 @@ import org.churchpresenter.app.churchpresenter.composables.sectionKindOf
 import org.churchpresenter.app.churchpresenter.composables.songStatsOf
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.models.SongTuning
+import org.churchpresenter.app.churchpresenter.data.settings.BackgroundConfig
+import org.churchpresenter.app.churchpresenter.data.settings.SongAppearance
+import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
+import churchpresenter.composeapp.generated.resources.song_pane_appearance
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.ChordSheetImporter
@@ -144,8 +148,13 @@ fun EditSongDialog(
     showTuningFields: Boolean = false,
     chordsVisible: Boolean = true,
     onChordsVisibleChange: (Boolean) -> Unit = {},
+    appearance: SongAppearance = SongAppearance.EMPTY,
+    background: BackgroundConfig? = null,
+    /** The shared song settings the Appearance pane seeds from and falls back to. */
+    songSettings: SongSettings = SongSettings(),
+    availableFonts: List<String> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (SongItem, SongTuning) -> Unit
+    onSave: (SongEditResult) -> Unit
 ) {
     if (!isVisible || song == null) return
 
@@ -171,6 +180,10 @@ fun EditSongDialog(
             chordsVisible = chordsVisible,
             onChordsVisibleChange = onChordsVisibleChange,
             isVisible = isVisible,
+            appearance = appearance,
+            background = background,
+            songSettings = songSettings,
+            availableFonts = availableFonts,
             onDismiss = onDismiss,
             onSave = onSave
         )
@@ -178,7 +191,21 @@ fun EditSongDialog(
 }
 
 /** Which set of lyrics the single editor pane is currently showing. */
-internal enum class LyricPane { PRIMARY, SECONDARY }
+internal enum class LyricPane { PRIMARY, SECONDARY, APPEARANCE }
+
+/**
+ * Everything the editor hands back on Save.
+ *
+ * One record rather than four parameters: tempo, capo, appearance and background are all per-machine
+ * things that ride alongside the song file rather than inside it, and the list has grown twice
+ * already. The caller commits them together, and only if the song itself saved.
+ */
+data class SongEditResult(
+    val song: SongItem,
+    val tuning: SongTuning,
+    val appearance: SongAppearance = SongAppearance.EMPTY,
+    val background: BackgroundConfig? = null,
+)
 
 /**
  * Puts [snippet] in at the caret, replacing whatever is selected, and leaves the caret after it.
@@ -236,8 +263,13 @@ internal fun EditSongContent(
     chordsVisible: Boolean = true,
     onChordsVisibleChange: (Boolean) -> Unit = {},
     isVisible: Boolean = true,
+    appearance: SongAppearance = SongAppearance.EMPTY,
+    background: BackgroundConfig? = null,
+    /** The shared song settings the Appearance pane seeds from and falls back to. */
+    songSettings: SongSettings = SongSettings(),
+    availableFonts: List<String> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (SongItem, SongTuning) -> Unit
+    onSave: (SongEditResult) -> Unit
 ) {
     // Filter out non-digits from song number (handles cases like "3.1" -> "3" or "31")
     var editedNumber by remember(isVisible, song) { mutableStateOf(song.number.filter { it.isDigit() }) }
@@ -264,6 +296,9 @@ internal fun EditSongContent(
     }
 
     var pane by remember(isVisible, song) { mutableStateOf(LyricPane.PRIMARY) }
+    // Buffered like every other field here, and committed only by Save.
+    var editedAppearance by remember(isVisible, song, appearance) { mutableStateOf(appearance) }
+    var editedBackground by remember(isVisible, song, background) { mutableStateOf(background) }
     // Keyed on the setting rather than on the song: the switch is remembered across songs, so it
     // resyncs when the stored preference changes and survives opening the next song.
     var showChords by remember(chordsVisible) { mutableStateOf(chordsVisible) }
@@ -418,6 +453,9 @@ internal fun EditSongContent(
                                 PaneTab(stringResource(Res.string.song_pane_secondary), pane == LyricPane.SECONDARY) {
                                     pane = LyricPane.SECONDARY
                                 }
+                                PaneTab(stringResource(Res.string.song_pane_appearance), pane == LyricPane.APPEARANCE) {
+                                    pane = LyricPane.APPEARANCE
+                                }
                             }
                             Spacer(Modifier.weight(1f))
                             ChordsToggle(on = showChords) {
@@ -426,6 +464,18 @@ internal fun EditSongContent(
                             }
                         }
 
+                        if (pane == LyricPane.APPEARANCE) {
+                            SongAppearanceEditor(
+                                appearance = editedAppearance,
+                                background = editedBackground,
+                                defaults = songSettings,
+                                sectionNames = sectionNamesIn(editedLyrics.text),
+                                availableFonts = availableFonts,
+                                onAppearanceChange = { editedAppearance = it },
+                                onBackgroundChange = { editedBackground = it },
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
+                        } else {
                         // Section markers, inserted at the caret.
                         FlowRow(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
@@ -466,6 +516,7 @@ internal fun EditSongContent(
                         )
 
                         SyntaxLegend(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp))
+                        }
                     }
 
                     VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -528,10 +579,14 @@ internal fun EditSongContent(
                                 ccliNumber = editedCcli
                             )
                             onSave(
-                                updatedSong,
-                                SongTuning(
-                                    bpm = editedBpm.toIntOrNull()?.coerceIn(0, MAX_BPM) ?: 0,
-                                    capo = editedCapo.toIntOrNull()?.coerceIn(0, MAX_CAPO) ?: 0,
+                                SongEditResult(
+                                    song = updatedSong,
+                                    tuning = SongTuning(
+                                        bpm = editedBpm.toIntOrNull()?.coerceIn(0, MAX_BPM) ?: 0,
+                                        capo = editedCapo.toIntOrNull()?.coerceIn(0, MAX_CAPO) ?: 0,
+                                    ),
+                                    appearance = editedAppearance,
+                                    background = editedBackground,
                                 ),
                             )
                         },

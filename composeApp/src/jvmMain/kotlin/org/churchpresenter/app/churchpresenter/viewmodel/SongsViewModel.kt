@@ -461,9 +461,20 @@ class SongsViewModel(
         }
 
         // Mark the very last section so the presenter can show end-of-song indicator
-        return sections.mapIndexed { index, section ->
+        val marked = sections.mapIndexed { index, section ->
             if (index == sections.lastIndex) section.copy(isLastSection = true) else section
         }
+        // The title slide is section 0 of the song rather than a row the operator has to find and
+        // click. Prepending it here — the one place a song becomes a list of slides — is what makes
+        // going live open on it, the down arrow move from it to verse one, and the play count and
+        // the Instance Link push happen, all without a second code path of their own.
+        if (!appSettings.songSettings.titleSlideEnabled || marked.isEmpty()) return marked
+        val titleSlide = titleSlideSection(
+            song,
+            appSettings.tuningFor(song.songId),
+            appSettings.songSettings.titleSlideShowSongNumber,
+        )
+        return listOf(titleSlide) + marked
     }
 
     private fun splitLyricsIntoSections(lyrics: List<String>, title: String, number: String): List<LyricSection> {

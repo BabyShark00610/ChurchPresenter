@@ -21,16 +21,12 @@ internal class SongDialogRequests {
         private set
     var creatingNew by mutableStateOf(false)
         private set
-    var backgrounding by mutableStateOf<SongItem?>(null)
-        private set
 
     fun edit(song: SongItem?) { editing = song }
-    fun background(song: SongItem?) { backgrounding = song }
     fun delete(song: SongItem?) { deleting = song }
     fun createNew() { creatingNew = true }
 
     fun closeEditor() { editing = null }
-    fun closeBackground() { backgrounding = null }
     fun closeDelete() { deleting = null }
     fun closeNew() { creatingNew = false }
 }
@@ -45,9 +41,6 @@ internal class SongLiveState {
     var songId by mutableStateOf<String?>(null)
     var sectionIndex by mutableStateOf(0)
     var lineIndex by mutableStateOf(0)
-
-    /** Whether the title slide, rather than a lyric section, is the selection in the panel. */
-    var titleSlideSelected by mutableStateOf(false)
 
     fun live(songId: String?, sectionIndex: Int, lineIndex: Int) {
         this.songId = songId

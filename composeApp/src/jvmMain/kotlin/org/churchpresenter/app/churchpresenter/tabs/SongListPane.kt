@@ -71,7 +71,6 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondary
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
@@ -90,7 +89,6 @@ import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.add_to_favorites
 import churchpresenter.composeapp.generated.resources.add_to_schedule
 import churchpresenter.composeapp.generated.resources.edit_song
-import churchpresenter.composeapp.generated.resources.song_background_menu
 import churchpresenter.composeapp.generated.resources.go_live
 import churchpresenter.composeapp.generated.resources.ic_arrow_down
 import churchpresenter.composeapp.generated.resources.ic_arrow_up
@@ -812,21 +810,6 @@ fun DragHandle(colId: String, onDrag: (Float) -> Unit, onDragEnd: () -> Unit) {
                             onClick = {
                                 dialogs.edit(song)
                                 tabFocusRequester.requestFocus()
-                                showContextMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(Res.string.song_background_menu)) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Image,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.tertiary
-                                )
-                            },
-                            onClick = {
-                                dialogs.background(song)
                                 showContextMenu = false
                             }
                         )

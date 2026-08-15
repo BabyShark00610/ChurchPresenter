@@ -81,7 +81,9 @@ data class SongSettings(
     val editorShowChords: Boolean = true,
 
     // Song Title Slide settings
-    val titleSlideEnabled: Boolean = false,
+    // On by default: a song opens on its title rather than dropping straight into verse one.
+    // The slide is section 0 of the song, so the down arrow moves from it into the words.
+    val titleSlideEnabled: Boolean = true,
     val titleSlideShowSongNumber: Boolean = true,
 
     // Song number settings

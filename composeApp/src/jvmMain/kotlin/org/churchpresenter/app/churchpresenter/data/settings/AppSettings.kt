@@ -66,6 +66,11 @@ data class AppSettings(
     // Kept here rather than in the .song file for the same reason as songBpm/songCapo above: the
     // file is a shared document, while a background is a path into THIS machine's media folder.
     val songBackgrounds: Map<String, BackgroundConfig> = emptyMap(),
+    // songId -> the look that song overrides: its font, colour, scrim, group size, and the size of
+    // named sections within it. Same reasoning as songBackgrounds above — per machine, not in the
+    // shared .song file. Kept apart from songBackgrounds only because that map predates it and
+    // folding them would need a migration for no behavioural gain.
+    val songAppearances: Map<String, SongAppearance> = emptyMap(),
     val songColOrder: List<String> = emptyList(),
     val songHiddenCols: Set<String> = setOf("tune", "play_count", "author", "composer"),
     val setupWizardShown: Boolean = false,
@@ -99,6 +104,20 @@ data class AppSettings(
         return copy(
             songBackgrounds = if (config == null) songBackgrounds - songId
             else songBackgrounds + (songId to config)
+        )
+    }
+
+    /** How [songId] overrides the shared song look, or null when it takes it as it comes. */
+    fun songAppearanceFor(songId: String): SongAppearance? =
+        if (songId.isBlank()) null else songAppearances[songId]
+
+    /** These settings with [songId]'s look set to [appearance]. An appearance that overrides nothing
+     * is removed rather than stored, so opening the editor and closing it leaves no trace. */
+    fun withSongAppearance(songId: String, appearance: SongAppearance?): AppSettings {
+        if (songId.isBlank()) return this
+        return copy(
+            songAppearances = if (appearance == null || appearance.isEmpty()) songAppearances - songId
+            else songAppearances + (songId to appearance)
         )
     }
 

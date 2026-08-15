@@ -64,8 +64,17 @@ fun calculateAutoFitFontSize(
 }
 
 /**
- * Finds the largest font size that fits ALL sections of a song without line wrapping.
- * Checks every line in every section against both width (no wrap) and height (fits vertically).
+ * Finds the largest font size at which EVERY section of a song fits the space it is given.
+ *
+ * [allowWrap] must match the presenter's `softWrap`, because it changes what "fits" means:
+ *
+ * - **off** — a line has to fit on one line, so it is measured unconstrained and rejected the moment
+ *   its natural width exceeds [availableWidth]. The size ends up governed by the song's single
+ *   longest line, which is the point: nothing is ever allowed to fold.
+ * - **on** — the presenter is going to fold long lines anyway, so measuring them unconstrained
+ *   fitted the size to a line that will never be drawn unbroken and left the whole song needlessly
+ *   small. Measured at [availableWidth] instead, folding included, and judged on height alone —
+ *   a wrapped line cannot exceed the width it was measured at.
  */
 fun calculateAutoFitForAllSections(
     textMeasurer: TextMeasurer,
@@ -75,6 +84,7 @@ fun calculateAutoFitForAllSections(
     availableHeight: Int,
     reservedHeight: Int = 0,
     includeEndIndicator: Boolean = false,
+    allowWrap: Boolean = false,
 ): Int {
     if (sections.isEmpty() || availableWidth <= 0 || availableHeight <= 0) return MIN_AUTO_FIT_FONT_SIZE
     val allLines = sections.flatMap { it.lines }
@@ -82,8 +92,7 @@ fun calculateAutoFitForAllSections(
 
     val effectiveHeight = (availableHeight - reservedHeight).coerceAtLeast(1)
     val referenceDensity = Density(1f)
-    // Use unconstrained width to measure natural line width (no wrapping)
-    val unconstrainedConstraints = Constraints()
+    val constraints = if (allowWrap) Constraints(maxWidth = availableWidth) else Constraints()
 
     var low = MIN_AUTO_FIT_FONT_SIZE
     var high = 300
@@ -92,9 +101,10 @@ fun calculateAutoFitForAllSections(
         val style = baseStyle.copy(fontSize = mid.sp)
         val fits = sections.withIndex().all { (sectionIdx, section) ->
             sectionFits(
-                textMeasurer, section, style, unconstrainedConstraints, referenceDensity,
+                textMeasurer, section, style, constraints, referenceDensity,
                 availableWidth, effectiveHeight,
                 withEndIndicator = includeEndIndicator && sectionIdx == sections.lastIndex,
+                enforceWidth = !allowWrap,
             )
         }
         if (fits) low = mid else high = mid
@@ -189,6 +199,7 @@ private fun sectionFits(
     availableWidth: Int,
     effectiveHeight: Int,
     withEndIndicator: Boolean,
+    enforceWidth: Boolean,
 ): Boolean {
     // Check both primary and secondary lines so bilingual text also fits
     val lineSets = if (section.secondaryLines.isNotEmpty()) {
@@ -209,6 +220,9 @@ private fun sectionFits(
             0
         }
         val sectionHeight = measured.sumOf { it.height } + indicatorHeight
-        measured.none { it.width > availableWidth } && sectionHeight <= effectiveHeight
+        // With wrapping on, [constraints] already capped the width and a line that folded is taller
+        // rather than wider — so height is the only thing left to judge.
+        val widthFits = !enforceWidth || measured.none { it.width > availableWidth }
+        widthFits && sectionHeight <= effectiveHeight
     }
 }
