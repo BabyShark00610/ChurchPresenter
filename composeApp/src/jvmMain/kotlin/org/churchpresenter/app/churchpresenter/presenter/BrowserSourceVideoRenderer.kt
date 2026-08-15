@@ -198,6 +198,24 @@ class BrowserSourceVideoRenderer(
          * columns only within the surviving row band. A full-screen crossfade (nearly every pixel
          * changes) degrades to close to the full frame — expected, not a regression.
          */
+        /** First and last column of one row that differ; (width, -1) when the row is unchanged. */
+        private fun changedColumns(
+            current: IntArray,
+            previous: IntArray,
+            rowStart: Int,
+            width: Int,
+        ): Pair<Int, Int> {
+            var first = width
+            var last = -1
+            for (col in 0 until width) {
+                val idx = rowStart + col
+                if (current[idx] == previous[idx]) continue
+                if (col < first) first = col
+                last = col
+            }
+            return first to last
+        }
+
         internal fun computeDirtyRect(current: IntArray, previous: IntArray, width: Int, height: Int): DirtyRect {
             var minRow = 0
             while (minRow < height && rowsEqual(current, previous, minRow, width)) minRow++
@@ -207,14 +225,9 @@ class BrowserSourceVideoRenderer(
             var minCol = width
             var maxCol = -1
             for (row in minRow..maxRow) {
-                val rowStart = row * width
-                for (col in 0 until width) {
-                    val idx = rowStart + col
-                    if (current[idx] != previous[idx]) {
-                        if (col < minCol) minCol = col
-                        if (col > maxCol) maxCol = col
-                    }
-                }
+                val (first, last) = changedColumns(current, previous, row * width, width)
+                if (first < minCol) minCol = first
+                if (last > maxCol) maxCol = last
             }
             // Defensive fallback — the caller guarantees a diff exists, so this shouldn't trigger,
             // but never emit an inverted rect.

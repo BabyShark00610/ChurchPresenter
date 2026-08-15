@@ -310,6 +310,20 @@ internal fun macCamerasFrom(run: CommandRunner): List<CameraDevice> {
     return parseMacCameras(profilerOutput, ffmpegOutput)
 }
 
+/** Adds an `[0] Camera name` line from ffmpeg's AVFoundation listing, if it names a new device. */
+private fun addIndexedAvfDevice(
+    line: String,
+    devices: MutableList<CameraDevice>,
+    seenNames: MutableSet<String>,
+) {
+    val match = Regex("\\[(\\d+)]\\s+(.+)").find(line) ?: return
+    val index = match.groupValues[1]
+    val name = match.groupValues[2].trim()
+    if (name.lowercase() in seenNames) return
+    devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
+    seenNames.add(name.lowercase())
+}
+
 internal fun parseMacCameras(systemProfilerOutput: String, ffmpegOutput: String): List<CameraDevice> {
     val devices = mutableListOf<CameraDevice>()
     val seenNames = mutableSetOf<String>()
@@ -339,17 +353,7 @@ internal fun parseMacCameras(systemProfilerOutput: String, ffmpegOutput: String)
 
         if (line.contains("AVFoundation video devices")) isVideo = true
         else if (line.contains("AVFoundation audio devices")) isVideo = false
-        else if (isVideo) {
-            val match = Regex("\\[(\\d+)]\\s+(.+)").find(line)
-            if (match != null) {
-                val index = match.groupValues[1]
-                val name = match.groupValues[2].trim()
-                if (name.lowercase() !in seenNames) {
-                    devices.add(CameraDevice(name = name, path = "avfoundation://$index", displayName = name))
-                    seenNames.add(name.lowercase())
-                }
-            }
-        }
+        else if (isVideo) addIndexedAvfDevice(line, devices, seenNames)
     }
 
     return devices

@@ -50,7 +50,8 @@ complexity:
   LargeClass:
     active: false
   NestedBlockDepth:
-    active: false
+    active: true
+    ignoreAnnotated: ['Composable']
 
 naming:
   TopLevelPropertyNaming:
