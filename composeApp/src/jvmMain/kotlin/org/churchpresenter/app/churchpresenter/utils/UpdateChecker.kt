@@ -65,14 +65,32 @@ enum class UpdateCheckInterval(private val days: Int?) {
 
 object UpdateChecker {
 
+    /**
+     * The repository this build offers updates FROM.
+     *
+     * This fork's own, not `ChurchPresenter/ChurchPresenter`. Pointed at the upstream one, a fork
+     * hands its users the official build the first time it is newer — silently replacing every
+     * change the fork exists for, on machines whose operators never chose that. A build must only
+     * ever update to another build of itself.
+     *
+     * Change this and the release tags it reads have to move together: the updater compares
+     * `tag_name` (less any `v`) with the running version, and on Windows installs the release's
+     * `.msi` asset — a release without one is skipped, not offered.
+     */
+    private const val RELEASES_REPO = "BabyShark00610/ChurchPresenter"
+
     private const val RELEASES_API_URL =
-        "https://api.github.com/repos/ChurchPresenter/ChurchPresenter/releases?per_page=50"
+        "https://api.github.com/repos/$RELEASES_REPO/releases?per_page=50"
     const val RELEASES_URL =
-        "https://github.com/ChurchPresenter/ChurchPresenter/releases/latest"
+        "https://github.com/$RELEASES_REPO/releases/latest"
     // Count-only beacon on churchpresenter.org that attributes downloads to the
     // app's updater (vs. the website's download buttons vs. GitHub directly).
-    private const val DOWNLOAD_BEACON_URL =
-        "https://www.churchpresenter.org/api/download"
+    //
+    // Blank in this fork, which switches the beacon off. It reports to the upstream project's own
+    // download statistics, and this build no longer downloads what those statistics are about — the
+    // updates come from RELEASES_REPO. Left on, a handful of churches running this fork would be
+    // counted as downloads of a release they never took.
+    private const val DOWNLOAD_BEACON_URL = ""
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -215,6 +233,7 @@ object UpdateChecker {
      */
     fun reportDownloadStarted(version: String) {
         if (!BuildConfig.IS_RELEASE) return
+        if (DOWNLOAD_BEACON_URL.isBlank()) return
         beaconScope.launch {
             // True once the server answered at all — any HTTP status counts,
             // since a 4xx/5xx means the request arrived and a retry won't help.
