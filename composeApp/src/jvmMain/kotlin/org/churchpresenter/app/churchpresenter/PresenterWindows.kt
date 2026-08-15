@@ -64,13 +64,6 @@ internal fun PresenterWindows(
     serverUrl: String = "",
     qaDisplayUrl: String = "",
     sttManager: STTManager,
-    /**
-     * Which device the operator's own desktop is on, so it is not driven as an output.
-     *
-     * A parameter because it is the one call in here that needs a display: a headless JVM throws
-     * from [GraphicsEnvironment.getDefaultScreenDevice], which would make everything below it
-     * unreachable in a test. Everything else works from the values it is given.
-     */
     defaultScreenDevice: () -> GraphicsDevice? = {
         GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice
     },
@@ -478,15 +471,6 @@ internal fun PresenterWindows(
     }
 }
 
-/**
- * Runs one pass of the lower third's lottie, writing progress onto [presenterManager] and asking
- * for the display to be cleared when it ends.
- *
- * Split out of [PresenterWindows], which cannot be composed without a display. This needs none: it
- * is arithmetic over the frame clock and calls onto the manager. [durationFrames]/[frameRate] are
- * taken as values rather than a `LottieComposition` so a test drives it without parsing one, and
- * so the pre-rendered path (no composition, a known frame count) is reachable on its own.
- */
 @Composable
 internal fun LottiePlaybackEffect(
     presenterManager: PresenterManager,

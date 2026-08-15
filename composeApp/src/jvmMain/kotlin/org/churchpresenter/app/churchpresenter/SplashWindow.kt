@@ -54,13 +54,6 @@ internal fun SplashWindow(theme: ThemeMode) {
     }
 }
 
-/**
- * What the splash window draws.
- *
- * Split from the [Window] around it because that window cannot be built without a display, so
- * composing [SplashWindow] itself throws in a headless test. Everything the operator actually sees
- * is here and needs no display at all.
- */
 @Composable
 internal fun SplashContent(theme: ThemeMode) {
     AppThemeWrapper(theme = theme) {

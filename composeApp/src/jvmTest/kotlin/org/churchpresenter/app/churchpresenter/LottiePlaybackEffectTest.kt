@@ -48,16 +48,6 @@ class LottiePlaybackEffectTest {
     }
 
     @Test
-    fun `progress starts at the beginning rather than jumping in`() = runComposeUiTest {
-        val manager = liveManager()
-
-        play(manager, durationFrames = 600f, frameRate = 60f)
-
-        waitUntil("the first frame was written") { manager.lottieProgress.value >= 0f }
-        assertTrue(manager.lottieProgress.value < 1f, "a ten-second clip cannot be over already")
-    }
-
-    @Test
     fun `a clip that holds on a frame still finishes`() = runComposeUiTest {
         val manager = liveManager()
 

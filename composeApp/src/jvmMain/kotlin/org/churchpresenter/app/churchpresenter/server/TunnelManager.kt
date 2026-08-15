@@ -45,6 +45,26 @@ internal fun cloudflaredDownloadUrl(isWin: Boolean, isMac: Boolean, isArm: Boole
     else -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
 }
 
+internal fun moveBinaryIntoPlace(downloaded: File, target: File) {
+    if (downloaded.renameTo(target)) return
+    target.delete()
+    if (!downloaded.renameTo(target)) {
+        throw RuntimeException("Failed to move downloaded binary into place")
+    }
+}
+
+internal fun checkExtracted(exitCode: Int, binaryExists: Boolean) {
+    if (exitCode != 0 || !binaryExists) {
+        throw RuntimeException("Failed to extract cloudflared from archive (exit $exitCode)")
+    }
+}
+
+internal fun tunnelExitStatus(foundUrl: Boolean, current: TunnelStatus): TunnelStatus? = when {
+    foundUrl && current is TunnelStatus.Connected -> TunnelStatus.Error("Tunnel disconnected")
+    !foundUrl -> TunnelStatus.Error("Tunnel failed to start")
+    else -> null
+}
+
 class TunnelManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -152,17 +172,10 @@ class TunnelManager {
             val result = ProcessBuilder("tar", "-xzf", tmpFile.absolutePath, "-C", dataDir.absolutePath, "cloudflared")
                 .redirectErrorStream(true)
                 .start()
-            val exitCode = result.waitFor()
-            if (exitCode != 0 || !binaryFile.exists()) {
-                throw RuntimeException("Failed to extract cloudflared from archive (exit $exitCode)")
-            }
+            checkExtracted(result.waitFor(), binaryFile.exists())
             return
         }
-        if (tmpFile.renameTo(binaryFile)) return
-        binaryFile.delete()
-        if (!tmpFile.renameTo(binaryFile)) {
-            throw RuntimeException("Failed to move downloaded binary into place")
-        }
+        moveBinaryIntoPlace(tmpFile, binaryFile)
     }
 
     private suspend fun startTunnel(localPort: Int) {
@@ -196,11 +209,8 @@ class TunnelManager {
             }
 
             // Process exited
-            if (foundUrl && _status.value is TunnelStatus.Connected) {
-                _status.value = TunnelStatus.Error("Tunnel disconnected")
-                _tunnelUrl.value = null
-            } else if (!foundUrl) {
-                _status.value = TunnelStatus.Error("Tunnel failed to start")
+            tunnelExitStatus(foundUrl, _status.value)?.let {
+                _status.value = it
                 _tunnelUrl.value = null
             }
         }

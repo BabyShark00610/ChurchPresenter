@@ -50,12 +50,6 @@ fun ConditionalTooltipArea(
     }
 }
 
-/**
- * Whether [bounds] sits wholly inside a window of [windowWidth] by [windowHeight].
- *
- * A tooltip anchored to a row that is half scrolled out of view is drawn at the row's real
- * position, which is off the window — so it appears detached from anything, or not at all.
- */
 internal fun isFullyVisibleInWindow(bounds: Rect, windowWidth: Float, windowHeight: Float): Boolean =
     bounds.left >= 0f &&
         bounds.top >= 0f &&
