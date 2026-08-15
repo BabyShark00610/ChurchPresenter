@@ -38,8 +38,6 @@ class SettingsProjectionMigrationTest {
     private fun withAssignments(vararg assignmentJson: String): List<ScreenAssignment> =
         assignments("""{"screenAssignments":[${assignmentJson.joinToString(",")}]}""")
 
-    // ── Version 1: showBible/showSongs become modes ─────────────────────────────
-
     @Test
     fun `a screen with scripture switched off becomes bible mode off`() {
         val assignment = withAssignments("""{"showBible":false}""").single()
@@ -136,8 +134,6 @@ class SettingsProjectionMigrationTest {
         assertEquals(once.projectionSettings.screenAssignments, twice.projectionSettings.screenAssignments)
     }
 
-    // ── Version 2: the four numbered screens become a list ──────────────────────
-
     @Test
     fun `the numbered screen fields become a list in order`() {
         val migrated = assignments(
@@ -177,9 +173,6 @@ class SettingsProjectionMigrationTest {
 
     @Test
     fun `the numbered screens are still converted when one carries an old flag`() {
-        // The flag itself is NOT converted here: version 1 rewrites projectionSettings
-        // .screenAssignments, which version 2 has not created yet, so a screen1Assignment carrying
-        // showBible is past the only migration that reads it. Pinned so the ordering is deliberate.
         val migrated = assignments(
             """{"screen1Assignment":{"targetDisplay":0,"showBible":false},"screen2Assignment":{"targetDisplay":1}}""",
         )

@@ -68,8 +68,6 @@ class InstanceLinkClientFetchGuardTest {
         throw AssertionError("timed out after ${timeoutMs}ms waiting for $what")
     }
 
-    // ── Never connected ─────────────────────────────────────────────────────────
-
     @Test
     fun `every fetch is refused before the link has ever been opened`() = runBlocking {
         val client = client()
@@ -111,8 +109,6 @@ class InstanceLinkClientFetchGuardTest {
 
         assertTrue(url.endsWith("media-1"), url)
     }
-
-    // ── Against a primary that demands an API key ───────────────────────────────
 
     @Test
     fun `a follower carrying the api key is served every asset`() {

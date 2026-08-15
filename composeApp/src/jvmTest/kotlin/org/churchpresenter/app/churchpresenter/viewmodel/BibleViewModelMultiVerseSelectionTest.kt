@@ -234,4 +234,86 @@ class BibleViewModelMultiVerseSelectionTest {
         assertTrue(model.getSelectedVerses().isEmpty())
         assertTrue(model.getNextVerses().isEmpty())
     }
+
+    private fun partialSecondary(secondaryVerses: List<Int>): BibleViewModel {
+        writeBible("p.spb", "Primary", "John", "English", 1)
+        SpbFixture.spbFile(
+            dir, name = "s.spb",
+            content = SpbFixture.buildContent(
+                "Secondary",
+                listOf(SpbFixture.Book(43, "\u0418\u043e\u0430\u043d\u043d\u0430", 2)),
+                secondaryVerses.map { SpbFixture.Verse(43, 1, it, "\u0420\u0443\u0441\u0441\u043a\u0438\u0439 1:$it") },
+            ),
+        )
+        return loaded("p.spb", "s.spb").also { it.openChapter(0, 1) }
+    }
+
+    @Test
+    fun `a verse the secondary translation skips comes back in the primary alone`() {
+        val model = partialSecondary(listOf(1, 3))
+        model.selectVerse(1)
+
+        val selected = model.getSelectedVerses()
+
+        assertEquals(1, selected.size)
+        assertEquals("English 1:2", selected[0].verseText)
+    }
+
+    @Test
+    fun `a multi-verse selection drops only the verses the secondary skips`() {
+        val model = partialSecondary(listOf(1, 3))
+        model.selectVerse(0)
+        model.ctrlClickVerse(1)
+
+        val selected = model.getSelectedVerses()
+
+        assertEquals(2, selected.size)
+        assertEquals("English 1:1 English 1:2", selected[0].verseText)
+        assertEquals(
+            "\u0420\u0443\u0441\u0441\u043a\u0438\u0439 1:1",
+            selected[1].verseText,
+            "the secondary carries only what it actually has",
+        )
+    }
+
+    @Test
+    fun `a look-ahead verse the secondary skips comes back in the primary alone`() {
+        val model = partialSecondary(listOf(1, 3))
+        model.selectVerse(0)
+
+        val next = model.getNextVerses()
+
+        assertEquals(1, next.size)
+        assertEquals("English 1:2", next[0].verseText)
+    }
+
+    @Test
+    fun `an empty secondary contributes nothing to a single selection`() {
+        writeBible("p.spb", "Primary", "John", "English", 1)
+        SpbFixture.spbFile(
+            dir, name = "s.spb",
+            content = SpbFixture.buildContent(
+                "Secondary", listOf(SpbFixture.Book(43, "\u0418\u043e\u0430\u043d\u043d\u0430", 2)), emptyList(),
+            ),
+        )
+        val model = loaded("p.spb", "s.spb").also { it.openChapter(0, 1) }
+        model.selectVerse(0)
+
+        assertEquals(1, model.getSelectedVerses().size)
+    }
+
+    @Test
+    fun `an empty secondary contributes nothing to the look-ahead`() {
+        writeBible("p.spb", "Primary", "John", "English", 1)
+        SpbFixture.spbFile(
+            dir, name = "s.spb",
+            content = SpbFixture.buildContent(
+                "Secondary", listOf(SpbFixture.Book(43, "\u0418\u043e\u0430\u043d\u043d\u0430", 2)), emptyList(),
+            ),
+        )
+        val model = loaded("p.spb", "s.spb").also { it.openChapter(0, 1) }
+        model.selectVerse(0)
+
+        assertEquals(1, model.getNextVerses().size)
+    }
 }

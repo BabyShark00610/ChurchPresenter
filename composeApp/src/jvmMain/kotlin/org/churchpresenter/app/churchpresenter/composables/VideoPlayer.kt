@@ -40,6 +40,22 @@ private const val FRAME_INTERVAL_MS = 16L
  * Initialises the JavaFX toolkit exactly once for the lifetime of the process.
  * Still needed for WebView (WebsitePresenter).
  */
+/**
+ * Whether [throwable] is the known Prism/Glass race rather than a fault worth crashing on.
+ *
+ * `Screen.notifySettingsChanged` -> `QuantumToolkit.assignScreensAdapters` can NPE deep inside
+ * JavaFX when the OS reports a display change while Prism is still starting. The whole stack is
+ * JavaFX-internal with no app frames, so it cannot be guarded at a call site — the handler that
+ * installs this needs the JavaFX toolkit running, which a headless JVM has no way to start, so the
+ * decision it makes lives here on its own where it can be checked.
+ */
+internal fun isJavaFxScreenReconfigRace(throwable: Throwable): Boolean =
+    throwable is NullPointerException &&
+        throwable.stackTrace.any {
+            it.className.startsWith("com.sun.glass.ui.Screen") ||
+                it.className.startsWith("com.sun.javafx.tk.quantum.QuantumToolkit")
+        }
+
 private object JfxInit {
     @Volatile private var initialised = false
     fun ensureInit() {
@@ -62,12 +78,7 @@ private object JfxInit {
                     Platform.runLater {
                         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
                         Thread.currentThread().uncaughtExceptionHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
-                            val isScreenReconfigRace = throwable is NullPointerException &&
-                                throwable.stackTrace.any {
-                                    it.className.startsWith("com.sun.glass.ui.Screen") ||
-                                        it.className.startsWith("com.sun.javafx.tk.quantum.QuantumToolkit")
-                                }
-                            if (isScreenReconfigRace) {
+                            if (isJavaFxScreenReconfigRace(throwable)) {
                                 CrashReporter.reportWarning(
                                     "JavaFX screen-reconfiguration NPE (suppressed, known Prism/Glass race)",
                                     throwable = throwable,

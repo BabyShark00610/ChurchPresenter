@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -38,15 +39,25 @@ fun ConditionalTooltipArea(
         tooltip = { if (fullyVisible) tooltip() },
         tooltipPlacement = tooltipPlacement,
         modifier = modifier.onGloballyPositioned { coords ->
-            val bounds = coords.boundsInWindow()
-            val winW = windowInfo.containerSize.width.toFloat()
-            val winH = windowInfo.containerSize.height.toFloat()
-            fullyVisible = bounds.left >= 0f &&
-                bounds.top >= 0f &&
-                bounds.right <= winW &&
-                bounds.bottom <= winH
+            fullyVisible = isFullyVisibleInWindow(
+                bounds = coords.boundsInWindow(),
+                windowWidth = windowInfo.containerSize.width.toFloat(),
+                windowHeight = windowInfo.containerSize.height.toFloat(),
+            )
         }
     ) {
         content()
     }
 }
+
+/**
+ * Whether [bounds] sits wholly inside a window of [windowWidth] by [windowHeight].
+ *
+ * A tooltip anchored to a row that is half scrolled out of view is drawn at the row's real
+ * position, which is off the window — so it appears detached from anything, or not at all.
+ */
+internal fun isFullyVisibleInWindow(bounds: Rect, windowWidth: Float, windowHeight: Float): Boolean =
+    bounds.left >= 0f &&
+        bounds.top >= 0f &&
+        bounds.right <= windowWidth &&
+        bounds.bottom <= windowHeight

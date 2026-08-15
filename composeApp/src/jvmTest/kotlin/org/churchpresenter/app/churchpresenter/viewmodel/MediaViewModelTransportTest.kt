@@ -26,8 +26,6 @@ class MediaViewModelTransportTest {
         dir.deleteRecursively()
     }
 
-    // ── Naming what was loaded ──────────────────────────────────────────────────
-
     @Test
     fun `an http url is named by its last path segment`() {
         assertEquals("sermon.mp4", model.deriveTitleFromUrl("https://example.org/media/sermon.mp4"))
@@ -82,8 +80,6 @@ class MediaViewModelTransportTest {
         assertEquals("clip.mp4", model.deriveTitleFromUrl("clip.mp4"))
     }
 
-    // ── Loading ─────────────────────────────────────────────────────────────────
-
     @Test
     fun `loading a video marks it loaded, stopped and not audio`() {
         model.loadMedia("https://example.org/sermon.mp4", Constants.MEDIA_TYPE_LOCAL)
@@ -137,8 +133,6 @@ class MediaViewModelTransportTest {
 
         assertFalse(model.isLoaded)
     }
-
-    // ── Transport ───────────────────────────────────────────────────────────────
 
     @Test
     fun `nothing loaded means play does nothing`() {
@@ -246,8 +240,6 @@ class MediaViewModelTransportTest {
         assertEquals(before + 1, model.seekVersion)
     }
 
-    // ── Volume ──────────────────────────────────────────────────────────────────
-
     @Test
     fun `the volume is held between silence and full`() {
         model.setVolume(2f)
@@ -285,8 +277,6 @@ class MediaViewModelTransportTest {
         assertEquals(1_234L, model.currentPosition)
         assertEquals(before, model.seekVersion)
     }
-
-    // ── Formatting ──────────────────────────────────────────────────────────────
 
     @Test
     fun `a time under an hour is minutes and seconds`() {
