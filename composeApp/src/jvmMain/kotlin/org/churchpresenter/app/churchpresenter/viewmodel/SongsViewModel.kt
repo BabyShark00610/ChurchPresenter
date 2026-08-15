@@ -412,17 +412,28 @@ class SongsViewModel(
         _selectedLineIndex.value = index
     }
 
+    /**
+     * The whole song as one section — what [getSelectedLyricSection] falls back to when no section is
+     * selected, which is the state a plain click in the song list leaves behind.
+     *
+     * Built from the PARSED sections, not from `song.lyrics`. The raw list is the file as written and
+     * still carries its `[Verse 1]` / `[Chorus]` markers and its chord brackets, so handing it to a
+     * presenter put a section header up on the projector — and the marker is not even skipped in line
+     * mode, it is simply one more line to step onto.
+     */
     fun getSelectedSong(): LyricSection? {
         val items = _filteredSongItems.value
         val idx = _selectedSongIndex.value
         if (items.isEmpty() || idx < 0 || idx >= items.size) return null
         val song = items[idx]
+        val sections = getLyricSections(song)
+            .filter { it.type != Constants.SECTION_TYPE_TITLE_SLIDE }
         return LyricSection(
             title = song.title,
             secondaryTitle = song.secondaryTitle,
             songNumber = song.number.toIntOrNull() ?: 0,
-            lines = song.lyrics,
-            secondaryLines = song.secondaryLyrics,
+            lines = sections.flatMap { it.lines },
+            secondaryLines = sections.flatMap { it.secondaryLines },
             type = Constants.SECTION_TYPE_SONG,
             songId = song.songId
         )

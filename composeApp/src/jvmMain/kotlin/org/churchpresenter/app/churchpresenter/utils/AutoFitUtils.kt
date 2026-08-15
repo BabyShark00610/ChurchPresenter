@@ -220,9 +220,43 @@ private fun sectionFits(
             0
         }
         val sectionHeight = measured.sumOf { it.height } + indicatorHeight
-        // With wrapping on, [constraints] already capped the width and a line that folded is taller
-        // rather than wider — so height is the only thing left to judge.
-        val widthFits = !enforceWidth || measured.none { it.width > availableWidth }
+        // Without wrapping, a whole line has to fit. With wrapping, the line may fold — but the
+        // longest thing that CANNOT fold still has to fit, or the renderer breaks it mid-word.
+        //
+        // Judging wrapped text on height alone is not enough: a measured wrapped line is never wider
+        // than the width it was measured at, so the check passed at any size and a token too long
+        // for the column — a Kazakh compound, or two words run together by a missing space after a
+        // comma — was never what made the font step down. It just got chopped.
+        val widthFits = if (enforceWidth) {
+            measured.none { it.width > availableWidth }
+        } else {
+            lines.none { longestUnbreakableWidth(textMeasurer, it, style, density) > availableWidth }
+        }
         widthFits && sectionHeight <= effectiveHeight
     }
 }
+
+
+/**
+ * The width of the widest run in [text] that no line breaker may split — its longest "word".
+ *
+ * Whitespace is the only break opportunity assumed. That is deliberately pessimistic: a renderer may
+ * also break after a hyphen or between scripts, so a size this accepts is one the real layout can
+ * always achieve, while a size it rejects might in fact have been fine. Erring that way costs a
+ * little size; erring the other way puts half a word on the screen.
+ */
+private fun longestUnbreakableWidth(
+    textMeasurer: TextMeasurer,
+    text: String,
+    style: TextStyle,
+    density: Density,
+): Int {
+    val longest = text.split(*BREAKING_WHITESPACE).maxByOrNull { it.length }
+    if (longest.isNullOrBlank()) return 0
+    return textMeasurer.measure(
+        text = longest, style = style, constraints = Constraints(), density = density,
+    ).size.width
+}
+
+/** What counts as a break opportunity above. A NO-BREAK SPACE deliberately is not one. */
+private val BREAKING_WHITESPACE = arrayOf(" ", "	", " ", " ", " ")

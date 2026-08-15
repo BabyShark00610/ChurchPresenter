@@ -9,6 +9,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,6 +25,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -361,7 +371,18 @@ internal fun SongAppearanceEditor(
     }
 }
 
-/** A group's tick and, once ticked, the controls it governs. */
+/**
+ * A group's tick, an arrow to fold it away, and the controls it governs.
+ *
+ * Folding and unticking are two different things and each has its own control. Unticking is what
+ * gives the setting back to the general ones — it necessarily discards what was chosen here. Folding
+ * only hides the controls: the group stays in force and keeps every value, so a pane with five
+ * groups open can be tidied down to five lines without losing a thing. Before they were the same
+ * gesture, and the only way to stop a group taking up room was to throw it away.
+ *
+ * A group opens as soon as it is ticked — that is the moment its controls are wanted — and folds
+ * with the arrow thereafter.
+ */
 @Composable
 private fun GroupToggle(
     label: String,
@@ -370,16 +391,38 @@ private fun GroupToggle(
     onCheckedChange: (Boolean) -> Unit,
     content: @Composable () -> Unit,
 ) {
+    // Keyed on `checked` so ticking a group always reveals it, however it was left last time.
+    var expanded by remember(checked) { mutableStateOf(checked) }
+
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    LabeledCheckbox(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        controlModifier = Modifier.size(24.dp),
-        label = label,
-        modifier = Modifier.testTag(testTag),
-        style = MaterialTheme.typography.bodyMedium,
-    )
-    if (checked) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LabeledCheckbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            controlModifier = Modifier.size(24.dp),
+            label = label,
+            modifier = Modifier.testTag(testTag),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.weight(1f))
+        if (checked) {
+            IconButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.size(28.dp).testTag("${testTag}Fold"),
+            ) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+    if (checked && expanded) {
         Column(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 4.dp)) { content() }
     }
 }
