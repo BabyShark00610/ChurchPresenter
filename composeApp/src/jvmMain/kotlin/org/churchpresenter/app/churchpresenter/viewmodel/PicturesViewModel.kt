@@ -22,8 +22,7 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
-import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
-import org.jetbrains.skia.Image
+import org.churchpresenter.app.churchpresenter.utils.PictureDecoder
 import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.WatchEvent
@@ -410,21 +409,7 @@ class PicturesViewModel(
     }
 
     private fun loadImageBitmap(file: File): ImageBitmap {
-        val bytes = file.readBytes()
-
-        // Try to decode directly with Skia (handles jpg, png, webp, gif, bmp…)
-        val originalImage = try {
-            Image.makeFromEncoded(bytes)
-        } catch (e: Exception) {
-            // Skia can't decode HEIC/HEIF natively — convert via platform tool first
-            if (file.extension.lowercase() in listOf("heic", "heif")) {
-                val jpegBytes = HeicDecoder.toJpegBytes(file)
-                    ?: throw Exception("Failed to convert HEIC file ${file.name} — sips/ImageIO returned no data")
-                Image.makeFromEncoded(jpegBytes)
-            } else {
-                throw Exception("Failed to decode image ${file.name}: ${e.message}", e)
-            }
-        }
+        val originalImage = PictureDecoder.decode(file)
 
         // Downscale to thumbnail size (400px max dimension) for grid display
         val maxThumbnailSize = 400

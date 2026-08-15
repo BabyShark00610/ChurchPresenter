@@ -106,6 +106,7 @@ import org.churchpresenter.app.churchpresenter.viewmodel.CompanionSatelliteViewM
 import org.churchpresenter.app.churchpresenter.viewmodel.InstanceLinkViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
+import org.churchpresenter.app.churchpresenter.utils.AppDataDir
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
@@ -198,7 +199,7 @@ fun main() {
 
     if (shouldBundleDefaultBible(startupSettings.bibleSettings)) {
         try {
-            val defaultBibleDir = File(System.getProperty("user.home"), Constants.DEFAULT_BIBLES_DIR)
+            val defaultBibleDir = File(AppDataDir.resolve(), Constants.DEFAULT_BIBLES_FOLDER)
             defaultBibleDir.mkdirs()
             val targetFile = File(defaultBibleDir, "kjv1769.spb")
             if (!targetFile.exists()) {
