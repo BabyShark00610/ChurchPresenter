@@ -203,7 +203,10 @@ internal fun RowScope.SongLyricsPanel(
         // Navigation hint — only in line mode, and drawn from the live bindings so a rebind is
         // reflected here. Hidden when both pairs are unbound: a sentence naming keys that do
         // nothing is worse than no hint.
-        val isLineModeHint = isSongLineMode(appSettings.songSettings)
+        // Everything here is about the SELECTED song, so it reads that song's own split.
+        val songAppearance = filteredSongs.getOrNull(selectedSongIndex)
+            ?.let { appSettings.songAppearanceFor(it.songId) }
+        val isLineModeHint = isSongLineMode(appSettings.songSettings, songAppearance)
         if (isLineModeHint && lineNavHintStr.isNotEmpty()) {
             Text(
                 text = lineNavHintStr,
@@ -313,11 +316,11 @@ internal fun RowScope.SongLyricsPanel(
                             else
                                 MaterialTheme.colorScheme.onSurface
 
-                            val isPerLineMode = isSongLineMode(appSettings.songSettings)
+                            val isPerLineMode = isSongLineMode(appSettings.songSettings, songAppearance)
                             // Highlight the whole group that goes on one slide, snapped to its
                             // boundary — with multi-line slides, marking only the cursor's own
                             // line would understate what the congregation is looking at.
-                            val perLineStep = songLineStep(appSettings.songSettings)
+                            val perLineStep = songLineStep(appSettings.songSettings, songAppearance)
                             val activeLineIndex = if (isPerLineMode && sectionIndex == selectedSectionIndex)
                                 songLineGroupStart(selectedLineIndex, perLineStep) else -1
 

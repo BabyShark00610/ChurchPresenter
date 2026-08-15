@@ -1,6 +1,8 @@
 package org.churchpresenter.app.churchpresenter.utils
 
+import org.churchpresenter.app.churchpresenter.data.settings.SongAppearance
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
+import org.churchpresenter.app.churchpresenter.data.settings.withSongAppearance
 
 /** Widest group a slide may hold in line mode. Above this the setting stops meaning anything —
  * a verse is rarely longer — and the number field would let a typo hide the whole song. */
@@ -12,11 +14,14 @@ internal const val MAX_LINES_PER_SLIDE = 10
  * navigation, the on-screen nav hint and per-line highlighting. Extracted from three identical inline
  * OR-chains in SongsTab so the "is any surface in line mode" question lives in one tested place.
  */
-internal fun isSongLineMode(settings: SongSettings): Boolean =
-    settings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-        settings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-        settings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-        settings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+internal fun isSongLineMode(settings: SongSettings, appearance: SongAppearance? = null): Boolean {
+    val fullscreen = settings.withSongAppearance(appearance, isLowerThird = false)
+    val lowerThird = settings.withSongAppearance(appearance, isLowerThird = true)
+    return fullscreen.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+        lowerThird.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+        fullscreen.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+        lowerThird.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+}
 
 /**
  * How many lines one slide holds on [isLowerThird]'s surface. Clamped rather than trusted: the value
@@ -49,16 +54,21 @@ internal fun songLinesPerSlide(settings: SongSettings, isLowerThird: Boolean): I
  * between. That is a genuinely contradictory pair of settings — two different slide sequences off one
  * cursor — and the main screen is the one to resolve it in favour of.
  */
-internal fun songLineStep(settings: SongSettings): Int {
+internal fun songLineStep(settings: SongSettings, appearance: SongAppearance? = null): Int {
+    // The song's own split, if it has one. Without this the presenter drew the song's two-line
+    // slides while the arrow key still walked the shared setting's single lines, so a press changed
+    // the slide only every other time and the panel highlighted half of what was on screen.
+    val fullscreen = settings.withSongAppearance(appearance, isLowerThird = false)
+    val lowerThird = settings.withSongAppearance(appearance, isLowerThird = true)
     val fullscreenInLineMode =
-        settings.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-            settings.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+        fullscreen.fullscreenDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+            fullscreen.lookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
     val lowerThirdInLineMode =
-        settings.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
-            settings.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
+        lowerThird.lowerThirdDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE ||
+            lowerThird.lowerThirdLookAheadDisplayMode != Constants.SONG_DISPLAY_MODE_VERSE
     return when {
-        fullscreenInLineMode -> songLinesPerSlide(settings, isLowerThird = false)
-        lowerThirdInLineMode -> songLinesPerSlide(settings, isLowerThird = true)
+        fullscreenInLineMode -> songLinesPerSlide(fullscreen, isLowerThird = false)
+        lowerThirdInLineMode -> songLinesPerSlide(lowerThird, isLowerThird = true)
         else -> 1
     }
 }

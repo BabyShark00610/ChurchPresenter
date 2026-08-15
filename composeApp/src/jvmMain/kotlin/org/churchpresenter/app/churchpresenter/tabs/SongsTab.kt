@@ -391,8 +391,13 @@ fun SongsTab(
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
-                    val isLineMode = isSongLineMode(appSettings.songSettings)
-                    val lineStep = songLineStep(appSettings.songSettings)
+                    // The selected song's own split, so the arrow moves by the slide the presenter
+                    // is actually drawing rather than by the shared setting's.
+                    val keySongAppearance = viewModel.filteredSongItems.value
+                        .getOrNull(viewModel.selectedSongIndex.value)
+                        ?.let { appSettings.songAppearanceFor(it.songId) }
+                    val isLineMode = isSongLineMode(appSettings.songSettings, keySongAppearance)
+                    val lineStep = songLineStep(appSettings.songSettings, keySongAppearance)
                     when {
                         shortcuts.matches(ShortcutAction.SONGS_PREVIOUS, keyEvent) -> {
                             if (isLineMode) {

@@ -1,5 +1,6 @@
 package org.churchpresenter.app.churchpresenter.utils
 
+import org.churchpresenter.app.churchpresenter.data.settings.SongAppearance
 import org.churchpresenter.app.churchpresenter.data.settings.SongSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -126,6 +127,45 @@ class SongDisplayModeTest {
             3,
             songLineStep(settings(lookAhead = line).copy(fullscreenLinesPerSlide = 3)),
         )
+
+    // ── the song's own split beats the shared one ──
+
+    private val ownTwoLines = SongAppearance(displayMode = line, linesPerSlide = 2)
+
+    @Test
+    fun `a song that splits into two-line slides is stepped two lines at a time`() {
+        // The regression this pins: the presenter honoured the song's override and drew two lines,
+        // while the arrow key read the shared setting and walked one — so a press changed the slide
+        // only every other time, and the panel highlighted half of what was on screen.
+        val shared = SongSettings(fullscreenDisplayMode = line, fullscreenLinesPerSlide = 1)
+        assertEquals(1, songLineStep(shared))
+        assertEquals(2, songLineStep(shared, ownTwoLines))
+    }
+
+    @Test
+    fun `a song that asks for line mode turns line navigation on by itself`() {
+        // Shared settings say whole verses; the song says lines. The arrow keys, the on-screen hint
+        // and the per-line highlight all hang off this, so it has to see the override too.
+        val shared = SongSettings(
+            fullscreenDisplayMode = verse, lowerThirdDisplayMode = verse,
+            lookAheadDisplayMode = verse, lowerThirdLookAheadDisplayMode = verse,
+        )
+        assertFalse(isSongLineMode(shared))
+        assertTrue(isSongLineMode(shared, ownTwoLines))
+    }
+
+    @Test
+    fun `a song with no override of its own still follows the shared split`() {
+        val shared = SongSettings(fullscreenDisplayMode = line, fullscreenLinesPerSlide = 3)
+        assertEquals(3, songLineStep(shared, SongAppearance()))
+        assertEquals(3, songLineStep(shared, null))
+    }
+
+    @Test
+    fun `a song override that says nothing about the split leaves it alone`() {
+        val shared = SongSettings(fullscreenDisplayMode = line, fullscreenLinesPerSlide = 3)
+        assertEquals(3, songLineStep(shared, SongAppearance(fontSize = 90)))
+    }
 
     // ── songLineGroupStart ──
 
