@@ -208,9 +208,11 @@ object Constants {
     const val LANGUAGE_INTERFACE = "Interface"
     const val LANGUAGE_DATABASE = "Database"
 
-    // Default Bible storage folder, relative to the user's home directory. Seeded on first run
-    // and used as the fallback target when a download is started before a folder has been picked.
-    const val DEFAULT_BIBLES_DIR = ".churchpresenter/Bibles"
+    /**
+     * The Bibles folder, relative to the app data directory [AppDataDir] resolves. Seeded with the
+     * bundled KJV on first run.
+     */
+    const val DEFAULT_BIBLES_FOLDER = "Bibles"
 
     // How many translations the parallel Bible stack may hold. Full screen gives each one an equal
     // band of the output height, and auto-fit shrinks the text until it fits its band -- with no

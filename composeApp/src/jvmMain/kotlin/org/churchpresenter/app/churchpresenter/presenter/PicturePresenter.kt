@@ -29,7 +29,7 @@ import org.jetbrains.skia.Image
 import java.io.File
 import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.utils.Constants
-import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
+import org.churchpresenter.app.churchpresenter.utils.PictureDecoder
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 
 /** The white key-output's alpha for [PicturePresenter]/[SlidePresenter] — a slide's own translation
@@ -154,24 +154,12 @@ private fun ImageContent(currentImagePath: String?) {
     }
 }
 
-private fun decodePictureBytes(file: File): Image? = try {
-    Image.makeFromEncoded(file.readBytes())
-} catch (_: Exception) {
-    // A HEIC/HEIF that Skia cannot read is transcoded to JPEG first
-    if (file.extension.lowercase() in listOf("heic", "heif")) decodeHeic(file) else null
-}
-
-private fun decodeHeic(file: File): Image? {
-    val jpegBytes = HeicDecoder.toJpegBytes(file) ?: return null
-    return try { Image.makeFromEncoded(jpegBytes) } catch (_: Exception) { null }
-}
-
 internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxHeight: Int = 1080): ImageBitmap? {
     return try {
         val file = File(imagePath)
         if (!file.exists()) return null
 
-        val originalImage = decodePictureBytes(file) ?: return null
+        val originalImage = PictureDecoder.decodeOrNull(file) ?: return null
 
         // Cap at actual screen resolution — no point storing more pixels than the display can show
         val widthScale = maxWidth.toFloat() / originalImage.width

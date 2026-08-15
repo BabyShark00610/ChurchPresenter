@@ -9,6 +9,7 @@ import kotlinx.serialization.decodeFromString
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings.Companion.CURRENT_SETTINGS_VERSION
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.utils.AppDataDir
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -27,8 +28,7 @@ private const val VERSION_SCREEN_ASSIGNMENTS = 6
 private val CompanionSurfacePlacementPrefixes = listOf("tab", "leftSidebar", "rightSidebar")
 
 class SettingsManager {
-    private val userHome = System.getProperty("user.home")
-    private val appDataDir = File(userHome, ".churchpresenter")
+    private val appDataDir = AppDataDir.resolve()
     private val settingsFile = File(appDataDir, "settings.json")
     private val settingsTmpFile = File(appDataDir, "settings.json.tmp")
     val lottiePresetsDir: File = File(appDataDir, "lottie_presets")
