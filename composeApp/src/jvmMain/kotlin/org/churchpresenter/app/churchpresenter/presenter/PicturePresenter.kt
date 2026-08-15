@@ -154,7 +154,6 @@ private fun ImageContent(currentImagePath: String?) {
     }
 }
 
-
 internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxHeight: Int = 1080): ImageBitmap? {
     return try {
         val file = File(imagePath)
