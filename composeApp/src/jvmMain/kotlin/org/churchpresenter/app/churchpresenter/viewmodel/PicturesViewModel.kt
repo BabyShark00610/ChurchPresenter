@@ -181,6 +181,26 @@ class PicturesViewModel(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var watchJob: Job? = null
 
+    /**
+     * Guards every structural change to [_images], and any index read taken in order to make one.
+     *
+     * The list is a [androidx.compose.runtime.snapshots.SnapshotStateList], which makes a write
+     * visible to composition but does not make one atomic against another thread. Writers arrive
+     * from three directions: the caller's thread ([loadImagesFromFolder], [clearImages],
+     * [moveImage]), the download coroutine in [loadPictureFromRemote], and the folder watcher.
+     * More than one watcher can be live at a time — [selectFolder] cancels the previous watch job
+     * and refills the list immediately, but cancellation is cooperative, so the outgoing watcher
+     * can still be inside `pollEvents()` working through a batch of events against a list that has
+     * already been emptied and repopulated underneath it.
+     *
+     * `indexOf` followed by `removeAt(index)` is the shape that fails: the index is read, the list
+     * shrinks, and the removal throws `IndexOutOfBoundsException` from the folder watcher — where
+     * nothing catches it. It took CI red intermittently (run 31793721082 on `main`, and again on
+     * PR #298) as `index: 5, size: 5`, blamed on whichever screenshot test happened to be running
+     * when a previous test's leaked watcher woke up.
+     */
+    private val imagesLock = Any()
+
     private val imageExtensions = listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif")
 
     init {
@@ -214,7 +234,9 @@ class PicturesViewModel(
 
         // Add only files not already present so a re-entrant/repeated load stays idempotent — a
         // duplicate path in _images would crash the LazyVerticalGrid keyed by absolutePath.
-        _images.addAll(imageFiles.filter { it !in _images })
+        synchronized(imagesLock) {
+            _images.addAll(imageFiles.filter { it !in _images })
+        }
 
         // Load thumbnails in background
         scope.launch {
@@ -261,7 +283,7 @@ class PicturesViewModel(
                     }
                 }
                 if (cached) {
-                    _images.add(cacheFile)
+                    synchronized(imagesLock) { _images.add(cacheFile) }
                     decodeThumbnail(cacheFile)
                     presenterManager?.let { syncWithPresenter(it) }
                 }
@@ -272,7 +294,7 @@ class PicturesViewModel(
     fun clearImages() {
         watchJob?.cancel()
         watchJob = null
-        _images.clear()
+        synchronized(imagesLock) { _images.clear() }
         _thumbnails.clear()
         _thumbnailFailures.clear()
         _selectedImageIndex.value = 0
@@ -319,12 +341,21 @@ class PicturesViewModel(
 
     fun moveImage(from: Int, to: Int) {
         if (from == to) return
-        if (from !in _images.indices || to !in _images.indices) return
         val currentFile = getCurrentImageFile()
-        _images.add(to, _images.removeAt(from))
+        // Both indices are re-checked under the lock: a watcher can remove a file between the
+        // caller reading these positions off the grid and the move landing.
+        val moved = synchronized(imagesLock) {
+            if (from !in _images.indices || to !in _images.indices) {
+                false
+            } else {
+                _images.add(to, _images.removeAt(from))
+                true
+            }
+        }
+        if (!moved) return
         _imageOrderVersion.value++
         currentFile?.let { file ->
-            val newIndex = _images.indexOf(file)
+            val newIndex = synchronized(imagesLock) { _images.indexOf(file) }
             if (newIndex >= 0) _selectedImageIndex.value = newIndex
         }
     }
@@ -333,12 +364,8 @@ class PicturesViewModel(
         _isPlaying.value = !_isPlaying.value
     }
 
-    fun getCurrentImageFile(): File? {
-        return if (_selectedImageIndex.value in _images.indices) {
-            _images[_selectedImageIndex.value]
-        } else {
-            null
-        }
+    fun getCurrentImageFile(): File? = synchronized(imagesLock) {
+        _images.getOrNull(_selectedImageIndex.value)
     }
 
     /**
@@ -496,30 +523,44 @@ class PicturesViewModel(
         else -> false
     }
 
-    private fun CoroutineScope.addWatchedImage(file: File): Boolean {
+    internal fun CoroutineScope.addWatchedImage(file: File): Boolean {
         // isActive gates the add: cancellation is cooperative, so a watcher cancelled by
         // clearImages() can still be mid-pollEvents() here — an add now would land in _images
         // after the reload and duplicate a path.
-        val isNewImageFile = file.exists() && file.isFile && file !in _images
-        if (!isActive || !isNewImageFile) return false
-        // Insert in sorted order, keep selected image stable
-        val insertIndex = _images.indexOfFirst { it.name > file.name }
-        if (insertIndex >= 0) {
-            _images.add(insertIndex, file)
-            if (insertIndex <= _selectedImageIndex.value) _selectedImageIndex.value++
-        } else {
-            _images.add(file)
-        }
+        if (!isActive || !file.exists() || !file.isFile) return false
+        // Insert in sorted order, keep the selected image stable. The membership test belongs under
+        // the same lock as the insert: apart, it is a check-then-act, and a duplicate path in
+        // _images crashes the LazyVerticalGrid keyed by absolutePath. Null means "already there".
+        val insertedAt: Int = synchronized(imagesLock) {
+            if (file in _images) {
+                null
+            } else {
+                val insertIndex = _images.indexOfFirst { it.name > file.name }
+                if (insertIndex >= 0) _images.add(insertIndex, file) else _images.add(file)
+                insertIndex
+            }
+        } ?: return false
+        if (insertedAt >= 0 && insertedAt <= _selectedImageIndex.value) _selectedImageIndex.value++
         // A file copied into a watched folder is seen the moment it is created, usually before it
         // is fully written, so the first decode of it legitimately fails.
         launch { decodeThumbnail(file, attempts = THUMBNAIL_RETRY_ATTEMPTS) }
         return true
     }
 
-    private fun removeWatchedImage(file: File): Boolean {
-        val idx = _images.indexOf(file)
+    internal fun CoroutineScope.removeWatchedImage(file: File): Boolean {
+        // The same gate, and for the same reason, as addWatchedImage: a watcher cancelled by
+        // clearImages() can still be working through a batch of events, and the list it is
+        // removing from has already been emptied and repopulated for another folder.
+        if (!isActive) return false
+        // indexOf and removeAt have to be one step. Read apart, the index goes stale the moment
+        // another writer shrinks the list, and removeAt then throws IndexOutOfBoundsException out
+        // of the watcher coroutine, where nothing catches it.
+        val idx = synchronized(imagesLock) {
+            val at = _images.indexOf(file)
+            if (at >= 0) _images.removeAt(at)
+            at
+        }
         if (idx < 0) return false
-        _images.removeAt(idx)
         _thumbnails.remove(file)
         _thumbnailFailures.remove(file)
         if (idx < _selectedImageIndex.value) {
