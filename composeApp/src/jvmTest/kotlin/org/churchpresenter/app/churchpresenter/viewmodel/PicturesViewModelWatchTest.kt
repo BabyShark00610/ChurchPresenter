@@ -51,7 +51,8 @@ class PicturesViewModelWatchTest {
     private fun fire(kind: WatchEvent.Kind<*>, file: File): Boolean =
         runBlocking { with(model) { this@runBlocking.applyWatchEvent(kind, file) } }
 
-    private fun removed(file: File): Boolean = model.removeWatchedImage(file)
+    private fun removed(file: File): Boolean =
+        runBlocking { with(model) { this@runBlocking.removeWatchedImage(file) } }
 
     @Test
     fun `a new file lands in name order rather than at the end`() {
