@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,7 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,11 +60,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -90,6 +86,8 @@ import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.add_to_schedule
 import churchpresenter.composeapp.generated.resources.ic_folder
 import churchpresenter.composeapp.generated.resources.ic_stop
+import churchpresenter.composeapp.generated.resources.recent_pin
+import churchpresenter.composeapp.generated.resources.recent_unpin
 import churchpresenter.composeapp.generated.resources.tooltip_presentation_remote
 import churchpresenter.composeapp.generated.resources.animation_crossfade
 import churchpresenter.composeapp.generated.resources.animation_fade
@@ -127,7 +125,6 @@ import churchpresenter.composeapp.generated.resources.recent
 import churchpresenter.composeapp.generated.resources.remove
 import churchpresenter.composeapp.generated.resources.select_presentation_file
 import churchpresenter.composeapp.generated.resources.select_presentation_file_button
-import churchpresenter.composeapp.generated.resources.slide_count
 import churchpresenter.composeapp.generated.resources.loading_slides_progress
 import churchpresenter.composeapp.generated.resources.presentation_builds_counter
 import churchpresenter.composeapp.generated.resources.presentation_focus_lost
@@ -170,13 +167,16 @@ import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.models.PresentationLoadError
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
+import org.churchpresenter.app.churchpresenter.utils.label
+import org.churchpresenter.app.churchpresenter.utils.pairLabel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresentationViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import java.awt.Component
-import java.awt.Container
 import java.awt.Window as AwtWindow
 import java.io.File
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -186,6 +186,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
+
+private const val MILLIS_PER_SECOND = 1000
+private const val MAX_AUTO_SCROLL_SECONDS = 30
+private const val MIN_TRANSITION_MS = 100
+private const val MAX_TRANSITION_MS = 2000
+
+/**
+ * Whether [event] means "go back a slide" in this tab.
+ *
+ * The tab's own previous binding *or* the global clicker binding: a clicker sends Page Up, which
+ * `MainDesktop` also claims while a presentation is live, but only then — with the tab focused and
+ * nothing presenting, this handler is the one that has to answer it.
+ */
+private fun goesBack(shortcuts: ShortcutMap, event: KeyEvent): Boolean =
+    shortcuts.matches(ShortcutAction.PRESENTATION_PREVIOUS, event) ||
+        shortcuts.matches(ShortcutAction.CLICKER_PREVIOUS, event)
+
+/** The forward counterpart of [goesBack]. */
+private fun goesForward(shortcuts: ShortcutMap, event: KeyEvent): Boolean =
+    shortcuts.matches(ShortcutAction.PRESENTATION_NEXT, event) ||
+        shortcuts.matches(ShortcutAction.CLICKER_NEXT, event)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -257,6 +278,7 @@ fun PresentationTab(
         focusRequester = focusRequester,
         active = viewModel.slideFiles.isNotEmpty(),
     )
+    val shortcuts = LocalShortcuts.current
 
     LaunchedEffect(selectedPresentationItem) {
         selectedPresentationItem?.let { item ->
@@ -309,7 +331,7 @@ fun PresentationTab(
 
     LaunchedEffect(viewModel.isPlaying, viewModel.selectedSlideIndex, viewModel.autoScrollInterval) {
         if (viewModel.isPlaying && viewModel.slideFiles.isNotEmpty()) {
-            delay((viewModel.autoScrollInterval * 1000).toLong())
+            delay((viewModel.autoScrollInterval * MILLIS_PER_SECOND).toLong())
             // Auto-play steps through builds too: only when the live slide has no build step
             // left does the interval move to the next slide (same identity guard as goNext).
             val deck = viewModel.deck
@@ -392,24 +414,22 @@ fun PresentationTab(
                     // normal case, since Controller mode doesn't mirror the primary's content.
                     val hasInstanceLinkNav = onInstanceLinkSendNextSlide != null || onInstanceLinkSendPreviousSlide != null
                     return@onKeyEvent if (hasInstanceLinkNav) {
-                        when (keyEvent.key) {
-                            Key.DirectionLeft, Key.DirectionUp, Key.PageUp -> { viewModel.previousSlide(onInstanceLinkSendPreviousSlide); true }
-                            Key.DirectionRight, Key.DirectionDown, Key.PageDown -> { viewModel.nextSlide(onInstanceLinkSendNextSlide); true }
+                        when {
+                            goesBack(shortcuts, keyEvent) -> { viewModel.previousSlide(onInstanceLinkSendPreviousSlide); true }
+                            goesForward(shortcuts, keyEvent) -> { viewModel.nextSlide(onInstanceLinkSendNextSlide); true }
                             else -> false
                         }
                     } else false
                 }
-                when (keyEvent.key) {
-                    // Page Down/Up are what presentation clickers send (also handled globally
-                    // in MainDesktop while a presentation is live, for any-tab operation).
-                    Key.DirectionLeft, Key.DirectionUp, Key.PageUp -> { goPrevious(); true }
-                    Key.DirectionRight, Key.DirectionDown, Key.PageDown -> { goNext(); true }
-                    Key.Spacebar -> { viewModel.togglePlayPause(); true }
+                when {
+                    goesBack(shortcuts, keyEvent) -> { goPrevious(); true }
+                    goesForward(shortcuts, keyEvent) -> { goNext(); true }
+                    shortcuts.matches(ShortcutAction.PRESENTATION_PLAY_PAUSE, keyEvent) -> { viewModel.togglePlayPause(); true }
                     // Clicker blank-screen button ('b' or '.' depending on model): toggle the
                     // same Blank Output state as the eye button — a truly blank output
                     // (PowerPoint's own 'B'), NOT Clear Display, which shows the configured
                     // background instead.
-                    Key.B, Key.Period -> {
+                    shortcuts.matches(ShortcutAction.PRESENTATION_BLANK, keyEvent) -> {
                         if (presenterManager?.presentingMode?.value == Presenting.PRESENTATION) {
                             onFreezeToggle()
                             true
@@ -630,7 +650,7 @@ fun PresentationTab(
                             IconButton(onClick = { RecentPresentationFiles.togglePin(path) }, modifier = Modifier.size(20.dp)) {
                                 Icon(
                                     painter = painterResource(if (isPinned) Res.drawable.ic_star_filled else Res.drawable.ic_star),
-                                    contentDescription = null,
+                                    contentDescription = stringResource(if (isPinned) Res.string.recent_unpin else Res.string.recent_pin),
                                     modifier = Modifier.size(12.dp),
                                     tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                                 )
@@ -645,7 +665,17 @@ fun PresentationTab(
         // ── Playback controls bar ─────────────────────────────────────
         // Adaptive shortcut hint: inline at the end of the controls bar when it fits on one
         // line there, otherwise on its own full-width row below the bar — never ellipsized.
-        val hintText = stringResource(Res.string.presentation_arrow_key_hint)
+        // Built from the live bindings so a rebind is reflected here. Empty when the user has
+        // unbound all three, which both render sites below treat as "draw no hint at all" —
+        // a hint whose keys do nothing is worse than none.
+        val slideLabel = shortcuts.pairLabel(ShortcutAction.PRESENTATION_PREVIOUS, ShortcutAction.PRESENTATION_NEXT)
+        val playLabel = shortcuts.label(ShortcutAction.PRESENTATION_PLAY_PAUSE)
+        val blankLabel = shortcuts.label(ShortcutAction.PRESENTATION_BLANK)
+        val hintText = if (slideLabel.isEmpty() && playLabel.isEmpty() && blankLabel.isEmpty()) {
+            ""
+        } else {
+            stringResource(Res.string.presentation_arrow_key_hint, slideLabel, playLabel, blankLabel)
+        }
         val hintStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp)
         val hintColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         var hintOnOwnRow by remember { mutableStateOf(false) }
@@ -773,7 +803,7 @@ fun PresentationTab(
                     onDismissRequest = { editingInterval = false },
                     title = { Text(stringResource(Res.string.auto_scroll_interval)) },
                     text = { OutlinedTextField(value = intervalInput, onValueChange = { intervalInput = it }, suffix = { Text(stringResource(Res.string.unit_s)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) },
-                    confirmButton = { TextButton(shape = RoundedCornerShape(6.dp), onClick = { intervalInput.toIntOrNull()?.coerceIn(1, 30)?.let { v -> viewModel.autoScrollInterval = v.toFloat(); onSettingsChange { s -> s.copy(presentationSettings = s.presentationSettings.copy(autoScrollInterval = v.toFloat())) } }; editingInterval = false }) { Text(stringResource(Res.string.ok)) } },
+                    confirmButton = { TextButton(shape = RoundedCornerShape(6.dp), onClick = { intervalInput.toIntOrNull()?.coerceIn(1, MAX_AUTO_SCROLL_SECONDS)?.let { v -> viewModel.autoScrollInterval = v.toFloat(); onSettingsChange { s -> s.copy(presentationSettings = s.presentationSettings.copy(autoScrollInterval = v.toFloat())) } }; editingInterval = false }) { Text(stringResource(Res.string.ok)) } },
                     dismissButton = { TextButton(shape = RoundedCornerShape(6.dp), onClick = { editingInterval = false }) { Text(stringResource(Res.string.cancel)) } }
                 )
             }
@@ -796,7 +826,7 @@ fun PresentationTab(
                     onDismissRequest = { editingTransition = false },
                     title = { Text(stringResource(Res.string.transition_duration)) },
                     text = { OutlinedTextField(value = transitionInput, onValueChange = { transitionInput = it }, suffix = { Text(stringResource(Res.string.unit_ms)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) },
-                    confirmButton = { TextButton(shape = RoundedCornerShape(6.dp), onClick = { transitionInput.toIntOrNull()?.coerceIn(100, 2000)?.let { v -> viewModel.transitionDuration = v.toFloat(); onSettingsChange { s -> s.copy(presentationSettings = s.presentationSettings.copy(transitionDuration = v.toFloat())) } }; editingTransition = false }) { Text(stringResource(Res.string.ok)) } },
+                    confirmButton = { TextButton(shape = RoundedCornerShape(6.dp), onClick = { transitionInput.toIntOrNull()?.coerceIn(MIN_TRANSITION_MS, MAX_TRANSITION_MS)?.let { v -> viewModel.transitionDuration = v.toFloat(); onSettingsChange { s -> s.copy(presentationSettings = s.presentationSettings.copy(transitionDuration = v.toFloat())) } }; editingTransition = false }) { Text(stringResource(Res.string.ok)) } },
                     dismissButton = { TextButton(shape = RoundedCornerShape(6.dp), onClick = { editingTransition = false }) { Text(stringResource(Res.string.cancel)) } }
                 )
             }
@@ -857,13 +887,13 @@ fun PresentationTab(
                 if (hintSlotWidthPx >= 0) hintOnOwnRow = !fitsInline
             }
             Box(modifier = Modifier.weight(1f).onSizeChanged { hintSlotWidthPx = it.width }) {
-                if (fitsInline) {
+                if (fitsInline && hintText.isNotEmpty()) {
                     Text(text = hintText, style = hintStyle, color = hintColor, maxLines = 1)
                 }
             }
 
         }
-        if (hintOnOwnRow) {
+        if (hintOnOwnRow && hintText.isNotEmpty()) {
             Text(
                 text = hintText,
                 style = hintStyle,

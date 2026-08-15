@@ -1,16 +1,12 @@
 package org.churchpresenter.app.churchpresenter
 
-import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.Column
@@ -22,10 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -43,12 +36,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
-import java.awt.Cursor
 import java.awt.GraphicsEnvironment
 import java.awt.Window as AwtWindow
 import androidx.compose.foundation.focusable
@@ -56,8 +45,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -96,8 +83,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
 
 import org.churchpresenter.app.churchpresenter.composables.ConnectionStatusRow
 import org.churchpresenter.app.churchpresenter.composables.PanelResizeHandle
@@ -111,15 +96,13 @@ import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
-import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSyncMode
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
-import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.data.Bible
-import org.churchpresenter.app.churchpresenter.data.RecentPresentationFiles
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
+import org.churchpresenter.app.churchpresenter.data.VerseSequenceLog
 import org.churchpresenter.app.churchpresenter.dialogs.AddLabelDialog
 import org.churchpresenter.app.churchpresenter.dialogs.AddWebsiteDialog
 import org.churchpresenter.app.churchpresenter.dialogs.CrashFeedbackDialog
@@ -158,8 +141,11 @@ import org.churchpresenter.app.churchpresenter.tabs.TabSection
 import org.churchpresenter.app.churchpresenter.tabs.Tabs
 import org.churchpresenter.app.churchpresenter.tabs.getStringName
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.models.ShortcutScope
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
@@ -176,29 +162,17 @@ import org.churchpresenter.app.churchpresenter.viewmodel.ScheduleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
 
 import java.io.File
+import org.churchpresenter.app.churchpresenter.viewmodel.clearDetectedReferences
+import org.churchpresenter.app.churchpresenter.viewmodel.getSelectedVerses
+import org.churchpresenter.app.churchpresenter.viewmodel.invalidateInstanceLinkBibleCache
+import org.churchpresenter.app.churchpresenter.viewmodel.logLiveReference
+import org.churchpresenter.app.churchpresenter.viewmodel.onEngineScripture
+import org.churchpresenter.app.churchpresenter.viewmodel.onEngineVersion
+import org.churchpresenter.app.churchpresenter.viewmodel.setInstanceLinkSource
 
-// Kept for NavigationTopBar / menu — wraps ScheduleTabActions
-data class ScheduleActions(
-    val newSchedule: () -> Unit = {},
-    val openSchedule: () -> Unit = {},
-    val saveSchedule: () -> Unit = {},
-    val saveScheduleAs: () -> Unit = {},
-    val removeSelected: () -> Unit = {},
-    /** Removes a specific item by id — used to apply an approved remote "remove from schedule". */
-    val removeById: (id: String) -> Unit = {},
-    val clearSchedule: () -> Unit = {},
-    // Remote-API add helpers (populated from ScheduleTabActions)
-    val addSong: (songNumber: Int, title: String, songbook: String, songId: String) -> Unit = { _, _, _, _ -> },
-    val addBibleVerse: (bookName: String, chapter: Int, verseNumber: Int, verseText: String, verseRange: String, bookId: Int) -> Unit = { _, _, _, _, _, _ -> },
-    val addPicture: (folderPath: String, folderName: String, imageCount: Int) -> Unit = { _, _, _ -> },
-    val addPresentation: (filePath: String, fileName: String, slideCount: Int, fileType: String) -> Unit = { _, _, _, _ -> },
-    val addMedia: (mediaUrl: String, mediaTitle: String, mediaType: String) -> Unit = { _, _, _ -> },
-    val addScene: (sceneId: String, sceneName: String) -> Unit = { _, _ -> },
-    val addDictionary: (number: String, word: String, transliteration: String, definition: String) -> Unit = { _, _, _, _ -> },
-    val addAnnouncement: (item: ScheduleItem.AnnouncementItem) -> Unit = { },
-    val addWebsite: (url: String, title: String) -> Unit = { _, _ -> }
-)
-
+private const val PANEL_COLLAPSE_ANIM_MS = 220
+private const val CLOCK_TICK_MS = 1000L
+private const val CONTENT_CROSSFADE_MS = 120
 
 @Composable
 fun MainDesktop(
@@ -213,6 +187,7 @@ fun MainDesktop(
     livePreviewAppSettings: AppSettings = appSettings,
     presenterManager: PresenterManager,
     statisticsManager: StatisticsManager? = null,
+    verseSequenceLog: VerseSequenceLog? = null,
     presenting: (Presenting) -> Unit,
     onVerseSelected: (List<SelectedVerse>) -> Unit,
     onSongItemSelected: (LyricSection) -> Unit,
@@ -309,13 +284,11 @@ fun MainDesktop(
     /** Controller mode instant Bible verse display — non-null only when connected AND controlling. */
     instanceLinkSendVerse: ((bookName: String, chapter: Int, verseNumber: Int, verseText: String, verseRange: String) -> Unit)? = null,
     /** Controller mode instant picture display — non-null only when connected AND controlling. */
-    instanceLinkSendPicture: ((folderId: String, index: Int, fileName: String?) -> Unit)? = null,
     /** Controller mode instant song-section navigation (within an already-live song) — non-null only
      *  when connected AND controlling. */
     instanceLinkSendSongSection: ((number: String, section: Int, lineIndex: Int) -> Unit)? = null,
     /** Controller mode instant slide navigation (within an already-live presentation) — non-null only
      *  when connected AND controlling. */
-    instanceLinkSendSlide: ((id: String, index: Int) -> Unit)? = null,
     /** Controller mode instant clear — non-null only when connected AND controlling. */
     instanceLinkSendClear: (() -> Unit)? = null,
     /** Controller mode instant Bible Hold toggle — non-null only when connected AND controlling. */
@@ -471,22 +444,6 @@ fun MainDesktop(
             presentationViewModel.slideFiles.toList(),
             presentationViewModel.slideNotes.toList()
         )
-    }
-    LaunchedEffect(remotePresentationPlayPauseFlow) {
-        remotePresentationPlayPauseFlow?.collect { presentationViewModel.togglePlayPause() }
-    }
-    LaunchedEffect(remotePresentationLoopToggleFlow) {
-        remotePresentationLoopToggleFlow?.collect {
-            presentationViewModel.isLooping = !presentationViewModel.isLooping
-            onSettingsChange { s -> s.copy(presentationSettings = s.presentationSettings.copy(isLooping = presentationViewModel.isLooping)) }
-        }
-    }
-    LaunchedEffect(remotePresentationGotoFlow) {
-        remotePresentationGotoFlow?.collect { index ->
-            if (isValidSlideIndex(index, presentationViewModel.slideFiles.size)) {
-                presentationViewModel.selectSlide(index)
-            }
-        }
     }
 
     val sceneViewModel = remember { SceneViewModel() }
@@ -742,67 +699,10 @@ fun MainDesktop(
     }
 
     // Handle remote picture selection (from REST POST /api/pictures/select or WS select_picture)
-    LaunchedEffect(selectPictureImageFlow) {
-        selectPictureImageFlow?.collect { (folderId, index) ->
-            // Derive the folderId of the currently loaded Pictures-tab folder (same hash as
-            // CompanionServer.updatePictures and the LaunchedEffect(pictureFolder, …) above).
-            val activeFolderId = picturesViewModel.selectedFolder?.let { stableFileId(it) }
-
-            // Resolve the file from the server's file map so selections from any folder
-            // (including session-only device_uploads) go to the correct image.
-            val imageFile = resolveImageFile?.invoke(folderId, index)
-            if (isUsableImageFile(imageFile) && imageFile != null) {
-                // When the selection is from a DIFFERENT folder (e.g. device_uploads), load
-                // that folder into picturesViewModel NOW, before changing the presenting mode.
-                // This prevents PicturesTab's syncWithPresenter LaunchedEffect from firing with
-                // stale files and overwriting the correct image path in the presenter.
-                if (shouldSwitchPictureFolder(folderId, activeFolderId)) {
-                    picturesViewModel.selectFolder(imageFile.parentFile)
-                }
-                // Set the selected index (images are synchronously populated by selectFolder).
-                if (index in picturesViewModel.images.indices) {
-                    picturesViewModel.selectedImageIndex = index
-                }
-                // Now syncWithPresenter will read the correct file via getCurrentImageFile().
-                presenterManager.setSelectedImagePath(imageFile.absolutePath)
-                val nextIdx = nextImageIndex(index, picturesViewModel.images.size)
-                presenterManager.setNextImagePath(picturesViewModel.images.getOrNull(nextIdx)?.absolutePath)
-                presenterManager.setPresentingMode(Presenting.PICTURES)
-                presenterManager.setShowPresenterWindow(true)
-            } else {
-                // Fallback: resolveImageFile not wired or file not found — use VM directly.
-                val images = picturesViewModel.images
-                if (index in images.indices) {
-                    picturesViewModel.selectedImageIndex = index
-                    val currentImage = picturesViewModel.getCurrentImageFile()
-                    if (currentImage != null) {
-                        presenterManager.setSelectedImagePath(currentImage.absolutePath)
-                        presenterManager.setNextImagePath(
-                            picturesViewModel.images.getOrNull(nextImageIndex(index, images.size))?.absolutePath
-                        )
-                        presenterManager.setPresentingMode(Presenting.PICTURES)
-                        presenterManager.setShowPresenterWindow(true)
-                    }
-                }
-            }
-        }
-    }
 
     // Instance Link Controller-mode navigation — advance/retreat whatever is currently live, no id
     // needed. syncWithPresenter() only pushes when Pictures is actually the live content, same gate
     // next/prev navigation should have.
-    LaunchedEffect(nextPictureFlow) {
-        nextPictureFlow?.collect {
-            picturesViewModel.nextImage()
-            picturesViewModel.syncWithPresenter(presenterManager)
-        }
-    }
-    LaunchedEffect(previousPictureFlow) {
-        previousPictureFlow?.collect {
-            picturesViewModel.previousImage()
-            picturesViewModel.syncWithPresenter(presenterManager)
-        }
-    }
 
     // Pushes the presentation's current slide to the presenter — shared by the next/previous slide
     // Instance Link commands below. Only pushes when Presentation is actually the live content,
@@ -819,120 +719,58 @@ fun MainDesktop(
         presentationViewModel.deck?.let { presenterManager.presentationShowSlide(it, index) }
             ?: presenterManager.clearPresentationPlayback()
     }
-    LaunchedEffect(nextSlideFlow) {
-        nextSlideFlow?.collect {
-            presentationViewModel.nextSlide()
-            pushCurrentSlideIfLive()
-        }
-    }
-    LaunchedEffect(previousSlideFlow) {
-        previousSlideFlow?.collect {
-            presentationViewModel.previousSlide()
-            pushCurrentSlideIfLive()
-        }
-    }
 
     // Handle remote slide selection (POST /api/presentations/{id}/select or WS select_slide)
     // No approval required — navigates the live presentation instantly.
-    LaunchedEffect(selectSlideFlow) {
-        selectSlideFlow?.collect { (_, index) ->
-            if (index in presentationViewModel.slideFiles.indices) {
-                presentationViewModel.selectSlide(index)
-                val (bitmap, nextBitmap) = decodeSlideBitmaps(presentationViewModel.slideFiles, index)
-                presenterManager.setSelectedSlide(bitmap)
-                presenterManager.setNextSlide(nextBitmap)
-                presenterManager.setPresenterNotes(presenterNotesAt(presentationViewModel.slideNotes, index))
-                if (shouldTakePresentationLive(presenterManager.presentingMode.value)) {
-                    presenterManager.setPresentingMode(Presenting.PRESENTATION)
-                    presenterManager.setShowPresenterWindow(true)
-                }
-                presentationViewModel.deck?.let { presenterManager.presentationShowSlide(it, index) }
-                    ?: presenterManager.clearPresentationPlayback()
-            }
-        }
-    }
 
     // Handle remote Bible verse instant display (POST /api/bible/select or WS select_bible_verse)
     // No approval required — displays the verse immediately like select_picture.
     // Resolves the request through BibleViewModel so every configured translation follows the same
     // canonical-code mapping as a local click.
-    LaunchedEffect(selectBibleVerseFlow) {
-        selectBibleVerseFlow?.collect { req ->
-            val primaryBible = bibleViewModel.primaryBible.value
-
-            // Resolve bookId from book name using the primary Bible's book list
-            val bookIndex = primaryBible?.getBooks()?.let { resolveBookIndex(it, req.bookName) } ?: -1
-            val bookId = resolveBookIdOrZero(bookIndex) { primaryBible?.getBookId(it) }
-
-            val resolved = bibleViewModel.getVersesForDisplay(req.bookName, req.chapter, req.verseNumber)
-            val verses = remoteSelectedVerses(
-                resolved = resolved,
-                request = req,
-                translationFileName = appSettings.bibleSettings.translationList().firstOrNull()?.fileName.orEmpty(),
-                bibleAbbreviation = primaryBible?.getBibleAbbreviation() ?: "",
-                bibleName = primaryBible?.getBibleTitle() ?: "",
-            )
-
-            presenterManager.setSelectedVerses(verses)
-            presenterManager.setPresentingMode(Presenting.BIBLE)
-            presenterManager.setShowPresenterWindow(true)
-            if (bookIndex >= 0) {
-                // Capture the full span the client asked for: parse req.verseRange ("1-3", "2,4,5")
-                // and take its max as the end, rather than hardcoding null (which dropped the range).
-                val verseEnd = parseVerseRangeEnd(req.verseRange, req.verseNumber)
-                bibleViewModel.logLiveReference(
-                    displayBookIndex = bookIndex,
-                    chapter    = req.chapter,
-                    verseStart = req.verseNumber,
-                    verseEnd   = verseEnd,
-                    source     = "remote",
-                    autoFollow = bibleViewModel.autoFollowEnabled.value,
-                )
-            }
-        }
-    }
 
     // Handle remote song selection — set selectedSongItem so the Songs tab navigates to it
-    LaunchedEffect(remoteSelectSongFlow) {
-        remoteSelectSongFlow?.collect { songItem ->
-            selectedSongItem = songItem
-            selectedSongItemVersion++
-            selectTab(Tabs.SONGS)
-        }
-    }
 
     // Handle remote picture-folder selection — same backfill shape as remoteSelectSongFlow above.
     // Setting selectedPictureItem drives the existing LaunchedEffect(selectedPictureItem) (below)
     // to load the folder into PicturesViewModel, whose own reactive effect (PicturesTab.kt) pushes
     // the current image to the presenter once loaded, since presentingMode is already PICTURES.
-    LaunchedEffect(remoteSelectPictureFlow) {
-        remoteSelectPictureFlow?.collect { pictureItem ->
-            selectedPictureItem = pictureItem
-            selectTab(Tabs.PICTURES)
-        }
-    }
 
     // Handle remote presentation selection — same shape. Setting selectedPresentationItem drives
     // PresentationTab's own LaunchedEffect(selectedPresentationItem) to load the file, and its
     // LaunchedEffect(selectedSlideIndex, slideFiles.size) pushes the first slide once loaded.
-    LaunchedEffect(remoteSelectPresentationFlow) {
-        remoteSelectPresentationFlow?.collect { presentationItem ->
-            selectedPresentationItem = presentationItem
-            selectTab(Tabs.PRESENTATION)
-        }
-    }
 
     // Load a presentation file uploaded by a mobile client (POST /api/presentations/upload).
     // addPresentation renders the slides and triggers onSlidesLoaded → companionServer.updatePresentation,
     // which broadcasts WS_EVENT_PRESENTATION_UPDATED so the mobile's GET /api/presentations finds it.
-    LaunchedEffect(uploadPresentationFlow) {
-        uploadPresentationFlow?.collect { file ->
-            presentationViewModel.addPresentation(file)
-            RecentPresentationFiles.add(file.absolutePath)
-            // Switch to the Presentations tab so the user can see the newly loaded file
-            selectTab(Tabs.PRESENTATION)
-        }
-    }
+    RemoteCommandEffects(
+        appSettings = appSettings,
+        picturesViewModel = picturesViewModel,
+        presentationViewModel = presentationViewModel,
+        bibleViewModel = bibleViewModel,
+        presenterManager = presenterManager,
+        onSongItemVersionBump = { selectedSongItemVersion++ },
+        resolveImageFile = resolveImageFile,
+        onSettingsChange = onSettingsChange,
+        onSongItemSelected = { selectedSongItem = it },
+        onPictureItemSelected = { selectedPictureItem = it },
+        onPresentationItemSelected = { selectedPresentationItem = it },
+        onSelectTab = ::selectTab,
+        pushCurrentSlideIfLive = ::pushCurrentSlideIfLive,
+        remotePresentationPlayPauseFlow = remotePresentationPlayPauseFlow,
+        remotePresentationLoopToggleFlow = remotePresentationLoopToggleFlow,
+        remotePresentationGotoFlow = remotePresentationGotoFlow,
+        selectPictureImageFlow = selectPictureImageFlow,
+        nextPictureFlow = nextPictureFlow,
+        previousPictureFlow = previousPictureFlow,
+        nextSlideFlow = nextSlideFlow,
+        previousSlideFlow = previousSlideFlow,
+        selectSlideFlow = selectSlideFlow,
+        selectBibleVerseFlow = selectBibleVerseFlow,
+        remoteSelectSongFlow = remoteSelectSongFlow,
+        remoteSelectPictureFlow = remoteSelectPictureFlow,
+        remoteSelectPresentationFlow = remoteSelectPresentationFlow,
+        uploadPresentationFlow = uploadPresentationFlow,
+    )
 
     LaunchedEffect(selectedTabIndex) {
         onTabChange(selectedTabIndex)
@@ -968,6 +806,8 @@ fun MainDesktop(
         }
     }
 
+    val shortcuts = LocalShortcuts.current
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -976,15 +816,15 @@ fun MainDesktop(
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
-                    val shortcutTab = tabForFunctionKey(keyEvent.key)
+                    val shortcutTab = shortcuts.actionFor(keyEvent, ShortcutScope.GLOBAL)?.targetTab
                     when {
-                        keyEvent.key == Key.Z && keyEvent.isCtrlPressed && keyEvent.isShiftPressed -> {
+                        shortcuts.matches(ShortcutAction.REDO, keyEvent) -> {
                             scheduleViewModel.redo(); true
                         }
-                        keyEvent.key == Key.Z && keyEvent.isCtrlPressed -> {
+                        shortcuts.matches(ShortcutAction.UNDO, keyEvent) -> {
                             scheduleViewModel.undo(); true
                         }
-                        keyEvent.key == Key.Escape -> {
+                        shortcuts.matches(ShortcutAction.CLEAR_OUTPUT, keyEvent) -> {
                             mediaViewModel?.pause()
                             presenterManager.requestClearDisplay()
                             instanceLinkSendClear?.invoke()
@@ -999,7 +839,7 @@ fun MainDesktop(
                         // presentation responds no matter which tab or control has focus —
                         // the presenter clicks from the platform while the operator works
                         // elsewhere. Only claimed while a presentation is actually live.
-                        keyEvent.key == Key.PageDown && presentingMode == Presenting.PRESENTATION -> {
+                        shortcuts.matches(ShortcutAction.CLICKER_NEXT, keyEvent) && presentingMode == Presenting.PRESENTATION -> {
                             clickerScope.launch {
                                 val deck = presentationViewModel.deck
                                 val stepped = deck != null && presenterManager
@@ -1011,7 +851,7 @@ fun MainDesktop(
                             }
                             true
                         }
-                        keyEvent.key == Key.PageUp && presentingMode == Presenting.PRESENTATION -> {
+                        shortcuts.matches(ShortcutAction.CLICKER_PREVIOUS, keyEvent) && presentingMode == Presenting.PRESENTATION -> {
                             clickerScope.launch {
                                 val deck = presentationViewModel.deck
                                 val stepped = deck != null && presenterManager
@@ -1089,11 +929,11 @@ fun MainDesktop(
             // rendered width below tracks schedulePanelPx/previewPanelPx with no extra lag.
             val scheduleVisibleFraction = remember { Animatable(if (scheduleCollapsed) 0f else 1f) }
             LaunchedEffect(scheduleCollapsed) {
-                scheduleVisibleFraction.animateTo(if (scheduleCollapsed) 0f else 1f, animationSpec = tween(220))
+                scheduleVisibleFraction.animateTo(if (scheduleCollapsed) 0f else 1f, animationSpec = tween(PANEL_COLLAPSE_ANIM_MS))
             }
             val previewVisibleFraction = remember { Animatable(if (previewCollapsed) 0f else 1f) }
             LaunchedEffect(previewCollapsed) {
-                previewVisibleFraction.animateTo(if (previewCollapsed) 0f else 1f, animationSpec = tween(220))
+                previewVisibleFraction.animateTo(if (previewCollapsed) 0f else 1f, animationSpec = tween(PANEL_COLLAPSE_ANIM_MS))
             }
 
             fun saveScheduleWidth() {
@@ -1180,7 +1020,7 @@ fun MainDesktop(
                             LaunchedEffect(instanceLinkConnectionStatus == InstanceLinkStatus.ERROR) {
                                 while (instanceLinkConnectionStatus == InstanceLinkStatus.ERROR) {
                                     reconnectNowMs = System.currentTimeMillis()
-                                    delay(1000)
+                                    delay(CLOCK_TICK_MS)
                                 }
                             }
                             val retrySecondsLeft = retrySecondsLeft(instanceLinkNextRetryAtMs, reconnectNowMs)
@@ -1219,7 +1059,6 @@ fun MainDesktop(
                         scheduleViewModel = scheduleViewModel,
                         onPresenting = presenting,
                         onAddLabel = { showAddLabelDialog = true },
-                        onAddWebsite = { showAddWebsiteDialog = true },
 
                         onPresentBible = { item ->
                             selectTab(Tabs.BIBLE)
@@ -1551,7 +1390,7 @@ fun MainDesktop(
 
                     AnimatedContent(
                         targetState = currentTab,
-                        transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(120)) },
+                        transitionSpec = { fadeIn(tween(CONTENT_CROSSFADE_MS)) togetherWith fadeOut(tween(CONTENT_CROSSFADE_MS)) },
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         label = "tab_content"
                     ) { tab ->
@@ -1573,6 +1412,7 @@ fun MainDesktop(
                                 isPresenting = presentingMode == Presenting.BIBLE,
                                 presenterManager = presenterManager,
                                 statisticsManager = statisticsManager,
+                                verseSequenceLog = verseSequenceLog,
                                 dialogDismissSignal = dialogDismissSignal,
                                 sttManager = sttManager,
                                 bibleEngineClient = bibleEngineClient
@@ -1903,7 +1743,6 @@ fun MainDesktop(
     KonamiEasterEggDialog(
         isVisible = showKonamiEasterEgg,
         onDismiss = { showKonamiEasterEgg = false },
-        theme = theme
     )
 
     // Invite feedback on the launch after an unexpected shutdown (opt-in analytics only).

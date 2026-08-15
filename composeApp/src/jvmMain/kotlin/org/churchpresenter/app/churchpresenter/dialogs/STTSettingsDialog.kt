@@ -27,7 +27,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,9 +89,11 @@ import org.churchpresenter.app.churchpresenter.composables.StyledTextField
 import org.churchpresenter.app.churchpresenter.composables.TextStyleButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
+
+private const val POSITION_GRID_COLUMNS = 3
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -101,9 +102,7 @@ fun STTSettingsDialog(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
 
     val mainWindowState = LocalMainWindowState.current
     val dialogWidth = 560.dp
@@ -383,7 +382,7 @@ internal fun STTSettingsDialogContent(
                             Constants.BOTTOM_RIGHT to stringResource(Res.string.qa_pos_br)
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
-                            positions.chunked(3).forEach { rowItems ->
+                            positions.chunked(POSITION_GRID_COLUMNS).forEach { rowItems ->
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                     rowItems.forEach { (posConst, posLabel) ->
                                         val isSelected = sttSettings.position == posConst

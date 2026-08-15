@@ -1719,6 +1719,17 @@
     <string name="copy_verse">Copiar versículo</string>
     <string name="style">Estilo</string>
     <string name="bible_split_browse_mode">Modo de navegação dividida</string>
+    <string name="bible_cross_references">Referências cruzadas</string>
+    <string name="bible_cross_references_title">Referências</string>
+    <string name="bible_cross_references_enable">Mostrar referências cruzadas</string>
+    <string name="bible_cross_references_none">Sem referências cruzadas</string>
+    <string name="bible_cross_references_often_next">Costuma vir a seguir</string>
+    <string name="bible_cross_references_passage">Passagem %1$s</string>
+    <string name="bible_cross_references_count">Referências cruzadas: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · referências cruzadas: %2$d</string>
+    <string name="bible_cross_references_keep_open">Fixar</string>
+    <string name="bible_cross_references_close">Fechar painel</string>
+    <string name="bible_cross_references_dismiss_hint">Esc para fechar</string>
     <string name="bible_live_view">Ao vivo</string>
     <string name="clear_recents">Limpar recentes</string>
     <string name="recent">Recentes:</string>

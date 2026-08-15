@@ -27,6 +27,8 @@ import org.churchpresenter.app.churchpresenter.utils.isHeaderLine
 import org.churchpresenter.app.churchpresenter.utils.songLineGroupStart
 import java.io.File
 
+private const val SONG_NUMBER_DIGITS = 4
+
 class SongsViewModel(
     private var appSettings: AppSettings,
     private val onSongsLoaded: ((List<SongItem>) -> Unit)? = null,
@@ -200,6 +202,9 @@ class SongsViewModel(
             _filteredSongItems.value = _filteredSongItems.value.replaced()
             _allSongItems.value = _allSongItems.value.replaced()
             _songsData.value = Songs().also { it.addSongs(_allSongItems.value) }
+            // The fetched lyrics are the first sections this song has had; an index carried over from
+            // whatever was selected before must not survive past their end.
+            clampSectionSelection()
             // Only nudge the presenter if this song is still the one selected — the operator may
             // have already moved on to a different song by the time this fetch resolves.
             val currentIdx = _selectedSongIndex.value
@@ -377,8 +382,30 @@ class SongsViewModel(
     fun selectSongById(songId: String): Boolean = selectSongByDetails(0, "", "", songId)
 
     fun selectSection(index: Int) {
-        _selectedSectionIndex.value = index
+        // Clamped, because the index does not always come from the rendered list: a phone pushes one
+        // through MainDesktop's songDisplaySectionIndex collector, and Back-to-Live replays one
+        // remembered from an earlier — possibly longer — version of the song.
+        _selectedSectionIndex.value = index.coerceAtMost(getLyricSections().lastIndex)
         _selectedLineIndex.value = 0
+    }
+
+    /**
+     * Keeps the section selection inside the song it now points at.
+     *
+     * There is no stored section list — [getLyricSections] recomputes from the selected song on every
+     * call — so the list changes under the index whenever the song does: a filter or sort change puts
+     * a different song at the same row, an edit or a folder-watcher reload can drop a verse, and an
+     * Instance Link catalog arrives with no lyrics at all. An index left past the end presented the
+     * wrong slide, and walking down from it crashed [navigatePreviousSection].
+     *
+     * `-1` is a real value — the whole-song/title slide — and is preserved.
+     */
+    private fun clampSectionSelection() {
+        val last = getLyricSections().lastIndex
+        if (_selectedSectionIndex.value > last) {
+            _selectedSectionIndex.value = last // -1 when the song has no sections at all
+            _selectedLineIndex.value = 0
+        }
     }
 
     fun setLineIndex(index: Int) {
@@ -528,7 +555,7 @@ class SongsViewModel(
      * previous one. When the section it lands on has no chords of its own, that section's words
      * become the rest of the chart, so the chart is never just the intro with the verse missing.
      */
-    private fun foldChordOnlySections(sections: List<LyricSection>): List<LyricSection> {
+    internal fun foldChordOnlySections(sections: List<LyricSection>): List<LyricSection> {
         val carried = mutableListOf<String>()
         val out = mutableListOf<LyricSection>()
 
@@ -583,7 +610,9 @@ class SongsViewModel(
     fun navigatePreviousSection(): Boolean {
         _selectedLineIndex.value = 0
         val sections = getLyricSections()
-        var prevIdx = _selectedSectionIndex.value - 1
+        // Start from the end of what actually exists: the selection can outlive the list it indexes
+        // (see [clampSectionSelection]), and this walk only guards its lower bound.
+        var prevIdx = (_selectedSectionIndex.value - 1).coerceAtMost(sections.lastIndex)
         while (prevIdx >= 0) {
             if (sections[prevIdx].lines.isNotEmpty()) {
                 _selectedSectionIndex.value = prevIdx
@@ -648,7 +677,9 @@ class SongsViewModel(
         }
         // Move to previous section with content lines (skip empty sections)
         val sections = getLyricSections()
-        var prevIdx = _selectedSectionIndex.value - 1
+        // Clamped for the same reason as [navigatePreviousSection] — a stale index would index past
+        // the end on the very first step.
+        var prevIdx = (_selectedSectionIndex.value - 1).coerceAtMost(sections.lastIndex)
         while (prevIdx >= 0) {
             if (sections[prevIdx].lines.isNotEmpty()) {
                 _selectedSectionIndex.value = prevIdx
@@ -719,75 +750,104 @@ class SongsViewModel(
             if (idx >= 0) {
                 _selectedSongIndex.value = idx
                 _pendingSelectSourceFile = null
+                // The re-select moved the song after [refreshFilteredSongItems] clamped, so the
+                // section index has to be checked against this song too.
+                clampSectionSelection()
             }
         }
     }
 
-    private fun refreshFilteredSongItems() {
-        var items = _filteredSongsList.value
-
-        if (_sortColumn.value.isNotEmpty()) {
-            items = when (_sortColumn.value) {
-                Constants.SORT_NUMBER -> if (_sortAscending.value)
-                    items.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
-                else
-                    items.sortedByDescending { it.number.toIntOrNull() ?: Int.MIN_VALUE }
-
-                Constants.SORT_TITLE -> if (_sortAscending.value)
-                    items.sortedBy { it.title.lowercase() }
-                else
-                    items.sortedByDescending { it.title.lowercase() }
-
-                Constants.SORT_SONGBOOK -> if (_sortAscending.value)
-                    items.sortedBy { it.songbook.lowercase() }
-                else
-                    items.sortedByDescending { it.songbook.lowercase() }
-
-                Constants.SORT_TUNE -> if (_sortAscending.value)
-                    items.sortedBy { it.tune.lowercase() }
-                else
-                    items.sortedByDescending { it.tune.lowercase() }
-
-                Constants.SORT_PLAY_COUNT -> {
-                    val sm = statisticsManager
-                    if (sm != null) {
-                        val counts = items.associate { it.songId to sm.getSongPlayCount(it.songId) }
-                        if (_sortAscending.value) items.sortedBy { counts[it.songId] ?: 0 }
-                        else items.sortedByDescending { counts[it.songId] ?: 0 }
-                    } else items
-                }
-
-                Constants.SORT_FAVORITES -> {
-                    val favIds = _favorites.value
-                    if (_sortAscending.value)
-                        items.sortedBy { if (it.songId in favIds) 0 else 1 }
-                    else
-                        items.sortedByDescending { if (it.songId in favIds) 0 else 1 }
-                }
-
-                Constants.SORT_AUTHOR -> if (_sortAscending.value)
-                    items.sortedBy { it.author.lowercase() }
-                else
-                    items.sortedByDescending { it.author.lowercase() }
-
-                Constants.SORT_COMPOSER -> if (_sortAscending.value)
-                    items.sortedBy { it.composer.lowercase() }
-                else
-                    items.sortedByDescending { it.composer.lowercase() }
-
-                else -> items
-            }
+    /** [items] in the order [column] asks for; the sort itself, without the selection bookkeeping. */
+    private fun sortedBy(column: String, items: List<SongItem>): List<SongItem> = when (column) {
+        Constants.SORT_NUMBER -> if (_sortAscending.value)
+            items.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
+        else
+            items.sortedByDescending { it.number.toIntOrNull() ?: Int.MIN_VALUE }
+        Constants.SORT_TITLE -> if (_sortAscending.value)
+            items.sortedBy { it.title.lowercase() }
+        else
+            items.sortedByDescending { it.title.lowercase() }
+        Constants.SORT_SONGBOOK -> if (_sortAscending.value)
+            items.sortedBy { it.songbook.lowercase() }
+        else
+            items.sortedByDescending { it.songbook.lowercase() }
+        Constants.SORT_TUNE -> if (_sortAscending.value)
+            items.sortedBy { it.tune.lowercase() }
+        else
+            items.sortedByDescending { it.tune.lowercase() }
+        Constants.SORT_PLAY_COUNT -> {
+            val sm = statisticsManager
+            if (sm != null) {
+                val counts = items.associate { it.songId to sm.getSongPlayCount(it.songId) }
+                if (_sortAscending.value) items.sortedBy { counts[it.songId] ?: 0 }
+                else items.sortedByDescending { counts[it.songId] ?: 0 }
+            } else items
         }
+        Constants.SORT_FAVORITES -> {
+            val favIds = _favorites.value
+            if (_sortAscending.value)
+                items.sortedBy { if (it.songId in favIds) 0 else 1 }
+            else
+                items.sortedByDescending { if (it.songId in favIds) 0 else 1 }
+        }
+        Constants.SORT_AUTHOR -> if (_sortAscending.value)
+            items.sortedBy { it.author.lowercase() }
+        else
+            items.sortedByDescending { it.author.lowercase() }
+        Constants.SORT_COMPOSER -> if (_sortAscending.value)
+            items.sortedBy { it.composer.lowercase() }
+        else
+            items.sortedByDescending { it.composer.lowercase() }
+        else -> items
+    }
+
+    private fun refreshFilteredSongItems() {
+        val unsorted = _filteredSongsList.value
+        val items = if (_sortColumn.value.isEmpty()) unsorted else sortedBy(_sortColumn.value, unsorted)
 
         _filteredSongItems.value = items
+        // A re-sort leaves _selectedSongIndex where it was, so a different song — with a different
+        // number of sections — now sits under it.
+        clampSectionSelection()
     }
 
     private fun buildSongFileName(number: String, title: String): String {
         return if (number.isNotBlank()) {
-            "${number.padStart(4, '0')} - $title.song"
+            "${number.padStart(SONG_NUMBER_DIGITS, '0')} - $title.song"
         } else {
             "$title.song"
         }
+    }
+
+    /**
+     * Moves the .song file when the songbook, title or number changed, and returns the song with
+     * its new path — or null when nothing had to move.
+     */
+    private fun moveSongFile(oldSong: SongItem, newSong: SongItem, storageDir: String): SongItem? {
+        val oldFile = File(oldSong.sourceFile)
+        if (!oldFile.exists()) return null
+        val songbookChanged = oldSong.songbook != newSong.songbook
+        val titleChanged = oldSong.title != newSong.title
+        val numberChanged = oldSong.number != newSong.number
+        if (!songbookChanged && !titleChanged && !numberChanged) return null
+
+        val targetDir = if (songbookChanged) File(storageDir, newSong.songbook) else oldFile.parentFile
+        if (!targetDir.exists()) targetDir.mkdirs()
+        val newFileName = if (titleChanged || numberChanged) {
+            buildSongFileName(newSong.number, newSong.title)
+        } else {
+            oldFile.name
+        }
+
+        val newFile = File(targetDir, newFileName)
+        oldFile.copyTo(newFile, overwrite = true)
+        if (oldFile.absolutePath != newFile.absolutePath) oldFile.delete()
+        if (songbookChanged) deleteIfEmpty(oldFile.parentFile)
+        return newSong.copy(sourceFile = newFile.absolutePath)
+    }
+
+    private fun deleteIfEmpty(dir: File?) {
+        if (dir != null && dir.isDirectory && dir.listFiles()?.isEmpty() == true) dir.delete()
     }
 
     fun updateSong(
@@ -801,41 +861,7 @@ class SongsViewModel(
 
             // Handle .song file moves/renames when songbook, title, or number change
             if (oldSong.sourceFile.isNotEmpty() && storageDir.isNotEmpty()) {
-                val oldFile = File(oldSong.sourceFile)
-                if (oldFile.exists()) {
-                    val songbookChanged = oldSong.songbook != newSong.songbook
-                    val titleChanged = oldSong.title != newSong.title
-                    val numberChanged = oldSong.number != newSong.number
-
-                    if (songbookChanged || titleChanged || numberChanged) {
-                        val targetDir = if (songbookChanged) {
-                            File(storageDir, newSong.songbook)
-                        } else {
-                            oldFile.parentFile
-                        }
-                        if (!targetDir.exists()) targetDir.mkdirs()
-
-                        val newFileName = if (titleChanged || numberChanged) {
-                            buildSongFileName(newSong.number, newSong.title)
-                        } else {
-                            oldFile.name
-                        }
-
-                        val newFile = File(targetDir, newFileName)
-                        oldFile.copyTo(newFile, overwrite = true)
-                        if (oldFile.absolutePath != newFile.absolutePath) {
-                            oldFile.delete()
-                        }
-                        // Clean up empty old directory
-                        if (songbookChanged) {
-                            val oldDir = oldFile.parentFile
-                            if (oldDir != null && oldDir.isDirectory && oldDir.listFiles()?.isEmpty() == true) {
-                                oldDir.delete()
-                            }
-                        }
-                        songToSave = newSong.copy(sourceFile = newFile.absolutePath)
-                    }
-                }
+                songToSave = moveSongFile(oldSong, newSong, storageDir) ?: songToSave
             }
 
             // Update in memory
@@ -870,7 +896,7 @@ class SongsViewModel(
             if (!targetDir.exists()) targetDir.mkdirs()
 
             val fileName = if (song.number.isNotBlank()) {
-                "${song.number.padStart(4, '0')} - ${song.title}.song"
+                "${song.number.padStart(SONG_NUMBER_DIGITS, '0')} - ${song.title}.song"
             } else {
                 "${song.title}.song"
             }

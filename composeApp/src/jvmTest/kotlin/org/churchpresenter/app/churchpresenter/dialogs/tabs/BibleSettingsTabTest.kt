@@ -15,8 +15,6 @@ import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
 import org.churchpresenter.app.churchpresenter.data.settings.ProjectionSettings
-import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
@@ -24,9 +22,9 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -35,6 +33,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import org.churchpresenter.app.churchpresenter.composables.SCANNING_ROW_TAG
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
@@ -126,7 +125,23 @@ class BibleSettingsTabTest {
                 )
             }
         }
+        awaitFolderScan()
         return harness
+    }
+
+    /**
+     * Waits for the Bible folder scan to land.
+     *
+     * The tab reads the folder on `Dispatchers.IO` — walking it and reading a header out of every
+     * module is what used to freeze the settings dialog on each open — and `waitForIdle` does not
+     * cover that hop, so every assertion about what the pickers offer would otherwise race it. The
+     * scanning row is on screen until the listing arrives and gone afterwards, so this ends on the
+     * scan finishing rather than on a clock; with no folder configured the scan returns at once.
+     */
+    private fun ComposeUiTest.awaitFolderScan() {
+        waitUntil {
+            onAllNodesWithTag(SCANNING_ROW_TAG).fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+        }
     }
 
     private fun ComposeUiTest.showBibleTab(bible: BibleSettings): Harness =
@@ -180,6 +195,19 @@ class BibleSettingsTabTest {
     }
 
     @Test
+    fun `a translation is named by the title inside its file once the folder has been read`() = runComposeUiTest {
+        // The title comes from a header read per module, which now happens off the composition
+        // thread — so the picker starts out labelled by file name and sharpens when the scan lands.
+        val dir = bibleFolder("kjv.spb" to "King James Version", "asv.spb" to "American Standard")
+        showBibleTab(BibleSettings(storageDirectory = dir.path, primaryBible = "kjv.spb"))
+
+        onAllNodesWithText("King James Version").onFirst()
+            .assertExists("the configured translation is named by its ##Title:")
+        onNodeWithText("Add translation")
+            .assertExists("and the other module in the folder is offered to add")
+    }
+
+    @Test
     fun `the swap button is offered only once a secondary bible is set`() = runComposeUiTest {
         showTab()
 
@@ -194,11 +222,12 @@ class BibleSettingsTabTest {
     private object Box {
         const val SHOW_IN_LOWER_THIRD = 0
         const val SPLIT_BROWSE = 1
-        const val FADE_IN = 2
-        const val FADE_OUT = 3
-        const val CROSSFADE = 4
-        const val PRIMARY_ABBREVIATION = 5
-        const val SECONDARY_ABBREVIATION = 6
+        const val CROSS_REFERENCES = 2
+        const val FADE_IN = 3
+        const val FADE_OUT = 4
+        const val CROSSFADE = 5
+        const val PRIMARY_ABBREVIATION = 6
+        const val SECONDARY_ABBREVIATION = 7
     }
 
     /** Clicks checkbox [index] and returns the bible settings that produced. */
@@ -224,6 +253,19 @@ class BibleSettingsTabTest {
 
         assertEquals(true, after.splitBrowseMode, "split browse starts off and turns on")
         assertEquals(before.copy(splitBrowseMode = true), after)
+    }
+
+    @Test
+    fun `cross references toggles only its own flag`() = runComposeUiTest {
+        val harness = showTab()
+        val before = harness.current.bibleSettings
+
+        val after = toggle(Box.CROSS_REFERENCES, harness)
+        if (after.crossReferencesEnabled) onAllNodes(isToggleable())[Box.CROSS_REFERENCES].assertIsOn()
+        else onAllNodes(isToggleable())[Box.CROSS_REFERENCES].assertIsOff()
+
+        assertEquals(false, after.crossReferencesEnabled, "cross references start on and turn off")
+        assertEquals(before.copy(crossReferencesEnabled = false), after)
     }
 
     @Test
@@ -692,44 +734,7 @@ class BibleSettingsTabTest {
 
 
     /** Types a new size into target [index]'s font-size field. */
-    private fun ComposeUiTest.assertFontSizeField(index: Int) {
-        var settings = BibleSettings()
-        targets.forEachIndexed { i, t -> settings = t.withFontSize(settings, 20 + i) }
-        val harness = showBibleTab(settings)
-        val target = targets[index]
-
-        onNodeWithText((20 + index).toString()).performScrollTo().performTextReplacement("120")
-        waitForIdle()
-
-        assertEquals(120, target.fontSize(harness.current.bibleSettings), "font size for ${target.name}")
-        assertEquals(120, target.fontSize(persisted(harness.current)), "and it must survive settings.json")
-        onAllNodesWithText("120").onFirst().assertExists("the field must show what was typed")
-    }
-
     /** Picks a different font in target [index]'s dropdown. */
-    private fun ComposeUiTest.assertFontDropdown(index: Int) {
-        val start = "Serif"
-        val chosen = "SansSerif"   // a Java logical family, and it matches the seeded "Serif" query
-        val harness = showBibleTab(
-            BibleSettings(
-                primaryBibleFontType = start, primaryBibleLowerThirdFontType = start,
-                primaryReferenceFontType = start, primaryReferenceLowerThirdFontType = start,
-                secondaryBibleFontType = start, secondaryBibleLowerThirdFontType = start,
-                secondaryReferenceFontType = start, secondaryReferenceLowerThirdFontType = start,
-            )
-        )
-        val target = targets[index]
-
-        onAllNodesWithText(start)[index].performScrollTo().performClick()
-        waitForIdle()
-        onAllNodesWithText(chosen).onLast().performScrollTo().performClick()
-        waitForIdle()
-
-        assertEquals(chosen, target.fontType(harness.current.bibleSettings), "font for ${target.name}")
-        assertEquals(chosen, target.fontType(persisted(harness.current)), "and it must survive settings.json")
-        onAllNodesWithText(chosen).onFirst().assertExists("the closed dropdown must read the new font")
-    }
-
     /** Opens target [index]'s colour swatch, types a hex and accepts it. */
     private fun ComposeUiTest.assertColourPicker(index: Int) {
         val harness = showBibleTab(distinctColours())
@@ -824,17 +829,6 @@ class BibleSettingsTabTest {
     // ── Shadow detail rows: eight of them, three controls each ────────────────
 
     /** Every target's shadow switched on, with distinct values so each control is findable. */
-    private fun everyShadowShowing() = twoBibles().copy(
-        primaryBibleShadow = true, primaryBibleShadowColor = "#A10011", primaryBibleShadowSize = 201, primaryBibleShadowOpacity = 41,
-        primaryBibleLowerThirdShadow = true, primaryBibleLowerThirdShadowColor = "#A10012", primaryBibleLowerThirdShadowSize = 202, primaryBibleLowerThirdShadowOpacity = 42,
-        primaryReferenceShadow = true, primaryReferenceShadowColor = "#A10013", primaryReferenceShadowSize = 203, primaryReferenceShadowOpacity = 43,
-        primaryReferenceLowerThirdShadow = true, primaryReferenceLowerThirdShadowColor = "#A10014", primaryReferenceLowerThirdShadowSize = 204, primaryReferenceLowerThirdShadowOpacity = 44,
-        secondaryBibleShadow = true, secondaryBibleShadowColor = "#A10015", secondaryBibleShadowSize = 205, secondaryBibleShadowOpacity = 45,
-        secondaryBibleLowerThirdShadow = true, secondaryBibleLowerThirdShadowColor = "#A10016", secondaryBibleLowerThirdShadowSize = 206, secondaryBibleLowerThirdShadowOpacity = 46,
-        secondaryReferenceShadow = true, secondaryReferenceShadowColor = "#A10017", secondaryReferenceShadowSize = 207, secondaryReferenceShadowOpacity = 47,
-        secondaryReferenceLowerThirdShadow = true, secondaryReferenceLowerThirdShadowColor = "#A10018", secondaryReferenceLowerThirdShadowSize = 208, secondaryReferenceLowerThirdShadowOpacity = 48,
-    ).migrateTranslations()
-
     // ── Horizontal alignment: one test per group ──────────────────────────────
 
     /**

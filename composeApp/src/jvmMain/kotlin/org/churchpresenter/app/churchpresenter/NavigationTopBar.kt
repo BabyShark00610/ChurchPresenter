@@ -1,7 +1,6 @@
 package org.churchpresenter.app.churchpresenter
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.MenuBar
@@ -66,6 +65,8 @@ import churchpresenter.composeapp.generated.resources.menu_settings
 import churchpresenter.composeapp.generated.resources.menu_statistics
 import churchpresenter.composeapp.generated.resources.system_theme
 import org.churchpresenter.app.churchpresenter.data.Language
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 
@@ -117,36 +118,43 @@ fun FrameWindowScope.NavigationTopBar(
     val helpLabel = stringResource(Res.string.menu_help)
     val helpMnemonic = helpLabel.firstOrNull() ?: 'H'
 
+    // Menu accelerators come from the same registry the key handlers use, so a rebind shows up on
+    // the menu item too. Only the first chord can be an accelerator — Compose's `Item` takes one —
+    // and null means the user unbound the action, which simply drops the accelerator label.
+    val shortcuts = LocalShortcuts.current
+    fun accel(action: ShortcutAction): KeyShortcut? = shortcuts.chordsFor(action).firstOrNull()?.toKeyShortcut()
+
     MenuBar {
         Menu(fileLabel, mnemonic = fileMnemonic) {
             Item(
                 stringResource(Res.string.menu_new_schedule),
                 onClick = onNewSchedule,
-                shortcut = KeyShortcut(ctrl = true, shift = true, key = Key.N)
+                shortcut = accel(ShortcutAction.NEW_SCHEDULE)
             )
             Item(
                 stringResource(Res.string.menu_open_schedule),
                 onClick = onOpenSchedule,
-                shortcut = KeyShortcut(ctrl = true, key = Key.O)
+                shortcut = accel(ShortcutAction.OPEN_SCHEDULE)
             )
             Item(
                 stringResource(Res.string.menu_save_schedule),
                 onClick = onSaveSchedule,
-                shortcut = KeyShortcut(ctrl = true, key = Key.S)
+                shortcut = accel(ShortcutAction.SAVE_SCHEDULE)
             )
             Item(
                 stringResource(Res.string.menu_save_schedule_as),
-                onClick = onSaveScheduleAs
+                onClick = onSaveScheduleAs,
+                shortcut = accel(ShortcutAction.SAVE_SCHEDULE_AS)
             )
             Item(
                 stringResource(Res.string.menu_close_schedule),
                 onClick = onCloseSchedule,
-                shortcut = KeyShortcut(ctrl = true, key = Key.W)
+                shortcut = accel(ShortcutAction.CLOSE_SCHEDULE)
             )
             Item(
                 stringResource(Res.string.menu_exit),
                 onClick = onExit,
-                shortcut = KeyShortcut(ctrl = true, key = Key.Q)
+                shortcut = accel(ShortcutAction.EXIT)
             )
         }
 
@@ -154,12 +162,12 @@ fun FrameWindowScope.NavigationTopBar(
             Item(
                 stringResource(Res.string.menu_add_to_schedule),
                 onClick = onAddToSchedule,
-                shortcut = KeyShortcut(key = Key.F2)
+                shortcut = accel(ShortcutAction.ADD_TO_SCHEDULE)
             )
             Item(
                 stringResource(Res.string.menu_remove_from_schedule),
                 onClick = onRemoveFromSchedule,
-                shortcut = KeyShortcut(key = Key.Delete)
+                shortcut = accel(ShortcutAction.REMOVE_FROM_SCHEDULE)
             )
             Item(stringResource(Res.string.menu_clear_schedule), onClick = onClearSchedule)
         }
@@ -168,7 +176,7 @@ fun FrameWindowScope.NavigationTopBar(
             Item(
                 stringResource(Res.string.menu_settings),
                 onClick = onSettings,
-                shortcut = KeyShortcut(ctrl = true, key = Key.T)
+                shortcut = accel(ShortcutAction.OPEN_SETTINGS)
             )
             Item(
                 stringResource(Res.string.menu_statistics),
@@ -306,7 +314,7 @@ fun FrameWindowScope.NavigationTopBar(
 
         Menu(helpLabel, mnemonic = helpMnemonic) {
             Item(stringResource(Res.string.menu_getting_started), onClick = onGettingStarted)
-            Item(stringResource(Res.string.menu_keyboard_shortcuts), onClick = onKeyboardShortcuts, shortcut = KeyShortcut(key = Key.F1))
+            Item(stringResource(Res.string.menu_keyboard_shortcuts), onClick = onKeyboardShortcuts, shortcut = accel(ShortcutAction.KEYBOARD_SHORTCUTS))
             Item(stringResource(Res.string.menu_how_to_blog), onClick = onHowToBlog)
             Item(stringResource(Res.string.open_converter), onClick = onConverter)
             Item(stringResource(Res.string.menu_about), onClick = onAbout)

@@ -6,6 +6,8 @@ import androidx.compose.ui.window.FrameWindowScope
 import kotlinx.coroutines.delay
 import java.awt.Desktop
 
+private const val APPKIT_SETTLE_MS = 300L
+
 /**
  * Works around the macOS screen-menu-bar staying greyed out when this window
  * replaces another one during startup (splash → main): AppKit sometimes fails
@@ -18,7 +20,7 @@ internal fun isMacOs(osName: String): Boolean = osName.lowercase().contains("mac
 fun FrameWindowScope.MacMenuBarActivationFix() {
     if (!isMacOs(System.getProperty("os.name", ""))) return
     LaunchedEffect(Unit) {
-        delay(300)   // let AppKit settle after the previous window closed
+        delay(APPKIT_SETTLE_MS)   // let AppKit settle after the previous window closed
         try {
             window.toFront()
             val desktop = Desktop.getDesktop()

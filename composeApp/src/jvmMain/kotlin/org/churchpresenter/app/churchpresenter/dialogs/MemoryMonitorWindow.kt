@@ -53,9 +53,12 @@ import java.lang.management.GarbageCollectorMXBean
 import java.lang.management.ManagementFactory
 import java.lang.management.MemoryMXBean
 
+private const val BYTES_PER_MB = 1024L * 1024L
+private const val REFRESH_INTERVAL_MS = 1000L
+
 private const val MAX_SAMPLES = 60
 
-private fun formatMb(bytes: Long): String = "%,d MB".format(bytes / (1024L * 1024L))
+private fun formatMb(bytes: Long): String = "%,d MB".format(bytes / BYTES_PER_MB)
 
 internal data class MemorySnapshot(
     val heapUsed: Long,
@@ -142,7 +145,7 @@ internal fun MemoryMonitorContent() {
 
             appendSample(history, snapshot.heapUsed)
 
-            delay(1000)
+            delay(REFRESH_INTERVAL_MS)
         }
     }
 

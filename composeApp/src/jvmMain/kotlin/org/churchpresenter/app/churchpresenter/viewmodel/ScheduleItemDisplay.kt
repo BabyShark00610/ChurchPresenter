@@ -15,6 +15,9 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.jetbrains.compose.resources.StringResource
 
+private const val VERSE_PREVIEW_CHARS = 100
+private const val PALETTE_INDEX_FOURTH = 3
+
 /**
  * How a schedule item is labelled in the list — its type glyph, its grey detail line, and an
  * announcement timer's preview. Extracted from ScheduleTab (the glyph `when` was duplicated at two
@@ -45,7 +48,7 @@ internal fun scheduleItemGlyph(item: ScheduleItem): String = when (item) {
  */
 internal fun scheduleItemDetailText(item: ScheduleItem): String? = when (item) {
     is ScheduleItem.BibleVerseItem ->
-        item.verseText.take(100) + if (item.verseText.length > 100) "..." else ""
+        item.verseText.take(VERSE_PREVIEW_CHARS) + if (item.verseText.length > VERSE_PREVIEW_CHARS) "..." else ""
     is ScheduleItem.PictureItem -> item.folderPath
     is ScheduleItem.PresentationItem -> "${item.fileType.uppercase()} - ${item.filePath}"
     is ScheduleItem.MediaItem -> "${item.mediaType.uppercase()} - ${item.mediaUrl}"
@@ -62,11 +65,11 @@ internal fun scheduleItemPaletteIndex(item: ScheduleItem): Int = when (item) {
     is ScheduleItem.SongItem -> 0
     is ScheduleItem.BibleVerseItem -> 1
     is ScheduleItem.PresentationItem -> 2
-    is ScheduleItem.PictureItem -> 3
+    is ScheduleItem.PictureItem -> PALETTE_INDEX_FOURTH
     is ScheduleItem.MediaItem -> 0
     is ScheduleItem.LowerThirdItem -> 1
     is ScheduleItem.AnnouncementItem -> 2
-    is ScheduleItem.WebsiteItem -> 3
+    is ScheduleItem.WebsiteItem -> PALETTE_INDEX_FOURTH
     is ScheduleItem.SceneItem -> 0
     is ScheduleItem.DictionaryItem -> 1
     is ScheduleItem.LabelItem -> 0

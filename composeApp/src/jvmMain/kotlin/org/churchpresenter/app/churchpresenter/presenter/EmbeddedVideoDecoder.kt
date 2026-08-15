@@ -28,6 +28,9 @@ import java.awt.image.DataBufferInt
 import java.io.File
 import java.nio.ByteBuffer
 
+private const val FRAME_INTERVAL_MS = 16L
+private const val FULL_VOLUME = 100
+
 /**
  * Decodes one embedded presentation video (Keynote or PowerPoint) live and republishes it as an
  * [ImageBitmap] sized/offset identically to the poster frame it replaces, so
@@ -93,7 +96,7 @@ internal class EmbeddedVideoDecoder(
                 decodedFrame = frame
                 return RV32BufferFormat(frame.width, frame.height)
             }
-            override fun allocatedBuffers(buffers: Array<out ByteBuffer>) {}
+            override fun allocatedBuffers(buffers: Array<out ByteBuffer>) = Unit
         }
         val renderCallback = RenderCallback { _, nativeBuffers, _ ->
             val img = decodedFrame ?: return@RenderCallback
@@ -137,7 +140,7 @@ internal class EmbeddedVideoDecoder(
                     lastVersion = v
                     composite()
                 }
-                delay(16) // ~60fps cap, off the VLC render thread
+                delay(FRAME_INTERVAL_MS) // ~60fps cap, off the VLC render thread
             }
         }
     }
@@ -198,7 +201,7 @@ internal class EmbeddedVideoDecoder(
         if (closed) return
         if (!resumed) {
             resumed = true
-            mp?.audio()?.setVolume(100)
+            mp?.audio()?.setVolume(FULL_VOLUME)
         }
         if (!confirmedPlaying) mp?.controls()?.play()
     }

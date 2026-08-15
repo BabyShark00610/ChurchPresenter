@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import churchpresenter.composeapp.generated.resources.Res
+import churchpresenter.composeapp.generated.resources.block_for_session
 import churchpresenter.composeapp.generated.resources.remote_activity_added_to_schedule
 import churchpresenter.composeapp.generated.resources.remote_activity_removed_from_schedule
 import churchpresenter.composeapp.generated.resources.remote_activity_by
@@ -58,18 +59,6 @@ import churchpresenter.composeapp.generated.resources.remote_activity_qa_admin_c
 import churchpresenter.composeapp.generated.resources.instance_link_follower_badge
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
-
-/**
- * Describes an auto-approved remote action that should be surfaced as a toast
- * so the operator knows what was done on their behalf.
- */
-data class RemoteActivityNotification(
-    val type: RemoteEventType,
-    val title: String,
-    val detail: String = "",
-    val clientId: String = "",
-    val clientLabel: String = ""
-)
 
 internal const val TOAST_AUTO_DISMISS_MS = 10_000L
 
@@ -270,7 +259,7 @@ private fun RemoteActivityToast(
                 OutlinedButton(shape = RoundedCornerShape(6.dp), onClick = onBlockForSession) {
                     Icon(
                         Icons.Filled.RemoveCircle,
-                        contentDescription = null,
+                        contentDescription = stringResource(Res.string.block_for_session),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
@@ -292,4 +281,3 @@ private fun RemoteActivityToast(
         }
     }
 }
-

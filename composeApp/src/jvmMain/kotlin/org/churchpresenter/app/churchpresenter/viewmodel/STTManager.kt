@@ -25,6 +25,9 @@ import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+private const val HTTP_OK = 200
+private const val MODEL_POLL_INTERVAL_MS = 60_000L
+
 data class STTSegment(
     val id: Int,
     val timestamp: String,
@@ -350,6 +353,26 @@ class STTManager {
      * comes up. `internal` rather than private for the same reason as the `handle*Update` parsers:
      * in production it is only reachable from a socket callback, and it is plain HTTP otherwise.
      */
+    /** The enabled highlighted words in the payload; words in a disabled colour group are dropped. */
+    private fun highlightedWordsFrom(json: JSONObject): List<HighlightedWord> {
+        val disabledArray = json.optJSONArray("disabled_colors")
+        val disabledColors = (0 until (disabledArray?.length() ?: 0))
+            .map { disabledArray!!.stringOr(it) }
+            .toSet()
+        val wordsArray = json.optJSONArray("words") ?: return emptyList()
+        return (0 until wordsArray.length())
+            .map { wordsArray.getJSONObject(it) }
+            .filter { it.stringOr("color", "#ffff00") !in disabledColors }
+            .map { w ->
+                HighlightedWord(
+                    word = w.stringOr("word"),
+                    color = w.stringOr("color", "#ffff00"),
+                    caseSensitive = w.optBoolean("case_sensitive", false),
+                    isRegex = w.optBoolean("is_regex", false)
+                )
+            }
+    }
+
     internal fun fetchWordHighlighting(baseUrl: String) {
         try {
             val client = HttpClient.newHttpClient()
@@ -358,40 +381,14 @@ class STTManager {
                 .GET()
                 .build()
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            if (response.statusCode() == 200) {
-                val json = JSONObject(response.body())
-                if (json.optBoolean("success", false)) {
-                    // Collect disabled color groups to filter them out
-                    val disabledColors = mutableSetOf<String>()
-                    val disabledArray = json.optJSONArray("disabled_colors")
-                    if (disabledArray != null) {
-                        for (i in 0 until disabledArray.length()) {
-                            disabledColors.add(disabledArray.stringOr(i))
-                        }
-                    }
-
-                    scope.launch {
-                        _wordHighlightingEnabled.value = json.optBoolean("enabled", true)
-                        val wordsArray = json.optJSONArray("words")
-                        _highlightedWords.clear()
-                        if (wordsArray != null) {
-                            for (i in 0 until wordsArray.length()) {
-                                val w = wordsArray.getJSONObject(i)
-                                val color = w.stringOr("color", "#ffff00")
-                                // Skip words whose color group is disabled
-                                if (color in disabledColors) continue
-                                _highlightedWords.add(
-                                    HighlightedWord(
-                                        word = w.stringOr("word"),
-                                        color = color,
-                                        caseSensitive = w.optBoolean("case_sensitive", false),
-                                        isRegex = w.optBoolean("is_regex", false)
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
+            if (response.statusCode() != HTTP_OK) return
+            val json = JSONObject(response.body())
+            if (!json.optBoolean("success", false)) return
+            val words = highlightedWordsFrom(json)
+            scope.launch {
+                _wordHighlightingEnabled.value = json.optBoolean("enabled", true)
+                _highlightedWords.clear()
+                _highlightedWords.addAll(words)
             }
         } catch (_: Exception) {
             // Silently ignore — highlighting is optional
@@ -412,7 +409,7 @@ class STTManager {
         dbCaptureJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 if (helpDevModeEnabled) runCatching { captureDbSnapshot(baseUrl) }
-                delay(60_000L)
+                delay(MODEL_POLL_INTERVAL_MS)
             }
         }
     }
@@ -424,14 +421,7 @@ class STTManager {
         TrainingDataLogger.cleanupOldLogsOnce()
 
         val client = HttpClient.newHttpClient()
-        val statusRequest = HttpRequest.newBuilder()
-            .uri(URI.create("$baseUrl/api/transcription/status"))
-            .GET()
-            .build()
-        val statusResponse = client.send(statusRequest, HttpResponse.BodyHandlers.ofString())
-        if (statusResponse.statusCode() != 200) return
-        val state = JSONObject(statusResponse.body()).optJSONObject("state") ?: return
-        val dbName = state.stringOrNull("db_name") ?: return
+        val dbName = remoteDbName(client, baseUrl) ?: return
 
         val encodedPath = URLEncoder.encode(dbName, "UTF-8")
         val downloadRequest = HttpRequest.newBuilder()
@@ -439,13 +429,23 @@ class STTManager {
             .GET()
             .build()
         val downloadResponse = client.send(downloadRequest, HttpResponse.BodyHandlers.ofByteArray())
-        if (downloadResponse.statusCode() != 200) return
+        if (downloadResponse.statusCode() != HTTP_OK) return
 
         val logDir = File(System.getProperty("user.home"), ".churchpresenter/bible-stt-logs").also { it.mkdirs() }
         val target = File(logDir, File(dbName).name)
         val tmp = File(logDir, "${target.name}.tmp")
         tmp.writeBytes(downloadResponse.body())
         Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    private fun remoteDbName(client: HttpClient, baseUrl: String): String? {
+        val statusRequest = HttpRequest.newBuilder()
+            .uri(URI.create("$baseUrl/api/transcription/status"))
+            .GET()
+            .build()
+        val statusResponse = client.send(statusRequest, HttpResponse.BodyHandlers.ofString())
+        if (statusResponse.statusCode() != HTTP_OK) return null
+        return JSONObject(statusResponse.body()).optJSONObject("state")?.stringOrNull("db_name")
     }
 
     fun dispose() {

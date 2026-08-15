@@ -107,8 +107,10 @@ import org.churchpresenter.app.churchpresenter.data.settings.QASettings
 import org.churchpresenter.app.churchpresenter.presenter.generateQRCodeBitmap
 import org.churchpresenter.app.churchpresenter.server.TunnelStatus
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
+
+private const val POSITION_GRID_COLUMNS = 3
 
 @Composable
 fun QARemoteDialog(
@@ -125,9 +127,7 @@ fun QARemoteDialog(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
     val mainWindowState = LocalMainWindowState.current
     val dialogWidth = 760.dp
     val dialogHeight = 700.dp
@@ -189,7 +189,7 @@ fun QARemoteDialog(
  * opens and the grow-to-fit effect sizing it, neither of which can run on a headless machine.
  *
  * Three things are taken as parameters rather than reached for here, because each is a piece of the
- * machine rather than of the dialog: [availableFonts] comes from `GraphicsEnvironment`,
+ * machine rather than of the dialog: [availableFonts] comes from the machine's installed fonts,
  * [copyText] writes the system clipboard, and [scrollState] is shared with the sizing effect above.
  * Passing them in is what lets a test press Copy and see *which* address was handed over — the
  * point of the URL-building rules below.
@@ -527,7 +527,7 @@ internal fun QARemoteContent(
                             Constants.BOTTOM_RIGHT to stringResource(Res.string.qa_pos_br),
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
-                            positions.chunked(3).forEach { rowItems ->
+                            positions.chunked(POSITION_GRID_COLUMNS).forEach { rowItems ->
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                     rowItems.forEach { (posConst, posLabel) ->
                                         val isSelected = qaSettings.position == posConst

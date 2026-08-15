@@ -10,7 +10,6 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import java.awt.Cursor
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.platform.LocalDensity
@@ -95,7 +94,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import churchpresenter.composeapp.generated.resources.Res
-import churchpresenter.composeapp.generated.resources.add_to_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_add_to_schedule
 import churchpresenter.composeapp.generated.resources.tooltip_go_live
 import churchpresenter.composeapp.generated.resources.tooltip_send_to_stage_monitor
@@ -123,7 +121,6 @@ import churchpresenter.composeapp.generated.resources.center_left
 import churchpresenter.composeapp.generated.resources.center_right
 import churchpresenter.composeapp.generated.resources.font_size
 import churchpresenter.composeapp.generated.resources.font_type
-import churchpresenter.composeapp.generated.resources.go_live
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
@@ -173,12 +170,21 @@ import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.presenterAspectRatio
 import org.churchpresenter.app.churchpresenter.utils.presenterScreenBounds
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.utils.Utils
 import org.churchpresenter.app.churchpresenter.viewmodel.AnnouncementsViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
+
+private const val POSITION_GRID_COLUMNS = 3
+private const val POSITION_TILE_ASPECT_ABBREV = 1.5f
+private const val POSITION_TILE_ASPECT_FULL = 3f
+private const val HOURS_PER_HALF_DAY = 12
+private const val HOUR_WRAP_OFFSET = 11
+private const val HOURS_PER_DAY = 24
+private const val MAX_SECOND = 59
+private const val MILLIS_PER_SECOND_F = 1000f
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -198,9 +204,7 @@ fun AnnouncementsTab(
         viewModel.syncFromSettings(appSettings.announcementsSettings)
     }
 
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
 
     // Screens configured as Stage Monitor — locking them to Announcements shows this content
     // there without disturbing whatever the main projection screen(s) are currently live with.
@@ -493,7 +497,7 @@ fun AnnouncementsTab(
                     BoxWithConstraints(modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()) {
                         val useAbbrev = maxWidth / 3 < 80.dp
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            positions.chunked(3).forEach { rowItems ->
+                            positions.chunked(POSITION_GRID_COLUMNS).forEach { rowItems ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -506,7 +510,7 @@ fun AnnouncementsTab(
                                         Box(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .aspectRatio(if (useAbbrev) 1.5f else 3f)
+                                                .aspectRatio(if (useAbbrev) POSITION_TILE_ASPECT_ABBREV else POSITION_TILE_ASPECT_FULL)
                                                 .clip(RoundedCornerShape(3.dp))
                                                 .background(
                                                     if (isSelected) MaterialTheme.colorScheme.primary
@@ -558,7 +562,7 @@ fun AnnouncementsTab(
                         val use24Hour = Utils.isSystemUsing24HourFormat()
                         val targetIsPm = viewModel.targetHour >= 12
                         fun displayHour(hour24: Int): Int =
-                            if (use24Hour) hour24 else ((hour24 + 11) % 12) + 1
+                            if (use24Hour) hour24 else ((hour24 + HOUR_WRAP_OFFSET) % HOURS_PER_HALF_DAY) + 1
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -655,7 +659,7 @@ fun AnnouncementsTab(
                                 TimerColumn(secText, secLabel,
                                     onIncrement = { viewModel.stepTimerSeconds(1); viewModel.saveToSettings(onSettingsChange) },
                                     onDecrement = { viewModel.stepTimerSeconds(-1); viewModel.saveToSettings(onSettingsChange) },
-                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); secText = d; d.toIntOrNull()?.let { viewModel.setTimerSeconds(it.coerceIn(0, 59)); viewModel.saveToSettings(onSettingsChange) } }
+                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); secText = d; d.toIntOrNull()?.let { viewModel.setTimerSeconds(it.coerceIn(0, MAX_SECOND)); viewModel.saveToSettings(onSettingsChange) } }
                                 )
                             }
                         } else if (viewModel.timerMode == Constants.TIMER_MODE_CLOCK) {
@@ -703,14 +707,14 @@ fun AnnouncementsTab(
                                 TimerColumn(tSecText, secLabel,
                                     onIncrement = { viewModel.stepTargetSecond(1); viewModel.saveToSettings(onSettingsChange) },
                                     onDecrement = { viewModel.stepTargetSecond(-1); viewModel.saveToSettings(onSettingsChange) },
-                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); tSecText = d; d.toIntOrNull()?.let { viewModel.setTargetSecond(it.coerceIn(0, 59)); viewModel.saveToSettings(onSettingsChange) } }
+                                    onValueChange = { v -> val d = v.filter { it.isDigit() }.take(2); tSecText = d; d.toIntOrNull()?.let { viewModel.setTargetSecond(it.coerceIn(0, MAX_SECOND)); viewModel.saveToSettings(onSettingsChange) } }
                                 )
                                 if (!use24Hour) {
                                     sepBox()
                                     AmPmToggle(
                                         isPm = targetIsPm,
                                         onToggle = {
-                                            viewModel.setTargetHour((viewModel.targetHour + 12) % 24)
+                                            viewModel.setTargetHour((viewModel.targetHour + HOURS_PER_HALF_DAY) % HOURS_PER_DAY)
                                             viewModel.saveToSettings(onSettingsChange)
                                         }
                                     )
@@ -1128,7 +1132,7 @@ fun AnnouncementsTab(
                                 viewModel.saveToSettings(onSettingsChange)
                             },
                             valueRange = sliderMin..sliderMax,
-                            trailingLabel = "${"%.1f".format((sliderSum - durationMs) / 1000f)}s",
+                            trailingLabel = "${"%.1f".format((sliderSum - durationMs) / MILLIS_PER_SECOND_F)}s",
                             modifier = Modifier.weight(1f)
                         )
                     }

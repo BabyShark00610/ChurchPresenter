@@ -65,6 +65,8 @@ import churchpresenter.composeapp.generated.resources.obs_status_connecting
 import churchpresenter.composeapp.generated.resources.obs_status_disconnected
 import churchpresenter.composeapp.generated.resources.obs_status_error
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.OBSSettings
@@ -72,6 +74,8 @@ import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.viewmodel.OBSWebSocketManager
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.stringResource
+
+private const val TRAILING_SPACER_WEIGHT = 3f
 
 @Composable
 fun OBSSettingsTab(
@@ -91,6 +95,7 @@ fun OBSSettingsTab(
     val status by obsManager.status
     val errorMessage by obsManager.errorMessage
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -100,7 +105,8 @@ fun OBSSettingsTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState)
+                .padding(end = SettingsScrollbarGutter),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ── Connection card ────────────────────────────────────────────────
@@ -305,7 +311,7 @@ fun OBSSettingsTab(
                                     modifier = Modifier.weight(2f)
                                 )
                             } else {
-                                Spacer(Modifier.weight(3f))
+                                Spacer(Modifier.weight(TRAILING_SPACER_WEIGHT))
                             }
                         }
                         Spacer(Modifier.height(6.dp))
@@ -313,5 +319,6 @@ fun OBSSettingsTab(
                 }
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }

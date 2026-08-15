@@ -106,6 +106,8 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.skia.Image as SkiaImage
 
+private const val PILL_CORNER_PERCENT = 50
+
 /**
  * Lets the operator pick a Planning Center Services plan and import its songs (matched against
  * the local library, or added on the spot via [EditSongDialog]) and section headers (as schedule
@@ -580,9 +582,9 @@ internal fun PlanningCenterImportDialogContent(
                                                 // for expand/collapse (see isExpandable above).
                                                 Box(
                                                     modifier = Modifier
-                                                        .clip(RoundedCornerShape(50))
+                                                        .clip(RoundedCornerShape(PILL_CORNER_PERCENT))
                                                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(50))
+                                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(PILL_CORNER_PERCENT))
                                                         .padding(horizontal = 12.dp, vertical = 5.dp)
                                                 ) {
                                                     Text(
@@ -697,16 +699,18 @@ internal fun PlanningCenterImportDialogContent(
                                 val pco = entry.pco
                                 when (pco.itemType) {
                                     "song" -> {
-                                        if (!entry.selected) continue
-                                        val songId = entry.matchedSongId ?: continue
-                                        val parts = songId.split("::", limit = 2)
-                                        val songbook = parts.getOrNull(0) ?: ""
-                                        val songNumber = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                                        onAddSong(songNumber, pco.songTitle ?: pco.title, songbook, songId)
+                                        val songId = entry.matchedSongId.takeIf { entry.selected }
+                                        if (songId != null) {
+                                            val parts = songId.split("::", limit = 2)
+                                            val songbook = parts.getOrNull(0) ?: ""
+                                            val songNumber = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                                            onAddSong(songNumber, pco.songTitle ?: pco.title, songbook, songId)
+                                        }
                                     }
                                     "header" -> {
-                                        if (!entry.selected) continue
-                                        onAddLabel(pco.title, defaultHeaderTextColor, defaultHeaderBackgroundColor)
+                                        if (entry.selected) {
+                                            onAddLabel(pco.title, defaultHeaderTextColor, defaultHeaderBackgroundColor)
+                                        }
                                     }
                                     "item" -> {
                                         // Scripture and attachment checkboxes are independent of
@@ -825,7 +829,7 @@ private fun attachmentExtensionIcon(ext: String): ImageVector = when (ext) {
 private fun MatchedTag() {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(RoundedCornerShape(PILL_CORNER_PERCENT))
             .background(MaterialTheme.semantic.successContainer)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {

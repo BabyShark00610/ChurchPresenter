@@ -215,6 +215,8 @@ data class BibleSettings(
     val transitionDuration: Float = 500f,
     val splitBrowseMode: Boolean = false,
     val splitLivePanelWidth: Int = 300,
+    val crossReferencesEnabled: Boolean = true,
+    val crossReferencesPanel: Boolean = false,
 ) {
     /**
      * The translations to present, in order. The first is the navigation bible.

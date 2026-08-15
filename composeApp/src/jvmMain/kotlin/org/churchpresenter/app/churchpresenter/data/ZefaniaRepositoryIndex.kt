@@ -1,20 +1,26 @@
 package org.churchpresenter.app.churchpresenter.data
 
-import converter.BibleCatalogNaming
+import converter.bible.BibleCatalogNaming
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import io.ktor.client.statement.HttpResponse
 import java.io.File
 import java.net.URLEncoder
+
+private val HTTP_OK_RANGE = 200..299
+private const val REGEX_GROUP_IDENTIFIER = 3
+private const val REGEX_GROUP_DISPLAY_NAME = 4
 
 /**
  * Lists the Bible modules available in the Zefania XML archive.
@@ -165,26 +171,7 @@ object ZefaniaRepositoryIndex {
                 if (cached != null && cached.etag.isNotBlank()) header("If-None-Match", cached.etag)
             }
 
-            if (response.status.value == 304 && cached != null) {
-                writeMeta(cacheFile, nowMillis, cached.etag)
-                memoryCache = nowMillis to cached
-                return@withContext IndexOutcome.Success(cached)
-            }
-
-            if (response.status.value == 403 && response.headers["x-ratelimit-remaining"] == "0") {
-                val reset = response.headers["x-ratelimit-reset"]?.toLongOrNull()
-                return@withContext cached
-                    ?.let { IndexOutcome.Success(it, stale = true) }
-                    ?: IndexOutcome.RateLimited(reset)
-            }
-
-            if (response.status.value !in 200..299) {
-                CrashReporter.reportWarning(
-                    "Zefania index fetch returned HTTP ${response.status.value}",
-                    tags = mapOf("subsystem" to "zefania_index")
-                )
-                return@withContext cached?.let { IndexOutcome.Success(it, stale = true) } ?: IndexOutcome.Failure
-            }
+            unusableResponseOutcome(response, cached, cacheFile, nowMillis)?.let { return@withContext it }
 
             val body = response.body<String>()
             val etag = response.headers["ETag"].orEmpty()
@@ -210,6 +197,35 @@ object ZefaniaRepositoryIndex {
             // install, which is far more useful than an empty dialog.
             cached?.let { IndexOutcome.Success(it, stale = true) } ?: IndexOutcome.NetworkError
         }
+    }
+
+    /**
+     * The outcome for a response that carries no new index — not-modified, rate-limited or an error
+     * status — or null when the body should be parsed. A stale cached index beats an empty dialog.
+     */
+    private suspend fun unusableResponseOutcome(
+        response: HttpResponse,
+        cached: Index?,
+        cacheFile: File,
+        nowMillis: Long,
+    ): IndexOutcome? {
+        if (response.status == HttpStatusCode.NotModified && cached != null) {
+            writeMeta(cacheFile, nowMillis, cached.etag)
+            memoryCache = nowMillis to cached
+            return IndexOutcome.Success(cached)
+        }
+        if (response.status == HttpStatusCode.Forbidden && response.headers["x-ratelimit-remaining"] == "0") {
+            val reset = response.headers["x-ratelimit-reset"]?.toLongOrNull()
+            return cached?.let { IndexOutcome.Success(it, stale = true) } ?: IndexOutcome.RateLimited(reset)
+        }
+        if (response.status.value !in HTTP_OK_RANGE) {
+            CrashReporter.reportWarning(
+                "Zefania index fetch returned HTTP ${response.status.value}",
+                tags = mapOf("subsystem" to "zefania_index")
+            )
+            return cached?.let { IndexOutcome.Success(it, stale = true) } ?: IndexOutcome.Failure
+        }
+        return null
     }
 
     /** Parses a git-tree response body. Pure — this is where nearly all the behaviour lives. */
@@ -274,9 +290,9 @@ object ZefaniaRepositoryIndex {
         if (match != null) {
             // A few are underscore-separated; normalise so the two shapes render alike.
             releaseDate = match.groupValues[1].replace('_', '-')
-            identifier = match.groupValues[3]
+            identifier = match.groupValues[REGEX_GROUP_IDENTIFIER]
             // A handful of modules carry no parenthesised title; the identifier is all there is.
-            displayName = match.groupValues[4].ifBlank { identifier }.replace('_', ' ').trim()
+            displayName = match.groupValues[REGEX_GROUP_DISPLAY_NAME].ifBlank { identifier }.replace('_', ' ').trim()
         } else {
             // Never drop a module just because its name doesn't follow the convention — fall back
             // to something usable rather than making a translation invisible.
@@ -303,25 +319,8 @@ object ZefaniaRepositoryIndex {
         return (parseIndex(body, readMeta(cacheFile).second) as? IndexOutcome.Success)?.index
     }
 
-    private fun metaFile(cacheFile: File) = File(cacheFile.parentFile, cacheFile.name + ".meta")
+    private fun readMeta(cacheFile: File) = BibleInstallSupport.BibleIndexCache.readMeta(cacheFile)
 
-    /**
-     * When the listing was fetched, and its ETag.
-     *
-     * Kept beside the cache rather than read from the file's timestamp: a copied user profile, a
-     * restored backup or a sync tool all rewrite mtimes, and any of those would silently make a
-     * years-old listing look current.
-     */
-    private fun readMeta(cacheFile: File): Pair<Long, String> {
-        val text = runCatching { metaFile(cacheFile).readText() }.getOrNull() ?: return 0L to ""
-        val fetchedAt = text.substringBefore('\n').trim().toLongOrNull() ?: 0L
-        return fetchedAt to text.substringAfter('\n', "").trim()
-    }
-
-    private fun writeMeta(cacheFile: File, fetchedAt: Long, etag: String) {
-        runCatching {
-            cacheFile.parentFile?.mkdirs()
-            metaFile(cacheFile).writeText("$fetchedAt\n$etag")
-        }
-    }
+    private fun writeMeta(cacheFile: File, fetchedAt: Long, etag: String) =
+        BibleInstallSupport.BibleIndexCache.writeMeta(cacheFile, fetchedAt, etag)
 }

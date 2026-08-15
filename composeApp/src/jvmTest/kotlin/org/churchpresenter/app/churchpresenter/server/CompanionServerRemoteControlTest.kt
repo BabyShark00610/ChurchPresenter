@@ -25,7 +25,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -135,7 +134,6 @@ class CompanionServerRemoteControlTest {
 
     private fun HttpResponse.text(): String = runBlocking { bodyAsText() }
     private fun HttpResponse.obj(): JsonObject = json.parseToJsonElement(text()).jsonObject
-    private fun HttpResponse.array(): JsonArray = json.parseToJsonElement(text()).jsonArray
     private fun JsonObject.str(key: String) = getValue(key).jsonPrimitive.content
 
     /**
@@ -1575,5 +1573,131 @@ class CompanionServerRemoteControlTest {
 
         assertEquals(true, assertNotNull(ack).ok)
         assertNotNull(runBlocking { withTimeoutOrNull(2_000) { cleared.await() } })
+    }
+
+    // ── What the operator's toast says an instant action did ────────────────────
+
+    private fun instantActionFrom(vararg frames: String): CompanionServer.RemoteInstantAction {
+        val seen = CompletableDeferred<CompanionServer.RemoteInstantAction>()
+        collecting(server.onInstantAction) { seen.complete(it) }
+        sendOverWebSocket(*frames)
+        return assertNotNull(runBlocking { withTimeoutOrNull(2_000) { seen.await() } })
+    }
+
+    @Test
+    fun `a picture from a registered folder is named by that folder`() {
+        val dir = java.nio.file.Files.createTempDirectory("cp-instant-pictures").toFile()
+        try {
+            val images = listOf("a.jpg", "b.jpg").map { java.io.File(dir, it).apply { writeBytes(ByteArray(4)) } }
+            server.updatePictures("folder-1", "Easter Slides", dir.absolutePath, images)
+
+            val action = instantActionFrom(
+                command(Constants.WS_CMD_SELECT_PICTURE, """{"folder-id":"folder-1","index":1}"""),
+            )
+
+            assertEquals("Easter Slides", action.title)
+            assertEquals("Image 1", action.detail)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a picture from a folder the desktop has never heard of falls back to its id`() {
+        val action = instantActionFrom(
+            command(Constants.WS_CMD_SELECT_PICTURE, """{"folder-id":"unknown-folder","index":0}"""),
+        )
+
+        assertEquals("unknown-folder", action.title, "an id reads badly but tells the operator more than a blank")
+    }
+
+    @Test
+    fun `a picture chosen by name is described by that name rather than an index`() {
+        val action = instantActionFrom(
+            command(
+                Constants.WS_CMD_SELECT_PICTURE,
+                """{"folder-id":"unknown-folder","index":4,"file-name":"sunrise.jpg"}""",
+            ),
+        )
+
+        assertEquals("sunrise.jpg", action.detail)
+    }
+
+    @Test
+    fun `a slide from a presentation the desktop has never heard of falls back to its id`() {
+        val action = instantActionFrom(
+            command(Constants.WS_CMD_SELECT_SLIDE, """{"id":"unknown-deck","index":2}"""),
+        )
+
+        assertEquals("unknown-deck", action.title)
+        assertEquals("Slide 3", action.detail, "the operator counts slides from one")
+    }
+
+    @Test
+    fun `a single verse is described by its own number`() {
+        val action = instantActionFrom(
+            command(
+                Constants.WS_CMD_SELECT_BIBLE_VERSE,
+                """{"bookName":"John","chapter":3,"verseNumber":16,"verseText":"For God so loved the world"}""",
+            ),
+        )
+
+        assertEquals("John 3:16", action.title)
+        assertTrue(action.detail.startsWith("For God so loved"))
+    }
+
+    @Test
+    fun `a passage is described by its range rather than its first verse`() {
+        val action = instantActionFrom(
+            command(
+                Constants.WS_CMD_SELECT_BIBLE_VERSE,
+                """{"bookName":"John","chapter":3,"verseNumber":16,"verseRange":"16-17","verseText":"…"}""",
+            ),
+        )
+
+        assertEquals("John 3:16-17", action.title)
+    }
+
+    @Test
+    fun `a song section is described by its number and section`() {
+        val action = instantActionFrom(
+            command(Constants.WS_CMD_SELECT_SONG_SECTION, """{"number":"42","section":2}"""),
+        )
+
+        assertEquals("Song 42", action.title)
+        assertEquals("Section 2", action.detail)
+    }
+
+    @Test
+    fun `clearing the screen is reported as a clear rather than a presentation`() {
+        val action = instantActionFrom(command(Constants.WS_CMD_CLEAR))
+
+        assertEquals("clear", action.actionType)
+    }
+
+    // ── Holding scripture from a phone ──────────────────────────────────────────
+
+    private fun bibleHoldFrom(payload: String): Boolean {
+        val held = CompletableDeferred<Boolean>()
+        collecting(server.onBibleHold) { held.complete(it) }
+        sendOverWebSocket(command(Constants.WS_CMD_BIBLE_HOLD, payload))
+        return assertNotNull(runBlocking { withTimeoutOrNull(2_000) { held.await() } })
+    }
+
+    @Test
+    fun `a hold is taken from the payload`() {
+        assertEquals(false, bibleHoldFrom("""{"hold":false}"""))
+        assertEquals(true, bibleHoldFrom("""{"hold":true}"""))
+    }
+
+    @Test
+    fun `a hold payload that is not json at all is taken as a hold`() {
+        // Holding is the safe reading: the screen keeps what it has rather than jumping.
+        assertEquals(true, bibleHoldFrom("not json"))
+    }
+
+    @Test
+    fun `a hold payload with no flag in it is taken as a hold`() {
+        assertEquals(true, bibleHoldFrom("""{"something":"else"}"""))
     }
 }

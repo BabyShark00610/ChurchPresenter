@@ -87,23 +87,33 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
 
+private const val FRAME_INTERVAL_MS = 16L
+private const val PLAYER_SETTLE_MS = 100L
+private const val VOLUME_PERCENT_SCALE = 100
+private const val URL_DEBOUNCE_MS = 800L
+private const val ERROR_TEXT_COLOR = 0xFFFF8888
+private const val POLL_INTERVAL_MS = 1000L
+private const val MIN_CAPTURE_INTERVAL_MS = 33L
+private const val WINDOW_BOUNDS_FIELDS = 4
+private const val BOUNDS_WIDTH_INDEX = 2
+private const val BOUNDS_HEIGHT_INDEX = 3
+
 @Composable
 fun SceneSourceRenderer(
     source: SceneSource,
     modifier: Modifier = Modifier,
-    isPresenter: Boolean = false,
     fontScale: Float = 1f
 ) {
     when (source) {
         is SceneSource.ImageSource -> ImageSourceContent(source, modifier)
         is SceneSource.TextSource -> TextSourceContent(source, modifier, fontScale)
         is SceneSource.ColorSource -> ColorSourceContent(source, modifier)
-        is SceneSource.VideoSource -> VideoSourceContent(source, modifier, isPresenter)
-        is SceneSource.BrowserSource -> BrowserSourceContent(source, modifier, isPresenter)
+        is SceneSource.VideoSource -> VideoSourceContent(source, modifier)
+        is SceneSource.BrowserSource -> BrowserSourceContent(source, modifier)
         is SceneSource.ShapeSource -> ShapeSourceContent(source, modifier, fontScale)
         is SceneSource.ClockSource -> ClockSourceContent(source, modifier, fontScale)
         is SceneSource.QRCodeSource -> QRCodeSourceContent(source, modifier)
-        is SceneSource.CameraSource -> CameraSourceContent(source, modifier, isPresenter)
+        is SceneSource.CameraSource -> CameraSourceContent(source, modifier)
         is SceneSource.ScreenCaptureSource -> ScreenCaptureSourceContent(source, modifier)
         is SceneSource.BibleSource -> BibleSourceContent(source, modifier, fontScale)
     }
@@ -210,7 +220,6 @@ private fun ColorSourceContent(source: SceneSource.ColorSource, modifier: Modifi
 private fun VideoSourceContent(
     source: SceneSource.VideoSource,
     modifier: Modifier,
-    isPresenter: Boolean
 ) {
     val file = remember(source.filePath) { if (source.filePath.isNotBlank()) File(source.filePath) else null }
     if (file == null || !file.exists() || !isVlcAvailable) {
@@ -256,7 +265,7 @@ private fun VideoSourceContent(
                     currentFrame.value = img.toComposeImageBitmap()
                 }
             }
-            delay(16)
+            delay(FRAME_INTERVAL_MS)
         }
     }
 
@@ -266,7 +275,7 @@ private fun VideoSourceContent(
                 bufferedImageHolder.value = BufferedImage(sourceWidth, sourceHeight, BufferedImage.TYPE_INT_ARGB)
                 return RV32BufferFormat(sourceWidth, sourceHeight)
             }
-            override fun allocatedBuffers(buffers: Array<out ByteBuffer>) { }
+            override fun allocatedBuffers(buffers: Array<out ByteBuffer>) = Unit
         }
 
         val renderCallback = RenderCallback { _, nativeBuffers, _ ->
@@ -295,9 +304,9 @@ private fun VideoSourceContent(
     }
 
     LaunchedEffect(source.filePath, source.loop, source.volume) {
-        delay(100)
+        delay(PLAYER_SETTLE_MS)
         try {
-            mediaPlayer.audio().setVolume((source.volume * 100).toInt())
+            mediaPlayer.audio().setVolume((source.volume * VOLUME_PERCENT_SCALE).toInt())
             val options = mutableListOf(":clock-jitter=0")
             if (source.loop) options.add(":input-repeat=65535")
             mediaPlayer.media().play(file.absolutePath, *options.toTypedArray())
@@ -326,7 +335,6 @@ private fun VideoSourceContent(
 private fun BrowserSourceContent(
     source: SceneSource.BrowserSource,
     modifier: Modifier,
-    isPresenter: Boolean
 ) {
     if (source.url.isBlank()) {
         Box(
@@ -353,7 +361,7 @@ private fun BrowserSourceContent(
 
     // Debounce URL and CSS changes — navigate in-place instead of restarting Chrome
     LaunchedEffect(source.url, source.customCss, source.forceTransparent) {
-        delay(800) // debounce: wait for user to stop typing
+        delay(URL_DEBOUNCE_MS) // debounce: wait for user to stop typing
         if (source.url.isNotBlank()) {
             SharedBrowserFrameCache.navigateTo(source.id, source.url, source.customCss, source.forceTransparent)
         }
@@ -386,7 +394,7 @@ private fun BrowserSourceContent(
         ) {
             Text(
                 text = error ?: "Loading: ${source.url}",
-                color = if (error != null) Color(0xFFFF8888) else Color.White,
+                color = if (error != null) Color(ERROR_TEXT_COLOR) else Color.White,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center
             )
@@ -531,8 +539,8 @@ private fun ClockSourceContent(source: SceneSource.ClockSource, modifier: Modifi
         val timerState = TimerStateManager.getState(source.id, totalSeconds)
         LaunchedEffect(timerState.isRunning) {
             while (timerState.isRunning) {
-                delay(1000)
-                TimerStateManager.tick(source.id, totalSeconds)
+                delay(POLL_INTERVAL_MS)
+                TimerStateManager.tick(source.id)
             }
         }
 
@@ -558,7 +566,7 @@ private fun ClockSourceContent(source: SceneSource.ClockSource, modifier: Modifi
                     if (source.timeFormat == "12h") append(" a")
                 }
                 displayText = now.format(DateTimeFormatter.ofPattern(pattern))
-                delay(1000)
+                delay(POLL_INTERVAL_MS)
             }
         }
     }
@@ -662,7 +670,6 @@ private fun QRCodeSourceContent(source: SceneSource.QRCodeSource, modifier: Modi
 private fun CameraSourceContent(
     source: SceneSource.CameraSource,
     modifier: Modifier,
-    isPresenter: Boolean
 ) {
     if (source.devicePath.isBlank()) {
         Box(
@@ -708,7 +715,7 @@ private fun CameraSourceContent(
                 text = error
                     ?: if (source.deviceName.isNotEmpty()) stringResource(Res.string.canvas_placeholder_camera, source.deviceName)
                        else stringResource(Res.string.canvas_placeholder_camera_default),
-                color = if (error != null) Color(0xFFFF8888) else Color.White,
+                color = if (error != null) Color(ERROR_TEXT_COLOR) else Color.White,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center
             )
@@ -745,7 +752,7 @@ private fun ScreenCaptureSourceContent(source: SceneSource.ScreenCaptureSource, 
                 if (capture != null) {
                     frame = capture.toComposeImageBitmap()
                 }
-                delay(source.captureInterval.toLong().coerceAtLeast(33))
+                delay(source.captureInterval.toLong().coerceAtLeast(MIN_CAPTURE_INTERVAL_MS))
             }
         } catch (_: Exception) {
             // Robot may fail in headless/restricted environments
@@ -806,7 +813,7 @@ internal fun linuxWindowBoundsFrom(title: String, run: CommandRunner): Rectangle
 
     for (wid in windowIds) {
         val nameOutput = run(listOf("xprop", "-id", wid, "_NET_WM_NAME"), 0L).output
-        val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1) ?: continue
+        val name = Regex("\"(.+)\"").find(nameOutput)?.groupValues?.get(1)
         if (name != title) continue
 
         val bounds = parseXwininfoBounds(run(listOf("xwininfo", "-id", wid), 0L).output)
@@ -872,8 +879,10 @@ internal fun macWindowBoundsScript(title: String): String = """
 internal fun macWindowBoundsFrom(title: String, run: CommandRunner): Rectangle? {
     val output = run(listOf("osascript", "-e", macWindowBoundsScript(title)), 0L).output.trim()
     val parts = output.split(",").mapNotNull { it.trim().toIntOrNull() }
-    return if (parts.size == 4 && parts[2] > 0 && parts[3] > 0) {
-        Rectangle(parts[0], parts[1], parts[2], parts[3])
+    return if (parts.size == WINDOW_BOUNDS_FIELDS &&
+        parts[BOUNDS_WIDTH_INDEX] > 0 && parts[BOUNDS_HEIGHT_INDEX] > 0
+    ) {
+        Rectangle(parts[0], parts[1], parts[BOUNDS_WIDTH_INDEX], parts[BOUNDS_HEIGHT_INDEX])
     } else null
 }
 

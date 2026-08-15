@@ -32,6 +32,8 @@ data class SongCache(
     val cachedSongs: List<CachedSong> = emptyList()
 )
 
+private const val TITLE_KEY_LENGTH = 6
+
 class SongFileParser {
 
     fun parseSongFile(filePath: String, songbook: String = ""): SongItem? {
@@ -46,6 +48,51 @@ class SongFileParser {
         }
     }
 
+    /** The `key: value` lines of a .song header, lowercased keys, unknown keys kept out. */
+    private fun parseHeaderFields(headerBody: List<String>): Map<String, String> {
+        val known = setOf("author", "composer", "tune", "ccli")
+        return headerBody.mapNotNull { raw ->
+            val line = raw.trim()
+            val colonIndex = line.indexOf(':')
+            if (colonIndex <= 0) return@mapNotNull null
+            val key = line.substring(0, colonIndex).trim().lowercase()
+            if (key !in known) null else key to line.substring(colonIndex + 1).trim()
+        }.toMap()
+    }
+
+    /** The [Primary]/[Secondary] halves of a .song body, filled a line at a time. */
+    private class SongBody(
+        private val primaryLyrics: MutableList<String>,
+        private val secondaryLyrics: MutableList<String>,
+    ) {
+        var primaryTitle = ""
+        var secondaryTitle = ""
+        private var section: String? = null // null, "primary", "secondary"
+        private var target: MutableList<String>? = null
+
+        fun consume(line: String) {
+            val trimmed = line.trim()
+            when {
+                trimmed.equals("[Primary]", ignoreCase = true) -> {
+                    section = "primary"
+                    target = primaryLyrics
+                }
+                trimmed.equals("[Secondary]", ignoreCase = true) -> {
+                    section = "secondary"
+                    target = secondaryLyrics
+                }
+                section == null || target == null -> Unit
+                // Title line right after the section tag
+                trimmed.startsWith("title:", ignoreCase = true) -> {
+                    val titleValue = trimmed.substring(TITLE_KEY_LENGTH).trim()
+                    if (section == "primary") primaryTitle = titleValue else secondaryTitle = titleValue
+                }
+                // Lyric lines (including section headers like [Verse 1], empty lines, etc.)
+                else -> target?.add(line)
+            }
+        }
+    }
+
     fun parseSongContent(content: String, filePath: String = "", songbook: String = ""): SongItem? {
         try {
             val lines = content.lines()
@@ -55,33 +102,19 @@ class SongFileParser {
             var composer = ""
             var tune = ""
             var ccli = ""
-            var inHeader = false
-            var headerEndIndex = 0
+            val headerStart = lines.indexOfFirst { it.trim() == "---" }
+            val headerClose = if (headerStart < 0) -1 else
+                lines.subList(headerStart + 1, lines.size).indexOfFirst { it.trim() == "---" }
+                    .takeIf { it >= 0 }?.plus(headerStart + 1) ?: -1
+            val headerEndIndex = if (headerClose < 0) 0 else headerClose + 1
 
-            for (i in lines.indices) {
-                val line = lines[i].trim()
-                if (line == "---") {
-                    if (!inHeader) {
-                        inHeader = true
-                        continue
-                    } else {
-                        headerEndIndex = i + 1
-                        break
-                    }
-                }
-                if (inHeader) {
-                    val colonIndex = line.indexOf(':')
-                    if (colonIndex > 0) {
-                        val key = line.substring(0, colonIndex).trim().lowercase()
-                        val value = line.substring(colonIndex + 1).trim()
-                        when (key) {
-                            "author" -> author = value
-                            "composer" -> composer = value
-                            "tune" -> tune = value
-                            "ccli" -> ccli = value
-                        }
-                    }
-                }
+            if (headerStart >= 0) {
+                val headerBody = lines.subList(headerStart + 1, if (headerClose < 0) lines.size else headerClose)
+                val header = parseHeaderFields(headerBody)
+                author = header["author"].orEmpty()
+                composer = header["composer"].orEmpty()
+                tune = header["tune"].orEmpty()
+                ccli = header["ccli"].orEmpty()
             }
 
             // Parse body after header
@@ -92,41 +125,10 @@ class SongFileParser {
             val primaryLyrics = mutableListOf<String>()
             val secondaryLyrics = mutableListOf<String>()
 
-            var currentSection: String? = null // null, "primary", "secondary"
-            var currentTarget: MutableList<String>? = null
-
-            for (line in bodyLines) {
-                val trimmed = line.trim()
-
-                when {
-                    trimmed.equals("[Primary]", ignoreCase = true) -> {
-                        currentSection = "primary"
-                        currentTarget = primaryLyrics
-                        continue
-                    }
-                    trimmed.equals("[Secondary]", ignoreCase = true) -> {
-                        currentSection = "secondary"
-                        currentTarget = secondaryLyrics
-                        continue
-                    }
-                }
-
-                if (currentSection != null && currentTarget != null) {
-                    // Check for title line right after section tag
-                    if (trimmed.startsWith("title:", ignoreCase = true)) {
-                        val titleValue = trimmed.substring(6).trim()
-                        if (currentSection == "primary") {
-                            primaryTitle = titleValue
-                        } else {
-                            secondaryTitle = titleValue
-                        }
-                        continue
-                    }
-
-                    // Add lyric lines (including section headers like [Verse 1], empty lines, etc.)
-                    currentTarget.add(line)
-                }
-            }
+            val body = SongBody(primaryLyrics, secondaryLyrics)
+            for (line in bodyLines) body.consume(line)
+            primaryTitle = body.primaryTitle
+            secondaryTitle = body.secondaryTitle
 
             // Trim leading/trailing blank lines from lyrics
             trimBlankLines(primaryLyrics)
@@ -161,7 +163,8 @@ class SongFileParser {
         val sb = StringBuilder()
 
         // Write header if any metadata exists
-        if (song.author.isNotEmpty() || song.composer.isNotEmpty() || song.tune.isNotEmpty() || song.ccliNumber.isNotEmpty()) {
+        val hasCredits = song.author.isNotEmpty() || song.composer.isNotEmpty()
+        if (hasCredits || song.tune.isNotEmpty() || song.ccliNumber.isNotEmpty()) {
             sb.appendLine("---")
             if (song.author.isNotEmpty()) sb.appendLine("author: ${song.author}")
             if (song.composer.isNotEmpty()) sb.appendLine("composer: ${song.composer}")
@@ -270,29 +273,22 @@ class SongFileParser {
         }
         private val cacheFile = File(System.getProperty("user.home"), ".churchpresenter/song_cache.json")
 
-        fun loadSongCache(storageDirectory: String): List<SongItem>? {
-            try {
-                if (!cacheFile.exists()) return null
-                val cache = cacheJson.decodeFromString<SongCache>(cacheFile.readText(StandardCharsets.UTF_8))
-                if (cache.storageDirectory != storageDirectory) return null
-                // Prefer cachedSongs (with timestamps); fall back to legacy songs list
-                return if (cache.cachedSongs.isNotEmpty()) cache.cachedSongs.map { it.song }
-                else cache.songs.ifEmpty { null }
-            } catch (_: Exception) {
-                return null
-            }
+        private fun readCacheFor(storageDirectory: String): SongCache? = try {
+            cacheJson.decodeFromString<SongCache>(cacheFile.readText(StandardCharsets.UTF_8))
+                .takeIf { it.storageDirectory == storageDirectory }
+        } catch (_: Exception) {
+            null
         }
 
-        fun loadCachedSongMap(storageDirectory: String): Map<String, CachedSong> {
-            try {
-                if (!cacheFile.exists()) return emptyMap()
-                val cache = cacheJson.decodeFromString<SongCache>(cacheFile.readText(StandardCharsets.UTF_8))
-                if (cache.storageDirectory != storageDirectory) return emptyMap()
-                return cache.cachedSongs.associateBy { it.song.sourceFile }
-            } catch (_: Exception) {
-                return emptyMap()
-            }
+        fun loadSongCache(storageDirectory: String): List<SongItem>? {
+            val cache = readCacheFor(storageDirectory) ?: return null
+            // Prefer cachedSongs (with timestamps); fall back to legacy songs list
+            return if (cache.cachedSongs.isNotEmpty()) cache.cachedSongs.map { it.song }
+            else cache.songs.ifEmpty { null }
         }
+
+        fun loadCachedSongMap(storageDirectory: String): Map<String, CachedSong> =
+            readCacheFor(storageDirectory)?.cachedSongs?.associateBy { it.song.sourceFile } ?: emptyMap()
 
         fun saveSongCache(storageDirectory: String, cachedSongs: List<CachedSong>) {
             try {

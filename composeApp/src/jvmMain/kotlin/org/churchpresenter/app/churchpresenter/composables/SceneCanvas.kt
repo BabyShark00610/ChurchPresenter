@@ -44,6 +44,8 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
+private const val HANDLE_MIDPOINT = 0.5f
+
 data class SnapLine(
     val orientation: SnapOrientation,
     val position: Float // normalized 0-1
@@ -61,7 +63,6 @@ fun SceneCanvas(
     onSourceSelected: (String?) -> Unit,
     onTransformChanged: (sourceId: String, SourceTransform) -> Unit,
     isInteractive: Boolean = true,
-    isPresenter: Boolean = false,
     activeTool: String = "select",
     drawingStrokeColor: String = "#FFFFFF",
     drawingFillColor: String = "#00000000",
@@ -190,7 +191,6 @@ fun SceneCanvas(
             )
     ) {
         val density = LocalDensity.current
-        val scale = density.density
         val cw = canvasSize.width.toFloat()
         val ch = canvasSize.height.toFloat()
         val fontScale = if (scene.canvasWidth > 0 && cw > 0) (cw / density.density) / scene.canvasWidth.toFloat() else 1f
@@ -207,13 +207,14 @@ fun SceneCanvas(
             val shDp = with(density) { (t.height * ch).toInt().toDp() }
             val isSelected = isInteractive && source.id == selectedSourceId
 
+            val editableForDrag = isSelected && !source.locked && activeTool == "select"
             Box(
                 modifier = Modifier
                     .offset(sxDp, syDp)
                     .size(width = swDp, height = shDp)
                     // Pointer input BEFORE graphicsLayer so drag is in parent (unrotated) space
                     .then(
-                        if (isInteractive && activeTool == "select" && isSelected && !source.locked) {
+                        if (isInteractive && editableForDrag) {
                             // Selected + unlocked: drag to move with snapping
                             Modifier.pointerInput(source.id, isSelected) {
                                 var rawX = 0f
@@ -266,13 +267,14 @@ fun SceneCanvas(
             ) {
                 SceneSourceRenderer(
                     source = source,
-                    isPresenter = isPresenter,
                     fontScale = fontScale
                 )
             }
 
             // Resize + rotate handles for selected source
-            if (isSelected && !source.locked && cw > 0 && ch > 0 && activeTool == "select") {
+            val resizable = isSelected && !source.locked
+            val hasArea = cw > 0 && ch > 0
+            if (resizable && hasArea && activeTool == "select") {
                 ResizeHandles(
                     transform = t,
                     canvasWidth = cw,
@@ -478,7 +480,7 @@ internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<Resize
         val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
         t.copy(x = t.x + dx, y = t.y + dy, width = t.width - dx, height = t.height - dy)
     },
-    ResizeHandleDef(0.5f, 0f, Cursor.N_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(HANDLE_MIDPOINT, 0f, Cursor.N_RESIZE_CURSOR) { t, d ->
         val dy = d.y / canvasHeight
         t.copy(y = t.y + dy, height = t.height - dy)
     },
@@ -486,11 +488,11 @@ internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<Resize
         val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
         t.copy(y = t.y + dy, width = t.width + dx, height = t.height - dy)
     },
-    ResizeHandleDef(0f, 0.5f, Cursor.W_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(0f, HANDLE_MIDPOINT, Cursor.W_RESIZE_CURSOR) { t, d ->
         val dx = d.x / canvasWidth
         t.copy(x = t.x + dx, width = t.width - dx)
     },
-    ResizeHandleDef(1f, 0.5f, Cursor.E_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(1f, HANDLE_MIDPOINT, Cursor.E_RESIZE_CURSOR) { t, d ->
         val dx = d.x / canvasWidth
         t.copy(width = t.width + dx)
     },
@@ -498,7 +500,7 @@ internal fun resizeHandles(canvasWidth: Float, canvasHeight: Float): List<Resize
         val dx = d.x / canvasWidth; val dy = d.y / canvasHeight
         t.copy(x = t.x + dx, width = t.width - dx, height = t.height + dy)
     },
-    ResizeHandleDef(0.5f, 1f, Cursor.S_RESIZE_CURSOR) { t, d ->
+    ResizeHandleDef(HANDLE_MIDPOINT, 1f, Cursor.S_RESIZE_CURSOR) { t, d ->
         val dy = d.y / canvasHeight
         t.copy(height = t.height + dy)
     },
@@ -517,7 +519,6 @@ private fun ResizeHandles(
 ) {
     val handleSize = 8.dp
     val density = LocalDensity.current
-    val scale = density.density
     val currentTransform by rememberUpdatedState(transform)
 
     val handles = resizeHandles(canvasWidth, canvasHeight)

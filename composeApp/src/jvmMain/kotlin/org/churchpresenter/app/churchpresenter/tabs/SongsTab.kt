@@ -1,210 +1,99 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.window.WindowPlacement
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.HorizontalScrollbar
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.isSecondary
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import org.churchpresenter.app.churchpresenter.composables.SectionLabelRow
-import org.churchpresenter.app.churchpresenter.composables.TooltipIconButton
-import org.churchpresenter.app.churchpresenter.composables.ActionIconButton
-import org.churchpresenter.app.churchpresenter.composables.AddToScheduleButton
-import org.churchpresenter.app.churchpresenter.composables.FocusLostBanner
-import org.churchpresenter.app.churchpresenter.composables.GoLiveButton
 import org.churchpresenter.app.churchpresenter.composables.focusRescuePressHook
 import org.churchpresenter.app.churchpresenter.composables.rememberFocusLostRescue
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import java.awt.Cursor
 import java.awt.Window as AwtWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextAlign
-import churchpresenter.composeapp.generated.resources.songs_indexing
-import churchpresenter.composeapp.generated.resources.songs_no_db_title
-import churchpresenter.composeapp.generated.resources.songs_no_db_hint
-import churchpresenter.composeapp.generated.resources.songs_no_db_step
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
-import kotlinx.coroutines.delay
 import churchpresenter.composeapp.generated.resources.Res
-import churchpresenter.composeapp.generated.resources.add_to_favorites
-import churchpresenter.composeapp.generated.resources.add_to_schedule
 import churchpresenter.composeapp.generated.resources.all_song_books
 import churchpresenter.composeapp.generated.resources.contains
-import churchpresenter.composeapp.generated.resources.edit_song
 import churchpresenter.composeapp.generated.resources.exact_match
 import churchpresenter.composeapp.generated.resources.back_to_live
-import churchpresenter.composeapp.generated.resources.go_live
-import churchpresenter.composeapp.generated.resources.ic_add
 import churchpresenter.composeapp.generated.resources.line_navigation_hint
-import churchpresenter.composeapp.generated.resources.metronome_bpm_label
-import churchpresenter.composeapp.generated.resources.unit_bpm
-import churchpresenter.composeapp.generated.resources.ok
 import churchpresenter.composeapp.generated.resources.new_song
-import churchpresenter.composeapp.generated.resources.ic_arrow_down
-import churchpresenter.composeapp.generated.resources.ic_arrow_up
-import androidx.compose.material.icons.filled.Tv
-import churchpresenter.composeapp.generated.resources.ic_delete
 import churchpresenter.composeapp.generated.resources.delete_saved_string
 import churchpresenter.composeapp.generated.resources.confirm_delete
 import churchpresenter.composeapp.generated.resources.cancel
-import churchpresenter.composeapp.generated.resources.filter
-import churchpresenter.composeapp.generated.resources.ic_close
-import churchpresenter.composeapp.generated.resources.ic_note
-import churchpresenter.composeapp.generated.resources.ic_search
-import churchpresenter.composeapp.generated.resources.ic_star
-import churchpresenter.composeapp.generated.resources.ic_star_filled
-import churchpresenter.composeapp.generated.resources.ic_edit
-import churchpresenter.composeapp.generated.resources.ic_playlist_add
-import churchpresenter.composeapp.generated.resources.no_lyrics_available
-import churchpresenter.composeapp.generated.resources.remove_from_favorites
-import churchpresenter.composeapp.generated.resources.song_favorites
-import churchpresenter.composeapp.generated.resources.tab_focus_lost
-import churchpresenter.composeapp.generated.resources.song_favorites_clear
-import churchpresenter.composeapp.generated.resources.song_play_count
-import churchpresenter.composeapp.generated.resources.song_columns
 import churchpresenter.composeapp.generated.resources.number
-import churchpresenter.composeapp.generated.resources.search
-import churchpresenter.composeapp.generated.resources.search_songs
-import churchpresenter.composeapp.generated.resources.song_book
-import churchpresenter.composeapp.generated.resources.song_title_slide
 import churchpresenter.composeapp.generated.resources.starts_with
 import churchpresenter.composeapp.generated.resources.title
-import churchpresenter.composeapp.generated.resources.tune
 import churchpresenter.composeapp.generated.resources.author
-import churchpresenter.composeapp.generated.resources.composer
-import org.churchpresenter.app.churchpresenter.composables.DropdownSelector
-import org.churchpresenter.app.churchpresenter.composables.initialPassClickable
-import org.churchpresenter.app.churchpresenter.composables.finalPassClickable
 import org.churchpresenter.app.churchpresenter.composables.initialPassCombinedClickable
-import org.churchpresenter.app.churchpresenter.composables.finalPassCombinedClickable
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.dialogs.EditSongDialog
+import org.churchpresenter.app.churchpresenter.dialogs.SongBackgroundDialog
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SongTuning
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.pairLabel
 import org.churchpresenter.app.churchpresenter.utils.availableSongColumns
-import org.churchpresenter.app.churchpresenter.utils.draggedColumnIndex
 import org.churchpresenter.app.churchpresenter.utils.UsageEvent
 import org.churchpresenter.app.churchpresenter.utils.UsageEvents
 import org.churchpresenter.app.churchpresenter.utils.isDualLanguagePresentation
 import org.churchpresenter.app.churchpresenter.utils.isSplitScreenSong
 import org.churchpresenter.app.churchpresenter.utils.isChordChartPresentation
 import org.churchpresenter.app.churchpresenter.utils.isSongLineMode
-import org.churchpresenter.app.churchpresenter.dialogs.SongBackgroundDialog
-import androidx.compose.material.icons.filled.Image
-import churchpresenter.composeapp.generated.resources.song_background_menu
-import org.churchpresenter.app.churchpresenter.utils.songLineGroupStart
 import org.churchpresenter.app.churchpresenter.utils.songLineStep
-import org.churchpresenter.app.churchpresenter.utils.mergeColumnOrder
-import org.churchpresenter.app.churchpresenter.utils.moveColumn
-import org.churchpresenter.app.churchpresenter.utils.songColumnSortKey
 import org.churchpresenter.app.churchpresenter.viewmodel.resolveEditedSongPush
-import org.churchpresenter.app.churchpresenter.viewmodel.songCreditLine
-import org.churchpresenter.app.churchpresenter.viewmodel.songTitleLine
-import org.churchpresenter.app.churchpresenter.viewmodel.titleSlideSection
 import org.churchpresenter.app.churchpresenter.viewmodel.SongsViewModel
-import org.churchpresenter.app.churchpresenter.ui.theme.semantic
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+
+/** The toolbar button that adds the *selected* song, as opposed to any other "Add to Schedule". */
+internal const val SONGS_ADD_SELECTED_TAG = "songs_addSelectedToSchedule"
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -265,30 +154,19 @@ fun SongsTab(
     val currentSortAscending by viewModel.sortAscending
 
     // Edit Song Dialog state (pure UI state — fine to keep here)
-    var showEditDialog by remember { mutableStateOf(false) }
-    var songToEdit by remember { mutableStateOf<SongItem?>(null) }
-    var showBackgroundDialog by remember { mutableStateOf(false) }
-    var songForBackground by remember { mutableStateOf<SongItem?>(null) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var songToDelete by remember { mutableStateOf<SongItem?>(null) }
-    var showNewSongDialog by remember { mutableStateOf(false) }
+    val dialogs = rememberSongDialogRequests()
 
     // Favorites panel state
     var favoritesExpanded by remember { mutableStateOf(true) }
     val favorites by viewModel.favorites
 
     // Track which song/section/line is currently live on the presenter.
-    // liveSongId is the song's stable songId (not a list index) so it survives the
+    // live.songId is the song's stable songId (not a list index) so it survives the
     // filtered list being rebuilt by search — see AGENT.md's "Song Edit While Live" note.
-    var liveSongId by remember { mutableStateOf<String?>(null) }
-    var liveSectionIndex by remember { mutableStateOf(0) }
-    var liveLineIndex by remember { mutableStateOf(0) }
-
-    // Track whether the title slide entry is currently selected in the lyrics panel
-    var isTitleSlideSelected by remember { mutableStateOf(false) }
+    val live = rememberSongLiveState()
 
     // Reset title-slide selection whenever the active song changes
-    LaunchedEffect(selectedSongIndex) { isTitleSlideSelected = false }
+    LaunchedEffect(selectedSongIndex) { live.titleSlideSelected = false }
 
     // Helper: push current viewModel selection to presenter and track as live.
     // goLive=true marks this call as an explicit "go live" action so statistics are
@@ -305,7 +183,7 @@ fun SongsTab(
         }
         // Record song display for statistics — only when the song is actually live
         // (or being sent live), and only when a different song is presented.
-        val isDifferentSong = items.getOrNull(idx)?.songId?.let { it != liveSongId } ?: false
+        val isDifferentSong = items.getOrNull(idx)?.songId?.let { it != live.songId } ?: false
         if ((goLive || isPresenting) && isDifferentSong) {
             if (idx in items.indices) {
                 val song = items[idx]
@@ -349,9 +227,9 @@ fun SongsTab(
                 onInstanceLinkSendSongSection?.invoke(song.number, viewModel.selectedSectionIndex.value, viewModel.selectedLineIndex.value)
             }
         }
-        liveSongId = items.getOrNull(idx)?.songId
-        liveSectionIndex = viewModel.selectedSectionIndex.value
-        liveLineIndex = viewModel.selectedLineIndex.value
+        live.songId = items.getOrNull(idx)?.songId
+        live.sectionIndex = viewModel.selectedSectionIndex.value
+        live.lineIndex = viewModel.selectedLineIndex.value
     }
 
     // Re-pushes freshly-edited content to the presenter when the just-saved song is the one
@@ -362,13 +240,13 @@ fun SongsTab(
     // song together, and the settings write has not reached `appSettings` yet in that same frame.
     fun sendEditedSongToPresenter(editedSong: SongItem, tuning: SongTuning) {
         val sections = viewModel.getLyricSections(editedSong)
-        val push = resolveEditedSongPush(sections, liveSectionIndex, liveLineIndex, editedSong, tuning)
+        val push = resolveEditedSongPush(sections, live.sectionIndex, live.lineIndex, editedSong, tuning)
         onAllSectionsChanged(sections)
         onSectionIndexChanged(push.sectionIndex)
         onLineIndexChanged(push.lineIndex)
         onSongItemSelected(push.section)
-        liveSectionIndex = push.sectionIndex
-        liveLineIndex = push.lineIndex
+        live.sectionIndex = push.sectionIndex
+        live.lineIndex = push.lineIndex
     }
 
     val tabFocusRequester = remember { FocusRequester() }
@@ -376,6 +254,7 @@ fun SongsTab(
     // holds keyboard focus AND the window is focused — full machinery in
     // composables/FocusLostRescue.kt (shared with Presentation/Bible).
     val focusRescue = rememberFocusLostRescue(hostWindow, tabFocusRequester)
+    val shortcuts = LocalShortcuts.current
 
     // React to schedule item selection
     // Uses selectedSongItemVersion as a key so clicking the same song twice always re-fires
@@ -406,7 +285,15 @@ fun SongsTab(
     // String resources
     val newSongStr = stringResource(Res.string.new_song)
     val backToLiveStr = stringResource(Res.string.back_to_live)
-    val lineNavHintStr = stringResource(Res.string.line_navigation_hint)
+    // Built from the live bindings rather than naming the arrow keys, and empty when the user has
+    // unbound both pairs so the render site can drop the hint entirely.
+    val lineKeys = shortcuts.pairLabel(ShortcutAction.SONGS_PREVIOUS, ShortcutAction.SONGS_NEXT)
+    val verseKeys = shortcuts.pairLabel(ShortcutAction.SONGS_PREVIOUS_SECTION, ShortcutAction.SONGS_NEXT_SECTION)
+    val lineNavHintStr = if (lineKeys.isEmpty() && verseKeys.isEmpty()) {
+        ""
+    } else {
+        stringResource(Res.string.line_navigation_hint, lineKeys, verseKeys)
+    }
     val allSongBooksText = stringResource(Res.string.all_song_books)
 
     // Prepend "All" option to songbooks
@@ -435,56 +322,21 @@ fun SongsTab(
 
     LaunchedEffect(dialogDismissSignal) { tabFocusRequester.requestFocus() }
 
-    // Column widths driven by settings; local state for smooth dragging
-    var colWNumber by remember(appSettings.songSettings.colWidthNumber) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthNumber.dp.toPx() })
-    }
-    var colWTitle by remember(appSettings.songSettings.colWidthTitle) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthTitle.dp.toPx() })
-    }
-    var colWSongbook by remember(appSettings.songSettings.colWidthSongbook) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthSongbook.dp.toPx() })
-    }
-    var colWTune by remember(appSettings.songSettings.colWidthTune) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthTune.dp.toPx() })
-    }
-    var colWPlayCount by remember(appSettings.songSettings.colWidthPlayCount) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthPlayCount.dp.toPx() })
-    }
-    var colWAuthor by remember(appSettings.songSettings.colWidthAuthor) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthAuthor.dp.toPx() })
-    }
-    var colWComposer by remember(appSettings.songSettings.colWidthComposer) {
-        mutableStateOf(with(density) { appSettings.songSettings.colWidthComposer.dp.toPx() })
-    }
+    val columns = rememberSongTableColumns(
+        settings = appSettings,
+        density = density,
+        availableColumns = availableSongColumns(songbooks.size, hasAddToSchedule = onAddToSchedule != null),
+    )
 
     // Favorites panel height in px
     var favPanelHeightPx by remember(appSettings.songFavoritesPanelHeightDp) {
         mutableStateOf(with(density) { appSettings.songFavoritesPanelHeightDp.dp.toPx() })
     }
 
-    // Column order — "songbook" excluded when only one songbook loaded;
-    // "add_to_schedule" excluded when the callback is absent
     val actionCols = setOf("favorites", "add_to_schedule")
     val availableCols = availableSongColumns(songbooks.size, hasAddToSchedule = onAddToSchedule != null)
-    var colOrder by remember(appSettings.songColOrder, songbooks.size) {
-        mutableStateOf(mergeColumnOrder(appSettings.songColOrder, availableCols))
-    }
-    // Drag-to-reorder state
-    var draggingColId by remember { mutableStateOf<String?>(null) }
-    var dragAccumX by remember { mutableStateOf(0f) }
+    val visibleCols = columns.visible
 
-    // Column visibility
-    var hiddenCols by remember(appSettings.songHiddenCols) {
-        mutableStateOf(appSettings.songHiddenCols)
-    }
-    var showColMenu by remember { mutableStateOf(false) }
-    var colMenuOffset by remember { mutableStateOf(DpOffset.Zero) }
-    var showColumnsMenu by remember { mutableStateOf(false) }
-    // Plain val — recomputed on every recomposition so it always reflects the current
-    // colOrder and hiddenCols state objects (remember(key){} creates new MutableState on
-    // each settings save, which would silently break a derivedStateOf subscription).
-    val visibleCols = colOrder.filter { it !in hiddenCols }
 
     val windowState = LocalMainWindowState.current
     val isMaximized = windowState?.placement != WindowPlacement.Floating
@@ -498,19 +350,20 @@ fun SongsTab(
     var rowTotalWidth by remember { mutableStateOf(0f) }
 
     fun saveColWidths() {
+        val dp = columns.widthsInDp()
         onSettingsChangeState.value { s ->
             s.copy(
                 songSettings = s.songSettings.copy(
-                    colWidthNumber      = with(density) { colWNumber.toDp().value.toInt() },
-                    colWidthTitle       = with(density) { colWTitle.toDp().value.toInt() },
-                    colWidthSongbook    = with(density) { colWSongbook.toDp().value.toInt() },
-                    colWidthTune        = with(density) { colWTune.toDp().value.toInt() },
-                    colWidthPlayCount   = with(density) { colWPlayCount.toDp().value.toInt() },
-                    colWidthAuthor      = with(density) { colWAuthor.toDp().value.toInt() },
-                    colWidthComposer    = with(density) { colWComposer.toDp().value.toInt() },
+                    colWidthNumber      = dp["number"] ?: s.songSettings.colWidthNumber,
+                    colWidthTitle       = dp["title"] ?: s.songSettings.colWidthTitle,
+                    colWidthSongbook    = dp["songbook"] ?: s.songSettings.colWidthSongbook,
+                    colWidthTune        = dp["tune"] ?: s.songSettings.colWidthTune,
+                    colWidthPlayCount   = dp["play_count"] ?: s.songSettings.colWidthPlayCount,
+                    colWidthAuthor      = dp["author"] ?: s.songSettings.colWidthAuthor,
+                    colWidthComposer    = dp["composer"] ?: s.songSettings.colWidthComposer,
                 ),
-                songColOrder = colOrder,
-                songHiddenCols = hiddenCols
+                songColOrder = columns.order,
+                songHiddenCols = columns.hidden,
             )
         }
     }
@@ -521,57 +374,6 @@ fun SongsTab(
             if (isMaximized) s.copy(maximizedLayout = s.maximizedLayout.copy(lyricsPanelWidthDp = widthDp))
             else s.copy(windowedLayout = s.windowedLayout.copy(lyricsPanelWidthDp = widthDp))
         }
-    }
-
-    fun colWidth(id: String) = when (id) {
-        "number"     -> colWNumber
-        "title"      -> colWTitle
-        "songbook"   -> colWSongbook
-        "tune"       -> colWTune
-        "play_count" -> colWPlayCount
-        "author"     -> colWAuthor
-        "composer"   -> colWComposer
-        else         -> with(density) { 30.dp.toPx() } // action columns: 6dp spacer + 24dp icon button
-    }
-
-    fun setColWidth(id: String, px: Float) {
-        when (id) {
-            "number"     -> colWNumber    = px.coerceAtLeast(with(density) { 30.dp.toPx() })
-            "title"      -> colWTitle     = px.coerceAtLeast(with(density) { 60.dp.toPx() })
-            "songbook"   -> colWSongbook  = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-            "tune"       -> colWTune      = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-            "play_count" -> colWPlayCount = px.coerceAtLeast(with(density) { 30.dp.toPx() })
-            "author"     -> colWAuthor    = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-            "composer"   -> colWComposer  = px.coerceAtLeast(with(density) { 40.dp.toPx() })
-        }
-    }
-
-    fun sortKey(id: String) = songColumnSortKey(id)
-
-    // NOTE: operates on visibleCols (set after state vars), returns index within visibleCols
-    fun computeNewIdx(draggedId: String, accumX: Float, visibleCols: List<String>): Int =
-        draggedColumnIndex(
-            draggedId, accumX, visibleCols,
-            columnWidthPx = ::colWidth,
-            handleWidthPx = with(density) { 6.dp.toPx() },
-        )
-
-    @Composable
-    fun DragHandle(colId: String, onDrag: (Float) -> Unit, onDragEnd: () -> Unit) {
-        val currentOnDrag by rememberUpdatedState(onDrag)
-        val currentOnDragEnd by rememberUpdatedState(onDragEnd)
-        Box(
-            modifier = Modifier
-                .width(6.dp)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)))
-                .pointerInput(colId) {
-                    detectHorizontalDragGestures(onDragEnd = { currentOnDragEnd() }) { _, amount ->
-                        currentOnDrag(amount)
-                    }
-                }
-        )
     }
 
     Row(
@@ -591,8 +393,8 @@ fun SongsTab(
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     val isLineMode = isSongLineMode(appSettings.songSettings)
                     val lineStep = songLineStep(appSettings.songSettings)
-                    when (keyEvent.key) {
-                        Key.DirectionLeft -> {
+                    when {
+                        shortcuts.matches(ShortcutAction.SONGS_PREVIOUS, keyEvent) -> {
                             if (isLineMode) {
                                 viewModel.navigatePreviousLine(lineStep)
                                 sendToPresenter(goLive = isPresenting)
@@ -601,7 +403,7 @@ fun SongsTab(
                             }
                             true
                         }
-                        Key.DirectionRight -> {
+                        shortcuts.matches(ShortcutAction.SONGS_NEXT, keyEvent) -> {
                             if (isLineMode) {
                                 viewModel.navigateNextLine(lineStep)
                                 sendToPresenter(goLive = isPresenting)
@@ -610,12 +412,12 @@ fun SongsTab(
                             }
                             true
                         }
-                        Key.DirectionUp -> {
+                        shortcuts.matches(ShortcutAction.SONGS_PREVIOUS_SECTION, keyEvent) -> {
                             if (!viewModel.navigatePreviousSection() && !isPresenting) viewModel.navigatePreviousSong()
                             sendToPresenter(goLive = isPresenting)
                             true
                         }
-                        Key.DirectionDown -> {
+                        shortcuts.matches(ShortcutAction.SONGS_NEXT_SECTION, keyEvent) -> {
                             if (!viewModel.navigateNextSection() && !isPresenting) viewModel.navigateNextSong()
                             sendToPresenter(goLive = isPresenting)
                             true
@@ -626,800 +428,67 @@ fun SongsTab(
             }
     ) {
         // Left panel — Search and song list (fills remaining space)
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            // Pre-compute column labels (stringResource is @Composable, can't be called in forEach)
-            val colHeaderLabels = mapOf(
-                "number"     to stringResource(Res.string.number),
-                "title"      to stringResource(Res.string.title),
-                "songbook"   to stringResource(Res.string.song_book),
-                "tune"       to stringResource(Res.string.tune),
-                "play_count" to stringResource(Res.string.song_play_count),
-                "author"     to stringResource(Res.string.author),
-                "composer"   to stringResource(Res.string.composer)
-            )
-            val allColLabels = colHeaderLabels + mapOf(
-                "favorites"       to stringResource(Res.string.song_favorites),
-                "add_to_schedule" to stringResource(Res.string.add_to_schedule)
-            )
-
-            // Search controls — wraps to new line if not enough space
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                itemVerticalAlignment = Alignment.CenterVertically
-            ) {
-                // Styled search field matching the dropdown aesthetic
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(min = 120.dp)
-                        .height(42.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_search),
-                        contentDescription = null,
-                        modifier = Modifier.padding(start = 11.dp).size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                    )
-                    Box(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                        BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.updateSearchQuery(it) },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            singleLine = true,
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            decorationBox = { innerTextField ->
-                                if (searchQuery.isEmpty()) {
-                                    Text(
-                                        text = stringResource(Res.string.search_songs),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        )
-                    }
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }, modifier = Modifier.size(30.dp)) {
-                            Icon(painter = painterResource(Res.drawable.ic_close), contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+        SongListPane(
+            columns = columns,
+            dialogs = dialogs,
+            live = live,
+            filteredSongs = filteredSongs,
+            selectedSongIndex = selectedSongIndex,
+            searchQuery = searchQuery,
+            isLoading = isLoading,
+            isPresenting = isPresenting,
+            songbooks = songbooks,
+            songbookOptions = songbookOptions,
+            selectedSongbook = selectedSongbook,
+            allSongBooksText = allSongBooksText,
+            containsText = containsText,
+            filterType = filterType,
+            filterTypes = filterTypes,
+            filterTypeMap = filterTypeMap,
+            filterTypeDisplayMap = filterTypeDisplayMap,
+            currentSortColumn = currentSortColumn,
+            currentSortAscending = currentSortAscending,
+            actionCols = actionCols,
+            availableCols = availableCols,
+            visibleCols = visibleCols,
+            favorites = favorites,
+            favoritesExpanded = favoritesExpanded,
+            favPanelHeightPx = favPanelHeightPx,
+            tabFocusRequester = tabFocusRequester,
+            favoriteSongs = { viewModel.getFavoriteSongs() },
+            playCountFor = { id -> statisticsManager?.getSongPlayCount(id) },
+            onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+            onFilterTypeChange = { viewModel.updateFilterType(it) },
+            onSongbookChange = { viewModel.updateSelectedSongbook(it) },
+            onSortChange = { viewModel.updateSort(it) },
+            onSelectSong = { viewModel.selectSong(it) },
+            onSelectSongByDetails = { number, title, songbook, songId ->
+                viewModel.selectSongByDetails(number, title, songbook, songId)
+            },
+            onSelectSection = { viewModel.selectSection(it) },
+            onToggleFavorite = { songId ->
+                viewModel.toggleFavorite(songId)
+                onSettingsChangeState.value { s -> s.copy(songFavorites = viewModel.favorites.value.toList()) }
+            },
+            onClearFavorites = {
+                viewModel.clearFavorites()
+                onSettingsChangeState.value { s -> s.copy(songFavorites = emptyList()) }
+            },
+            onReloadSongs = { viewModel.loadSongs() },
+            onSaveColumnWidths = ::saveColWidths,
+            onSaveColumnOrder = { onSettingsChangeState.value { s -> s.copy(songColOrder = columns.order) } },
+            onSaveHiddenColumns = { onSettingsChangeState.value { s -> s.copy(songHiddenCols = columns.hidden) } },
+            onSaveFavPanelHeight = {
+                onSettingsChangeState.value { s ->
+                    s.copy(songFavoritesPanelHeightDp = with(density) { favPanelHeightPx.toDp().value.toInt() })
                 }
-
-                if (songbooks.size > 1) {
-                    DropdownSelector(
-                        label = stringResource(Res.string.song_book),
-                        items = songbookOptions,
-                        selected = selectedSongbook.ifEmpty { allSongBooksText },
-                        onSelectedChange = { viewModel.updateSelectedSongbook(it) }
-                    )
-                }
-
-                DropdownSelector(
-                    label = stringResource(Res.string.filter),
-                    items = filterTypes,
-                    selected = filterTypeDisplayMap[filterType] ?: containsText,
-                    onSelectedChange = { displayText ->
-                        val internalKey = filterTypeMap[displayText] ?: Constants.CONTAINS
-                        viewModel.updateFilterType(internalKey)
-                    }
-                )
-
-                // Hidden rebuild: 3 rapid clicks on the search button force-reloads songs from disk
-                var rebuildClickCount by remember { mutableStateOf(0) }
-                var rebuildClickTime by remember { mutableStateOf(0L) }
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                        .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
-                            val now = System.currentTimeMillis()
-                            if (now - rebuildClickTime > 800) rebuildClickCount = 0
-                            rebuildClickCount++
-                            rebuildClickTime = now
-                            if (rebuildClickCount >= 3) {
-                                rebuildClickCount = 0
-                                viewModel.loadSongs()
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Icon(painter = painterResource(Res.drawable.ic_search), contentDescription = stringResource(Res.string.search), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
-
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // Shared horizontal scroll state for header + song list
-            val hScrollState = rememberScrollState()
-
-            val contentMinWidthDp = with(density) {
-                val colsW = visibleCols.fold(0f) { acc, id -> acc + colWidth(id) }
-                // DragHandles (6dp each) only appear after data columns, not after action columns
-                val handlesW = visibleCols.count { it !in actionCols } * 6.dp.toPx()
-                (colsW + handlesW).toDp() + 16.dp
-            }
-
-            // Column header row — scrolls horizontally with the song list
-            // Wrapped in a Box so the right-click DropdownMenu can anchor here
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                if (event.type == PointerEventType.Press &&
-                                    event.button?.isSecondary == true
-                                ) {
-                                    val pos = event.changes.firstOrNull()?.position
-                                    if (pos != null) colMenuOffset = with(density) { DpOffset(pos.x.toDp(), pos.y.toDp()) }
-                                    showColMenu = true
-                                }
-                            }
-                        }
-                    }
-            ) {
-            Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .horizontalScroll(hScrollState)
-            ) {
-            Row(
-                modifier = Modifier
-                    .width(contentMinWidthDp)
-                    .fillMaxHeight()
-                    .padding(end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                visibleCols.forEach { colId ->
-                    val isBeingDragged = colId == draggingColId
-                    val sk = sortKey(colId)
-                    val isSortable = sk.isNotEmpty() && colId != "add_to_schedule"
-                    val isSorted = isSortable && currentSortColumn == sk
-                    val reorderDragMod = Modifier.pointerInput(colId) {
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                val vc = colOrder.filter { it !in hiddenCols }
-                                val newVisIdx = computeNewIdx(colId, dragAccumX, vc)
-                                val targetId = vc.getOrNull(newVisIdx)
-                                if (targetId != null) {
-                                    val reordered = moveColumn(colOrder, colId, targetId)
-                                    if (reordered !== colOrder) {
-                                        colOrder = reordered
-                                        onSettingsChangeState.value { s -> s.copy(songColOrder = colOrder) }
-                                    }
-                                }
-                                draggingColId = null
-                                dragAccumX = 0f
-                            },
-                            onDragCancel = { draggingColId = null; dragAccumX = 0f }
-                        ) { _, amount ->
-                            if (draggingColId != colId) { draggingColId = colId; dragAccumX = 0f }
-                            dragAccumX += amount
-                        }
-                    }
-                    val cellColor = when {
-                        isBeingDragged -> MaterialTheme.colorScheme.primary
-                        isSorted -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    val cellBg = if (isSorted)
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                    else
-                        Color.Transparent
-
-                    if (colId in actionCols) {
-                        // Action column — icon header, no resize handle
-                        Box(
-                            modifier = Modifier
-                                .width(with(density) { colWidth(colId).toDp() })
-                                .fillMaxHeight()
-                                .padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
-                                .background(cellBg, shape = MaterialTheme.shapes.extraSmall)
-                                .then(if (isSortable) Modifier.clickable { viewModel.updateSort(sk) } else Modifier)
-                                .then(reorderDragMod),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                Icon(
-                                    painter = painterResource(
-                                        if (colId == "favorites") Res.drawable.ic_star else Res.drawable.ic_playlist_add
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(13.dp),
-                                    tint = cellColor
-                                )
-                                if (isSorted) {
-                                    Icon(
-                                        painter = painterResource(if (currentSortAscending) Res.drawable.ic_arrow_up else Res.drawable.ic_arrow_down),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(8.dp),
-                                        tint = cellColor
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        // Data column — text label + resize handle
-                        Box(
-                            modifier = Modifier
-                                .width(with(density) { colWidth(colId).toDp() })
-                                .fillMaxHeight()
-                                .padding(vertical = 4.dp)
-                                .background(cellBg, shape = MaterialTheme.shapes.extraSmall)
-                                .then(if (isSortable) Modifier.clickable { viewModel.updateSort(sk) } else Modifier)
-                                .then(reorderDragMod),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = colHeaderLabels[colId] ?: colId,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = cellColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (isSorted) {
-                                    Icon(
-                                        painter = painterResource(if (currentSortAscending) Res.drawable.ic_arrow_up else Res.drawable.ic_arrow_down),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(10.dp),
-                                        tint = cellColor
-                                    )
-                                }
-                            }
-                        }
-                        DragHandle(
-                            colId = colId,
-                            onDrag = { setColWidth(colId, colWidth(colId) + it) },
-                            onDragEnd = ::saveColWidths
-                        )
-                    }
-                }
-            }
-            } // end inner scrollable header Box
-            } // end header Row
-
-            // Floating column filter button — right side
-            Box(modifier = Modifier.align(Alignment.CenterEnd).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                TooltipIconButton(
-                    painter = rememberVectorPainter(Icons.Default.Tune),
-                    text = stringResource(Res.string.song_columns),
-                    onClick = { showColumnsMenu = true },
-                    buttonSize = 36.dp,
-                    iconTint = MaterialTheme.colorScheme.onSurface
-                )
-                DropdownMenu(
-                    expanded = showColumnsMenu,
-                    onDismissRequest = { showColumnsMenu = false }
-                ) {
-                    availableCols.forEach { colId ->
-                        val isVisible = colId !in hiddenCols
-                        val isProtected = colId == "title"
-                        DropdownMenuItem(
-                            text = { Text(allColLabels[colId] ?: colId) },
-                            leadingIcon = {
-                                Checkbox(
-                                    checked = isVisible,
-                                    onCheckedChange = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
-                            onClick = {
-                                if (!(isProtected && isVisible)) {
-                                    hiddenCols = if (isVisible) hiddenCols + colId else hiddenCols - colId
-                                    onSettingsChangeState.value { s -> s.copy(songHiddenCols = hiddenCols) }
-                                }
-                            },
-                            enabled = !(isProtected && isVisible)
-                        )
-                    }
-                }
-            }
-
-            // Right-click dropdown — toggle column visibility
-            DropdownMenu(
-                expanded = showColMenu,
-                onDismissRequest = { showColMenu = false },
-                offset = colMenuOffset
-            ) {
-                availableCols.forEach { colId ->
-                    val isVisible = colId !in hiddenCols
-                    val isProtected = colId == "title"
-                    DropdownMenuItem(
-                        text = { Text(allColLabels[colId] ?: colId) },
-                        leadingIcon = {
-                            Checkbox(
-                                checked = isVisible,
-                                onCheckedChange = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        onClick = {
-                            if (!(isProtected && isVisible)) {
-                                hiddenCols = if (isVisible) hiddenCols + colId else hiddenCols - colId
-                                onSettingsChangeState.value { s -> s.copy(songHiddenCols = hiddenCols) }
-                            }
-                        },
-                        enabled = !(isProtected && isVisible)
-                    )
-                }
-            }
-            } // end outer header Box (right-click + dropdown wrapper)
-
-            // Song list + horizontal scrollbar
-            Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (isLoading && filteredSongs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                stringResource(Res.string.songs_indexing),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                } else {
-                    val lazyListState = rememberLazyListState()
-
-                LaunchedEffect(selectedSongIndex, filteredSongs.size) {
-                    if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                        delay(100)
-                        lazyListState.animateScrollToItem(selectedSongIndex)
-                    }
-                }
-
-                Row(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .horizontalScroll(hScrollState)
-                ) {
-                LazyColumn(
-                    state = lazyListState,
-                    modifier = Modifier
-                        .width(contentMinWidthDp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(end = 8.dp)
-                ) {
-                    itemsIndexed(filteredSongs) { index, song ->
-                        var showContextMenu by remember { mutableStateOf(false) }
-                        var contextMenuOffset by remember { mutableStateOf(DpOffset.Zero) }
-                        val rowAccentColor = MaterialTheme.colorScheme.primary
-                        val isRowSelected = index == selectedSongIndex
-                        Box {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    if (isRowSelected) MaterialTheme.colorScheme.surfaceVariant
-                                    else MaterialTheme.colorScheme.surface
-                                )
-                                .finalPassClickable {
-                                    viewModel.selectSong(index)
-                                    if (isPresenting && liveSongId != null) {
-                                        viewModel.selectSection(-1)
-                                    }
-                                    tabFocusRequester.requestFocus()
-                                }
-                                .padding(vertical = 8.dp)
-                                .pointerInput(Unit) {
-                                    awaitPointerEventScope {
-                                        while (true) {
-                                            val event = awaitPointerEvent(PointerEventPass.Main)
-                                            if (event.type == PointerEventType.Press &&
-                                                event.button?.isSecondary == true
-                                            ) {
-                                                val pos = event.changes.first().position
-                                                contextMenuOffset = with(density) {
-                                                    DpOffset(pos.x.toDp(), pos.y.toDp())
-                                                }
-                                                showContextMenu = true
-                                            }
-                                        }
-                                    }
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val textColor = if (isRowSelected)
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            else
-                                MaterialTheme.colorScheme.onSurface
-                            // All columns in visibleCols order — data cols use per-cell initialPassClickable,
-                            // action cols are inline so reordering them is reflected in both header and rows
-                            visibleCols.forEach { colId ->
-                                if (colId !in actionCols) {
-                                    val cellText = when (colId) {
-                                        "number"     -> song.number
-                                        "title"      -> song.title
-                                        "songbook"   -> song.songbook
-                                        "tune"       -> song.tune
-                                        "play_count" -> {
-                                            val count = statisticsManager?.getSongPlayCount(song.songId) ?: 0
-                                            if (count > 0) count.toString() else ""
-                                        }
-                                        "author"     -> song.author
-                                        "composer"   -> song.composer
-                                        else         -> ""
-                                    }
-                                    TooltipArea(
-                                        tooltip = {
-                                            if (cellText.isNotEmpty()) {
-                                                Surface(
-                                                    color = MaterialTheme.colorScheme.inverseSurface,
-                                                    shape = MaterialTheme.shapes.extraSmall,
-                                                    tonalElevation = 4.dp
-                                                ) {
-                                                    Text(
-                                                        cellText,
-                                                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        style = MaterialTheme.typography.bodySmall
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        tooltipPlacement = TooltipPlacement.ComponentRect(
-                                            anchor = Alignment.BottomStart,
-                                            offset = DpOffset(0.dp, 4.dp)
-                                        )
-                                    ) {
-                                        Text(
-                                            cellText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            textAlign = if (colId == "play_count") TextAlign.End else TextAlign.Start,
-                                            modifier = Modifier
-                                                .width(with(density) { colWidth(colId).toDp() })
-                                                .initialPassClickable {
-                                                    viewModel.selectSong(index)
-                                                    if (isPresenting && liveSongId != null) {
-                                                        viewModel.selectSection(-1)
-                                                    }
-                                                    tabFocusRequester.requestFocus()
-                                                }
-                                                .padding(horizontal = 8.dp),
-                                            maxLines = if (colId == "number") Int.MAX_VALUE else 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = textColor
-                                        )
-                                    }
-                                    Box(modifier = Modifier.width(6.dp))
-                                } else {
-                                    Box(modifier = Modifier.width(6.dp))
-                                    when (colId) {
-                                        "add_to_schedule" -> IconButton(
-                                            onClick = { onAddToSchedule?.invoke(song.number.toIntOrNull() ?: 0, song.title, song.songbook, song.songId) },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(Res.drawable.ic_playlist_add),
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.secondary
-                                            )
-                                        }
-                                        "favorites" -> {
-                                            val isFav = song.songId in favorites
-                                            IconButton(
-                                                onClick = {
-                                                    viewModel.toggleFavorite(song.songId)
-                                                    onSettingsChangeState.value { s ->
-                                                        s.copy(songFavorites = viewModel.favorites.value.toList())
-                                                    }
-                                                },
-                                                modifier = Modifier.size(24.dp)
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(
-                                                        if (isFav) Res.drawable.ic_star_filled else Res.drawable.ic_star
-                                                    ),
-                                                    contentDescription = if (isFav)
-                                                        stringResource(Res.string.remove_from_favorites)
-                                                    else
-                                                        stringResource(Res.string.add_to_favorites),
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = if (isFav) MaterialTheme.semantic.favorite
-                                                           else MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        DropdownMenu(
-                            expanded = showContextMenu,
-                            onDismissRequest = { showContextMenu = false },
-                            offset = contextMenuOffset
-                        ) {
-                            if (onAddToSchedule != null) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(Res.string.add_to_schedule)) },
-                                    leadingIcon = {
-                                        Icon(
-                                            painter = painterResource(Res.drawable.ic_playlist_add),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.secondary
-                                        )
-                                    },
-                                    onClick = {
-                                        onAddToSchedule(song.number.toIntOrNull() ?: 0, song.title, song.songbook, song.songId)
-                                        showContextMenu = false
-                                    }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = {
-                                    val isFav = song.songId in favorites
-                                    Text(stringResource(if (isFav) Res.string.remove_from_favorites else Res.string.add_to_favorites))
-                                },
-                                leadingIcon = {
-                                    val isFav = song.songId in favorites
-                                    Icon(
-                                        painter = painterResource(if (isFav) Res.drawable.ic_star_filled else Res.drawable.ic_star),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = if (isFav) MaterialTheme.semantic.favorite else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                onClick = {
-                                    viewModel.toggleFavorite(song.songId)
-                                    onSettingsChangeState.value { s ->
-                                        s.copy(songFavorites = viewModel.favorites.value.toList())
-                                    }
-                                    showContextMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.edit_song)) },
-                                leadingIcon = {
-                                    Icon(
-                                        painter = painterResource(Res.drawable.ic_edit),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.tertiary
-                                    )
-                                },
-                                onClick = {
-                                    songToEdit = song
-                                    showEditDialog = true
-                                    tabFocusRequester.requestFocus()
-                                    showContextMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.song_background_menu)) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Image,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.tertiary
-                                    )
-                                },
-                                onClick = {
-                                    songForBackground = song
-                                    showBackgroundDialog = true
-                                    showContextMenu = false
-                                }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.delete_saved_string), color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = {
-                                    Icon(
-                                        painter = painterResource(Res.drawable.ic_delete),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                },
-                                onClick = {
-                                    songToDelete = song
-                                    showDeleteConfirm = true
-                                    showContextMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.go_live)) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Tv,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                },
-                                onClick = {
-                                    viewModel.selectSong(index)
-                                    sendToPresenter(goLive = true)
-                                    onPresenting(Presenting.LYRICS)
-                                    tabFocusRequester.requestFocus()
-                                    showContextMenu = false
-                                }
-                            )
-                        }
-                        } // Box
-                        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
-                    }
-                }
-                } // end horizontalScroll Box
-                } // end song list Row (spacer + scroll box)
-                VerticalScrollbar(
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    adapter = rememberScrollbarAdapter(scrollState = lazyListState)
-                )
-                }
-            }
-            Row(modifier = Modifier.fillMaxWidth()) {
-                HorizontalScrollbar(
-                    modifier = Modifier.weight(1f).padding(end = 8.dp),
-                    adapter = rememberScrollbarAdapter(hScrollState)
-                )
-            }
-            } // end Column (song list + horizontal scrollbar)
-
-            // ── Favorites panel ───────────────────────────────────────
-            val favoriteSongs = viewModel.getFavoriteSongs()
-            if (favoriteSongs.isNotEmpty()) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable { favoritesExpanded = !favoritesExpanded }
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        painter = painterResource(
-                            if (favoritesExpanded) Res.drawable.ic_arrow_down else Res.drawable.ic_arrow_up
-                        ),
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = stringResource(Res.string.song_favorites),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    TooltipArea(
-                        tooltip = {
-                            Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.extraSmall, tonalElevation = 4.dp) {
-                                Text(stringResource(Res.string.song_favorites_clear), color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
-                            }
-                        },
-                        tooltipPlacement = TooltipPlacement.ComponentRect(anchor = Alignment.BottomCenter, offset = DpOffset(0.dp, 4.dp))
-                    ) {
-                        IconButton(onClick = {
-                            viewModel.clearFavorites()
-                            onSettingsChangeState.value { s -> s.copy(songFavorites = emptyList()) }
-                        }) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_delete),
-                                contentDescription = stringResource(Res.string.song_favorites_clear),
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                AnimatedVisibility(visible = favoritesExpanded) {
-                    Column {
-                        // Drag handle — drag up/down to resize panel height
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                                .pointerHoverIcon(PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR)))
-                                .draggable(
-                                    orientation = Orientation.Vertical,
-                                    state = rememberDraggableState { delta ->
-                                        favPanelHeightPx = (favPanelHeightPx - delta)
-                                            .coerceIn(
-                                                with(density) { 60.dp.toPx() },
-                                                with(density) { 400.dp.toPx() }
-                                            )
-                                    },
-                                    onDragStopped = {
-                                        onSettingsChangeState.value { s ->
-                                            s.copy(songFavoritesPanelHeightDp = with(density) { favPanelHeightPx.toDp().value.toInt() })
-                                        }
-                                    }
-                                )
-                        )
-                        val favGridState = rememberLazyGridState()
-                        Box(modifier = Modifier.fillMaxWidth().height(with(density) { favPanelHeightPx.toDp() })) {
-                            LazyVerticalGrid(
-                                columns = GridCells.Adaptive(minSize = 180.dp),
-                                state = favGridState,
-                                modifier = Modifier.fillMaxSize().padding(end = 8.dp)
-                            ) {
-                                itemsIndexed(favoriteSongs) { _, song ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                viewModel.selectSongByDetails(
-                                                    song.number.toIntOrNull() ?: 0,
-                                                    song.title,
-                                                    song.songbook,
-                                                    song.songId
-                                                )
-                                                tabFocusRequester.requestFocus()
-                                            }
-                                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = if (song.number.isNotBlank()) "${song.number}. ${song.title}" else song.title,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f, fill = false)
-                                        )
-                                        if (onAddToSchedule != null) {
-                                            IconButton(
-                                                onClick = {
-                                                    onAddToSchedule(song.number.toIntOrNull() ?: 0, song.title, song.songbook, song.songId)
-                                                },
-                                                modifier = Modifier.size(20.dp)
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(Res.drawable.ic_playlist_add),
-                                                    contentDescription = stringResource(Res.string.add_to_schedule),
-                                                    modifier = Modifier.size(14.dp),
-                                                    tint = MaterialTheme.colorScheme.secondary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            VerticalScrollbar(
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                adapter = rememberScrollbarAdapter(scrollState = favGridState)
-                            )
-                        }
-                    }
-                }
-            }
-        }
+            },
+            onFavoritesExpandedChange = { favoritesExpanded = it },
+            onFavPanelHeightChange = { favPanelHeightPx = it },
+            onAddToSchedule = onAddToSchedule,
+            onPresenting = onPresenting,
+            sendToPresenter = ::sendToPresenter,
+        )
 
         // Vertical drag handle — resize lyrics panel
         Box(
@@ -1441,346 +510,34 @@ fun SongsTab(
                 )
         )
 
-        // Right panel — Lyrics display (fixed width, resizable via drag handle)
-        Column(
-            modifier = Modifier
-                .width(with(density) { lyricsPanelPx.toDp() })
-                .fillMaxHeight()
-        ) {
-            // Header row with action buttons — switches to icon-only when width is tight
-            val editSongStr    = stringResource(Res.string.edit_song)
-            val goLiveStr      = stringResource(Res.string.go_live)
-            val addScheduleStr = stringResource(Res.string.add_to_schedule)
-
-            val hasSongSelected = selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size && selectedSectionIndex >= 0
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    ActionIconButton(
-                        onClick = { songToEdit = filteredSongs[selectedSongIndex]; showEditDialog = true; tabFocusRequester.requestFocus() },
-                        tooltipText = editSongStr,
-                        painter = painterResource(Res.drawable.ic_edit),
-                        containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary
-                    )
-                }
-
-                // New Song button
-                ActionIconButton(
-                    onClick = { showNewSongDialog = true; tabFocusRequester.requestFocus() },
-                    tooltipText = newSongStr,
-                    painter = painterResource(Res.drawable.ic_add),
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                )
-
-                if (onAddToSchedule != null && selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    AddToScheduleButton(
-                        onClick = {
-                            filteredSongs.getOrNull(selectedSongIndex)?.let { item ->
-                                onAddToSchedule(item.number.toIntOrNull() ?: 0, item.title, item.songbook, item.songId)
-                            }
-                            tabFocusRequester.requestFocus()
-                        },
-                        tooltipText = addScheduleStr
-                    )
-                }
-
-                GoLiveButton(
-                    onClick = { sendToPresenter(goLive = true); onPresenting(Presenting.LYRICS); tabFocusRequester.requestFocus() },
-                    enabled = hasSongSelected,
-                    tooltipText = goLiveStr
-                )
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            FocusLostBanner(focusRescue, stringResource(Res.string.tab_focus_lost))
-
-            // "Back to Live" button — shown when browsing a different song than what's live.
-            // Compares songId, not index/position, so this stays correct even when the live
-            // song has been filtered out of the visible list by a search.
-            val currentSongIdForLiveCheck = filteredSongs.getOrNull(selectedSongIndex)?.songId
-            if (isPresenting && liveSongId != null && currentSongIdForLiveCheck != liveSongId) {
-                Button(
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                    onClick = {
-                        liveSongId?.let { viewModel.selectSongById(it) }
-                        viewModel.selectSection(liveSectionIndex)
-                        viewModel.setLineIndex(liveLineIndex)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(backToLiveStr, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onError, maxLines = 1)
-                }
-            }
-
-            // Arrow key navigation hint — only in line mode
-            val isLineModeHint = isSongLineMode(appSettings.songSettings)
-            if (isLineModeHint) {
-                Text(
-                    text = lineNavHintStr,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
-                )
-            }
-
-            // Lyrics content
-            val noSongsLoaded = filteredSongs.isEmpty() && searchQuery.isBlank()
-            if (noSongsLoaded) {
-                // ── Empty state: no song database configured ──────────────
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.widthIn(max = 320.dp),
-                        shape = MaterialTheme.shapes.large,
-                        tonalElevation = 3.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(Res.drawable.ic_note),
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                            Text(
-                                text = stringResource(Res.string.songs_no_db_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                            Text(
-                                text = stringResource(Res.string.songs_no_db_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = stringResource(Res.string.songs_no_db_step),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-            } else {
-            // ── Normal lyrics view ────────────────────────────────────
-            Box {
-                val lyricsListState = rememberLazyListState()
-                val titleSlideEnabled = appSettings.songSettings.titleSlideEnabled
-                val currentSong = filteredSongs.getOrNull(selectedSongIndex)
-
-                LaunchedEffect(selectedSectionIndex, isTitleSlideSelected) {
-                    if (isTitleSlideSelected) {
-                        lyricsListState.animateScrollToItem(0)
-                    } else if (selectedSectionIndex >= 0) {
-                        val offset = if (titleSlideEnabled && currentSong != null) 1 else 0
-                        lyricsListState.animateScrollToItem(selectedSectionIndex + offset)
-                    }
-                }
-
-                // Get lyric sections from ViewModel — no parsing in UI
-                val sections = if (selectedSongIndex >= 0 && selectedSongIndex < filteredSongs.size) {
-                    viewModel.getLyricSections()
-                } else emptyList()
-
-                LazyColumn(
-                    state = lyricsListState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(12.dp)
-                ) {
-                    // ── Title slide entry ────────────────────────────────────
-                    if (titleSlideEnabled && currentSong != null && sections.isNotEmpty()) {
-                        item {
-                            val titleLine = songTitleLine(
-                                currentSong,
-                                appSettings.songSettings.titleSlideShowSongNumber,
-                            )
-                            val creditLine = songCreditLine(currentSong)
-
-                            fun buildTitleSection() =
-                                titleSlideSection(
-                                    currentSong,
-                                    appSettings.tuningFor(currentSong.songId),
-                                    appSettings.songSettings.titleSlideShowSongNumber,
-                                )
-
-                            fun sendTitleSlide() {
-                                val ts = buildTitleSection()
-                                val allSections = listOf(ts) + viewModel.getLyricSections()
-                                onAllSectionsChanged(allSections)
-                                onSectionIndexChanged(0)
-                                onLineIndexChanged(0)
-                                onSongItemSelected(ts)
-                                isTitleSlideSelected = true
-                                liveSongId = currentSong.songId
-                                liveSectionIndex = -1
-                                liveLineIndex = 0
-                            }
-
-                            val contentColor = if (isTitleSlideSelected)
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            else
-                                MaterialTheme.colorScheme.onSurface
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (isTitleSlideSelected)
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                        else Color.Transparent
-                                    )
-                                    .initialPassCombinedClickable(
-                                        onClick = { sendTitleSlide() },
-                                        onDoubleClick = { sendTitleSlide(); onPresenting(Presenting.LYRICS) }
-                                    )
-                                    .padding(8.dp)
-                            ) {
-                                // Same chip the lyric sections use, so the title slide reads as
-                                // one more entry in the list rather than a differently-styled one.
-                                SectionLabelRow(
-                                    label = stringResource(Res.string.song_title_slide),
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                )
-                                Text(
-                                    text = titleLine,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = contentColor
-                                )
-                                if (creditLine.isNotBlank()) {
-                                    Text(
-                                        text = creditLine,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = contentColor.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Regular lyric sections ───────────────────────────────
-                    if (sections.isNotEmpty()) {
-                        itemsIndexed(sections) { sectionIndex, section ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (!isTitleSlideSelected && sectionIndex == selectedSectionIndex)
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                        else Color.Transparent
-                                    )
-                                    .finalPassCombinedClickable(
-                                        onClick = {
-                                            viewModel.selectSection(sectionIndex)
-                                            isTitleSlideSelected = false
-                                            sendToPresenter(goLive = isPresenting)
-                                        },
-                                        onDoubleClick = {
-                                            viewModel.selectSection(sectionIndex)
-                                            isTitleSlideSelected = false
-                                            sendToPresenter(goLive = true)
-                                            onPresenting(Presenting.LYRICS)
-                                        }
-                                    )
-                                    .padding(8.dp)
-                            ) {
-                                val textColor = if (!isTitleSlideSelected && sectionIndex == selectedSectionIndex)
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                else
-                                    MaterialTheme.colorScheme.onSurface
-
-                                val isPerLineMode = isSongLineMode(appSettings.songSettings)
-                                // Highlight the whole group that goes on one slide, snapped to its
-                                // boundary — with multi-line slides, marking only the cursor's own
-                                // line would understate what the congregation is looking at.
-                                val perLineStep = songLineStep(appSettings.songSettings)
-                                val activeLineIndex = if (isPerLineMode && sectionIndex == selectedSectionIndex)
-                                    songLineGroupStart(viewModel.selectedLineIndex.value, perLineStep) else -1
-
-                                // Render section header if present — the same chip the editor's
-                                // preview uses, so a verse is recognised the same way in both.
-                                section.header?.let { header ->
-                                    SectionLabelRow(
-                                        label = header.trim().trim('[', ']', '{', '}').trim(),
-                                        modifier = Modifier.padding(vertical = 4.dp),
-                                    )
-                                }
-
-                                // Lyrics panel always shows both — language filtering only applies to presenter
-                                val langDisplay = Constants.SONG_LANG_BOTH
-                                val showPrimary = langDisplay != Constants.SONG_LANG_SECONDARY
-                                val showSecondary = langDisplay != Constants.SONG_LANG_PRIMARY && section.secondaryLines.isNotEmpty()
-
-                                val lineClickHandler: ((Int) -> Unit)? = if (isPerLineMode) { lineIdx ->
-                                    viewModel.selectSection(sectionIndex)
-                                    viewModel.setLineIndex(lineIdx)
-                                    isTitleSlideSelected = false
-                                    sendToPresenter(goLive = isPresenting)
-                                } else null
-                                // Double-click on the words goes live too — at the clicked LINE,
-                                // so per-line display mode stays line-accurate (the section's own
-                                // double-click below the text still covers the background).
-                                val lineDoubleClickHandler: ((Int) -> Unit)? = if (isPerLineMode) { lineIdx ->
-                                    viewModel.selectSection(sectionIndex)
-                                    viewModel.setLineIndex(lineIdx)
-                                    isTitleSlideSelected = false
-                                    sendToPresenter(goLive = true)
-                                    onPresenting(Presenting.LYRICS)
-                                } else null
-
-                                if (showPrimary && showSecondary) {
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
-                                        }
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
-                                        }
-                                    }
-                                } else if (showSecondary) {
-                                    LyricLines(section.secondaryLines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
-                                } else {
-                                    LyricLines(section.lines, textColor, activeLineIndex, lineClickHandler, lineDoubleClickHandler, perLineStep)
-                                }
-                            }
-                            // No separator between sections: each one opens with its own labelled
-                            // chip and rule, which is what divides them now.
-                        }
-                    } else {
-                        item {
-                            Text(
-                                text = stringResource(Res.string.no_lyrics_available),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                VerticalScrollbar(
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    adapter = rememberScrollbarAdapter(scrollState = lyricsListState)
-                )
-            }
-            } // end else (songs loaded)
-        }
+        SongLyricsPanel(
+            lyricsPanelPx = lyricsPanelPx,
+            appSettings = appSettings,
+            filteredSongs = filteredSongs,
+            selectedSongIndex = selectedSongIndex,
+            selectedSectionIndex = selectedSectionIndex,
+            selectedLineIndex = viewModel.selectedLineIndex.value,
+            searchQuery = searchQuery,
+            isPresenting = isPresenting,
+            live = live,
+            dialogs = dialogs,
+            backToLiveStr = backToLiveStr,
+            lineNavHintStr = lineNavHintStr,
+            newSongStr = newSongStr,
+            focusRescue = focusRescue,
+            tabFocusRequester = tabFocusRequester,
+            lyricSections = { viewModel.getLyricSections() },
+            onSectionSelected = { viewModel.selectSection(it) },
+            onLineSelected = { viewModel.setLineIndex(it) },
+            onBackToLiveSong = { live.songId?.let { viewModel.selectSongById(it) } },
+            onSectionIndexChanged = onSectionIndexChanged,
+            onLineIndexChanged = onLineIndexChanged,
+            onAllSectionsChanged = onAllSectionsChanged,
+            onSongItemSelected = onSongItemSelected,
+            onAddToSchedule = onAddToSchedule,
+            onPresenting = onPresenting,
+            sendToPresenter = ::sendToPresenter,
+        )
     }
 
     // The metronome tempo is only ever read by the stage monitor, so the field that sets it is
@@ -1791,59 +548,38 @@ fun SongsTab(
 
     // Edit Song Dialog — pure UI dialog state is fine here
     EditSongDialog(
-        isVisible = showEditDialog,
-        song = songToEdit,
+        isVisible = dialogs.editing != null,
+        song = dialogs.editing,
         songbooks = viewModel.songbooks.value,
         existingSongs = viewModel.songsData.value.getSongs(),
         theme = theme,
-        tuning = songToEdit?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
+        tuning = dialogs.editing?.let { appSettings.tuningFor(it.songId) } ?: SongTuning(),
         showTuningFields = hasStageMonitorScreen,
         chordsVisible = appSettings.songSettings.editorShowChords,
         onChordsVisibleChange = { visible ->
             onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
         },
-        onDismiss = { showEditDialog = false },
+        onDismiss = { dialogs.closeEditor() },
         onSave = { updatedSong, tuning ->
-            songToEdit?.let { oldSong ->
-                val wasLive = isPresenting && liveSongId == oldSong.songId
+            dialogs.editing?.let { oldSong ->
+                val wasLive = isPresenting && live.songId == oldSong.songId
                 val success = viewModel.updateSong(oldSong, updatedSong)
                 if (success) {
                     onSettingsChangeState.value { s -> s.withTuning(updatedSong.songId, tuning) }
-                    songToEdit = null
-                    showEditDialog = false
+                    dialogs.closeEditor()
+                    dialogs.closeEditor()
                     if (wasLive) sendEditedSongToPresenter(updatedSong, tuning)
                 }
             }
         }
     )
 
-    // Per-song background dialog
-    SongBackgroundDialog(
-        isVisible = showBackgroundDialog,
-        songTitle = songForBackground?.let { song ->
-            listOf(song.number, song.title).filter { it.isNotBlank() }.joinToString(" – ")
-        } ?: "",
-        background = songForBackground?.let { appSettings.songBackgroundFor(it.songId) },
-        theme = theme,
-        onDismiss = { showBackgroundDialog = false; songForBackground = null },
-        onSave = { config ->
-            songForBackground?.let { song ->
-                onSettingsChangeState.value { s -> s.withSongBackground(song.songId, config) }
-            }
-            showBackgroundDialog = false
-            songForBackground = null
-            // No re-push: the presenter resolves the background out of `appSettings` on every
-            // composition, so a song already live picks the new one up as the settings write
-            // propagates. Only the *section* would need re-sending, and it has not changed.
-        }
-    )
-
     // Delete Song Confirmation Dialog
-    if (showDeleteConfirm) {
-        val s = songToDelete
+    if (dialogs.deleting != null) {
+        val s = dialogs.deleting
         if (s != null) {
             AlertDialog(
-                onDismissRequest = { showDeleteConfirm = false; songToDelete = null },
+                onDismissRequest = { dialogs.closeDelete(); dialogs.closeDelete() },
                 title = { Text(stringResource(Res.string.confirm_delete)) },
                 text = {
                     Column {
@@ -1863,20 +599,39 @@ fun SongsTab(
                         shape = RoundedCornerShape(6.dp),
                         onClick = {
                         viewModel.deleteSong(s)
-                        showDeleteConfirm = false
-                        songToDelete = null
+                        dialogs.closeDelete()
                     }) {
                         Text(stringResource(Res.string.delete_saved_string), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(shape = RoundedCornerShape(6.dp), onClick = { showDeleteConfirm = false; songToDelete = null }) {
+                    TextButton(shape = RoundedCornerShape(6.dp), onClick = { dialogs.closeDelete(); dialogs.closeDelete() }) {
                         Text(stringResource(Res.string.cancel))
                     }
                 }
             )
         }
     }
+
+    // Per-song background dialog
+    SongBackgroundDialog(
+        isVisible = dialogs.backgrounding != null,
+        songTitle = dialogs.backgrounding?.let { song ->
+            listOf(song.number, song.title).filter { it.isNotBlank() }.joinToString(" – ")
+        } ?: "",
+        background = dialogs.backgrounding?.let { appSettings.songBackgroundFor(it.songId) },
+        theme = theme,
+        onDismiss = { dialogs.closeBackground() },
+        onSave = { config ->
+            dialogs.backgrounding?.let { song ->
+                onSettingsChangeState.value { s -> s.withSongBackground(song.songId, config) }
+            }
+            dialogs.closeBackground()
+            // No re-push: the presenter resolves the background out of `appSettings` on every
+            // composition, so a song already live picks the new one up as the settings write
+            // propagates. Only the *section* would need re-sending, and it has not changed.
+        }
+    )
 
     // New Song Dialog
     val newSongTemplate = remember {
@@ -1890,7 +645,7 @@ fun SongsTab(
         )
     }
     EditSongDialog(
-        isVisible = showNewSongDialog,
+        isVisible = dialogs.creatingNew,
         song = newSongTemplate,
         songbooks = viewModel.songbooks.value,
         existingSongs = viewModel.songsData.value.getSongs(),
@@ -1901,26 +656,27 @@ fun SongsTab(
         onChordsVisibleChange = { visible ->
             onSettingsChangeState.value { s -> s.copy(songSettings = s.songSettings.copy(editorShowChords = visible)) }
         },
-        onDismiss = { showNewSongDialog = false },
+        onDismiss = { dialogs.closeNew() },
         onSave = { newSong, tuning ->
             val success = viewModel.createSong(newSong)
             if (success) {
                 if (tuning != SongTuning()) {
                     onSettingsChangeState.value { s -> s.withTuning(newSong.songId, tuning) }
                 }
-                showNewSongDialog = false
+                dialogs.closeNew()
             }
         }
     )
 }
 
 @Composable
-private fun LyricLines(
+internal fun LyricLines(
     lines: List<String>,
     textColor: Color,
     activeLineIndex: Int = -1,
     onLineClick: ((Int) -> Unit)? = null,
     onLineDoubleClick: ((Int) -> Unit)? = null,
+    /** How many lines from [activeLineIndex] share the slide, so the highlight covers the group. */
     activeLineCount: Int = 1,
 ) {
     lines.forEachIndexed { lineIndex, line ->

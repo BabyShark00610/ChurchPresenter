@@ -59,7 +59,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -106,6 +105,7 @@ import churchpresenter.composeapp.generated.resources.book
 import churchpresenter.composeapp.generated.resources.chapter
 import churchpresenter.composeapp.generated.resources.ic_close
 import churchpresenter.composeapp.generated.resources.ic_search
+import churchpresenter.composeapp.generated.resources.search_clear
 import churchpresenter.composeapp.generated.resources.verse
 import java.awt.Cursor
 import org.churchpresenter.app.churchpresenter.composables.ActionIconButton
@@ -121,6 +121,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.DictionaryViewModel
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+
+private const val DEFINITION_PREVIEW_CHARS = 200
 
 @Composable
 fun DictionaryTab(
@@ -891,8 +893,8 @@ private fun InterlinearWordChip(
                             )
                         }
                         Text(
-                            text = entry.definition.take(200).let {
-                                if (entry.definition.length > 200) "$it…" else it
+                            text = entry.definition.take(DEFINITION_PREVIEW_CHARS).let {
+                                if (entry.definition.length > DEFINITION_PREVIEW_CHARS) "$it…" else it
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.inverseOnSurface,
@@ -1008,7 +1010,7 @@ private fun DictionarySearchField(
             IconButton(onClick = onClear, modifier = Modifier.size(30.dp)) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_close),
-                    contentDescription = null,
+                    contentDescription = stringResource(Res.string.search_clear),
                     modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

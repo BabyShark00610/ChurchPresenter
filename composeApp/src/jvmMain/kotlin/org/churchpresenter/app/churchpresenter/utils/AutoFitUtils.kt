@@ -7,6 +7,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import org.churchpresenter.app.churchpresenter.models.LyricSection
 
+private const val SECTION_INDICATOR_SPACER_PX = 4
+
 /**
  * The floor the two searches in this file settle on, in settings units at the 1920×1080 reference
  * resolution. Named rather than repeated at the five places that had it inline.
@@ -88,48 +90,12 @@ fun calculateAutoFitForAllSections(
     while (high - low > 1) {
         val mid = (low + high) / 2
         val style = baseStyle.copy(fontSize = mid.sp)
-        var fits = true
-
-        for ((sectionIdx, section) in sections.withIndex()) {
-            // Check both primary and secondary lines so bilingual text also fits
-            val lineSets = if (section.secondaryLines.isNotEmpty())
-                listOf(section.lines, section.secondaryLines) else listOf(section.lines)
-            for (lines in lineSets) {
-                if (lines.isEmpty()) continue
-                var sectionHeight = 0
-                for (line in lines) {
-                    val result = textMeasurer.measure(
-                        text = line,
-                        style = style,
-                        constraints = unconstrainedConstraints,
-                        density = referenceDensity
-                    )
-                    // Check width: line must fit without wrapping
-                    if (result.size.width > availableWidth) {
-                        fits = false
-                        break
-                    }
-                    sectionHeight += result.size.height
-                }
-                if (!fits) break
-                // Reserve space for end-of-song indicator on the last section
-                if (includeEndIndicator && sectionIdx == sections.lastIndex) {
-                    val lineHeight = textMeasurer.measure(
-                        text = "* * *",
-                        style = style,
-                        constraints = unconstrainedConstraints,
-                        density = referenceDensity
-                    ).size.height
-                    // Spacer (4px reference) + indicator line height
-                    sectionHeight += 4 + lineHeight
-                }
-                // Check height: all lines of this section must fit
-                if (sectionHeight > effectiveHeight) {
-                    fits = false
-                    break
-                }
-            }
-            if (!fits) break
+        val fits = sections.withIndex().all { (sectionIdx, section) ->
+            sectionFits(
+                textMeasurer, section, style, unconstrainedConstraints, referenceDensity,
+                availableWidth, effectiveHeight,
+                withEndIndicator = includeEndIndicator && sectionIdx == sections.lastIndex,
+            )
         }
         if (fits) low = mid else high = mid
     }
@@ -210,4 +176,39 @@ fun calculateChordChartFontSize(
         if (fits(mid)) low = mid else high = mid - 1
     }
     return low.coerceAtLeast(MIN_AUTO_FIT_FONT_SIZE)
+}
+
+/** True when every line of [section] fits on one row and the section fits the height. */
+@Suppress("LongParameterList")
+private fun sectionFits(
+    textMeasurer: TextMeasurer,
+    section: LyricSection,
+    style: TextStyle,
+    constraints: Constraints,
+    density: Density,
+    availableWidth: Int,
+    effectiveHeight: Int,
+    withEndIndicator: Boolean,
+): Boolean {
+    // Check both primary and secondary lines so bilingual text also fits
+    val lineSets = if (section.secondaryLines.isNotEmpty()) {
+        listOf(section.lines, section.secondaryLines)
+    } else {
+        listOf(section.lines)
+    }
+    return lineSets.filter { it.isNotEmpty() }.all { lines ->
+        val measured = lines.map {
+            textMeasurer.measure(text = it, style = style, constraints = constraints, density = density).size
+        }
+        // Reserve space for end-of-song indicator on the last section: spacer + indicator height
+        val indicatorHeight = if (withEndIndicator) {
+            SECTION_INDICATOR_SPACER_PX + textMeasurer.measure(
+                text = "* * *", style = style, constraints = constraints, density = density
+            ).size.height
+        } else {
+            0
+        }
+        val sectionHeight = measured.sumOf { it.height } + indicatorHeight
+        measured.none { it.width > availableWidth } && sectionHeight <= effectiveHeight
+    }
 }

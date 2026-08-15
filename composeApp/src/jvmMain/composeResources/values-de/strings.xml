@@ -1697,6 +1697,17 @@
     <string name="copy_verse">Vers kopieren</string>
     <string name="style">Stil</string>
     <string name="bible_split_browse_mode">Geteilter Browsemodus</string>
+    <string name="bible_cross_references">Querverweise</string>
+    <string name="bible_cross_references_title">Verweise</string>
+    <string name="bible_cross_references_enable">Querverweise anzeigen</string>
+    <string name="bible_cross_references_none">Keine Querverweise</string>
+    <string name="bible_cross_references_often_next">Oft als Nächstes</string>
+    <string name="bible_cross_references_passage">Abschnitt %1$s</string>
+    <string name="bible_cross_references_count">Querverweise: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · Querverweise: %2$d</string>
+    <string name="bible_cross_references_keep_open">Anheften</string>
+    <string name="bible_cross_references_close">Leiste schließen</string>
+    <string name="bible_cross_references_dismiss_hint">Esc zum Schließen</string>
     <string name="bible_live_view">Live</string>
     <string name="clear_recents">Verlauf löschen</string>
     <string name="recent">Zuletzt:</string>

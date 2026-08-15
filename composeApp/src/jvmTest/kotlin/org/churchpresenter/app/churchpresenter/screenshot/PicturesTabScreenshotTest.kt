@@ -185,16 +185,31 @@ class PicturesTabScreenshotTest {
         openAnimationDropdown()
     }
 
+    /**
+     * Both editors focus a text field, and a focused field draws a *blinking* caret — so whether
+     * the caret is up or down when the frame is taken depends on how the run happened to be timed.
+     * `interval_editor` had already started failing that way: it passes on its own and differs
+     * inside a full-suite run, where warm-up shifts the capture into the other half of the blink.
+     *
+     * Freezing the clock pins the phase, so every capture sees the same frame.
+     */
     @Test
     fun `the auto-scroll interval editor`() = shoot("interval_editor", rootIndex = 1) { vm ->
         awaitAll(vm)
         openIntervalEditor()
+        freezeCaret()
     }
 
     @Test
     fun `the transition duration editor`() = shoot("transition_editor", rootIndex = 1) { vm ->
         awaitAll(vm)
         openTransitionEditor()
+        freezeCaret()
+    }
+
+    private fun ComposeUiTest.freezeCaret() {
+        mainClock.autoAdvance = false
+        mainClock.advanceTimeByFrame()
     }
 
     @Test

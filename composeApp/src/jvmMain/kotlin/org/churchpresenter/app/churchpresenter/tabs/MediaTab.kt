@@ -1,7 +1,6 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import kotlinx.serialization.json.Json
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
@@ -63,9 +62,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
@@ -117,6 +114,8 @@ import churchpresenter.composeapp.generated.resources.media_vlc_required
 import churchpresenter.composeapp.generated.resources.pause
 import churchpresenter.composeapp.generated.resources.play
 import churchpresenter.composeapp.generated.resources.recent
+import churchpresenter.composeapp.generated.resources.recent_pin
+import churchpresenter.composeapp.generated.resources.recent_unpin
 import churchpresenter.composeapp.generated.resources.stop
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Movie
@@ -138,7 +137,9 @@ import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.server.followerMediaUrl
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.presenterAspectRatio
 import org.churchpresenter.app.churchpresenter.viewmodel.LocalMediaViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
@@ -150,55 +151,9 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.extension
 import kotlinx.coroutines.launch
 
-/**
- * Recent media files, mirroring `RecentPictureFolders` in `PicturesTab.kt`.
- *
- * `internal` rather than private so the bar it feeds can be driven from a test by seeding [paths]
- * and [pinned]. [file], [pinnedFile] and [load] are `internal var`/`internal fun` for the same
- * reason: a test points them at a temp dir before calling [add]/[togglePin]/[clear]/[load], so the
- * real read/write logic runs without ever touching the developer's own recent/pinned JSON files
- * under `~/.churchpresenter`. Nothing else is widened.
- */
-internal object RecentMediaFiles {
-    private const val MAX = 10
-    internal var file = java.io.File(System.getProperty("user.home"), ".churchpresenter/recent_media_files.json")
-    internal var pinnedFile = java.io.File(System.getProperty("user.home"), ".churchpresenter/pinned_media_files.json")
-    val paths = androidx.compose.runtime.mutableStateListOf<String>()
-    val pinned = androidx.compose.runtime.mutableStateListOf<String>()
-
-    init { load() }
-
-    fun add(path: String) {
-        paths.remove(path)
-        paths.add(0, path)
-        while (paths.size > MAX) paths.removeLast()
-        save()
-    }
-
-    fun togglePin(path: String) {
-        if (path in pinned) pinned.remove(path)
-        else { pinned.remove(path); pinned.add(0, path) }
-        savePinned()
-    }
-
-    fun clear() {
-        val keep = paths.filter { it in pinned }
-        paths.clear(); paths.addAll(keep); save()
-    }
-
-    internal fun load() {
-        try { if (file.exists()) { val json = Json { ignoreUnknownKeys = true }; val list = json.decodeFromString<List<String>>(file.readText()); paths.clear(); paths.addAll(list.take(MAX)) } } catch (_: Exception) {}
-        try { if (pinnedFile.exists()) { val json = Json { ignoreUnknownKeys = true }; val list = json.decodeFromString<List<String>>(pinnedFile.readText()); pinned.clear(); pinned.addAll(list) } } catch (_: Exception) {}
-    }
-
-    private fun save() {
-        try { file.parentFile?.mkdirs(); val json = Json { encodeDefaults = true }; file.writeText(json.encodeToString(paths.toList())) } catch (_: Exception) {}
-    }
-
-    private fun savePinned() {
-        try { pinnedFile.parentFile?.mkdirs(); val json = Json { encodeDefaults = true }; pinnedFile.writeText(json.encodeToString(pinned.toList())) } catch (_: Exception) {}
-    }
-}
+private const val MENU_OFFSET_X = 100
+private const val MENU_OFFSET_Y = 60
+private const val HANDLE_VISIBLE_ALPHA = 0.01f
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -290,6 +245,8 @@ fun MediaTab(
         }
     }
 
+    val shortcuts = LocalShortcuts.current
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -298,9 +255,14 @@ fun MediaTab(
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     when {
-                        keyEvent.key == Key.Escape && presenterManager != null -> { viewModel.pause(); presenterManager.requestClearDisplay(); true }
-                        viewModel.isLoaded && keyEvent.key == Key.Spacebar -> { viewModel.togglePlayPause(); true }
-                        viewModel.isLoaded && keyEvent.key == Key.M -> { viewModel.toggleMute(); true }
+                        // Clear Output is a global action, but it is claimed here too so the media
+                        // is paused before the display clears — the root handler pauses via a
+                        // nullable ViewModel reference that this tab already holds directly.
+                        shortcuts.matches(ShortcutAction.CLEAR_OUTPUT, keyEvent) && presenterManager != null -> {
+                            viewModel.pause(); presenterManager.requestClearDisplay(); true
+                        }
+                        viewModel.isLoaded && shortcuts.matches(ShortcutAction.MEDIA_PLAY_PAUSE, keyEvent) -> { viewModel.togglePlayPause(); true }
+                        viewModel.isLoaded && shortcuts.matches(ShortcutAction.MEDIA_MUTE, keyEvent) -> { viewModel.toggleMute(); true }
                         else -> false
                     }
                 } else false
@@ -476,7 +438,7 @@ fun MediaTab(
                                 Text(displayName, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium), color = if (isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), maxLines = 1)
                             }
                             IconButton(onClick = { RecentMediaFiles.togglePin(path) }, modifier = Modifier.size(20.dp)) {
-                                Icon(painterResource(if (isPinned) Res.drawable.ic_star_filled else Res.drawable.ic_star), contentDescription = null, modifier = Modifier.size(12.dp), tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
+                                Icon(painterResource(if (isPinned) Res.drawable.ic_star_filled else Res.drawable.ic_star), contentDescription = stringResource(if (isPinned) Res.string.recent_unpin else Res.string.recent_pin), modifier = Modifier.size(12.dp), tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
                             }
                         }
                     }
@@ -568,7 +530,7 @@ fun MediaTab(
                 if (volumeExpanded) {
                     Popup(
                         alignment = Alignment.BottomCenter,
-                        offset = IntOffset(100, 60),
+                        offset = IntOffset(MENU_OFFSET_X, MENU_OFFSET_Y),
                         onDismissRequest = { volumeExpanded = false },
                         properties = PopupProperties(focusable = true)
                     ) {
@@ -789,7 +751,7 @@ private fun MediaSeekBar(
                     )
                 }
                 // Hover handle — fades/scales in only on hover or drag
-                if (handleAlpha > 0.01f) {
+                if (handleAlpha > HANDLE_VISIBLE_ALPHA) {
                     val hx = (size.width * playedFraction).coerceIn(0f, size.width)
                     drawCircle(color = handleColor.copy(alpha = handleAlpha), radius = 6.dp.toPx() * handleScale, center = Offset(hx, cy))
                 }

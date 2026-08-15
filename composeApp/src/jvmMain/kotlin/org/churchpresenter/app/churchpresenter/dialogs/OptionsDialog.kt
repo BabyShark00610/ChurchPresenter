@@ -1,5 +1,6 @@
 package org.churchpresenter.app.churchpresenter.dialogs
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,11 +73,22 @@ import org.churchpresenter.app.churchpresenter.dialogs.tabs.SongSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.LowerThirdSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.DictionarySettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.StageMonitorSettingsTab
+import org.churchpresenter.app.churchpresenter.composables.TabStripBackArrow
+import org.churchpresenter.app.churchpresenter.composables.TabStripForwardArrow
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.viewmodel.OBSWebSocketManager
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.stringResource
+
+private const val TAB_BACKGROUND = 3
+private const val TAB_PROJECTION = 4
+private const val TAB_LOWER_THIRD = 5
+private const val TAB_SERVER = 6
+private const val TAB_STAGE_MONITOR = 7
+private const val TAB_ATEM = 8
+private const val TAB_DICTIONARY = 9
+private const val TAB_INTEGRATIONS = 10
 
 @Composable
 fun OptionsDialog(
@@ -90,7 +102,6 @@ fun OptionsDialog(
     onSave: (AppSettings) -> Unit = {},
     onIdentifyScreen: () -> Unit = {},
     onIdentifyBrowserSource: (Int) -> Unit = {},
-    onThemeChange: (ThemeMode) -> Unit = {},
     scenes: List<Scene> = emptyList(),
     onOpenLottieGen: (outputDir: String, onFileSaved: (() -> Unit)?) -> Unit = { _, _ -> },
     obsManager: OBSWebSocketManager? = null,
@@ -129,7 +140,6 @@ fun OptionsDialog(
             onSave = onSave,
             onIdentifyScreen = onIdentifyScreen,
             onIdentifyBrowserSource = onIdentifyBrowserSource,
-            onThemeChange = onThemeChange,
             scenes = scenes,
             onOpenLottieGen = onOpenLottieGen,
             obsManager = obsManager,
@@ -151,7 +161,6 @@ internal fun OptionsDialogContent(
     onSave: (AppSettings) -> Unit = {},
     onIdentifyScreen: () -> Unit = {},
     onIdentifyBrowserSource: (Int) -> Unit = {},
-    onThemeChange: (ThemeMode) -> Unit = {},
     scenes: List<Scene> = emptyList(),
     onOpenLottieGen: (outputDir: String, onFileSaved: (() -> Unit)?) -> Unit = { _, _ -> },
     obsManager: OBSWebSocketManager? = null,
@@ -165,6 +174,7 @@ internal fun OptionsDialogContent(
     val tabCount = companionSatelliteTabIndex + 1
     var selectedTabIndex by remember(initialTab) { mutableStateOf(initialTab) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
+    val tabScrollState = remember { ScrollState(0) }
 
         AppThemeWrapper(theme = theme) {
             Surface(
@@ -172,75 +182,87 @@ internal fun OptionsDialogContent(
                 color = MaterialTheme.colorScheme.background
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Tab Row
-                    PrimaryScrollableTabRow(
-                        selectedTabIndex = safeTabIndex,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        edgePadding = 0.dp
+                    // Tab Row — with the same overflow arrows as the main window's tab strip, since
+                    // a dozen tabs outrun the dialog's width long before the window is narrow.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Tab(
-                            selected = safeTabIndex == 0,
-                            onClick = { selectedTabIndex = 0 },
-                            text = { Text(stringResource(Res.string.appearance)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 1,
-                            onClick = { selectedTabIndex = 1 },
-                            text = { Text(stringResource(Res.string.bible)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 2,
-                            onClick = { selectedTabIndex = 2 },
-                            text = { Text(stringResource(Res.string.song)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 3,
-                            onClick = { selectedTabIndex = 3 },
-                            text = { Text(stringResource(Res.string.background)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 4,
-                            onClick = { selectedTabIndex = 4 },
-                            text = { Text(stringResource(Res.string.projection)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 5,
-                            onClick = { selectedTabIndex = 5 },
-                            text = { Text(stringResource(Res.string.display_lower_third)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 6,
-                            onClick = { selectedTabIndex = 6 },
-                            text = { Text(stringResource(Res.string.server_settings)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 7,
-                            onClick = { selectedTabIndex = 7 },
-                            text = { Text(stringResource(Res.string.stage_monitor)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 8,
-                            onClick = { selectedTabIndex = 8 },
-                            text = { Text(stringResource(Res.string.atem_settings)) }
-                        )
-                        Tab(
-                            selected = safeTabIndex == 9,
-                            onClick = { selectedTabIndex = 9 },
-                            text = { Text(stringResource(Res.string.tab_dictionary)) }
-                        )
-                        if (obsManager != null) {
+                        TabStripBackArrow(tabScrollState)
+                        PrimaryScrollableTabRow(
+                            selectedTabIndex = safeTabIndex,
+                            modifier = Modifier.weight(1f),
+                            scrollState = tabScrollState,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            edgePadding = 0.dp
+                        ) {
                             Tab(
-                                selected = safeTabIndex == 10,
-                                onClick = { selectedTabIndex = 10 },
-                                text = { Text(stringResource(Res.string.obs_settings)) }
+                                selected = safeTabIndex == 0,
+                                onClick = { selectedTabIndex = 0 },
+                                text = { Text(stringResource(Res.string.appearance)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 1,
+                                onClick = { selectedTabIndex = 1 },
+                                text = { Text(stringResource(Res.string.bible)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 2,
+                                onClick = { selectedTabIndex = 2 },
+                                text = { Text(stringResource(Res.string.song)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 3,
+                                onClick = { selectedTabIndex = 3 },
+                                text = { Text(stringResource(Res.string.background)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 4,
+                                onClick = { selectedTabIndex = 4 },
+                                text = { Text(stringResource(Res.string.projection)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 5,
+                                onClick = { selectedTabIndex = 5 },
+                                text = { Text(stringResource(Res.string.display_lower_third)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 6,
+                                onClick = { selectedTabIndex = 6 },
+                                text = { Text(stringResource(Res.string.server_settings)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 7,
+                                onClick = { selectedTabIndex = 7 },
+                                text = { Text(stringResource(Res.string.stage_monitor)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 8,
+                                onClick = { selectedTabIndex = 8 },
+                                text = { Text(stringResource(Res.string.atem_settings)) }
+                            )
+                            Tab(
+                                selected = safeTabIndex == 9,
+                                onClick = { selectedTabIndex = 9 },
+                                text = { Text(stringResource(Res.string.tab_dictionary)) }
+                            )
+                            if (obsManager != null) {
+                                Tab(
+                                    selected = safeTabIndex == 10,
+                                    onClick = { selectedTabIndex = 10 },
+                                    text = { Text(stringResource(Res.string.obs_settings)) }
+                                )
+                            }
+                            Tab(
+                                selected = safeTabIndex == companionSatelliteTabIndex,
+                                onClick = { selectedTabIndex = companionSatelliteTabIndex },
+                                text = { Text(stringResource(Res.string.companion_satellite_settings)) }
                             )
                         }
-                        Tab(
-                            selected = safeTabIndex == companionSatelliteTabIndex,
-                            onClick = { selectedTabIndex = companionSatelliteTabIndex },
-                            text = { Text(stringResource(Res.string.companion_satellite_settings)) }
-                        )
+                        TabStripForwardArrow(tabScrollState)
                     }
 
                     // Tab Content
@@ -252,8 +274,6 @@ internal fun OptionsDialogContent(
                     ) {
                         when (safeTabIndex) {
                             0 -> SystemSettingsTab(
-                                currentTheme = theme,
-                                onThemeChange = onThemeChange,
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
@@ -274,13 +294,13 @@ internal fun OptionsDialogContent(
                                 },
                                 presenterManager = presenterManager
                             )
-                            3 -> BackgroundSettingsTab(
+                            TAB_BACKGROUND -> BackgroundSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            4 -> ProjectionSettingsTab(
+                            TAB_PROJECTION -> ProjectionSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
@@ -291,14 +311,14 @@ internal fun OptionsDialogContent(
                                 scenes = scenes,
                                 detectScreens = detectScreens
                             )
-                            5 -> LowerThirdSettingsTab(
+                            TAB_LOWER_THIRD -> LowerThirdSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 },
                                 onOpenLottieGen = onOpenLottieGen
                             )
-                            6 -> ServerSettingsTab(
+                            TAB_SERVER -> ServerSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
@@ -306,25 +326,25 @@ internal fun OptionsDialogContent(
                                 companionServer = companionServer,
                                 remoteClientManager = remoteClientManager
                             )
-                            7 -> StageMonitorSettingsTab(
+                            TAB_STAGE_MONITOR -> StageMonitorSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            8 -> AtemSettingsTab(
+                            TAB_ATEM -> AtemSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            9 -> DictionarySettingsTab(
+                            TAB_DICTIONARY -> DictionarySettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)
                                 }
                             )
-                            10 -> if (obsManager != null) {
+                            TAB_INTEGRATIONS -> if (obsManager != null) {
                                 OBSSettingsTab(
                                     settings = currentSettings,
                                     onSettingsChange = { updateFn ->
@@ -341,7 +361,10 @@ internal fun OptionsDialogContent(
                                     viewModel = companionSatelliteViewModel
                                 )
                             }
-                            11 -> CompanionSatelliteSettingsTab(
+                            // Past index 10 the numbering depends on whether the OBS tab is
+                            // present, so this is matched by its computed index rather than by a
+                            // literal that would be right in only one of the two cases.
+                            companionSatelliteTabIndex -> CompanionSatelliteSettingsTab(
                                 settings = currentSettings,
                                 onSettingsChange = { updateFn ->
                                     currentSettings = updateFn(currentSettings)

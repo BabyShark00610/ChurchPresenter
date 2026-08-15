@@ -73,6 +73,7 @@ import churchpresenter.composeapp.generated.resources.stock_photo_error_network
 import churchpresenter.composeapp.generated.resources.stock_photo_error_rate_limited
 import churchpresenter.composeapp.generated.resources.stock_photo_get_key
 import churchpresenter.composeapp.generated.resources.stock_photo_get_key_hint
+import churchpresenter.composeapp.generated.resources.stock_photo_hide_key
 import churchpresenter.composeapp.generated.resources.stock_photo_key_required_hint
 import churchpresenter.composeapp.generated.resources.stock_photo_load_more
 import churchpresenter.composeapp.generated.resources.stock_photo_no_results
@@ -80,6 +81,7 @@ import churchpresenter.composeapp.generated.resources.stock_photo_pexels_key_lab
 import churchpresenter.composeapp.generated.resources.stock_photo_pixabay_key_label
 import churchpresenter.composeapp.generated.resources.stock_photo_search_placeholder_photo
 import churchpresenter.composeapp.generated.resources.stock_photo_search_placeholder_video
+import churchpresenter.composeapp.generated.resources.stock_photo_show_key
 import churchpresenter.composeapp.generated.resources.stock_photo_source_pexels
 import churchpresenter.composeapp.generated.resources.stock_photo_source_pixabay
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
@@ -94,6 +96,10 @@ import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Desktop
 import java.net.URI
+
+private const val HALF_WIDTH = 0.5f
+private const val THUMB_ASPECT_W = 4f
+private const val THUMB_ASPECT_H = 3f
 
 /**
  * Lets the user search Pexels/Pixabay and download a photo or video directly into
@@ -258,7 +264,7 @@ private fun StockSourcePane(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         ApiKeyField(
-            modifier = Modifier.fillMaxWidth(0.5f),
+            modifier = Modifier.fillMaxWidth(HALF_WIDTH),
             label = keyLabel,
             value = apiKey,
             onValueChange = onApiKeyChange,
@@ -388,7 +394,7 @@ private fun StockMediaThumbnail(
 
     Box(
         modifier = Modifier
-            .aspectRatio(4f / 3f)
+            .aspectRatio(THUMB_ASPECT_W / THUMB_ASPECT_H)
             .clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
@@ -466,7 +472,9 @@ private fun ApiKeyField(
                 IconButton(onClick = { showKey = !showKey }) {
                     Icon(
                         imageVector = if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = null
+                        contentDescription = stringResource(
+                            if (showKey) Res.string.stock_photo_hide_key else Res.string.stock_photo_show_key
+                        )
                     )
                 }
             }

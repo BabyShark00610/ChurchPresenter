@@ -20,6 +20,8 @@ import presentation.engine.LoadResult
 import presentation.engine.PresentationLoader
 import java.io.File
 
+private const val TOKEN_REFRESH_MARGIN_MS = 60_000
+
 /**
  * Owns Planning Center Services API calls and per-item import state for
  * [org.churchpresenter.app.churchpresenter.dialogs.PlanningCenterImportDialog]. Created and used
@@ -112,7 +114,7 @@ class PlanningCenterImportViewModel(
 
     private suspend fun ensureValidToken(): Boolean {
         if (accessToken.isBlank()) return false
-        if (System.currentTimeMillis() < expiresAtEpochMs - 60_000) return true
+        if (System.currentTimeMillis() < expiresAtEpochMs - TOKEN_REFRESH_MARGIN_MS) return true
         if (refreshToken.isBlank()) return false
         return when (
             val outcome = PlanningCenterClient.refreshAccessToken(

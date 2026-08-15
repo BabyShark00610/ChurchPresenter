@@ -58,6 +58,8 @@ import org.jetbrains.skia.Image
 import java.io.File
 import kotlin.math.min
 
+private const val SHADOW_OFFSET_PX = 6f
+
 /**
  * The smallest scale the search below will go down to before giving up.
  *
@@ -187,7 +189,7 @@ fun BiblePresenter(
         systemFontFamilyOrDefault(if (isLowerThird) t1.lowerThirdReferenceFontType else t1.referenceFontType)
     }
 
-    val primaryBible = effectiveVerses.firstOrNull() ?: return
+    effectiveVerses.firstOrNull() ?: return
     val secondaryBible = effectiveVerses.getOrNull(1)
 
     // Resolve colors — key mode forces white for a proper key signal
@@ -445,7 +447,7 @@ fun BiblePresenter(
             val alpha = (opacity / 100f).coerceIn(0f, 1f)
             return Shadow(
                 color = base.copy(alpha = alpha),
-                offset = Offset(6f * scaleFactor * mul, 6f * scaleFactor * mul),
+                offset = Offset(SHADOW_OFFSET_PX * scaleFactor * mul, SHADOW_OFFSET_PX * scaleFactor * mul),
                 blurRadius = 12f * scaleFactor * mul
             )
         }

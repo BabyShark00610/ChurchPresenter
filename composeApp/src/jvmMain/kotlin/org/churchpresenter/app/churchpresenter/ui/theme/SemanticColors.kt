@@ -9,6 +9,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
+private const val DARK_LUMINANCE_THRESHOLD = 0.5f
+
 /**
  * The colours that carry a meaning Material 3 has no role for.
  *
@@ -105,7 +107,7 @@ private val DarkSemanticColors = SemanticColors(
  * silently hand a tenth theme the wrong half if it were not.
  */
 internal fun semanticColorsFor(scheme: ColorScheme): SemanticColors =
-    if (scheme.surface.luminance() < 0.5f) DarkSemanticColors else LightSemanticColors
+    if (scheme.surface.luminance() < DARK_LUMINANCE_THRESHOLD) DarkSemanticColors else LightSemanticColors
 
 internal val LocalSemanticColors = staticCompositionLocalOf { LightSemanticColors }
 

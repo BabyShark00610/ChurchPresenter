@@ -11,10 +11,15 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The small library-picker view models behind the Songs, Bible and Lower Third settings panes.
+ * The small library-picker view models behind the Songs and Lower Third settings panes.
  * They share a shape — a directory, a listing, a selection, and a refresh counter the UI observes
  * to re-read the disk — so their contract is mostly about not stranding a stale selection when the
  * directory changes underneath it.
+ *
+ * The Bible pane had one of these too. It is gone: reading the folder in composition was what froze
+ * the settings dialog on every open, so the tab now goes through `readBibleFolderListing` on
+ * `Dispatchers.IO` and nothing was left for the view model to hold. Its listing cases live in
+ * `BibleFolderListingTest`.
  */
 class SongSettingsViewModelTest {
 
@@ -73,75 +78,6 @@ class SongSettingsViewModelTest {
         val trigger = vm.refreshTrigger
         vm.selectFile("anything.sps")
         assertEquals(trigger, vm.refreshTrigger, "picking a row is not a directory change")
-    }
-}
-
-class BibleSettingsViewModelTest {
-
-    private lateinit var dir: File
-    private val vm = BibleSettingsViewModel()
-
-    @BeforeTest
-    fun createDir() {
-        dir = Files.createTempDirectory("cp-biblesettings-test").toFile()
-    }
-
-    @AfterTest
-    fun deleteDir() {
-        dir.deleteRecursively()
-    }
-
-    @Test
-    fun `setting a directory lists only bible files`() {
-        File(dir, "kjv.spb").writeText("x")
-        File(dir, "synodal.spb").writeText("x")
-        File(dir, "song.sps").writeText("x")
-        vm.setDirectory(dir.path)
-        assertEquals(listOf("kjv.spb", "synodal.spb"), vm.filesInDirectory())
-    }
-
-    @Test
-    fun `display names are empty with no directory set`() {
-        assertTrue(vm.fileDisplayNames(listOf("kjv.spb")).isEmpty())
-    }
-
-    @Test
-    fun `an unreadable bible still gets a display-name entry`() {
-        // The title is read from inside the file; a corrupt or non-SQLite file must not throw
-        // and must not drop the row out of the picker.
-        File(dir, "broken.spb").writeText("not a database")
-        vm.setDirectory(dir.path)
-        val names = vm.fileDisplayNames(listOf("broken.spb"))
-        assertEquals(setOf("broken.spb"), names.keys)
-    }
-
-    @Test
-    fun `two bibles sharing a title are told apart by their folder`() {
-        // The picker reverse-maps the chosen display name back to a file, so duplicate display names
-        // would make one of the two unselectable. Collections nest a folder per translation and
-        // routinely carry several editions with the same ##Title:.
-        File(dir, "ENG").mkdirs(); File(dir, "RUS").mkdirs()
-        File(dir, "ENG/a.spb").writeText("##Title:Holy Bible")
-        File(dir, "RUS/b.spb").writeText("##Title:Holy Bible")
-        File(dir, "unique.spb").writeText("##Title:Only One")
-        vm.setDirectory(dir.path)
-
-        val names = vm.fileDisplayNames(vm.filesInDirectory())
-        assertEquals(names.values.toSet().size, names.size, "display names must stay unique: $names")
-        assertEquals("Only One", names["unique.spb"], "an unambiguous title is left alone")
-        assertTrue(names.getValue("ENG/a.spb").contains("ENG"))
-        assertTrue(names.getValue("RUS/b.spb").contains("RUS"))
-    }
-
-    @Test
-    fun `changing the directory clears the selection and bumps the trigger`() {
-        vm.setDirectory(dir.path)
-        vm.selectFile("kjv.spb")
-        val trigger = vm.refreshTrigger
-
-        vm.setDirectory(dir.path + "/other")
-        assertNull(vm.selectedFile)
-        assertEquals(trigger + 1, vm.refreshTrigger)
     }
 }
 

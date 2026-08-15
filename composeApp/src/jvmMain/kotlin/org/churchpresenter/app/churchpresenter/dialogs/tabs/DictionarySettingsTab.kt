@@ -14,9 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -40,34 +38,37 @@ import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.FontSettingsDropdown
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.ShadowDetailRow
 import org.churchpresenter.app.churchpresenter.composables.SlimSlider
 import org.churchpresenter.app.churchpresenter.composables.TextStyleButtons
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
+
+private const val COLUMN_WEIGHT = 0.48f
 
 @Composable
 fun DictionarySettingsTab(
     settings: AppSettings,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
     val ds = settings.dictionarySettings
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(14.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(end = SettingsScrollbarGutter),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Left column: Word + Definition
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 360.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 360.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
             // Word section
@@ -189,7 +190,7 @@ fun DictionarySettingsTab(
 
             // Right column: Reference + KJV + Card Background + Transitions
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 360.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 360.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Reference & Transliteration
@@ -315,6 +316,7 @@ fun DictionarySettingsTab(
                 }
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }
 

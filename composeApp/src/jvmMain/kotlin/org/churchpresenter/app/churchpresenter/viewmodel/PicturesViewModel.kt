@@ -6,6 +6,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,13 +22,15 @@ import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
-import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
-import org.jetbrains.skia.Image
+import org.churchpresenter.app.churchpresenter.utils.PictureDecoder
 import java.io.File
 import java.nio.file.FileSystems
+import java.nio.file.WatchEvent
 import java.nio.file.StandardWatchEventKinds
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
+
+private const val MAX_RESCAN_ATTEMPTS = 3
 
 /** How long to wait before re-reading a file whose first decode failed. */
 private const val THUMBNAIL_RETRY_MS = 120L
@@ -39,6 +42,16 @@ private const val THUMBNAIL_RETRY_MS = 120L
  * a genuinely corrupt file is reported almost immediately rather than sitting on "Loading…".
  */
 private const val THUMBNAIL_RETRY_ATTEMPTS = 3
+
+/**
+ * How many times a decoded thumbnail is written into the state maps before giving up on it, and how
+ * long between tries.
+ *
+ * The write races the thread advancing the global snapshot and can lose; the window is momentary, so
+ * a handful of tries a few milliseconds apart clears it without costing anything measurable.
+ */
+private const val PUBLISH_ATTEMPTS = 4
+private const val PUBLISH_RETRY_MS = 20L
 
 class PicturesViewModel(
     appSettings: AppSettings? = null
@@ -81,9 +94,12 @@ class PicturesViewModel(
         var lastError: Exception? = null
         repeat(attempts) { attempt ->
             try {
-                _thumbnails[file] = loadImageBitmap(file)
-                _thumbnailFailures.remove(file)
+                publishThumbnail(file, loadImageBitmap(file))
                 return
+            } catch (e: CancellationException) {
+                // Disposing the view model cancels the decode. That is not a broken file, and
+                // recording it would mark a working image failed and warn about it.
+                throw e
             } catch (e: Exception) {
                 lastError = e
                 if (attempt < attempts - 1) delay(THUMBNAIL_RETRY_MS)
@@ -95,6 +111,33 @@ class PicturesViewModel(
             "Pictures: thumbnail for ${file.name} could not be decoded — $reason",
             tags = mapOf("subsystem" to "pictures")
         )
+    }
+
+    /**
+     * Writes a decoded thumbnail into the state maps, from the background thread that decoded it.
+     *
+     * Both maps are snapshot state, and a write from a thread other than the one advancing the
+     * global snapshot can lose that race — the *write* throws `Reading a state that was created
+     * after the snapshot was taken or in a snapshot that has not yet been applied`. The image is
+     * fine; only the moment it was published in was wrong, so the write is simply made again.
+     *
+     * Writing inside `Snapshot.withMutableSnapshot` instead is not the fix — it moves the identical
+     * failure onto the readers, where the grid throws it out of composition.
+     *
+     * Whatever the last attempt throws is left to [decodeThumbnail] to record, so a write that never
+     * lands still resolves the file instead of leaving its tile on "Loading…" for ever.
+     */
+    private suspend fun publishThumbnail(file: File, bitmap: ImageBitmap) {
+        repeat(PUBLISH_ATTEMPTS) { attempt ->
+            try {
+                _thumbnails[file] = bitmap
+                _thumbnailFailures.remove(file)
+                return
+            } catch (e: IllegalStateException) {
+                if (attempt == PUBLISH_ATTEMPTS - 1) throw e
+                delay(PUBLISH_RETRY_MS)
+            }
+        }
     }
 
     private val _selectedImageIndex = mutableStateOf(0)
@@ -138,6 +181,26 @@ class PicturesViewModel(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var watchJob: Job? = null
 
+    /**
+     * Guards every structural change to [_images], and any index read taken in order to make one.
+     *
+     * The list is a [androidx.compose.runtime.snapshots.SnapshotStateList], which makes a write
+     * visible to composition but does not make one atomic against another thread. Writers arrive
+     * from three directions: the caller's thread ([loadImagesFromFolder], [clearImages],
+     * [moveImage]), the download coroutine in [loadPictureFromRemote], and the folder watcher.
+     * More than one watcher can be live at a time — [selectFolder] cancels the previous watch job
+     * and refills the list immediately, but cancellation is cooperative, so the outgoing watcher
+     * can still be inside `pollEvents()` working through a batch of events against a list that has
+     * already been emptied and repopulated underneath it.
+     *
+     * `indexOf` followed by `removeAt(index)` is the shape that fails: the index is read, the list
+     * shrinks, and the removal throws `IndexOutOfBoundsException` from the folder watcher — where
+     * nothing catches it. It took CI red intermittently (run 31793721082 on `main`, and again on
+     * PR #298) as `index: 5, size: 5`, blamed on whichever screenshot test happened to be running
+     * when a previous test's leaked watcher woke up.
+     */
+    private val imagesLock = Any()
+
     private val imageExtensions = listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif")
 
     init {
@@ -171,7 +234,9 @@ class PicturesViewModel(
 
         // Add only files not already present so a re-entrant/repeated load stays idempotent — a
         // duplicate path in _images would crash the LazyVerticalGrid keyed by absolutePath.
-        _images.addAll(imageFiles.filter { it !in _images })
+        synchronized(imagesLock) {
+            _images.addAll(imageFiles.filter { it !in _images })
+        }
 
         // Load thumbnails in background
         scope.launch {
@@ -207,15 +272,21 @@ class PicturesViewModel(
         scope.launch {
             for (index in 0 until imageCount) {
                 val cacheFile = File(cacheDir, "image_%04d.jpg".format(index))
-                if (!cacheFile.exists()) {
-                    val bytes = fetchBytes(index) ?: continue
-                    val tmp = File(cacheDir, "${cacheFile.name}.tmp")
-                    tmp.writeBytes(bytes)
-                    if (!tmp.renameTo(cacheFile)) { tmp.delete(); continue }
+                var cached = cacheFile.exists()
+                if (!cached) {
+                    val bytes = fetchBytes(index)
+                    if (bytes != null) {
+                        val tmp = File(cacheDir, "${cacheFile.name}.tmp")
+                        tmp.writeBytes(bytes)
+                        cached = tmp.renameTo(cacheFile)
+                        if (!cached) tmp.delete()
+                    }
                 }
-                _images.add(cacheFile)
-                decodeThumbnail(cacheFile)
-                presenterManager?.let { syncWithPresenter(it) }
+                if (cached) {
+                    synchronized(imagesLock) { _images.add(cacheFile) }
+                    decodeThumbnail(cacheFile)
+                    presenterManager?.let { syncWithPresenter(it) }
+                }
             }
         }
     }
@@ -223,7 +294,7 @@ class PicturesViewModel(
     fun clearImages() {
         watchJob?.cancel()
         watchJob = null
-        _images.clear()
+        synchronized(imagesLock) { _images.clear() }
         _thumbnails.clear()
         _thumbnailFailures.clear()
         _selectedImageIndex.value = 0
@@ -270,12 +341,21 @@ class PicturesViewModel(
 
     fun moveImage(from: Int, to: Int) {
         if (from == to) return
-        if (from !in _images.indices || to !in _images.indices) return
         val currentFile = getCurrentImageFile()
-        _images.add(to, _images.removeAt(from))
+        // Both indices are re-checked under the lock: a watcher can remove a file between the
+        // caller reading these positions off the grid and the move landing.
+        val moved = synchronized(imagesLock) {
+            if (from !in _images.indices || to !in _images.indices) {
+                false
+            } else {
+                _images.add(to, _images.removeAt(from))
+                true
+            }
+        }
+        if (!moved) return
         _imageOrderVersion.value++
         currentFile?.let { file ->
-            val newIndex = _images.indexOf(file)
+            val newIndex = synchronized(imagesLock) { _images.indexOf(file) }
             if (newIndex >= 0) _selectedImageIndex.value = newIndex
         }
     }
@@ -284,12 +364,8 @@ class PicturesViewModel(
         _isPlaying.value = !_isPlaying.value
     }
 
-    fun getCurrentImageFile(): File? {
-        return if (_selectedImageIndex.value in _images.indices) {
-            _images[_selectedImageIndex.value]
-        } else {
-            null
-        }
+    fun getCurrentImageFile(): File? = synchronized(imagesLock) {
+        _images.getOrNull(_selectedImageIndex.value)
     }
 
     /**
@@ -360,21 +436,7 @@ class PicturesViewModel(
     }
 
     private fun loadImageBitmap(file: File): ImageBitmap {
-        val bytes = file.readBytes()
-
-        // Try to decode directly with Skia (handles jpg, png, webp, gif, bmp…)
-        val originalImage = try {
-            Image.makeFromEncoded(bytes)
-        } catch (e: Exception) {
-            // Skia can't decode HEIC/HEIF natively — convert via platform tool first
-            if (file.extension.lowercase() in listOf("heic", "heif")) {
-                val jpegBytes = HeicDecoder.toJpegBytes(file)
-                    ?: throw Exception("Failed to convert HEIC file ${file.name} — sips/ImageIO returned no data")
-                Image.makeFromEncoded(jpegBytes)
-            } else {
-                throw Exception("Failed to decode image ${file.name}: ${e.message}", e)
-            }
-        }
+        val originalImage = PictureDecoder.decode(file)
 
         // Downscale to thumbnail size (400px max dimension) for grid display
         val maxThumbnailSize = 400
@@ -424,7 +486,7 @@ class PicturesViewModel(
                         )
                         registered = true
                     } catch (e: java.io.IOException) {
-                        if (++attempt >= 3 || !folder.isDirectory) {
+                        if (++attempt >= MAX_RESCAN_ATTEMPTS || !folder.isDirectory) {
                             watchService.close()
                             return@launch
                         }
@@ -435,51 +497,10 @@ class PicturesViewModel(
                     var changed = false
                     for (event in key.pollEvents()) {
                         val kind = event.kind()
-                        if (kind == StandardWatchEventKinds.OVERFLOW) continue
                         val fileName = event.context().toString()
                         val ext = fileName.substringAfterLast('.', "").lowercase()
-                        if (ext !in imageExtensions) continue
-
-                        val file = File(folder, fileName)
-                        when (kind) {
-                            StandardWatchEventKinds.ENTRY_CREATE -> {
-                                // isActive gates the add: cancellation is cooperative, so a watcher
-                                // cancelled by clearImages() can still be mid-pollEvents() here — an
-                                // add now would land in _images after the reload and duplicate a path.
-                                if (isActive && file.exists() && file.isFile && file !in _images) {
-                                    // Insert in sorted order, keep selected image stable
-                                    val insertIndex = _images.indexOfFirst { it.name > file.name }
-                                    if (insertIndex >= 0) {
-                                        _images.add(insertIndex, file)
-                                        if (insertIndex <= _selectedImageIndex.value) {
-                                            _selectedImageIndex.value++
-                                        }
-                                    } else {
-                                        _images.add(file)
-                                    }
-                                    // Load thumbnail
-                                    // A file copied into a watched folder is seen the moment it
-                                    // is created, usually before it is fully written, so the first
-                                    // decode of it legitimately fails.
-                                    launch { decodeThumbnail(file, attempts = THUMBNAIL_RETRY_ATTEMPTS) }
-                                    changed = true
-                                }
-                            }
-                            StandardWatchEventKinds.ENTRY_DELETE -> {
-                                val idx = _images.indexOf(file)
-                                if (idx >= 0) {
-                                    _images.removeAt(idx)
-                                    _thumbnails.remove(file)
-                                    _thumbnailFailures.remove(file)
-                                    if (idx < _selectedImageIndex.value) {
-                                        _selectedImageIndex.value--
-                                    } else if (_selectedImageIndex.value >= _images.size && _images.isNotEmpty()) {
-                                        _selectedImageIndex.value = _images.size - 1
-                                    }
-                                    changed = true
-                                }
-                            }
-                        }
+                        if (kind == StandardWatchEventKinds.OVERFLOW || ext !in imageExtensions) continue
+                        if (applyWatchEvent(kind, File(folder, fileName))) changed = true
                     }
                     if (!key.reset()) break
                 }
@@ -492,6 +513,62 @@ class PicturesViewModel(
                 // Folder became unavailable mid-watch (deleted/unmounted). Watching is best-effort.
             }
         }
+    }
+
+
+    /** Applies one watch event to the image list; true when the list actually changed. */
+    internal fun CoroutineScope.applyWatchEvent(kind: WatchEvent.Kind<*>, file: File): Boolean = when (kind) {
+        StandardWatchEventKinds.ENTRY_CREATE -> addWatchedImage(file)
+        StandardWatchEventKinds.ENTRY_DELETE -> removeWatchedImage(file)
+        else -> false
+    }
+
+    internal fun CoroutineScope.addWatchedImage(file: File): Boolean {
+        // isActive gates the add: cancellation is cooperative, so a watcher cancelled by
+        // clearImages() can still be mid-pollEvents() here — an add now would land in _images
+        // after the reload and duplicate a path.
+        if (!isActive || !file.exists() || !file.isFile) return false
+        // Insert in sorted order, keep the selected image stable. The membership test belongs under
+        // the same lock as the insert: apart, it is a check-then-act, and a duplicate path in
+        // _images crashes the LazyVerticalGrid keyed by absolutePath. Null means "already there".
+        val insertedAt: Int = synchronized(imagesLock) {
+            if (file in _images) {
+                null
+            } else {
+                val insertIndex = _images.indexOfFirst { it.name > file.name }
+                if (insertIndex >= 0) _images.add(insertIndex, file) else _images.add(file)
+                insertIndex
+            }
+        } ?: return false
+        if (insertedAt >= 0 && insertedAt <= _selectedImageIndex.value) _selectedImageIndex.value++
+        // A file copied into a watched folder is seen the moment it is created, usually before it
+        // is fully written, so the first decode of it legitimately fails.
+        launch { decodeThumbnail(file, attempts = THUMBNAIL_RETRY_ATTEMPTS) }
+        return true
+    }
+
+    internal fun CoroutineScope.removeWatchedImage(file: File): Boolean {
+        // The same gate, and for the same reason, as addWatchedImage: a watcher cancelled by
+        // clearImages() can still be working through a batch of events, and the list it is
+        // removing from has already been emptied and repopulated for another folder.
+        if (!isActive) return false
+        // indexOf and removeAt have to be one step. Read apart, the index goes stale the moment
+        // another writer shrinks the list, and removeAt then throws IndexOutOfBoundsException out
+        // of the watcher coroutine, where nothing catches it.
+        val idx = synchronized(imagesLock) {
+            val at = _images.indexOf(file)
+            if (at >= 0) _images.removeAt(at)
+            at
+        }
+        if (idx < 0) return false
+        _thumbnails.remove(file)
+        _thumbnailFailures.remove(file)
+        if (idx < _selectedImageIndex.value) {
+            _selectedImageIndex.value--
+        } else if (_selectedImageIndex.value >= _images.size && _images.isNotEmpty()) {
+            _selectedImageIndex.value = _images.size - 1
+        }
+        return true
     }
 
     fun dispose() {

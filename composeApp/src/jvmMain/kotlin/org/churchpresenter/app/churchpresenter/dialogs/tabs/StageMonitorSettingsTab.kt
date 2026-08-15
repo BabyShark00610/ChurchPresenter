@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,6 +69,8 @@ import org.churchpresenter.app.churchpresenter.composables.HorizontalAlignmentBu
 import org.churchpresenter.app.churchpresenter.composables.MetronomeDot
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.ShadowDetailRow
 import org.churchpresenter.app.churchpresenter.composables.TextStyleButtons
@@ -84,23 +85,25 @@ import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorSetting
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorStyleZone
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZone
 import org.churchpresenter.app.churchpresenter.data.settings.StageMonitorZoneStyle
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
+
+private const val PREVIEW_WIDTH_FRACTION = 0.9f
+private const val BOTTOM_MIDDLE_WEIGHT = 0.8f
 
 @Composable
 fun StageMonitorSettingsTab(
     settings: AppSettings,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
+    val availableFonts = rememberSystemFonts()
 
     val sm = settings.stageMonitorSettings
     fun update(block: StageMonitorSettings.() -> StageMonitorSettings) {
         onSettingsChange { s -> s.copy(stageMonitorSettings = s.stageMonitorSettings.block()) }
     }
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -108,7 +111,7 @@ fun StageMonitorSettingsTab(
             .padding(14.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(end = SettingsScrollbarGutter),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -170,6 +173,7 @@ fun StageMonitorSettingsTab(
                 }
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }
 
@@ -296,7 +300,7 @@ private fun StageMonitorLayoutPreviewSection(sm: StageMonitorSettings) {
 
     SettingsSection(title = stringResource(Res.string.stage_monitor_layout_section)) {
         TvScreenBox(
-            modifier = Modifier.fillMaxWidth(0.9f).height(200.dp)
+            modifier = Modifier.fillMaxWidth(PREVIEW_WIDTH_FRACTION).height(200.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -305,7 +309,7 @@ private fun StageMonitorLayoutPreviewSection(sm: StageMonitorSettings) {
                 }
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_LEFT), modifier = Modifier.weight(1f))
-                    ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_MIDDLE), modifier = Modifier.weight(0.8f))
+                    ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_MIDDLE), modifier = Modifier.weight(BOTTOM_MIDDLE_WEIGHT))
                     ZoneLabelCell(text = labelsFor(StageMonitorZone.BOTTOM_RIGHT), modifier = Modifier.weight(1f))
                 }
             }

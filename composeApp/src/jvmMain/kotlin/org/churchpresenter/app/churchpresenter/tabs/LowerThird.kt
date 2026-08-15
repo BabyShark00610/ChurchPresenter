@@ -74,7 +74,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.ContentScale
@@ -163,6 +162,17 @@ import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import java.awt.Window
 import java.io.File
 import javax.swing.SwingUtilities
+
+private const val ATEM_REACHABLE_POLL_MS = 30_000L
+private const val ATEM_UNREACHABLE_POLL_MS = 10_000L
+private const val UPLOAD_ERROR_DISPLAY_MS = 8000L
+private const val COMPOSITION_LOAD_SETTLE_MS = 3000L
+private const val DEFAULT_FRAME_RATE = 30f
+private const val MILLIS_PER_SECOND_F = 1000f
+private const val PREVIEW_SETTLE_MS = 800L
+private const val ASPECT_EPSILON = 0.01f
+private const val MAX_FIT_SCALE = 1.01f
+private const val SELECTION_BAR_WIDTH = 4f
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -280,7 +290,7 @@ fun LowerThirdTab(
             val reachable = probeAtemReachable(host, port)
             atemReachable = reachable
             if (reachable) atemEverConnected = true
-            delay(if (reachable) 30_000L else 10_000L)
+            delay(if (reachable) ATEM_REACHABLE_POLL_MS else ATEM_UNREACHABLE_POLL_MS)
         }
     }
     var atemIsClip by remember { mutableStateOf(false) }
@@ -299,7 +309,7 @@ fun LowerThirdTab(
     // Auto-dismiss a remote upload error after a while (success self-clears server-side)
     LaunchedEffect(remoteUpload?.error) {
         val errored = remoteUpload
-        if (errored?.error != null) { delay(8000); AtemUploadStatus.clear(errored.id) }
+        if (errored?.error != null) { delay(UPLOAD_ERROR_DISPLAY_MS); AtemUploadStatus.clear(errored.id) }
     }
 
     // Fetch media pool slot info + FPS when dialog opens or mode toggles
@@ -356,7 +366,7 @@ fun LowerThirdTab(
     // True while composition is loading — prevents flashing warning triangle during async load
     var isCompositionLoading by remember(jsonContent) { mutableStateOf(jsonContent.isNotBlank()) }
     LaunchedEffect(composition) { if (composition != null) isCompositionLoading = false }
-    LaunchedEffect(jsonContent) { if (jsonContent.isNotBlank()) { delay(3000); isCompositionLoading = false } }
+    LaunchedEffect(jsonContent) { if (jsonContent.isNotBlank()) { delay(COMPOSITION_LOAD_SETTLE_MS); isCompositionLoading = false } }
 
     // Reset when file changes
     LaunchedEffect(selectedFile) {
@@ -367,7 +377,7 @@ fun LowerThirdTab(
     }
 
     fun totalDurationMs(): Long =
-        ((composition?.durationFrames ?: 0f) / (composition?.frameRate ?: 30f) * 1000f)
+        ((composition?.durationFrames ?: 0f) / (composition?.frameRate ?: DEFAULT_FRAME_RATE) * MILLIS_PER_SECOND_F)
             .toLong().coerceAtLeast(1L)
 
     // Cache variant for an ATEM upload. Frame count comes from the lottie JSON itself
@@ -443,7 +453,7 @@ fun LowerThirdTab(
                 atemReachable = true
                 atemProgress = 1f
                 AtemUploadStatus.complete(id)
-                delay(800)
+                delay(PREVIEW_SETTLE_MS)
                 AtemUploadStatus.clear(id)
                 if (closeDialogOnSuccess) showAtemDialog = false
             } catch (e: Exception) {
@@ -555,7 +565,7 @@ fun LowerThirdTab(
                         val s = appSettings.atemSettings
                         val designAspect = cw.toFloat() / ch
                         val frameAspect = s.renderWidth.toFloat() / s.renderHeight
-                        if (kotlin.math.abs(designAspect - frameAspect) > 0.01f) {
+                        if (kotlin.math.abs(designAspect - frameAspect) > ASPECT_EPSILON) {
                             Text(
                                 stringResource(
                                     Res.string.atem_aspect_mismatch,
@@ -566,7 +576,7 @@ fun LowerThirdTab(
                             )
                         }
                         val fitScale = minOf(s.renderWidth.toFloat() / cw, s.renderHeight.toFloat() / ch)
-                        if (fitScale > 1.01f) {
+                        if (fitScale > MAX_FIT_SCALE) {
                             Text(
                                 stringResource(
                                     Res.string.atem_upscale_notice,
@@ -765,7 +775,7 @@ fun LowerThirdTab(
                                     .height(36.dp)
                                     .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                                     .drawBehind {
-                                        if (isSelected) drawRect(color = accentColor, size = Size(4f, size.height))
+                                        if (isSelected) drawRect(color = accentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                                     }
                                     .finalPassClickable { selectedFile = file; isPlaying = false }
                                     .padding(start = 12.dp, end = 4.dp),
@@ -912,7 +922,9 @@ fun LowerThirdTab(
                     )
                     val unreachableTooltip = stringResource(Res.string.atem_unreachable, appSettings.atemSettings.host)
                     val goLiveKey = appSettings.atemSettings.goLiveKey
-                    Tooltip(stringResource(Res.string.atem_golive_key)) {
+                    // One string for the tooltip and the button's name, so they cannot drift apart.
+                    val goLiveKeyLabel = stringResource(Res.string.atem_golive_key)
+                    Tooltip(goLiveKeyLabel) {
                         FilledIconButton(
                             onClick = { onSettingsChangeState.value { s -> s.copy(atemSettings = s.atemSettings.copy(goLiveKey = !s.atemSettings.goLiveKey)) } },
                             modifier = Modifier.size(34.dp),
@@ -922,7 +934,7 @@ fun LowerThirdTab(
                                 contentColor = if (goLiveKey) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
                         ) {
-                            Icon(painterResource(Res.drawable.ic_key), contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(painterResource(Res.drawable.ic_key), contentDescription = goLiveKeyLabel, modifier = Modifier.size(16.dp))
                         }
                     }
 
@@ -934,14 +946,16 @@ fun LowerThirdTab(
                         val quickClipCapacity = appSettings.atemSettings.detectedClipMaxFrames.getOrNull(clipSlot)
                         val quickClipTooLong = quickClipVariant != null && quickClipCapacity != null && quickClipVariant.frameCount > quickClipCapacity
 
-                        Tooltip(if (!atemReachable) unreachableTooltip else stringResource(Res.string.atem_quick_still_tooltip, stillSlot + 1)) {
+                        val quickStillLabel = if (!atemReachable) unreachableTooltip else stringResource(Res.string.atem_quick_still_tooltip, stillSlot + 1)
+                        Tooltip(quickStillLabel) {
                             FilledIconButton(onClick = { startAtemUpload(atemVariant(isClip = false, useDetectedFps = false), stillSlot, closeDialogOnSuccess = false) }, enabled = quickEnabled, modifier = Modifier.size(34.dp), shape = RoundedCornerShape(8.dp), colors = atemButtonColors) {
-                                Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Image, contentDescription = quickStillLabel, modifier = Modifier.size(16.dp))
                             }
                         }
-                        Tooltip(when { !atemReachable -> unreachableTooltip; quickClipTooLong -> { val secs = String.format(java.util.Locale.US, "%.1f", quickClipCapacity / quickClipVariant.fps); stringResource(Res.string.atem_clip_too_long, quickClipVariant.frameCount, clipSlot + 1, quickClipCapacity, secs) }; else -> stringResource(Res.string.atem_quick_clip_tooltip, clipSlot + 1) }) {
+                        val quickClipLabel = when { !atemReachable -> unreachableTooltip; quickClipTooLong -> { val secs = String.format(java.util.Locale.US, "%.1f", quickClipCapacity / quickClipVariant.fps); stringResource(Res.string.atem_clip_too_long, quickClipVariant.frameCount, clipSlot + 1, quickClipCapacity, secs) }; else -> stringResource(Res.string.atem_quick_clip_tooltip, clipSlot + 1) }
+                        Tooltip(quickClipLabel) {
                             FilledIconButton(onClick = { quickClipVariant?.let { startAtemUpload(it, clipSlot, closeDialogOnSuccess = false) } }, enabled = quickEnabled && !quickClipTooLong, modifier = Modifier.size(34.dp), shape = RoundedCornerShape(8.dp), colors = atemButtonColors) {
-                                Icon(Icons.Filled.Movie, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Movie, contentDescription = quickClipLabel, modifier = Modifier.size(16.dp))
                             }
                         }
                     } else {

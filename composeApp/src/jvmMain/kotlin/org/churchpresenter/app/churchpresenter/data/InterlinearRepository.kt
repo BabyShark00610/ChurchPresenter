@@ -6,6 +6,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
+private const val VERSE_KEY_SCALE = 1000
+
 class InterlinearRepository {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -112,8 +114,8 @@ class InterlinearRepository {
     fun getChaptersForBook(bookId: Int): List<Int> {
         val index = if (greekBookIndex.containsKey(bookId)) greekChapterIndex else hebrewChapterIndex
         return index.keys
-            .filter { it / 1000 == bookId }
-            .map { it % 1000 }
+            .filter { it / VERSE_KEY_SCALE == bookId }
+            .map { it % VERSE_KEY_SCALE }
             .sorted()
     }
 

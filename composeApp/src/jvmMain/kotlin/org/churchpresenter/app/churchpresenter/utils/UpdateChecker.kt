@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -17,6 +18,15 @@ import org.churchpresenter.app.churchpresenter.BuildConfig
 import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.time.Duration.Companion.seconds
+
+private const val HOURS_PER_DAY = 24L
+private const val MINUTES_PER_HOUR = 60
+private const val SECONDS_PER_MINUTE = 60
+private const val MILLIS_PER_SECOND = 1000
+private const val CONNECT_TIMEOUT_MS = 5_000
+private const val READ_TIMEOUT_MS = 5_000
+private const val HTTP_OK = 200
+private const val RELEASE_NOTES_MAX_CHARS = 500
 
 data class UpdateInfo(
     val latestVersion: String,
@@ -49,7 +59,7 @@ enum class UpdateCheckInterval(private val days: Int?) {
         val intervalDays = days ?: return false
         if (intervalDays == 0) return true
         val elapsedMillis = System.currentTimeMillis() - lastCheckedAtMillis
-        return elapsedMillis >= intervalDays * 24L * 60 * 60 * 1000
+        return elapsedMillis >= intervalDays * HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLIS_PER_SECOND
     }
 }
 
@@ -99,10 +109,10 @@ object UpdateChecker {
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("User-Agent", "ChurchPresenter/${BuildConfig.APP_VERSION}")
-            connection.connectTimeout = 5_000
-            connection.readTimeout = 5_000
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
 
-            if (connection.responseCode != 200) return null
+            if (connection.responseCode != HTTP_OK) return null
 
             val body = connection.inputStream.bufferedReader().readText()
             connection.disconnect()
@@ -115,39 +125,47 @@ object UpdateChecker {
     internal fun selectUpdate(body: String, includePrereleases: Boolean, currentVersion: String): UpdateCheckResult {
         return try {
             // GitHub returns releases sorted by created_at descending.
-            val releases = json.parseToJsonElement(body).jsonArray
-            for (rel in releases) {
-                val obj = rel.jsonObject
-                if (obj["draft"]?.jsonPrimitive?.booleanOrNull == true) continue
-                val isPrerelease = obj["prerelease"]?.jsonPrimitive?.booleanOrNull == true
-                if (isPrerelease && !includePrereleases) continue
-
-                val urls = (obj["assets"]?.jsonArray ?: continue)
-                    .mapNotNull { it.jsonObject["browser_download_url"]?.jsonPrimitive?.contentOrNull }
-                // Skip releases that have no installer for the detected OS.
-                val downloadUrl = selectDownloadUrl(urls) ?: continue
-
-                // First OS-matching release = latest build available for this OS.
-                val latestVersion = (obj["tag_name"]?.jsonPrimitive?.contentOrNull ?: continue)
-                    .removePrefix("v")
-                return if (isNewerVersion(latestVersion, currentVersion)) {
-                    UpdateCheckResult.Available(
-                        UpdateInfo(
-                            latestVersion = latestVersion,
-                            releaseUrl = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: RELEASES_URL,
-                            releaseNotes = (obj["body"]?.jsonPrimitive?.contentOrNull ?: "").take(500),
-                            downloadUrl = downloadUrl,
-                            isPrerelease = isPrerelease
-                        )
-                    )
-                } else {
-                    UpdateCheckResult.UpToDate
-                }
+            // First OS-matching release = latest build available for this OS.
+            val candidate = json.parseToJsonElement(body).jsonArray
+                .firstNotNullOfOrNull { installableRelease(it.jsonObject, includePrereleases) }
+                ?: return UpdateCheckResult.UpToDate
+            if (isNewerVersion(candidate.latestVersion, currentVersion)) {
+                UpdateCheckResult.Available(candidate)
+            } else {
+                UpdateCheckResult.UpToDate
             }
-            UpdateCheckResult.UpToDate
         } catch (_: Exception) {
             UpdateCheckResult.UpToDate
         }
+    }
+
+    /** The installer for the detected OS among the release's assets, or null when it has none. */
+    private fun installerUrl(obj: JsonObject): String? {
+        val assets = obj["assets"]?.jsonArray ?: return null
+        return selectDownloadUrl(
+            assets.mapNotNull { it.jsonObject["browser_download_url"]?.jsonPrimitive?.contentOrNull }
+        )
+    }
+
+    /**
+     * The release as an [UpdateInfo], or null when it is a draft, a pre-release the caller does not
+     * want, or carries no installer for the detected OS.
+     */
+    private fun installableRelease(obj: JsonObject, includePrereleases: Boolean): UpdateInfo? {
+        if (obj["draft"]?.jsonPrimitive?.booleanOrNull == true) return null
+        val downloadUrl = installerUrl(obj) ?: return null
+        val latestVersion = obj["tag_name"]?.jsonPrimitive?.contentOrNull?.removePrefix("v") ?: return null
+
+        val isPrerelease = obj["prerelease"]?.jsonPrimitive?.booleanOrNull == true
+        if (isPrerelease && !includePrereleases) return null
+
+        return UpdateInfo(
+            latestVersion = latestVersion,
+            releaseUrl = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: RELEASES_URL,
+            releaseNotes = (obj["body"]?.jsonPrimitive?.contentOrNull ?: "").take(RELEASE_NOTES_MAX_CHARS),
+            downloadUrl = downloadUrl,
+            isPrerelease = isPrerelease
+        )
     }
 
     private fun selectDownloadUrl(urls: List<String>): String? {
@@ -208,8 +226,8 @@ object UpdateChecker {
                 // form-like (or absent) content type; JSON passes it.
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("User-Agent", "ChurchPresenter/${BuildConfig.APP_VERSION}")
-                connection.connectTimeout = 5_000
-                connection.readTimeout = 5_000
+                connection.connectTimeout = CONNECT_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
                 connection.responseCode // send the request
                 connection.disconnect()
                 true

@@ -70,12 +70,7 @@ import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.net.URI
 
-internal sealed interface SendStatus {
-    data object Idle : SendStatus
-    data object Sending : SendStatus
-    data object Sent : SendStatus
-    data class Error(val message: String) : SendStatus
-}
+private const val SENT_CONFIRMATION_MS = 1500L
 
 /**
  * Builds the submit request from the dialog's current field state, trimming free-text
@@ -191,7 +186,7 @@ fun ContactUsDialog(
                         selectedType.second, name, email, message, errorText, networkText, rateLimitedText
                     )
                     if (status == SendStatus.Sent) {
-                        delay(1500)
+                        delay(SENT_CONFIRMATION_MS)
                         onDismiss()
                     }
                 }

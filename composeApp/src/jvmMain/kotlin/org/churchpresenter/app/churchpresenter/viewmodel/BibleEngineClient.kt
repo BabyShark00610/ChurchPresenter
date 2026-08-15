@@ -28,6 +28,9 @@ import java.time.Instant
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import org.json.JSONObject
 
+private const val JITTER_MIN = 0.8
+private const val JITTER_MAX = 1.2
+
 /**
  * One `scripture.*` event from the Bible Lookup Engine, decoded.
  *
@@ -77,7 +80,7 @@ internal const val MAX_RETRY_DELAY_MS = 30_000L
  */
 internal fun retryDelayMs(attempt: Int, floorMs: Long = DEFAULT_RETRY_FLOOR_MS): Long {
     val base = (floorMs shl attempt.coerceAtMost(4)).coerceAtMost(MAX_RETRY_DELAY_MS)
-    return (base * Random.nextDouble(0.8, 1.2)).toLong().coerceAtLeast(floorMs)
+    return (base * Random.nextDouble(JITTER_MIN, JITTER_MAX)).toLong().coerceAtLeast(floorMs)
 }
 
 /**
@@ -213,23 +216,23 @@ class BibleEngineClient(
 
     private fun handleMessage(raw: String) {
         val obj = runCatching { JSONObject(raw) }.getOrNull() ?: return
-        val type = obj.optString("type")
-        if (type == "engine_status") {
-            // The engine's real upstream STT health (broadcast on transitions and replayed to
-            // late joiners). sttConfigured=false means a deliberate WS-input-only engine — treat
-            // its STT link as fine so the UI doesn't flag a non-error.
-            val configured = obj.optBoolean("sttConfigured", true)
-            _engineSttConnected.value = if (!configured) true else obj.optBoolean("sttConnected", false)
-            return
-        }
-        if (type == "version_detected") {
-            onVersion(
+        when (val type = obj.optString("type")) {
+            "engine_status" -> {
+                // The engine's real upstream STT health (broadcast on transitions and replayed to
+                // late joiners). sttConfigured=false means a deliberate WS-input-only engine — treat
+                // its STT link as fine so the UI doesn't flag a non-error.
+                val configured = obj.optBoolean("sttConfigured", true)
+                _engineSttConnected.value = if (!configured) true else obj.optBoolean("sttConnected", false)
+            }
+            "version_detected" -> onVersion(
                 if (obj.isNull("version")) null
                 else obj.optString("version").takeIf { it.isNotEmpty() }
             )
-            return
+            else -> if (type.startsWith("scripture.")) handleScripture(obj)
         }
-        if (!type.startsWith("scripture.")) return
+    }
+
+    private fun handleScripture(obj: JSONObject) {
         val ref = obj.optJSONObject("reference") ?: return
         val bookId = ref.optInt("bookId", -1)
         if (bookId < 0) return

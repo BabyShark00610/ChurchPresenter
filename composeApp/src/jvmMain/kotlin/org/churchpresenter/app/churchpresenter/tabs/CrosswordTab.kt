@@ -60,6 +60,8 @@ import churchpresenter.composeapp.generated.resources.crossword_ask_more
 import churchpresenter.composeapp.generated.resources.crossword_check
 import churchpresenter.composeapp.generated.resources.crossword_correct
 import churchpresenter.composeapp.generated.resources.crossword_down
+import churchpresenter.composeapp.generated.resources.crossword_next_level
+import churchpresenter.composeapp.generated.resources.crossword_prev_level
 import churchpresenter.composeapp.generated.resources.crossword_wrong
 import churchpresenter.composeapp.generated.resources.crossword_level_label
 import churchpresenter.composeapp.generated.resources.crossword_loading
@@ -71,6 +73,8 @@ import org.churchpresenter.app.churchpresenter.data.CrosswordLayoutEngine
 import org.churchpresenter.app.churchpresenter.data.RenderedCrossword
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
+
+private const val SETTLE_MS = 500L
 
 private val CELL_SIZE = 36.dp
 private const val MAX_LEVELS = 100
@@ -126,7 +130,7 @@ fun CrosswordTab(
     fun saveProgress(levelIdx: Int, input: Map<Pair<Int, Int>, Char>) {
         saveJob?.cancel()
         saveJob = scope.launch {
-            delay(500)
+            delay(SETTLE_MS)
             val serialized = serializeInput(input)
             onSettingsChange { s ->
                 s.copy(crosswordProgress = s.crosswordProgress + (levelIdx to serialized))
@@ -197,7 +201,7 @@ fun CrosswordTab(
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
+                            contentDescription = stringResource(Res.string.crossword_prev_level),
                             tint = if (canGoBack)
                                 MaterialTheme.colorScheme.onSurface
                             else
@@ -218,7 +222,7 @@ fun CrosswordTab(
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
+                            contentDescription = stringResource(Res.string.crossword_next_level),
                             tint = if (canGoForward)
                                 MaterialTheme.colorScheme.onSurface
                             else

@@ -37,6 +37,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
+private const val AUTOSAVE_INTERVAL_MS = 60_000L
+private const val MAX_UNDO_DEPTH = 50
+
 class ScheduleViewModel(
     private val onScheduleChanged: ((List<ScheduleItem>) -> Unit)? = null
 ) {
@@ -99,7 +102,7 @@ class ScheduleViewModel(
         Runtime.getRuntime().addShutdownHook(Thread { scope.cancel() })
         scope.launch {
             while (true) {
-                delay(60_000)
+                delay(AUTOSAVE_INTERVAL_MS)
                 if (isDirty && _scheduleItems.isNotEmpty()) {
                     try {
                         autoSaveFile.parentFile?.mkdirs()
@@ -210,7 +213,7 @@ class ScheduleViewModel(
 
     private fun pushUndoSnapshot() {
         undoStack.addLast(ScheduleSnapshot(_scheduleItems.toList(), _notes.toMap()))
-        if (undoStack.size > 50) undoStack.removeFirst()
+        if (undoStack.size > MAX_UNDO_DEPTH) undoStack.removeFirst()
         redoStack.clear()
         _canUndo.value = true
         _canRedo.value = false
@@ -354,38 +357,34 @@ class ScheduleViewModel(
             title = dialogTitle,
             selectDirectory = false
         )
-        if (file != null) {
-            if (file.exists()) {
-                try {
-                    val raw = file.readText()
-                    val jsonText = try { decrypt(raw) } catch (_: Exception) { raw }
-                    // Try new format (v2 with notes), fall back to legacy plain array
-                    val (items, notes) = try {
-                        val schedFile = json.decodeFromString(ScheduleFileV2.serializer(), jsonText)
-                        Pair(schedFile.items, schedFile.notes)
-                    } catch (_: Exception) {
-                        Pair(
-                            json.decodeFromString(ListSerializer(ScheduleItem.serializer()), jsonText),
-                            emptyMap()
-                        )
-                    }
-                    _scheduleItems.clear()
-                    _scheduleItems.addAll(items)
-                    _notes.clear()
-                    _notes.putAll(notes)
-                    currentFilePath = file.absolutePathString()
-                    undoStack.clear()
-                    redoStack.clear()
-                    _canUndo.value = false
-                    _canRedo.value = false
-                    clearAutoSave()
-                    notifyChanged()
-                    CrashReporter.breadcrumb("Schedule opened (${file.fileName}, ${items.size} items)", category = "schedule")
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+        if (file == null || !file.exists()) return
+        try {
+            val raw = file.readText()
+            val jsonText = try { decrypt(raw) } catch (_: Exception) { raw }
+            val (items, notes) = decodeSchedule(jsonText)
+            _scheduleItems.clear()
+            _scheduleItems.addAll(items)
+            _notes.clear()
+            _notes.putAll(notes)
+            currentFilePath = file.absolutePathString()
+            undoStack.clear()
+            redoStack.clear()
+            _canUndo.value = false
+            _canRedo.value = false
+            clearAutoSave()
+            notifyChanged()
+            CrashReporter.breadcrumb("Schedule opened (${file.fileName}, ${items.size} items)", category = "schedule")
+        } catch (e: Exception) {
+            CrashReporter.reportException(e, "Opening schedule file")
         }
+    }
+
+    /** Try new format (v2 with notes), fall back to legacy plain array. */
+    private fun decodeSchedule(jsonText: String): Pair<List<ScheduleItem>, Map<String, String>> = try {
+        val schedFile = json.decodeFromString(ScheduleFileV2.serializer(), jsonText)
+        schedFile.items to schedFile.notes
+    } catch (_: Exception) {
+        json.decodeFromString(ListSerializer(ScheduleItem.serializer()), jsonText) to emptyMap()
     }
 
     /** Clears the schedule and forgets the current file path. */
@@ -614,7 +613,9 @@ class ScheduleViewModel(
 
     fun moveItem(from: Int, to: Int) {
         if (_isFollowingRemote.value) return
-        if (from < 0 || to < 0 || from >= _scheduleItems.size || to >= _scheduleItems.size || from == to) return
+        val fromValid = from in _scheduleItems.indices
+        val toValid = to in _scheduleItems.indices
+        if (!fromValid || !toValid || from == to) return
         pushUndoSnapshot()
         val item = _scheduleItems.removeAt(from)
         _scheduleItems.add(to, item)

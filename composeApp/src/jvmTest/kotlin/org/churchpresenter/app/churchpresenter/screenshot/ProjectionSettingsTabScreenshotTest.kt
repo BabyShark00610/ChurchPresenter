@@ -24,6 +24,7 @@ import org.churchpresenter.app.churchpresenter.dialogs.tabs.DetectedScreen
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.Grid
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.ProjectionSettingsTab
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.TranslationPickerTags
+import org.churchpresenter.app.churchpresenter.dialogs.tabs.awaitAudioDevices
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.gridButton
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.noExternalScreens
 import org.churchpresenter.app.churchpresenter.dialogs.tabs.oneExternalScreen
@@ -317,6 +318,9 @@ class ProjectionSettingsTabScreenshotTest {
                 }
             }
             waitForIdle()
+            // The audio card's device list comes back off Dispatchers.IO, which waitForIdle does
+            // not cover — without this the capture can catch its spinner instead of the dropdown.
+            awaitAudioDevices()
             drive()
             waitForIdle()
             captureTo(file, rootIndex)

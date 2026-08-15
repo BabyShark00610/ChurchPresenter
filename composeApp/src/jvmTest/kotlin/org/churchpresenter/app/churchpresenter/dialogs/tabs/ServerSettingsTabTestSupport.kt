@@ -131,6 +131,10 @@ internal fun serverTab(
                 )
             }
         }
+        awaitFolderScan()
+        // The trigger-URL card only renders while the server is up; with it stopped there are no
+        // rows to wait for and waiting would simply time out.
+        if (companion.isRunning.value) awaitLowerThirdRows(current)
         block({ current }, clients)
     }
 }

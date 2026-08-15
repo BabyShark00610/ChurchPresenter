@@ -95,8 +95,8 @@ class CompanionServerMediaCommandTest {
                 ack = withTimeoutOrNull(10_000) {
                     var found: String? = null
                     for (frame in incoming) {
-                        val text = (frame as? Frame.Text)?.readText() ?: continue
-                        if (text.contains("cmd-1")) { found = text; break }
+                        val text = (frame as? Frame.Text)?.readText()
+                        if (text != null && text.contains("cmd-1")) { found = text; break }
                     }
                     found
                 }

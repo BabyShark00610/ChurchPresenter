@@ -8,7 +8,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import java.awt.Cursor
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.window.WindowPlacement
 import org.churchpresenter.app.churchpresenter.LocalMainWindowState
@@ -64,9 +63,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpOffset
@@ -102,6 +99,8 @@ import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.SceneCanvas
 import org.churchpresenter.app.churchpresenter.composables.SourcePropertiesPanel
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
 import org.churchpresenter.app.churchpresenter.utils.assignedDisplayBounds
 import org.churchpresenter.app.churchpresenter.utils.formatAspectRatio
 import org.churchpresenter.app.churchpresenter.models.SceneSource
@@ -123,6 +122,7 @@ import churchpresenter.composeapp.generated.resources.canvas_tool_ellipse
 import churchpresenter.composeapp.generated.resources.canvas_tool_line
 import churchpresenter.composeapp.generated.resources.canvas_tool_arrow
 import churchpresenter.composeapp.generated.resources.canvas_tool_freehand
+import churchpresenter.composeapp.generated.resources.canvas_rename_confirm
 import churchpresenter.composeapp.generated.resources.canvas_rename_scene
 import churchpresenter.composeapp.generated.resources.canvas_remove_scene
 import churchpresenter.composeapp.generated.resources.canvas_add_source
@@ -133,6 +133,12 @@ import churchpresenter.composeapp.generated.resources.canvas_toggle_visibility
 import churchpresenter.composeapp.generated.resources.canvas_toggle_lock
 import churchpresenter.composeapp.generated.resources.canvas_aspect_ratio_warning
 import churchpresenter.composeapp.generated.resources.canvas_fix_aspect_ratio
+
+private const val SCENE_LIST_WEIGHT = 0.4f
+private const val SOURCE_LIST_WEIGHT = 0.6f
+private const val SELECTION_BAR_WIDTH = 4f
+private const val HIDDEN_SOURCE_ALPHA = 0.5f
+private const val ASPECT_EPSILON = 0.01f
 
 /**
  * Where a left-panel drag's final width is written back — mirrors `MainDesktop.withScheduleWidth`,
@@ -216,6 +222,8 @@ fun CanvasTab(
         }
     }
 
+    val shortcuts = LocalShortcuts.current
+
     Row(
         modifier = modifier
             .fillMaxSize()
@@ -223,7 +231,7 @@ fun CanvasTab(
             .focusable()
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.Delete || event.key == Key.Backspace) &&
+                    shortcuts.matches(ShortcutAction.CANVAS_DELETE_SOURCE, event) &&
                     renamingSceneId == null
                 ) {
                     val sourceId = selectedSourceId
@@ -258,7 +266,7 @@ fun CanvasTab(
             val displayAr0 = if (presentationBounds0.height > 0) presentationBounds0.width.toFloat() / presentationBounds0.height else 0f
 
             @OptIn(ExperimentalFoundationApi::class)
-            LazyColumn(modifier = Modifier.weight(0.4f).fillMaxWidth()) {
+            LazyColumn(modifier = Modifier.weight(SCENE_LIST_WEIGHT).fillMaxWidth()) {
                 items(sceneViewModel.scenes) { scene ->
                     val isSelected = scene.id == sceneViewModel.currentSceneId.value
                     val isRenaming = renamingSceneId == scene.id
@@ -273,7 +281,7 @@ fun CanvasTab(
                                 else Color.Transparent
                             )
                             .drawBehind {
-                                if (isSelected) drawRect(color = sceneAccentColor, size = Size(4f, size.height))
+                                if (isSelected) drawRect(color = sceneAccentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                             }
                             .padding(start = 12.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -298,7 +306,7 @@ fun CanvasTab(
                                 },
                                 modifier = Modifier.size(20.dp)
                             ) {
-                                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Filled.Check, contentDescription = stringResource(Res.string.canvas_rename_confirm), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                             }
                         } else {
                             Text(
@@ -389,7 +397,7 @@ fun CanvasTab(
             Spacer(Modifier.height(4.dp))
 
             if (currentScene != null) {
-                LazyColumn(modifier = Modifier.weight(0.6f).fillMaxWidth()) {
+                LazyColumn(modifier = Modifier.weight(SOURCE_LIST_WEIGHT).fillMaxWidth()) {
                     // Render in reverse order so top item = front
                     items(currentScene.sources.reversed()) { source ->
                         val isSelected = source.id == selectedSourceId
@@ -402,7 +410,7 @@ fun CanvasTab(
                                     else Color.Transparent
                                 )
                                 .drawBehind {
-                                    if (isSelected) drawRect(color = sourceAccentColor, size = Size(4f, size.height))
+                                    if (isSelected) drawRect(color = sourceAccentColor, size = Size(SELECTION_BAR_WIDTH, size.height))
                                 }
                                 .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -455,7 +463,7 @@ fun CanvasTab(
                                 source.name,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f).alpha(if (source.visible) 1f else 0.5f)
+                                modifier = Modifier.weight(1f).alpha(if (source.visible) 1f else HIDDEN_SOURCE_ALPHA)
                                     .initialPassClickable { sceneViewModel.selectSource(source.id) }
                             )
                         }
@@ -846,7 +854,7 @@ fun CanvasTab(
                 val displayH = presentationBounds.height
                 val displayAr = if (displayH > 0) displayW.toFloat() / displayH else 0f
                 val sceneAr = if (currentScene.canvasHeight > 0) currentScene.canvasWidth.toFloat() / currentScene.canvasHeight else 0f
-                if (displayAr > 0f && kotlin.math.abs(displayAr - sceneAr) > 0.01f) {
+                if (displayAr > 0f && kotlin.math.abs(displayAr - sceneAr) > ASPECT_EPSILON) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

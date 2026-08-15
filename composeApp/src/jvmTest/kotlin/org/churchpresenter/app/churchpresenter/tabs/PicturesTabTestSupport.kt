@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -24,6 +25,8 @@ import org.churchpresenter.app.churchpresenter.data.settings.PictureSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.ui.theme.ChurchPresenterTheme
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.ShortcutMap
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import java.awt.image.BufferedImage
@@ -102,6 +105,8 @@ internal fun picturesTab(
     onInstanceLinkSendPreviousPicture: (() -> Unit)? = null,
     width: Dp? = null,
     themeMode: ThemeMode? = null,
+    /** The bindings the tab resolves its key handler through; the shipped set unless overridden. */
+    shortcuts: ShortcutMap = ShortcutMap.DEFAULT,
     block: ComposeUiTest.(vm: PicturesViewModel, reports: PictureReports) -> Unit,
 ) {
     val appSettings = settings(
@@ -116,6 +121,7 @@ internal fun picturesTab(
         runComposeUiTest {
             setContent {
                 ThemedForTest(themeMode) {
+                  CompositionLocalProvider(LocalShortcuts provides shortcuts) {
                     Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
                         PicturesTab(
                             viewModel = vm,
@@ -133,6 +139,7 @@ internal fun picturesTab(
                             },
                         )
                     }
+                  }
                 }
             }
             block(vm, reports)

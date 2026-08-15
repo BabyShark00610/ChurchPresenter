@@ -21,6 +21,10 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
+private const val HTTP_OK = 200
+private const val TUNNEL_READY_TIMEOUT_MS = 30_000L
+private const val TUNNEL_POLL_INTERVAL_MS = 200L
+
 sealed class TunnelStatus {
     data object Idle : TunnelStatus()
     data object Downloading : TunnelStatus()
@@ -39,6 +43,26 @@ internal fun cloudflaredDownloadUrl(isWin: Boolean, isMac: Boolean, isArm: Boole
     isMac -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz"
     isArm -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
     else -> "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+}
+
+internal fun moveBinaryIntoPlace(downloaded: File, target: File) {
+    if (downloaded.renameTo(target)) return
+    target.delete()
+    if (!downloaded.renameTo(target)) {
+        throw RuntimeException("Failed to move downloaded binary into place")
+    }
+}
+
+internal fun checkExtracted(exitCode: Int, binaryExists: Boolean) {
+    if (exitCode != 0 || !binaryExists) {
+        throw RuntimeException("Failed to extract cloudflared from archive (exit $exitCode)")
+    }
+}
+
+internal fun tunnelExitStatus(foundUrl: Boolean, current: TunnelStatus): TunnelStatus? = when {
+    foundUrl && current is TunnelStatus.Connected -> TunnelStatus.Error("Tunnel disconnected")
+    !foundUrl -> TunnelStatus.Error("Tunnel failed to start")
+    else -> null
 }
 
 class TunnelManager {
@@ -124,7 +148,7 @@ class TunnelManager {
             .build()
 
         val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
-        if (response.statusCode() != 200) {
+        if (response.statusCode() != HTTP_OK) {
             throw IOException("Download failed (HTTP ${response.statusCode()})")
         }
 
@@ -135,27 +159,23 @@ class TunnelManager {
                 }
             }
 
-            if (isMac) {
-                binaryFile.delete()
-                val result = ProcessBuilder("tar", "-xzf", tmpFile.absolutePath, "-C", dataDir.absolutePath, "cloudflared")
-                    .redirectErrorStream(true)
-                    .start()
-                val exitCode = result.waitFor()
-                if (exitCode != 0 || !binaryFile.exists()) {
-                    throw RuntimeException("Failed to extract cloudflared from archive (exit $exitCode)")
-                }
-            } else {
-                if (!tmpFile.renameTo(binaryFile)) {
-                    binaryFile.delete()
-                    if (!tmpFile.renameTo(binaryFile)) {
-                        throw RuntimeException("Failed to move downloaded binary into place")
-                    }
-                }
-            }
+            installDownloadedBinary()
             binaryFile.setExecutable(true)
         } finally {
             tmpFile.delete()
         }
+    }
+
+    private fun installDownloadedBinary() {
+        if (isMac) {
+            binaryFile.delete()
+            val result = ProcessBuilder("tar", "-xzf", tmpFile.absolutePath, "-C", dataDir.absolutePath, "cloudflared")
+                .redirectErrorStream(true)
+                .start()
+            checkExtracted(result.waitFor(), binaryFile.exists())
+            return
+        }
+        moveBinaryIntoPlace(tmpFile, binaryFile)
     }
 
     private suspend fun startTunnel(localPort: Int) {
@@ -189,19 +209,16 @@ class TunnelManager {
             }
 
             // Process exited
-            if (foundUrl && _status.value is TunnelStatus.Connected) {
-                _status.value = TunnelStatus.Error("Tunnel disconnected")
-                _tunnelUrl.value = null
-            } else if (!foundUrl) {
-                _status.value = TunnelStatus.Error("Tunnel failed to start")
+            tunnelExitStatus(foundUrl, _status.value)?.let {
+                _status.value = it
                 _tunnelUrl.value = null
             }
         }
 
         // Wait up to 30s for URL to appear
-        withTimeoutOrNull(30_000) {
+        withTimeoutOrNull(TUNNEL_READY_TIMEOUT_MS) {
             while (_tunnelUrl.value == null && monitorJob?.isActive == true) {
-                delay(200)
+                delay(TUNNEL_POLL_INTERVAL_MS)
             }
         }
 

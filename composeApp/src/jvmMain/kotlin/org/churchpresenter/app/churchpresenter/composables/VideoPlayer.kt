@@ -31,10 +31,22 @@ import java.util.Locale
 import javax.swing.SwingUtilities
 import androidx.compose.foundation.Image
 
+private const val POSITION_POLL_MS = 200
+private const val VOLUME_PERCENT_SCALE = 100
+private const val STATE_SETTLE_MS = 250L
+private const val FRAME_INTERVAL_MS = 16L
+
 /**
  * Initialises the JavaFX toolkit exactly once for the lifetime of the process.
  * Still needed for WebView (WebsitePresenter).
  */
+internal fun isJavaFxScreenReconfigRace(throwable: Throwable): Boolean =
+    throwable is NullPointerException &&
+        throwable.stackTrace.any {
+            it.className.startsWith("com.sun.glass.ui.Screen") ||
+                it.className.startsWith("com.sun.javafx.tk.quantum.QuantumToolkit")
+        }
+
 private object JfxInit {
     @Volatile private var initialised = false
     fun ensureInit() {
@@ -57,12 +69,7 @@ private object JfxInit {
                     Platform.runLater {
                         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
                         Thread.currentThread().uncaughtExceptionHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
-                            val isScreenReconfigRace = throwable is NullPointerException &&
-                                throwable.stackTrace.any {
-                                    it.className.startsWith("com.sun.glass.ui.Screen") ||
-                                        it.className.startsWith("com.sun.javafx.tk.quantum.QuantumToolkit")
-                                }
-                            if (isScreenReconfigRace) {
+                            if (isJavaFxScreenReconfigRace(throwable)) {
                                 CrashReporter.reportWarning(
                                     "JavaFX screen-reconfiguration NPE (suppressed, known Prism/Glass race)",
                                     throwable = throwable,
@@ -284,15 +291,12 @@ private fun isVlcInstalledOnSystem(): Boolean =
  * trying only where distributions reliably ship the two together.
  */
 internal fun vlcInstalledOn(osName: String, customPath: String, run: CommandRunner): Boolean {
-    if (customPath.isNotBlank()) {
-        val custom = try { Paths.get(customPath) } catch (_: Exception) { null }
-        if (custom != null && dirContainsVlcLib(custom)) return true
-    }
+    val custom = customPath.takeIf { it.isNotBlank() }
+        ?.let { try { Paths.get(it) } catch (_: Exception) { null } }
+    if (custom != null && dirContainsVlcLib(custom)) return true
     if (detectVlcInstallPathFor(osName).isNotBlank()) return true
-    if ("win" !in osName && "mac" !in osName && "darwin" !in osName) {
-        return run(listOf("which", "vlc"), 0L).exitCode == 0
-    }
-    return false
+    val unixLike = "win" !in osName && "mac" !in osName && "darwin" !in osName
+    return unixLike && run(listOf("which", "vlc"), 0L).exitCode == 0
 }
 
 data class VlcAudioDevice(val id: String, val description: String)
@@ -376,7 +380,7 @@ fun VideoPlayer(
                     if (!firstFrameCaptured.value) {
                         // Delay pause by 200 ms so VLC can decode and render the first frame
                         // before being paused. Without this, portrait/MOV videos stay black.
-                        javax.swing.Timer(200) {
+                        javax.swing.Timer(POSITION_POLL_MS) {
                             if (!viewModel.isPlaying) mediaPlayer.controls().pause()
                         }.also { it.isRepeats = false; it.start() }
                     } else {
@@ -426,7 +430,7 @@ fun VideoPlayer(
         // VLC pipeline to capture a first frame (see playing() below), and without this guard
         // that grace window would be audible even though the file is meant to load paused.
         if (!audioEnabled || !viewModel.isPlaying) mp.audio().setVolume(0)
-        else mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+        else mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
 
         // When the caller has determined this instance must never produce audio (e.g. a
         // background decoder mounted only to keep rendering a paused frame), disable the
@@ -448,7 +452,7 @@ fun VideoPlayer(
             if (viewModel.isPlaying) {
                 // Restore real volume now that playback is genuinely resuming — the load
                 // above may have muted the player to silence the first-frame grace window.
-                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
                 mp.controls().play()
             } else {
                 mp.controls().pause()
@@ -459,7 +463,7 @@ fun VideoPlayer(
     // Volume sync
     LaunchedEffect(viewModel.effectiveVolume) {
         if (audioEnabled) {
-            mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+            mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
         }
     }
 
@@ -474,7 +478,7 @@ fun VideoPlayer(
     if (audioEnabled) {
         LaunchedEffect(viewModel.mediaUrl) {
             while (isActive) {
-                delay(250)
+                delay(STATE_SETTLE_MS)
                 if (mp.status().isPlaying) {
                     viewModel.setCurrentPosition(mp.status().time())
                     // Fallback: pick up duration if the lengthChanged event was missed.
@@ -542,7 +546,7 @@ fun SoftwareVideoPlayer(
                     SharedVideoOutput.frame.value = bitmap
                 }
             }
-            delay(16) // ~60fps cap
+            delay(FRAME_INTERVAL_MS) // ~60fps cap
         }
     }
 
@@ -555,7 +559,7 @@ fun SoftwareVideoPlayer(
                 bufferedImageHolder.value = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
                 return uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32BufferFormat(w, h)
             }
-            override fun allocatedBuffers(buffers: Array<out java.nio.ByteBuffer>) { }
+            override fun allocatedBuffers(buffers: Array<out java.nio.ByteBuffer>) = Unit
         }
 
         val renderCallback = uk.co.caprica.vlcj.player.embedded.videosurface.callback.RenderCallback { _, nativeBuffers, _ ->
@@ -587,7 +591,7 @@ fun SoftwareVideoPlayer(
                         // Give VLC up to 200 ms to decode and deliver the first frame to the
                         // render callback before pausing. This is critical for portrait/rotated
                         // videos (e.g. iPhone MOV) where the decoder may take longer to start.
-                        javax.swing.Timer(200) {
+                        javax.swing.Timer(POSITION_POLL_MS) {
                             if (!viewModel.isPlaying) mediaPlayer.controls().pause()
                         }.also { it.isRepeats = false; it.start() }
                     } else {
@@ -637,7 +641,7 @@ fun SoftwareVideoPlayer(
         // VLC pipeline to capture a first frame (see playing() below), and without this guard
         // that grace window would be audible even though the video is meant to load paused.
         if (!audioEnabled || !viewModel.isPlaying) mp.audio().setVolume(0)
-        else mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+        else mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
 
         // :codec=avcodec forces FFmpeg software decoding, bypassing VideoToolbox.
         // Required for Dolby Vision HEVC / 10-bit files where VideoToolbox outputs zero-copy
@@ -664,7 +668,7 @@ fun SoftwareVideoPlayer(
             if (viewModel.isPlaying) {
                 // Restore real volume now that playback is genuinely resuming — the load
                 // above may have muted the player to silence the first-frame grace window.
-                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+                if (audioEnabled) mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
                 mp.controls().play()
             } else {
                 mp.controls().pause()
@@ -675,7 +679,7 @@ fun SoftwareVideoPlayer(
     // Volume sync
     LaunchedEffect(viewModel.effectiveVolume) {
         if (audioEnabled) {
-            mp.audio().setVolume((viewModel.effectiveVolume * 100).toInt())
+            mp.audio().setVolume((viewModel.effectiveVolume * VOLUME_PERCENT_SCALE).toInt())
         }
     }
 
@@ -690,7 +694,7 @@ fun SoftwareVideoPlayer(
     if (audioEnabled) {
         LaunchedEffect(viewModel.mediaUrl) {
             while (isActive) {
-                delay(250)
+                delay(STATE_SETTLE_MS)
                 if (mp.status().isPlaying) {
                     viewModel.setCurrentPosition(mp.status().time())
                     // Fallback: pick up duration if lengthChanged was missed.

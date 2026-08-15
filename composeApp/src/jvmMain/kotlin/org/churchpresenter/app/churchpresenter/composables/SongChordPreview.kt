@@ -54,6 +54,8 @@ import org.churchpresenter.app.churchpresenter.utils.SongSectionWords
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
 import org.jetbrains.compose.resources.stringResource
 
+private const val CHORD_SPACING_RATIO = 0.42f
+
 /** How a section reads in the preview — the colour tells verses from choruses at a glance. */
 enum class SongSectionKind { VERSE, CHORUS, BRIDGE, TAG }
 
@@ -481,7 +483,7 @@ private fun InlineChordRow(
     textStyle: TextStyle,
 ) {
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(fontSize.value.times(0.42f).dp),
+        horizontalArrangement = Arrangement.spacedBy(fontSize.value.times(CHORD_SPACING_RATIO).dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (!name.isNullOrBlank()) {

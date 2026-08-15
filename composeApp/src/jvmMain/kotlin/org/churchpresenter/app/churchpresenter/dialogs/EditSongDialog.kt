@@ -126,6 +126,11 @@ import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.jetbrains.compose.resources.stringResource
 
+private const val BPM_MAX_DIGITS = 3
+private const val MAX_BPM = 300
+private const val MAX_CAPO = 12
+private const val CHORD_PREVIEW_SCALE = 0.75f
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditSongDialog(
@@ -372,7 +377,7 @@ internal fun EditSongContent(
                             )
                             TempoCard(
                                 bpm = editedBpm,
-                                onBpmChange = { editedBpm = it.filter { c -> c.isDigit() }.take(3) },
+                                onBpmChange = { editedBpm = it.filter { c -> c.isDigit() }.take(BPM_MAX_DIGITS) },
                                 weight = 0.9f,
                             )
                         }
@@ -525,8 +530,8 @@ internal fun EditSongContent(
                             onSave(
                                 updatedSong,
                                 SongTuning(
-                                    bpm = editedBpm.toIntOrNull()?.coerceIn(0, 300) ?: 0,
-                                    capo = editedCapo.toIntOrNull()?.coerceIn(0, 12) ?: 0,
+                                    bpm = editedBpm.toIntOrNull()?.coerceIn(0, MAX_BPM) ?: 0,
+                                    capo = editedCapo.toIntOrNull()?.coerceIn(0, MAX_CAPO) ?: 0,
                                 ),
                             )
                         },
@@ -642,7 +647,7 @@ private fun RowScope.SongbookCard(
                     onClick = { onSongbookChange(originalSongbook); isAddingNew = false },
                     modifier = Modifier.size(20.dp),
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Close, contentDescription = stringResource(Res.string.cancel), modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -773,7 +778,7 @@ private fun ChordsToggle(on: Boolean, onToggle: () -> Unit) {
             Switch(
                 checked = on,
                 onCheckedChange = { onToggle() },
-                modifier = Modifier.scale(0.75f),
+                modifier = Modifier.scale(CHORD_PREVIEW_SCALE),
             )
         }
     }

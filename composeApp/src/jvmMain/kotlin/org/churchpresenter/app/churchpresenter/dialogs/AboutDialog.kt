@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,22 +55,27 @@ import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.ui.theme.AppThemeWrapper
+import org.churchpresenter.app.churchpresenter.ui.theme.LocalLanguage
 import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.DeviceInfoReport
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import churchpresenter.composeapp.generated.resources.ic_app_icon
 import ui.App as ConverterApp
+import ui.Strings as ConverterStrings
 import lottiegen.App as LottieGenApp
 import lottiegen.editor.StyleEditorApp
 import java.awt.Desktop
 import java.awt.Window as AwtWindow
 import java.io.File
+import java.util.Locale
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.writeText
+
+private const val GRADIENT_DARKEN = 0.45f
 
 @Composable
 fun AboutDialog(
@@ -127,7 +133,7 @@ internal fun AboutDialogContent(
                         .background(
                             Brush.linearGradient(
                                 listOf(
-                                    lerp(MaterialTheme.colorScheme.primary, Color.Black, 0.45f),
+                                    lerp(MaterialTheme.colorScheme.primary, Color.Black, GRADIENT_DARKEN),
                                     MaterialTheme.colorScheme.primary
                                 )
                             )
@@ -251,6 +257,12 @@ internal fun AboutDialogContent(
 
 @Composable
 fun ConverterWindow(theme: ThemeMode, onClose: () -> Unit) {
+    val language = LocalLanguage.current
+    // The converter is a separate module with its own `ResourceBundle`, which it initialises from
+    // the OS locale — so without this it answers in the machine's language and ignores the one
+    // chosen in the app. Set before the window composes, so the first frame is already right;
+    // keyed on the language, so changing it while the window is open redraws it.
+    remember(language) { ConverterStrings.setLocale(Locale.forLanguageTag(language.code)) }
     Window(
         onCloseRequest = onClose,
         title = stringResource(Res.string.converter_window_title),
@@ -272,7 +284,15 @@ fun LottieGenWindow(theme: ThemeMode, outputDir: File?, onClose: () -> Unit, onF
         state = rememberWindowState(width = 1200.dp, height = 800.dp)
     ) {
         AppThemeWrapper(theme = theme) {
-            LottieGenApp(outputDir = outputDir, onFileSaved = onFileSaved, canvasWidth = canvasWidth, canvasHeight = canvasHeight)
+            // embedded = true regardless of outputDir: opened from the Help menu there is no output
+            // folder, but the generator is still inside the app's theme and must follow it.
+            LottieGenApp(
+                outputDir = outputDir,
+                onFileSaved = onFileSaved,
+                canvasWidth = canvasWidth,
+                canvasHeight = canvasHeight,
+                embedded = true
+            )
         }
     }
 }

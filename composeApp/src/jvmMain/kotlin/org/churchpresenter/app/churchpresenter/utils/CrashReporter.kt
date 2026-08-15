@@ -18,6 +18,13 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
+private const val FLUSH_TIMEOUT_MS = 3_000L
+private const val SHUTDOWN_FLUSH_TIMEOUT_MS = 5_000L
+private const val DSN_PREFIX_CHARS = 12
+private const val DSN_KEY_VISIBLE_CHARS = 6
+private const val MIN_SCRUBBED_NAME_LENGTH = 3
+private const val RELEASE_SAMPLE_RATE = 0.2
+
 /**
  * Global crash reporter that:
  *  1. Writes crash logs to ~/.churchpresenter/crash-reports/ (always)
@@ -66,7 +73,7 @@ object CrashReporter {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             writeCrashLog(throwable, context = "Thread: ${thread.name}", fatal = true)
             // Flush Sentry synchronously so the event is delivered before the JVM exits
-            try { Sentry.flush(3_000) } catch (_: Exception) {}
+            try { Sentry.flush(FLUSH_TIMEOUT_MS) } catch (_: Exception) {}
             defaultHandler?.uncaughtException(thread, throwable)
         }
 
@@ -193,13 +200,13 @@ object CrashReporter {
         val dsn = readDsn()
         if (dsn.isBlank()) return ""
         val atIdx = dsn.indexOf('@')
-        if (atIdx < 0) return dsn.take(12) + "••••"
+        if (atIdx < 0) return dsn.take(DSN_PREFIX_CHARS) + "••••"
         val beforeAt = dsn.substring(0, atIdx)
         val afterAt  = dsn.substring(atIdx)
         val schemeEnd = beforeAt.indexOf("//") + 2
         val key = beforeAt.substring(schemeEnd)
         val scheme = beforeAt.substring(0, schemeEnd)
-        "$scheme${key.take(6)}${"•".repeat(maxOf(0, key.length - 6))}$afterAt"
+        "$scheme${key.take(DSN_KEY_VISIBLE_CHARS)}${"•".repeat(maxOf(0, key.length - DSN_KEY_VISIBLE_CHARS))}$afterAt"
     } catch (_: Exception) { "" }
 
     /** Sends a test exception to Sentry and flushes. Returns true on success. */
@@ -207,7 +214,7 @@ object CrashReporter {
         if (!isEnabled()) return false
         val version = try { BuildConfig.VERSION_DISPLAY } catch (_: Exception) { "unknown" }
         Sentry.captureException(RuntimeException("🧪 ChurchPresenter Sentry test event — v$version"))
-        Sentry.flush(5_000)
+        Sentry.flush(SHUTDOWN_FLUSH_TIMEOUT_MS)
         true
     } catch (_: Exception) { false }
 
@@ -276,7 +283,7 @@ object CrashReporter {
                 if (name.isNotBlank()) this.name = name
                 if (email.isNotBlank()) this.email = email
             })
-            Sentry.flush(3_000)
+            Sentry.flush(FLUSH_TIMEOUT_MS)
         } catch (_: Exception) {}
     }
 
@@ -298,7 +305,7 @@ object CrashReporter {
     private fun scrubPii(text: String?): String? {
         if (text.isNullOrEmpty()) return text
         var out = text.replace(Regex("(?i)([/\\\\](?:Users|home)[/\\\\])[^/\\\\\\r\\n\"']+"), "$1<user>")
-        if (userName.length >= 3) out = out.replace(userName, "<user>", ignoreCase = true)
+        if (userName.length >= MIN_SCRUBBED_NAME_LENGTH) out = out.replace(userName, "<user>", ignoreCase = true)
         return out
     }
 
@@ -355,9 +362,9 @@ object CrashReporter {
                 options.isAttachStacktrace = true
                 // Sample perf/profile volume down in release so it can't crowd out error
                 // events in the quota (errors are captured directly and are unaffected).
-                options.tracesSampleRate = if (BuildConfig.IS_RELEASE) 0.2 else 1.0
+                options.tracesSampleRate = if (BuildConfig.IS_RELEASE) RELEASE_SAMPLE_RATE else 1.0
                 // Capture CPU profiles for sampled transactions (see Performance → Profiling).
-                options.profilesSampleRate = if (BuildConfig.IS_RELEASE) 0.2 else 1.0
+                options.profilesSampleRate = if (BuildConfig.IS_RELEASE) RELEASE_SAMPLE_RATE else 1.0
                 options.isEnableAutoSessionTracking = true
                 // Privacy: don't send end-users' machine hostnames to Sentry.
                 options.isAttachServerName = false
@@ -386,15 +393,14 @@ object CrashReporter {
         }
     }
 
+    private fun sentryMessage(text: String): Message = Message().apply { message = text }
+
     private fun sendToSentry(throwable: Throwable, context: String, fatal: Boolean) {
         try {
             if (!Sentry.isEnabled()) return
-            val event = SentryEvent(throwable).apply {
-                level = if (fatal) SentryLevel.FATAL else SentryLevel.ERROR
-                if (context.isNotBlank()) {
-                    message = Message().apply { message = context }
-                }
-            }
+            val event = SentryEvent(throwable)
+            event.level = if (fatal) SentryLevel.FATAL else SentryLevel.ERROR
+            if (context.isNotBlank()) event.message = sentryMessage(context)
             Sentry.captureEvent(event)
         } catch (_: Exception) {
             // Never let Sentry errors surface to the user

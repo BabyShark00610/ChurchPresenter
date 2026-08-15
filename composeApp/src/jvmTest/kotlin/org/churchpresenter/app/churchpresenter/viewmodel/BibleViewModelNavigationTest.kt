@@ -10,6 +10,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -105,6 +106,93 @@ class BibleViewModelNavigationTest {
     @Test
     fun `an unknown book name reports failure immediately`() {
         assertFalse(vm.selectVerseByDetails("Habakkuk", 3, 2), "a book not in this module cannot be shown")
+    }
+
+    // ── selectVerseByCanonicalRef ───────────────────────────────────────────────
+
+    @Test
+    fun `navigating by canonical reference lands on the verse`() {
+        val token = vm.verseSelectionToken.value
+        // 43 is John's canonical id — what a cross-reference and the sequence log both store.
+        assertTrue(vm.selectVerseByCanonicalRef(43, 3, 16))
+        awaitToken(token)
+
+        assertEquals(2, vm.selectedBookIndex.value)
+        assertEquals(3, vm.selectedChapter.value)
+        assertEquals(16, selectedVerseNumber())
+    }
+
+    @Test
+    fun `a canonical reference to a book this module lacks reports failure`() {
+        // Habakkuk is canonical book 35 and is not in this fixture. The panel greys such a row
+        // rather than drawing one that does nothing when clicked.
+        assertFalse(vm.selectVerseByCanonicalRef(35, 3, 2))
+    }
+
+    @Test
+    fun `a canonical reference reads back in the module's own words`() {
+        val ref = vm.moduleRefFor(43, 3, 16)
+
+        assertEquals("John", ref?.abbreviation, "the short name the module's own book name gives")
+        assertEquals(3, ref?.chapter)
+        assertEquals(16, ref?.verse)
+        assertEquals("John three verse 16 text about light and truth.", ref?.text)
+    }
+
+    @Test
+    fun `a reference the module does not contain reads back as nothing`() {
+        assertNull(vm.moduleRefFor(35, 3, 2), "Habakkuk is not in this module")
+        assertNull(vm.moduleRefFor(43, 3, 999), "nor is a verse past the end of a chapter it has")
+    }
+
+    @Test
+    fun `a canonical reference can be resolved from a book name`() {
+        // What the live-chapter panel holds: a name, because what is live may be a different book
+        // from what is being browsed.
+        assertEquals(Triple(43, 3, 16), vm.canonicalRefForBookName("John", 3, 16))
+        assertEquals(Triple(43, 3, 16), vm.canonicalRefForBookName("jOhN", 3, 16))
+        assertNull(vm.canonicalRefForBookName("Habakkuk", 3, 2), "a book this module lacks")
+    }
+
+    @Test
+    fun `a canonical reference goes live only when a source is given`() {
+        val liveToken = vm.autoFollowLiveToken.value
+
+        val token = vm.verseSelectionToken.value
+        assertTrue(vm.selectVerseByCanonicalRef(43, 3, 16))
+        awaitToken(token)
+        assertEquals(liveToken, vm.autoFollowLiveToken.value, "selecting alone must not go live")
+
+        assertTrue(vm.selectVerseByCanonicalRef(43, 3, 17, goLiveSource = "crossref"))
+        awaitUntil("the go-live token to bump") { vm.autoFollowLiveToken.value > liveToken }
+        assertEquals("crossref", vm.autoFollowLiveSource.value)
+    }
+
+    @Test
+    fun `a canonical reference can be scheduled without moving the selection`() {
+        val book = vm.selectedBookIndex.value
+        val chapter = vm.selectedChapter.value
+        val verse = vm.selectedVerseIndex.value
+
+        val added = mutableListOf<String>()
+        assertTrue(
+            vm.addCanonicalRefToSchedule(43, 3, 16) { name, ch, num, text, range, id ->
+                added += "$name $ch:$num|$text|$range|$id"
+            }
+        )
+
+        assertEquals(listOf("John 3:16|John three verse 16 text about light and truth.||43"), added)
+        assertEquals(book, vm.selectedBookIndex.value, "queueing is not navigating")
+        assertEquals(chapter, vm.selectedChapter.value)
+        assertEquals(verse, vm.selectedVerseIndex.value)
+    }
+
+    @Test
+    fun `scheduling a reference this module lacks reports failure and adds nothing`() {
+        val added = mutableListOf<String>()
+        assertFalse(vm.addCanonicalRefToSchedule(35, 3, 2) { _, _, _, _, _, _ -> added += "x" })
+        assertFalse(vm.addCanonicalRefToSchedule(43, 3, 999) { _, _, _, _, _, _ -> added += "x" })
+        assertTrue(added.isEmpty())
     }
 
     @Test

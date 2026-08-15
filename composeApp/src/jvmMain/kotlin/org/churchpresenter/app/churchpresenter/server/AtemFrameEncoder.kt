@@ -23,6 +23,13 @@ object AtemFrameEncoder {
     /** 8-byte marker introducing an RLE run. Cannot occur in YUVA data (alpha tops out at 0x3A…). */
     const val RLE_HEADER = -0x0101010101010102L   // 0xFEFEFEFEFEFEFEFE
 
+    private const val BLOCK_BYTES = 8
+
+    private const val ALPHA_SHIFT = 20
+    private const val CHROMA_SHIFT = 10
+
+    private const val MIN_RUN_LENGTH = 2
+
     /** Convert + compress one ARGB frame. */
     fun encodeFrame(width: Int, height: Int, argbPixels: IntArray): EncodedFrame {
         require(argbPixels.size == width * height) {
@@ -55,10 +62,11 @@ object AtemFrameEncoder {
             val a = ((rawA shl 2) * 219) / 255 + (16 shl 2)
             val y = (Math.round(y16) shr 6).toInt()
             val uv = (Math.round(uv16) shr 6).toInt()
-            return (a shl 20) or (uv shl 10) or y
+            return (a shl ALPHA_SHIFT) or (uv shl CHROMA_SHIFT) or y
         }
 
-        val out = ByteArray(width * height * 4)
+        val out = ByteArray(width * height * Int.SIZE_BYTES)
+        val outBuf = ByteBuffer.wrap(out)
         var o = 0
         var i = 0
         while (i < pixels.size) {
@@ -78,19 +86,11 @@ object AtemFrameEncoder {
             val y16b = yOffset + kr * yRange * r2 + kg * yRange * g2 + kb * yRange * b2
             val cr16 = cbCrOffset + (halfCbCrRange * r1 - kgOKri * g1 - kbOKri * b1)
 
-            val word1 = genColor(a1, cb16, y16a)
-            val word2 = genColor(a2, cr16, y16b)
-            out[o]     = ((word1 ushr 24) and 0xFF).toByte()
-            out[o + 1] = ((word1 shr 16) and 0xFF).toByte()
-            out[o + 2] = ((word1 shr 8) and 0xFF).toByte()
-            out[o + 3] = (word1 and 0xFF).toByte()
-            out[o + 4] = ((word2 ushr 24) and 0xFF).toByte()
-            out[o + 5] = ((word2 shr 16) and 0xFF).toByte()
-            out[o + 6] = ((word2 shr 8) and 0xFF).toByte()
-            out[o + 7] = (word2 and 0xFF).toByte()
+            outBuf.putInt(o, genColor(a1, cb16, y16a))
+            outBuf.putInt(o + Int.SIZE_BYTES, genColor(a2, cr16, y16b))
 
             i += 2
-            o += 8
+            o += BLOCK_BYTES
         }
         return out
     }
@@ -106,9 +106,9 @@ object AtemFrameEncoder {
         var lastBlock = src.getLong(0)
         var identicalCount = 0
         var differentCount = 0
-        var resultOffset = -8
+        var resultOffset = -BLOCK_BYTES
 
-        var sourceOffset = 8
+        var sourceOffset = BLOCK_BYTES
         while (sourceOffset < data.size) {
             val block = src.getLong(sourceOffset)
 
@@ -116,48 +116,48 @@ object AtemFrameEncoder {
                 ++identicalCount
                 if (differentCount > 0) {
                     System.arraycopy(
-                        data, sourceOffset - 8 * (differentCount + 1),
-                        result, resultOffset + 8, differentCount * 8
+                        data, sourceOffset - BLOCK_BYTES * (differentCount + 1),
+                        result, resultOffset + BLOCK_BYTES, differentCount * BLOCK_BYTES
                     )
-                    resultOffset += differentCount * 8
+                    resultOffset += differentCount * BLOCK_BYTES
                     differentCount = 0
                 }
-                sourceOffset += 8
+                sourceOffset += BLOCK_BYTES
                 continue
             }
-            if (identicalCount > 2) {
-                resultOffset += 8; dst.putLong(resultOffset, RLE_HEADER)
-                resultOffset += 8; dst.putLong(resultOffset, (identicalCount + 1).toLong())
-                resultOffset += 8; dst.putLong(resultOffset, lastBlock)
+            if (identicalCount > MIN_RUN_LENGTH) {
+                resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, RLE_HEADER)
+                resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, (identicalCount + 1).toLong())
+                resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, lastBlock)
             } else if (identicalCount > 0) {
-                for (j in 0..identicalCount) {
-                    resultOffset += 8; dst.putLong(resultOffset, lastBlock)
+                repeat(identicalCount + 1) {
+                    resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, lastBlock)
                 }
             } else {
                 ++differentCount
             }
             lastBlock = block
             identicalCount = 0
-            sourceOffset += 8
+            sourceOffset += BLOCK_BYTES
         }
 
-        if (identicalCount > 2) {
-            resultOffset += 8; dst.putLong(resultOffset, RLE_HEADER)
-            resultOffset += 8; dst.putLong(resultOffset, (identicalCount + 1).toLong())
-            resultOffset += 8; dst.putLong(resultOffset, lastBlock)
+        if (identicalCount > MIN_RUN_LENGTH) {
+            resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, RLE_HEADER)
+            resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, (identicalCount + 1).toLong())
+            resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, lastBlock)
         } else if (identicalCount > 0) {
-            for (j in 0..identicalCount) {
-                resultOffset += 8; dst.putLong(resultOffset, lastBlock)
+            repeat(identicalCount + 1) {
+                resultOffset += BLOCK_BYTES; dst.putLong(resultOffset, lastBlock)
             }
         } else {
             ++differentCount
             System.arraycopy(
-                data, data.size - 8 * differentCount,
-                result, resultOffset + 8, differentCount * 8
+                data, data.size - BLOCK_BYTES * differentCount,
+                result, resultOffset + BLOCK_BYTES, differentCount * BLOCK_BYTES
             )
-            resultOffset += differentCount * 8
+            resultOffset += differentCount * BLOCK_BYTES
         }
 
-        return result.copyOf(resultOffset + 8)
+        return result.copyOf(resultOffset + BLOCK_BYTES)
     }
 }

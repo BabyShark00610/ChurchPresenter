@@ -20,6 +20,12 @@ import org.churchpresenter.app.churchpresenter.data.Language
 import java.io.File
 import kotlin.math.roundToInt
 
+private const val DEFAULT_FADE_OUT_MS = 500
+private const val DEV_WINDOW_BASE_OFFSET_DP = 40
+private const val DEV_WINDOW_STEP_DP = 48
+private const val MILLIS_PER_SECOND_F = 1000f
+private const val MILLIS_PER_SECOND_L = 1000L
+
 /**
  * The decisions `main.kt` makes at startup, held apart from the entry point that makes them.
  *
@@ -310,7 +316,7 @@ internal fun shouldFadeOnClear(
 internal fun fadeOutDuration(mode: Presenting, bible: BibleSettings, song: SongSettings): Int = when (mode) {
     Presenting.BIBLE -> bible.transitionDuration.toInt()
     Presenting.LYRICS -> song.transitionDuration.toInt()
-    else -> 500
+    else -> DEFAULT_FADE_OUT_MS
 }.coerceAtLeast(MIN_TRANSITION_MS)
 
 /** The shortest an announcement stays up, however fast the speed slider is wound. */
@@ -480,7 +486,7 @@ internal fun devFallbackWindowCount(devWindowedFallback: Boolean, configured: In
     if (devWindowedFallback) configured.coerceAtLeast(1) else 0
 
 /** How far each extra fallback window is cascaded, so several do not stack exactly on each other. */
-internal fun devFallbackWindowOffsetDp(index: Int): Int = 40 + index * 48
+internal fun devFallbackWindowOffsetDp(index: Int): Int = DEV_WINDOW_BASE_OFFSET_DP + index * DEV_WINDOW_STEP_DP
 
 /** Whether this output's picture goes out over SDI rather than to a display. */
 internal fun isDeckLinkPrimaryOutput(assignment: ScreenAssignment): Boolean =
@@ -516,11 +522,11 @@ internal fun keyOutputScreenIndex(matchedByBounds: Int?, savedIndex: Int): Int =
 
 /** How long a Lottie composition runs, from its own frame count and rate. Never zero. */
 internal fun lottieCompositionDurationMs(durationFrames: Float, frameRate: Float): Long =
-    ((durationFrames / frameRate) * 1000f).toLong().coerceAtLeast(1L)
+    ((durationFrames / frameRate) * MILLIS_PER_SECOND_F).toLong().coerceAtLeast(1L)
 
 /** How long pre-rendered frames run, from how many there are and the rate they were rendered at. */
 internal fun lottiePrerenderDurationMs(frameCount: Int, fps: Int): Long =
-    (frameCount * 1000L / fps).coerceAtLeast(1L)
+    (frameCount * MILLIS_PER_SECOND_L / fps).coerceAtLeast(1L)
 
 /**
  * Whether the clip holds on a frame partway through.

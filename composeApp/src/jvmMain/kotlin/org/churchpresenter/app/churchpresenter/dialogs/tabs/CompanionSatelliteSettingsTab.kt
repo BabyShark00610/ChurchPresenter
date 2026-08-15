@@ -64,6 +64,8 @@ import churchpresenter.composeapp.generated.resources.companion_satellite_status
 import churchpresenter.composeapp.generated.resources.companion_satellite_status_error
 import companionsatellite.CompanionConnectionStatus
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.SettingsTextField
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
@@ -75,6 +77,8 @@ import org.churchpresenter.app.churchpresenter.viewmodel.CompanionSatelliteViewM
 import org.jetbrains.compose.resources.stringResource
 import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 import org.churchpresenter.app.churchpresenter.ui.theme.semantic
+
+private const val MIN_RECONNECT_DELAY_MS = 500
 
 @Composable
 fun CompanionSatelliteSettingsTab(
@@ -105,6 +109,7 @@ fun CompanionSatelliteSettingsTab(
         }
     }
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -114,7 +119,8 @@ fun CompanionSatelliteSettingsTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState)
+                .padding(end = SettingsScrollbarGutter),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             connections.forEach { connection ->
@@ -131,6 +137,7 @@ fun CompanionSatelliteSettingsTab(
                 Text(stringResource(Res.string.companion_satellite_add_connection))
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }
 
@@ -333,7 +340,7 @@ private fun CompanionConnectionCard(
                         value = reconnectDelayText,
                         onValueChange = { v ->
                             reconnectDelayText = v
-                            v.toIntOrNull()?.let { onUpdate { copy(reconnectDelayMs = it.coerceAtLeast(500)) } }
+                            v.toIntOrNull()?.let { onUpdate { copy(reconnectDelayMs = it.coerceAtLeast(MIN_RECONNECT_DELAY_MS)) } }
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

@@ -1,11 +1,56 @@
 package org.churchpresenter.app.churchpresenter.data
 
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
+import java.io.FileNotFoundException
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.charset.StandardCharsets
 
+private const val MIN_SHORTENABLE_WORD_LENGTH = 3
+private const val MAX_ACRONYM_WORDS = 4
+private const val SHORT_WORD_MAX_LENGTH = 4
+private const val SHORT_WORD_TRUNCATED_LENGTH = 3
+private const val SHORT_TITLE_MAX_LENGTH = 5
+private const val REGEX_GROUP_THIRD = 3
+private const val VERSE_GROUP_NUMBER = 7
+private const val VERSE_GROUP_TEXT = 8
+private const val TITLE_PREFIX_LENGTH = 8
+private const val CHAPTER_KEY_BOOK_SHIFT = 20
+private const val CHAPTER_KEY_CHAPTER_MASK = 0xFFFFFL
+
 data class ChapterResult(val previewIds: List<String>, val verses: List<String>)
+
+/** A parenthesised aside in a module title: "King James Version (KJV)", "… (Public Domain)". */
+private val PARENTHESISED_ASIDE = Regex("\\([^)]*\\)")
+
+private val SPB_CODE_REGEX = Regex("^B(\\d{3})C(\\d{3})V(\\d{3})$")
+private val SPB_VERSE_LINE_REGEX =
+    Regex("^(B(\\d{3})C(\\d{3})V(\\d{3}))\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(.*)")
+private val SPB_BOOK_HEADER_REGEX = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
+
+/**
+ * Why a module could not be read, in whole or in part.
+ *
+ * A load never throws — every caller loads several modules at once and one bad file must not take
+ * the others down with it — so this is how a failure travels back out. It is what the Bible tab
+ * shows the operator and what [CrashReporter] has already recorded by the time it exists.
+ *
+ * @property resourcePath what was asked for — the absolute path, or a classpath resource name.
+ * @property reason the exception's own message, kept verbatim; it is the only thing that says
+ *   *why*, and it is what someone asking for help has to send in.
+ * @property partial true when some of the module parsed before the failure. Whatever did parse is
+ *   kept and shown as far as it goes, so a file truncated three books in still opens on those
+ *   three books rather than on nothing.
+ */
+data class BibleLoadError(
+    val resourcePath: String,
+    val reason: String,
+    val partial: Boolean,
+) {
+    /** The file's own name, which is what the operator recognises — not the whole path. */
+    val fileName: String
+        get() = resourcePath.substringAfterLast('/').substringAfterLast('\\')
+}
 
 class Bible {
     private var bibleAbbreviation: String = ""
@@ -20,49 +65,81 @@ class Bible {
     private val codeIndex = HashMap<String, BibleVerse>()
 
     /**
-     * Generate abbreviation for a book name
-     * Takes first 3 letters or first letter of each word for compound names
+     * Why the last load failed, or null when it succeeded — see [BibleLoadError].
+     *
+     * Cleared at the start of every load, so it always describes the most recent one.
      */
-    private fun generateAbbreviation(bookName: String): String {
+    var loadError: BibleLoadError? = null
+        private set
+
+    /**
+     * A short form of a book name, in whatever language the module names its books.
+     *
+     * Single words shorten to their first three or four characters ("Genesis" → "Gen", "Бытие" →
+     * "Быт"). A name that leads with a numeral keeps it and shortens the word after it
+     * ("1 Corinthians" → "1 Cor", "1 Коринфянам" → "1 Кор"), which is the form these books are
+     * conventionally written in and is what makes them tellable apart at a glance. Anything else
+     * multi-word takes the significant word — the first one longer than three characters, so
+     * "Song of Solomon" → "Song" rather than "SoS".
+     *
+     * Initials remain the fallback for names with no word worth shortening.
+     */
+    internal fun generateAbbreviation(bookName: String): String {
         if (bookName.isBlank()) return ""
 
         val words = bookName.trim().split(Regex("\\s+"))
         return when {
             // Single word: take first 3-4 characters
-            words.size == 1 -> {
-                val word = words[0]
-                when {
-                    word.length <= 3 -> word
-                    word.length == 4 -> word.take(4)
-                    else -> word.take(3)
-                }
-            }
-            // Multiple words: take first letter of each word (up to 4 letters)
-            else -> {
-                words.take(4).map { it.first().uppercase() }.joinToString("")
-            }
+            words.size == 1 -> shortenWord(words[0])
+            // "1 Corinthians", "2 Samuel" — the numeral is the whole point of the name.
+            words.size >= 2 && words[0].all { it.isDigit() } ->
+                "${words[0]} ${shortenWord(words[1])}"
+            else -> words.firstOrNull { it.length > MIN_SHORTENABLE_WORD_LENGTH }?.let(::shortenWord)
+                ?: words.take(MAX_ACRONYM_WORDS).joinToString("") { it.first().uppercase() }
         }
+    }
+
+    /** One word shortened: kept whole at three characters or fewer, else its first three or four. */
+    private fun shortenWord(word: String): String = when {
+        word.length <= SHORT_WORD_MAX_LENGTH -> word
+        else -> word.take(SHORT_WORD_TRUNCATED_LENGTH)
     }
 
     /**
      * Extract Bible version abbreviation from title or filename
      * Examples: "Russian Synodal Translation" -> "RST"
      *           "King James Version" -> "KJV"
+     *           "King James Version (KJV)" -> "KJV"
      *           "ru_RST77.spb" -> "RST77"
+     *
+     * A parenthesised aside is dropped before the initials are taken, and each initial is the
+     * word's first *letter or digit*. Without either step a bracket becomes an initial in its own
+     * right — "King James Version (KJV)" abbreviated to "KJV(", which is what the operator then
+     * saw beside every verse on screen.
      */
     private fun extractBibleAbbreviation(title: String?, filename: String): String {
         // First try to extract from title if available
         if (!title.isNullOrBlank()) {
-            // Look for common patterns: "Version", "Translation", etc.
-            val words = title.trim().split(Regex("\\s+"))
+            // A title that is nothing but an aside — "(KJV)" — still has to name itself, so fall
+            // back to the title with its punctuation stripped rather than to the file name.
+            val cleaned = title.replace(PARENTHESISED_ASIDE, " ").trim()
+                .ifEmpty { title.filter { it.isLetterOrDigit() || it.isWhitespace() }.trim() }
 
-            // If title is short (like "RSV" or "KJV"), use it as-is
-            if (words.size == 1 && words[0].length <= 5) {
-                return words[0]
+            if (cleaned.isNotEmpty()) {
+                val words = cleaned.split(Regex("\\s+"))
+
+                // If title is short (like "RSV" or "KJV"), use it as-is — minus any punctuation
+                // riding along with it, so "KJV." does not label every verse "KJV.".
+                val loneWord = words.singleOrNull()?.filter { it.isLetterOrDigit() }
+                if (loneWord != null && loneWord.isNotEmpty() && loneWord.length <= SHORT_TITLE_MAX_LENGTH) {
+                    return loneWord
+                }
+
+                // Generate abbreviation from title words
+                return words.mapNotNull { word ->
+                    word.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()
+                }.take(MAX_ACRONYM_WORDS).joinToString("")
             }
-
-            // Generate abbreviation from title words
-            return words.take(4).map { it.first().uppercase() }.joinToString("")
         }
 
         // Fallback to filename without extension
@@ -74,49 +151,77 @@ class Bible {
      * Stops as soon as the separator line or first verse is encountered.
      * Call this first to show the book list immediately, then call loadFromSpb() for full data.
      */
+    private fun openHeaderReader(resourcePath: String): java.io.BufferedReader {
+        val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
+        if (inputStream != null) return inputStream.bufferedReader(StandardCharsets.UTF_8)
+        val path = Paths.get(resourcePath)
+        if (!Files.exists(path)) {
+            throw FileNotFoundException(
+                "loadBooksOnly: module not found on classpath or filesystem: $resourcePath"
+            )
+        }
+        return Files.newBufferedReader(path, StandardCharsets.UTF_8)
+    }
+
+    private fun collectBookHeader(
+        line: String,
+        headerOrder: MutableList<Int>,
+        parsedBookNames: MutableMap<Int, String>,
+        parsedChapterCounts: MutableMap<Int, Int>,
+    ) {
+        val m = SPB_BOOK_HEADER_REGEX.matchEntire(line) ?: return
+        val bookId = m.groupValues[1].toInt()
+        headerOrder.add(bookId)
+        parsedBookNames[bookId] = m.groupValues[2].trim()
+        parsedChapterCounts[bookId] = m.groupValues[REGEX_GROUP_THIRD].toInt()
+    }
+
     fun loadBooksOnly(resourcePath: String) {
         books.clear()
+        loadError = null
+        val headerOrder = mutableListOf<Int>()
+        val parsedBookNames = mutableMapOf<Int, String>()
+        val parsedChapterCounts = mutableMapOf<Int, Int>()
         try {
-            val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
-            val reader = if (inputStream != null) {
-                inputStream.bufferedReader(StandardCharsets.UTF_8)
-            } else {
-                val path = Paths.get(resourcePath)
-                if (!Files.exists(path)) return
-                Files.newBufferedReader(path, StandardCharsets.UTF_8)
-            }
-            val bookHeaderRegex = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
-            val headerOrder = mutableListOf<Int>()
-            val parsedBookNames = mutableMapOf<Int, String>()
-            val parsedChapterCounts = mutableMapOf<Int, Int>()
-            reader.use { r ->
-                for (rawLine in r.lineSequence()) {
-                    val line = rawLine.trimEnd('\r', '\n')
-                    if (line.startsWith("##")) continue
-                    if (line.startsWith("-----") || line.startsWith("B")) break
-                    if (line.isNotEmpty()) {
-                        val m = bookHeaderRegex.matchEntire(line)
-                        if (m != null) {
-                            val bookId = m.groupValues[1].toInt()
-                            headerOrder.add(bookId)
-                            parsedBookNames[bookId] = m.groupValues[2].trim()
-                            parsedChapterCounts[bookId] = m.groupValues[3].toInt()
-                        }
+            openHeaderReader(resourcePath).use { r ->
+                r.lineSequence()
+                    .map { it.trimEnd('\r', '\n') }
+                    .takeWhile { !it.startsWith("-----") && !it.startsWith("B") }
+                    .filter { it.isNotEmpty() && !it.startsWith("##") }
+                    .forEach { line ->
+                        collectBookHeader(line, headerOrder, parsedBookNames, parsedChapterCounts)
                     }
-                }
             }
-            if (headerOrder.isNotEmpty()) {
-                for (b in headerOrder) {
-                    val name = parsedBookNames[b] ?: "Book $b"
-                    books.add(BibleBook(
-                        book = name,
-                        bookId = b.toString(),
-                        chapterCount = parsedChapterCounts[b] ?: 0,
-                        abbreviation = generateAbbreviation(name)
-                    ))
-                }
-            }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            recordLoadFailure(e, resourcePath, parsedAnything = headerOrder.isNotEmpty())
+        }
+        // Built from whatever the scan managed to read: on a header that fails partway through,
+        // that is the books it got to, not nothing.
+        for (b in headerOrder) {
+            val name = parsedBookNames[b] ?: "Book $b"
+            books.add(BibleBook(
+                book = name,
+                bookId = b.toString(),
+                chapterCount = parsedChapterCounts[b] ?: 0,
+                abbreviation = generateAbbreviation(name)
+            ))
+        }
+    }
+
+    /**
+     * Records a failed load and reports it, once, in the one place both load paths funnel through.
+     *
+     * The exception is deliberately not rethrown. A load failure has to reach the operator as a
+     * message beside the book list, not as an exception unwinding through a coroutine that is
+     * loading several translations at once — see [BibleLoadError].
+     */
+    private fun recordLoadFailure(e: Exception, resourcePath: String, parsedAnything: Boolean) {
+        loadError = BibleLoadError(
+            resourcePath = resourcePath,
+            reason = e.message?.takeIf { it.isNotBlank() } ?: e.toString(),
+            partial = parsedAnything,
+        )
+        CrashReporter.reportException(e, "Loading Bible module $resourcePath")
     }
 
     // New: load from a BibleQuote .spb plain text module
@@ -124,204 +229,175 @@ class Bible {
     fun loadFromSpb(resourcePath: String, bookNames: List<String> = emptyList()) {
         operatorBible.clear()
         books.clear()
+        loadError = null
 
+        // Declared out here so a failure partway through still has whatever parsed to build from.
+        val state = SpbParseState()
 
         try {
-            val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
-            val reader = if (inputStream != null) {
-                inputStream.bufferedReader(StandardCharsets.UTF_8)
-            } else {
-                val path = Paths.get(resourcePath)
-                if (Files.exists(path)) {
-                    Files.newBufferedReader(path, StandardCharsets.UTF_8)
-                } else {
-                    val msg = "loadFromSpb: resource not found on classpath or filesystem: $resourcePath"
-                    throw IllegalArgumentException(msg)
-                }
-            }
-
-            val codeRegex = Regex("^B(\\d{3})C(\\d{3})V(\\d{3})$")
-            val verseLineRegex = Regex("^(B(\\d{3})C(\\d{3})V(\\d{3}))\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(.*)")
-            val bookHeaderRegex = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
-            val bookChapterMap = mutableMapOf<Int, MutableSet<Int>>()
-            val headerOrder = mutableListOf<Int>()
-            val parsedBookNames = mutableMapOf<Int, String>()
-            var bibleTitle: String? = null
-
-            var currentCode: String? = null
-            val sb = StringBuilder()
-            var headerParsed = false
-
-            reader.use { r ->
-                r.forEachLine { rawLine ->
-                    val line = rawLine.trimEnd('\r', '\n')
-
-                    // Extract Bible title from ##Title: line
-                    if (line.startsWith("##Title:")) {
-                        bibleTitle = line.substring(8).trim()
-                        return@forEachLine
-                    }
-
-                    // Skip other metadata lines
-                    if (line.startsWith("##")) {
-                        return@forEachLine
-                    }
-
-                    // Parse book header lines (before verse data starts)
-                    if (!headerParsed && line.isNotEmpty()) {
-                        val headerMatch = bookHeaderRegex.matchEntire(line)
-                        if (headerMatch != null) {
-                            val bookId = headerMatch.groupValues[1].toInt()
-                            val bookName = headerMatch.groupValues[2].trim()
-                            val chapterCount = headerMatch.groupValues[3].toInt()
-                            headerOrder.add(bookId)
-                            parsedBookNames[bookId] = bookName
-                            return@forEachLine
-                        }
-
-                        // Check if we've reached the separator line (-----) or first verse
-                        if (line.startsWith("-----") || line.startsWith("B")) {
-                            headerParsed = true
-                            if (line.startsWith("-----")) {
-                                return@forEachLine
-                            }
-                            // Continue processing this line as a verse if it starts with B
-                        }
-                    }
-
-                    // Skip separator line
-                    if (line.startsWith("-----")) {
-                        headerParsed = true
-                        return@forEachLine
-                    }
-
-                    // Process verse data (same as before)
-                    val verseMatch = verseLineRegex.matchEntire(line)
-                    if (verseMatch != null) {
-                        val code = verseMatch.groupValues[1]
-                        // Code numbers from BXXXCXXXVXXX (internal/Hebrew numbering)
-                        val codeBook = verseMatch.groupValues[2].toInt()
-                        val codeChapter = verseMatch.groupValues[3].toInt()
-                        // Display reference numbers (native numbering, e.g. LXX for Russian)
-                        val b = verseMatch.groupValues[5].toInt()
-                        val ch = verseMatch.groupValues[6].toInt()
-                        val vnum = verseMatch.groupValues[7].toInt()
-                        val text = verseMatch.groupValues[8].trim()
-
-                        operatorBible.add(
-                            BibleVerse(
-                                verseId = code,
-                                book = b,
-                                chapter = ch,
-                                verseNumber = vnum,
-                                verseText = text
-                            )
-                        )
-                        bookChapterMap.getOrPut(b) { mutableSetOf() }.add(ch)
-                        // Map code reference to display reference for cross-Bible lookups
-                        codeToDisplayMap[chapterKey(codeBook, codeChapter)] = chapterKey(b, ch)
-                        currentCode = null
-                        sb.setLength(0)
-                        return@forEachLine
-                    }
-
-                    // Fallback for older SPB format
-                    val m = codeRegex.matchEntire(line)
-                    if (m != null) {
-                        val code = currentCode
-                        if (code != null) {
-                            val prev = codeRegex.matchEntire(code) ?: error("Invalid verse code: $code")
-                            val bPrev = prev.groupValues[1].toInt()
-                            val chPrev = prev.groupValues[2].toInt()
-                            val vnumPrev = prev.groupValues[3].toInt()
-                            val textPrev = sb.toString().trim()
-                            operatorBible.add(
-                                BibleVerse(
-                                    verseId = code,
-                                    book = bPrev,
-                                    chapter = chPrev,
-                                    verseNumber = vnumPrev,
-                                    verseText = textPrev
-                                )
-                            )
-                            bookChapterMap.getOrPut(bPrev) { mutableSetOf() }.add(chPrev)
-                        }
-                        currentCode = line
-                        sb.setLength(0)
-                    } else if (currentCode != null) {
-                        if (sb.isNotEmpty()) sb.append("\n")
-                        sb.append(line)
-                    }
-                }
-
+            openSpbReader(resourcePath).use { r ->
+                r.forEachLine { rawLine -> parseSpbLine(rawLine.trimEnd('\r', '\n'), state) }
                 // Flush last verse if using multiline format
-                val lastCode = currentCode
-                if (lastCode != null) {
-                    val prev = codeRegex.matchEntire(lastCode) ?: error("Invalid verse code: $lastCode")
-                    val b = prev.groupValues[1].toInt()
-                    val ch = prev.groupValues[2].toInt()
-                    val vnum = prev.groupValues[3].toInt()
-                    val text = sb.toString().trim()
-                    operatorBible.add(
-                        BibleVerse(
-                            verseId = lastCode,
-                            book = b,
-                            chapter = ch,
-                            verseNumber = vnum,
-                            verseText = text
-                        )
-                    )
-                    bookChapterMap.getOrPut(b) { mutableSetOf() }.add(ch)
-                }
+                flushPendingVerse(state)
             }
+        } catch (e: Exception) {
+            recordLoadFailure(
+                e, resourcePath,
+                parsedAnything = operatorBible.isNotEmpty() || state.headerOrder.isNotEmpty(),
+            )
+        }
 
-            // Build book list preserving header order from the SPB file
-            val maxBook = if (bookChapterMap.isEmpty()) 0 else bookChapterMap.keys.maxOrNull() ?: 0
-            val headerBookIds = headerOrder.toSet()
-            // First: books in header order
-            for (b in headerOrder) {
-                val chapterCount = bookChapterMap[b]?.maxOrNull() ?: 0
-                val name = when {
-                    parsedBookNames.containsKey(b) -> parsedBookNames.getValue(b)
-                    bookNames.size >= b -> bookNames[b - 1]
-                    else -> "Book $b"
-                }
-                books.add(BibleBook(
-                    book = name,
-                    bookId = b.toString(),
-                    chapterCount = chapterCount,
-                    abbreviation = generateAbbreviation(name)
-                ))
+        // Outside the try: on a module that stops being readable partway through, the books and
+        // verses that did parse are still indexed and still shown, as far as they go.
+        buildBooksFrom(state, bookNames)
+
+        // Store full title and abbreviation
+        this.bibleTitle = state.bibleTitle
+            ?: resourcePath.substringBeforeLast(".").substringAfterLast("/").substringAfterLast("\\")
+        bibleAbbreviation = extractBibleAbbreviation(state.bibleTitle, resourcePath)
+
+        // Build chapter index for O(1) lookup in getChapter()
+        buildChapterIndex()
+    }
+
+    /** Everything one .spb scan accumulates, so a failure partway through still has it. */
+    private class SpbParseState {
+        val bookChapterMap = mutableMapOf<Int, MutableSet<Int>>()
+        val headerOrder = mutableListOf<Int>()
+        val parsedBookNames = mutableMapOf<Int, String>()
+        var bibleTitle: String? = null
+        var currentCode: String? = null
+        val pendingText = StringBuilder()
+        var headerParsed = false
+    }
+
+    private fun openSpbReader(resourcePath: String): java.io.BufferedReader {
+        val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
+        if (inputStream != null) return inputStream.bufferedReader(StandardCharsets.UTF_8)
+        val path = Paths.get(resourcePath)
+        require(Files.exists(path)) {
+            "loadFromSpb: resource not found on classpath or filesystem: $resourcePath"
+        }
+        return Files.newBufferedReader(path, StandardCharsets.UTF_8)
+    }
+
+    private fun parseSpbLine(line: String, state: SpbParseState) {
+        // Extract Bible title from ##Title: line
+        if (line.startsWith("##Title:")) {
+            state.bibleTitle = line.substring(TITLE_PREFIX_LENGTH).trim()
+            return
+        }
+        // Skip other metadata lines
+        if (line.startsWith("##")) return
+        if (!state.headerParsed && line.isNotEmpty() && parseSpbHeaderLine(line, state)) return
+        // Skip separator line
+        if (line.startsWith("-----")) {
+            state.headerParsed = true
+            return
+        }
+        if (parseSpbVerseLine(line, state)) return
+        parseSpbLegacyLine(line, state)
+    }
+
+    /** True once the line has been consumed as a book header or as the end of the header block. */
+    private fun parseSpbHeaderLine(line: String, state: SpbParseState): Boolean {
+        val headerMatch = SPB_BOOK_HEADER_REGEX.matchEntire(line)
+        if (headerMatch != null) {
+            val bookId = headerMatch.groupValues[1].toInt()
+            state.headerOrder.add(bookId)
+            state.parsedBookNames[bookId] = headerMatch.groupValues[2].trim()
+            return true
+        }
+        // Check if we've reached the separator line (-----) or first verse
+        if (line.startsWith("-----") || line.startsWith("B")) {
+            state.headerParsed = true
+            // A separator is done with here; a line starting with B is still a verse to process.
+            return line.startsWith("-----")
+        }
+        return false
+    }
+
+    private fun parseSpbVerseLine(line: String, state: SpbParseState): Boolean {
+        val verseMatch = SPB_VERSE_LINE_REGEX.matchEntire(line) ?: return false
+        val code = verseMatch.groupValues[1]
+        // Code numbers from BXXXCXXXVXXX (internal/Hebrew numbering)
+        val codeBook = verseMatch.groupValues[2].toInt()
+        val codeChapter = verseMatch.groupValues[3].toInt()
+        // Display reference numbers (native numbering, e.g. LXX for Russian)
+        val b = verseMatch.groupValues[5].toInt()
+        val ch = verseMatch.groupValues[6].toInt()
+        addVerse(
+            state, code, b, ch,
+            verseMatch.groupValues[VERSE_GROUP_NUMBER].toInt(),
+            verseMatch.groupValues[VERSE_GROUP_TEXT].trim(),
+        )
+        // Map code reference to display reference for cross-Bible lookups
+        codeToDisplayMap[chapterKey(codeBook, codeChapter)] = chapterKey(b, ch)
+        state.currentCode = null
+        state.pendingText.setLength(0)
+        return true
+    }
+
+    /** Fallback for older SPB format: a bare code line followed by its text on the lines after it. */
+    private fun parseSpbLegacyLine(line: String, state: SpbParseState) {
+        if (SPB_CODE_REGEX.matchEntire(line) != null) {
+            flushPendingVerse(state)
+            state.currentCode = line
+            state.pendingText.setLength(0)
+        } else if (state.currentCode != null) {
+            if (state.pendingText.isNotEmpty()) state.pendingText.append("\n")
+            state.pendingText.append(line)
+        }
+    }
+
+    private fun flushPendingVerse(state: SpbParseState) {
+        val code = state.currentCode ?: return
+        val prev = SPB_CODE_REGEX.matchEntire(code) ?: error("Invalid verse code: $code")
+        addVerse(
+            state, code,
+            prev.groupValues[1].toInt(), prev.groupValues[2].toInt(), prev.groupValues[REGEX_GROUP_THIRD].toInt(),
+            state.pendingText.toString().trim(),
+        )
+    }
+
+    private fun addVerse(state: SpbParseState, code: String, book: Int, chapter: Int, verse: Int, text: String) {
+        operatorBible.add(
+            BibleVerse(
+                verseId = code,
+                book = book,
+                chapter = chapter,
+                verseNumber = verse,
+                verseText = text
+            )
+        )
+        state.bookChapterMap.getOrPut(book) { mutableSetOf() }.add(chapter)
+    }
+
+    /** Book list in header order first, then any book seen only in verse data. */
+    private fun buildBooksFrom(state: SpbParseState, bookNames: List<String>) {
+        val headerBookIds = state.headerOrder.toSet()
+        val maxBook = state.bookChapterMap.keys.maxOrNull() ?: 0
+        val fromVerses = (1..maxBook).filter { it !in headerBookIds && state.bookChapterMap.containsKey(it) }
+        for (b in state.headerOrder + fromVerses) {
+            val name = when {
+                state.parsedBookNames.containsKey(b) && b in headerBookIds -> state.parsedBookNames.getValue(b)
+                bookNames.size >= b -> bookNames[b - 1]
+                else -> "Book $b"
             }
-            // Then: any books found in verse data but missing from header
-            for (b in 1..maxBook) {
-                if (b in headerBookIds) continue
-                if (!bookChapterMap.containsKey(b)) continue
-                val chapterCount = bookChapterMap[b]?.maxOrNull() ?: 0
-                val name = when {
-                    bookNames.size >= b -> bookNames[b - 1]
-                    else -> "Book $b"
-                }
-                books.add(BibleBook(
-                    book = name,
-                    bookId = b.toString(),
-                    chapterCount = chapterCount,
-                    abbreviation = generateAbbreviation(name)
-                ))
-            }
-
-            // Store full title and abbreviation
-            this.bibleTitle = bibleTitle ?: resourcePath.substringBeforeLast(".").substringAfterLast("/").substringAfterLast("\\")
-            bibleAbbreviation = extractBibleAbbreviation(bibleTitle, resourcePath)
-
-            // Build chapter index for O(1) lookup in getChapter()
-            buildChapterIndex()
-
-        } catch (_: Exception) {}
+            books.add(BibleBook(
+                book = name,
+                bookId = b.toString(),
+                chapterCount = state.bookChapterMap[b]?.maxOrNull() ?: 0,
+                abbreviation = generateAbbreviation(name)
+            ))
+        }
     }
 
     /** Encodes (bookId, chapterNum) as a single Long key for the HashMap. */
-    private fun chapterKey(book: Int, chapter: Int): Long = book.toLong().shl(20) or chapter.toLong()
+    private fun chapterKey(
+        book: Int,
+        chapter: Int
+    ): Long = book.toLong().shl(CHAPTER_KEY_BOOK_SHIFT) or chapter.toLong()
 
     private fun buildChapterIndex() {
         chapterIndex.clear()
@@ -473,6 +549,15 @@ class Bible {
     fun getBookName(bookId: Int): String? = books.firstOrNull { it.bookId == bookId.toString() }?.book
 
     /**
+     * Returns the short form of the book name for the given 1-based book id, or null if not found.
+     *
+     * In the module's own language, since it is derived from the name the module gives the book —
+     * which is what a reference shown beside this module's verse text has to be written in.
+     */
+    fun getBookAbbreviation(bookId: Int): String? =
+        books.firstOrNull { it.bookId == bookId.toString() }?.abbreviation?.takeIf { it.isNotBlank() }
+
+    /**
      * Returns the SPB book ID for the given 0-based display index.
      */
     fun getBookId(displayIndex: Int): Int =
@@ -501,7 +586,7 @@ class Bible {
      */
     fun parseVerseCode(verseId: String): Triple<Int, Int, Int>? {
         val m = Regex("B(\\d{3})C(\\d{3})V(\\d{3})").matchEntire(verseId) ?: return null
-        return Triple(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
+        return Triple(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[REGEX_GROUP_THIRD].toInt())
     }
 
     /**
@@ -540,8 +625,8 @@ class Bible {
         val displayBook: Int
         val displayChapter: Int
         if (displayKey != null) {
-            displayBook = (displayKey shr 20).toInt()
-            displayChapter = (displayKey and 0xFFFFF).toInt()
+            displayBook = (displayKey shr CHAPTER_KEY_BOOK_SHIFT).toInt()
+            displayChapter = (displayKey and CHAPTER_KEY_CHAPTER_MASK).toInt()
         } else {
             displayBook = codeBook
             displayChapter = codeChapter
@@ -599,43 +684,47 @@ class Bible {
          * [maxLines] bounds how far in it will look. A caller that only wants the title can pass
          * [TITLE_SCAN_LINE_LIMIT] and skip the book list entirely.
          */
+        private class SummaryScan {
+            var title: String? = null
+            var hasOld = false
+            var hasNew = false
+        }
+
+        private fun openSummaryReader(resourcePath: String): java.io.BufferedReader? {
+            val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
+            if (inputStream != null) return inputStream.bufferedReader(StandardCharsets.UTF_8)
+            val path = Paths.get(resourcePath)
+            if (!Files.exists(path)) return null
+            return Files.newBufferedReader(path, StandardCharsets.UTF_8)
+        }
+
+        private fun scanSummaryLine(line: String, scan: SummaryScan) {
+            // The converter writes a TAB after the colon and hand-made modules often write a
+            // space, so the separator is trimmed, not counted.
+            if (line.startsWith("##Title:")) scan.title = line.removePrefix("##Title:").trim()
+            if (line.startsWith("##") || line.isEmpty()) return
+            when (SPB_BOOK_HEADER_REGEX.matchEntire(line)?.groupValues?.get(1)?.toIntOrNull()) {
+                in OLD_TESTAMENT_BOOK_IDS -> scan.hasOld = true
+                in NEW_TESTAMENT_BOOK_IDS -> scan.hasNew = true
+                else -> Unit
+            }
+        }
+
         fun readTranslationSummary(
             resourcePath: String,
             maxLines: Int = HEADER_SCAN_LINE_LIMIT,
         ): TranslationSummary? {
             try {
-                val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream(resourcePath)
-                val reader = if (inputStream != null) {
-                    inputStream.bufferedReader(StandardCharsets.UTF_8)
-                } else {
-                    val path = Paths.get(resourcePath)
-                    if (!Files.exists(path)) return null
-                    Files.newBufferedReader(path, StandardCharsets.UTF_8)
-                }
-                val bookHeaderRegex = Regex("^(\\d+)\\s+(.+?)\\s+(\\d+)$")
-                var title: String? = null
-                var hasOld = false
-                var hasNew = false
-                var scanned = 0
+                val reader = openSummaryReader(resourcePath) ?: return null
+                val scan = SummaryScan()
                 reader.use { r ->
-                    for (rawLine in r.lineSequence()) {
-                        if (++scanned > maxLines) break
-                        val line = rawLine.trimEnd('\r', '\n')
-                        if (line.startsWith("##Title:")) {
-                            // The converter writes a TAB after the colon and hand-made modules often
-                            // write a space, so the separator is trimmed rather than counted.
-                            title = line.removePrefix("##Title:").trim()
-                            continue
-                        }
-                        if (line.startsWith("##")) continue
-                        if (line.startsWith("-----") || line.startsWith("B")) break
-                        if (line.isEmpty()) continue
-                        val bookId = bookHeaderRegex.matchEntire(line)?.groupValues?.get(1)?.toIntOrNull() ?: continue
-                        if (bookId in OLD_TESTAMENT_BOOK_IDS) hasOld = true
-                        if (bookId in NEW_TESTAMENT_BOOK_IDS) hasNew = true
-                    }
+                    r.lineSequence()
+                        .take(maxLines)
+                        .map { it.trimEnd('\r', '\n') }
+                        .takeWhile { !it.startsWith("-----") && !it.startsWith("B") }
+                        .forEach { line -> scanSummaryLine(line, scan) }
                 }
-                return TranslationSummary(title, hasOld, hasNew)
+                return TranslationSummary(scan.title, scan.hasOld, scan.hasNew)
             } catch (_: Exception) {
                 return null
             }

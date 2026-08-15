@@ -8,7 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ComposeUiTest
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.doubleClick
@@ -523,7 +523,10 @@ class MainDesktopComposeTest {
 
     @Test
     fun `the keys the root owns are handled without anything live`() = root(withOneSong()) { _ ->
-        onRoot().performKeyInput {
+        // Not onRoot(): a tooltip/popup composes as its own root, so "the" root is ambiguous and
+        // fetching it throws before any key is delivered. The handler under test is on the main
+        // root, which is always the first.
+        onAllNodes(isRoot())[0].performKeyInput {
             pressKey(Key.Escape)
             pressKey(Key.PageDown)
             pressKey(Key.PageUp)

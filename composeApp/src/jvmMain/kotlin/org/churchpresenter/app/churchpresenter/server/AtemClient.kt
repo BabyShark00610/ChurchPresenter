@@ -108,6 +108,95 @@ class AtemClient(val host: String, val port: Int = 9910) {
         private const val TEMP_SESSION_ID = 0x53AB        // client's placeholder until the ATEM assigns the real one
         private const val SESSION_WAIT_MS = 1500L         // how long to wait for the real session id post-handshake
 
+        private const val BYTE_MASK = 0xFF
+        private const val BYTE_BITS = 8
+        private const val U16_MASK = 0xFFFF
+        private const val U16_BITS = 16
+        private const val U16_SIZE = 2
+        private const val FLAGS_SHIFT = 3
+        private const val PACKET_LEN_HIGH_MASK = 0x07
+
+        private const val OFFSET_SESSION_ID = 2
+        private const val OFFSET_ACK_PACKET_ID = 4
+        private const val OFFSET_RETRANSMIT_FROM = 6
+        private const val OFFSET_PACKET_ID = 10
+
+        private const val CMD_HEADER_SIZE = 8
+        private const val CMD_NAME_OFFSET = 4
+        private const val CMD_NAME_SIZE = 4
+
+        private const val FTCD_MIN_SIZE = 10
+        private const val OFFSET_FTCD_CHUNK_SIZE = 6
+        private const val OFFSET_FTCD_CHUNK_COUNT = 8
+        private const val CHUNK_SIZE_ALIGNMENT = 8
+
+        private const val RLE_WORD_BYTES = 8
+        private const val RLE_TWO_WORDS_BYTES = 16
+
+        private const val OFFSET_FTDE_CODE = 2
+        private const val FTDE_CODE_RETRY = 1
+
+        private const val STATE_DUMP_TIMEOUT_MS = 2000
+        private const val STATE_DUMP_IDLE_MS = 300
+        private const val DEFAULT_FPS = 30.0
+        private const val UNKNOWN_VIDEO_MODE = "Unknown"
+
+        private val VIDEO_MODES: Map<Int, Pair<String, Double>> = mapOf(
+            0 to ("525i59.94 NTSC" to 30000.0 / 1001.0),
+            2 to ("525i59.94 NTSC" to 30000.0 / 1001.0),
+            1 to ("625i50 PAL" to 25.0),
+            3 to ("625i50 PAL" to 25.0),
+            4 to ("720p50" to 50.0),
+            5 to ("720p59.94" to 60000.0 / 1001.0),
+            6 to ("1080i50" to 50.0),
+            7 to ("1080i59.94" to 60000.0 / 1001.0),
+            8 to ("1080p23.98" to 24000.0 / 1001.0),
+            9 to ("1080p24" to 24.0),
+            10 to ("1080p25" to 25.0),
+            11 to ("1080p29.97" to 30000.0 / 1001.0),
+            12 to ("1080p50" to 50.0),
+            13 to ("1080p59.94" to 60000.0 / 1001.0),
+            14 to ("2160p23.98" to 24000.0 / 1001.0),
+            15 to ("2160p24" to 24.0),
+            16 to ("2160p25" to 25.0),
+            17 to ("2160p29.97" to 30000.0 / 1001.0)
+        )
+
+        private const val OFFSET_TOP_DOWNSTREAM_KEYERS = 2
+        private const val OFFSET_MEC_KEYER_COUNT = 1
+
+        private const val MPFE_MIN_SIZE = 24
+        private const val OFFSET_MPFE_FRAME_INDEX = 2
+        private const val OFFSET_MPFE_IS_USED = 4
+        private const val OFFSET_MPFE_NAME_LEN = 23
+        private const val OFFSET_MPFE_NAME = 24
+
+        private const val MPCS_MIN_SIZE = 68
+        private const val OFFSET_MPCS_NAME = 2
+        private const val MPCS_NAME_END = 66
+        private const val OFFSET_MPCS_FRAME_COUNT = 66
+
+        private const val MPSP_MIN_SIZE = 10
+        private const val OFFSET_MPSP_UNASSIGNED_FRAMES = 8
+        private const val OFFSET_MPL_CLIP_COUNT = 1
+        private const val DEFAULT_CLIP_BANK_COUNT = 4
+
+        private const val CMPC_PAYLOAD_SIZE = 4
+        private const val OFFSET_FTSD_FRAME_INDEX = 6
+        private const val OFFSET_FTSD_SIZE = 8
+        private const val OFFSET_FTSD_MODE = 12
+        private const val FTSD_MODE_WRITE = 1
+        private const val OFFSET_FTFD_NAME = 2
+        private const val FTFD_NAME_MAX = 64
+        private const val OFFSET_FTFD_MD5 = 194
+        private const val MD5_SIZE = 16
+        private const val FTDA_HEADER_SIZE = 4
+        private const val OFFSET_FTDA_LENGTH = 2
+        private const val SMPC_MASK_NAME_AND_FRAMES = 3
+        private const val OFFSET_SMPC_NAME = 2
+        private const val SMPC_NAME_MAX = 44
+        private const val OFFSET_SMPC_FRAME_COUNT = 66
+
         /** Client hello packet, verbatim from sofie-atem-connection (COMMAND_CONNECT_HELLO). */
         private val CONNECT_HELLO = byteArrayOf(
             0x10, 0x14, 0x53, 0xAB.toByte(), 0x00, 0x00, 0x00, 0x00, 0x00, 0x3A, 0x00, 0x00,
@@ -376,7 +465,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
     suspend fun queryState(): AtemState = withContext(Dispatchers.IO) {
         try {
             connect()
-            lastKnownState ?: AtemState(30.0, "Unknown", emptyList(), emptyList())
+            lastKnownState ?: AtemState(DEFAULT_FPS, UNKNOWN_VIDEO_MODE, emptyList(), emptyList())
         } finally {
             disconnect()
         }
@@ -400,7 +489,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val knownStills = lastKnownState?.stillSlots
         if (!knownStills.isNullOrEmpty() && knownStills.none { it.index == slot }) {
             // 1-based in messages to match ATEM Software Control's numbering
-            throw Exception("Still slot ${slot + 1} does not exist on this ATEM (available: 1–${knownStills.maxOf { it.index } + 1})")
+            throw Exception(
+                "Still slot ${slot + 1} does not exist on this ATEM (available: 1–${knownStills.maxOf { it.index } + 1})"
+            )
         }
 
         opMutex.withLock {
@@ -443,7 +534,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val knownClips = lastKnownState?.clipSlots
         if (!knownClips.isNullOrEmpty() && knownClips.none { it.index == slot }) {
             // 1-based in messages to match ATEM Software Control's numbering
-            throw Exception("Clip slot ${slot + 1} does not exist on this ATEM (available: 1–${knownClips.maxOf { it.index } + 1})")
+            throw Exception(
+                "Clip slot ${slot + 1} does not exist on this ATEM (available: 1–${knownClips.maxOf { it.index } + 1})"
+            )
         }
         val storeId = slot + 1   // clip stores are 1-based; store 0 is the still pool
 
@@ -451,10 +544,19 @@ class AtemClient(val host: String, val port: Int = 9910) {
             // Drop any buffered clip-store state from before this upload so a later readiness wait
             // (awaitClipReady) only reacts to MPCS updates produced by this upload.
             pendingCommands.removeAll { it.first == "MPCS" }
-            sendCommandAndWait("LOCK", buildLockPayload(storeId, locked = true), "LKOB", timeout = CMD_TIMEOUT_MS.toLong())
+            sendCommandAndWait(
+                "LOCK",
+                buildLockPayload(storeId, locked = true),
+                "LKOB",
+                timeout = CMD_TIMEOUT_MS.toLong()
+            )
             try {
                 // Clear the clip slot before uploading new frames
-                sendCommandAndWait("CMPC", ByteArray(4).also { it[0] = slot.toByte() }, expectedResponse = null)
+                sendCommandAndWait(
+                    "CMPC",
+                    ByteArray(CMPC_PAYLOAD_SIZE).also { it[0] = slot.toByte() },
+                    expectedResponse = null
+                )
 
                 for (frameIdx in 0 until frameCount) {
                     val frame = nextFrame(frameIdx)
@@ -498,9 +600,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
                 } catch (_: Exception) {
                     return@withLock false   // no MPCS within the timeout
                 }
-                if (payload.size >= 68 && (payload[0].toInt() and 0xFF) == slot) {
+                if (payload.size >= MPCS_MIN_SIZE && (payload[0].toInt() and BYTE_MASK) == slot) {
                     val used = payload[1].toInt() == 1
-                    val frames = u16(payload, 66)
+                    val frames = u16(payload, OFFSET_MPCS_FRAME_COUNT)
                     onProgress((frames.toFloat() / expectedFrames).coerceIn(0f, 1f))
                     if (used && frames >= expectedFrames) return@withLock true
                 }
@@ -536,9 +638,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
 
         while (true) {
             val (cmd, payload) = waitForAnyCommand(setOf("FTCD", "FTDC", "FTDE"), CMD_TIMEOUT_MS.toLong())
-            if (payload.size < 2) continue
             // Ignore messages that belong to other transfers
-            val cmdTransferId = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
+            val cmdTransferId = if (payload.size < 2) null
+                else ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
             if (cmdTransferId != transferId) continue
 
             when (cmd) {
@@ -547,62 +649,94 @@ class AtemClient(val host: String, val port: Int = 9910) {
                         sendCommand("FTFD", buildFileDescriptionPayload(transferId, name, hash))
                         descriptionSent = true
                     }
-                    if (payload.size < 10) continue
-                    // ATEM grants chunkCount chunks of chunkSize bytes (rounded to 8)
-                    val chunkSize = ((((payload[6].toInt() and 0xFF) shl 8) or (payload[7].toInt() and 0xFF)) / 8) * 8
-                    val chunkCount = ((payload[8].toInt() and 0xFF) shl 8) or (payload[9].toInt() and 0xFF)
-                    if (chunkSize <= 0) continue
-                    var sent = 0
-                    while (sent < chunkCount && bytesSent < data.size) {
-                        var len = minOf(chunkSize, data.size - bytesSent)
-                        // Don't end a chunk mid RLE block: shorten if an RLE header starts
-                        // 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit)
-                        if (bytesSent + len < data.size) {
-                            if (len >= 8 && dataBuf.getLong(bytesSent + len - 8) == AtemFrameEncoder.RLE_HEADER) {
-                                len -= 8
-                            } else if (len >= 16 && dataBuf.getLong(bytesSent + len - 16) == AtemFrameEncoder.RLE_HEADER) {
-                                len -= 16
-                            }
-                        }
-                        sendCommand("FTDa", buildDataChunkPayload(transferId, data, bytesSent, len))
-                        bytesSent += len
-                        sent++
-                    }
-                    onProgress(bytesSent.toFloat() / data.size)
+                    bytesSent = sendGrantedChunks(payload, transferId, data, dataBuf, bytesSent, onProgress)
                 }
                 "FTDC" -> return
                 "FTDE" -> {
-                    val code = payload.getOrNull(2)?.toInt()?.and(0xFF) ?: -1
-                    if (code == 1 && retries < MAX_TRANSFER_RETRIES) {
-                        // Code 1 = "retry": the ATEM is busy (e.g. still clearing the clip
-                        // pool after CMPC). Back off briefly, then restart the same transfer.
-                        retries++
-                        bytesSent = 0
-                        descriptionSent = false
-                        Thread.sleep(RETRY_BACKOFF_MS)
-                        sendCommand("FTSD", buildUploadRequestPayload(transferId, storeId, frameIndex, frame.rawLen))
-                    } else {
-                        // Clip frames past index 0 usually fail because the device's clip
-                        // pool ran out of frame capacity — surface an actionable hint
-                        val what = if (name == null) "clip frame $frameIndex" else "still"
-                        val hint = if (name == null && frameIndex > 0)
-                            " — the clip may exceed the ATEM's clip pool capacity; try a shorter duration or lower fps"
-                        else ""
-                        if (code == 1) {
-                            throw Exception("ATEM stayed busy uploading $what after $retries retries$hint")
-                        } else {
-                            throw Exception("ATEM rejected $what (error code $code)$hint")
-                        }
+                    val code = payload.getOrNull(OFFSET_FTDE_CODE)?.toInt()?.and(BYTE_MASK) ?: -1
+                    if (code != FTDE_CODE_RETRY || retries >= MAX_TRANSFER_RETRIES) {
+                        throw transferRejected(code, name, frameIndex, retries)
                     }
+                    // Code 1 = "retry": the ATEM is busy (e.g. still clearing the clip pool after
+                    // CMPC). Back off briefly, then restart the same transfer.
+                    retries++
+                    bytesSent = 0
+                    descriptionSent = false
+                    Thread.sleep(RETRY_BACKOFF_MS)
+                    sendCommand("FTSD", buildUploadRequestPayload(transferId, storeId, frameIndex, frame.rawLen))
                 }
             }
+        }
+    }
+
+
+    /**
+     * Sends as much of [data] as this FTCD grant allows, and returns the new total sent.
+     *
+     * ATEM grants chunkCount chunks of chunkSize bytes (rounded down to 8).
+     */
+    private fun sendGrantedChunks(
+        payload: ByteArray,
+        transferId: Int,
+        data: ByteArray,
+        dataBuf: java.nio.ByteBuffer,
+        alreadySent: Int,
+        onProgress: (Float) -> Unit,
+    ): Int {
+        val chunkSize = if (payload.size < FTCD_MIN_SIZE) 0
+            else (u16(payload, OFFSET_FTCD_CHUNK_SIZE) / CHUNK_SIZE_ALIGNMENT) * CHUNK_SIZE_ALIGNMENT
+        val chunkCount = if (payload.size < FTCD_MIN_SIZE) 0 else u16(payload, OFFSET_FTCD_CHUNK_COUNT)
+        var bytesSent = alreadySent
+        var sent = 0
+        while (chunkSize > 0 && sent < chunkCount && bytesSent < data.size) {
+            val len = chunkLengthAt(dataBuf, data.size, bytesSent, chunkSize)
+            sendCommand("FTDa", buildDataChunkPayload(transferId, data, bytesSent, len))
+            bytesSent += len
+            sent++
+        }
+        if (chunkSize > 0) onProgress(bytesSent.toFloat() / data.size)
+        return bytesSent
+    }
+
+    /**
+     * How much to put in the next chunk: never ending mid RLE block, so the length is shortened
+     * when an RLE header starts 8 or 16 bytes before the chunk end (header+count+pattern = 24B unit).
+     */
+    private fun chunkLengthAt(dataBuf: java.nio.ByteBuffer, dataSize: Int, bytesSent: Int, chunkSize: Int): Int {
+        val len = minOf(chunkSize, dataSize - bytesSent)
+        if (bytesSent + len >= dataSize) return len
+        val endsOnHeader = { back: Int ->
+            len >= back && dataBuf.getLong(bytesSent + len - back) == AtemFrameEncoder.RLE_HEADER
+        }
+        return when {
+            endsOnHeader(RLE_WORD_BYTES) -> len - RLE_WORD_BYTES
+            endsOnHeader(RLE_TWO_WORDS_BYTES) -> len - RLE_TWO_WORDS_BYTES
+            else -> len
+        }
+    }
+
+    /**
+     * The failure for an FTDE the transfer cannot retry past. Clip frames after index 0 usually
+     * fail because the device's clip pool ran out of capacity, which is worth saying outright.
+     */
+    private fun transferRejected(code: Int, name: String?, frameIndex: Int, retries: Int): Exception {
+        val what = if (name == null) "clip frame $frameIndex" else "still"
+        val hint = if (name == null && frameIndex > 0) {
+            " — the clip may exceed the ATEM's clip pool capacity; try a shorter duration or lower fps"
+        } else {
+            ""
+        }
+        return if (code == FTDE_CODE_RETRY) {
+            Exception("ATEM stayed busy uploading $what after $retries retries$hint")
+        } else {
+            Exception("ATEM rejected $what (error code $code)$hint")
         }
     }
 
     // ── Packet building ──────────────────────────────────────────────────────
 
     internal fun u16(b: ByteArray, offset: Int): Int =
-        ((b[offset].toInt() and 0xFF) shl 8) or (b[offset + 1].toInt() and 0xFF)
+        ((b[offset].toInt() and BYTE_MASK) shl BYTE_BITS) or (b[offset + 1].toInt() and BYTE_MASK)
 
     /**
      * Write one packet to the switcher.
@@ -615,21 +749,21 @@ class AtemClient(val host: String, val port: Int = 9910) {
      * genuinely dead socket there still cannot mask the original failure.
      */
     private fun sendRaw(bytes: ByteArray) {
-        val sock = socket ?: throw IllegalStateException(
+        val sock = socket ?: error(
             "ATEM connection to $host:$port is closed — connect() first (or the keepalive dropped it)"
         )
         sock.send(DatagramPacket(bytes, bytes.size, address, port))
     }
 
     internal fun buildCommandBytes(name: String, data: ByteArray): ByteArray {
-        val cmdLen = 8 + data.size
+        val cmdLen = CMD_HEADER_SIZE + data.size
         val cmd = ByteArray(cmdLen)
-        cmd[0] = ((cmdLen shr 8) and 0xFF).toByte()
-        cmd[1] = (cmdLen and 0xFF).toByte()
+        cmd[0] = ((cmdLen shr BYTE_BITS) and BYTE_MASK).toByte()
+        cmd[1] = (cmdLen and BYTE_MASK).toByte()
         // bytes 2-3 = 0 (unused)
         val nameBytes = name.toByteArray(Charsets.US_ASCII)
-        System.arraycopy(nameBytes, 0, cmd, 4, minOf(4, nameBytes.size))
-        System.arraycopy(data, 0, cmd, 8, data.size)
+        System.arraycopy(nameBytes, 0, cmd, CMD_NAME_OFFSET, minOf(CMD_NAME_SIZE, nameBytes.size))
+        System.arraycopy(data, 0, cmd, CMD_HEADER_SIZE, data.size)
         return cmd
     }
 
@@ -643,10 +777,10 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val pktId = nextSendPacketId
         nextSendPacketId = (nextSendPacketId + 1) % MAX_PACKET_ID
         val pkt = ByteArray(totalLen)
-        pkt[0] = ((FLAG_ACK_REQUEST shl 3) or ((totalLen shr 8) and 0x07)).toByte()
-        pkt[1] = (totalLen and 0xFF).toByte()
-        writeU16(pkt, 2, sessionId)
-        writeU16(pkt, 10, pktId)
+        pkt[0] = ((FLAG_ACK_REQUEST shl FLAGS_SHIFT) or ((totalLen shr BYTE_BITS) and PACKET_LEN_HIGH_MASK)).toByte()
+        pkt[1] = (totalLen and BYTE_MASK).toByte()
+        writeU16(pkt, OFFSET_SESSION_ID, sessionId)
+        writeU16(pkt, OFFSET_PACKET_ID, pktId)
         System.arraycopy(payload, 0, pkt, HEADER_SIZE, payload.size)
         inFlight[pktId] = pkt
         while (inFlight.size > MAX_IN_FLIGHT) inFlight.remove(inFlight.keys.first())
@@ -657,10 +791,10 @@ class AtemClient(val host: String, val port: Int = 9910) {
     /** Pure ACK packet: AckReply flag, acked packet id at bytes 4-5, packet id 0. */
     private fun sendAck(ackId: Int) {
         val pkt = ByteArray(HEADER_SIZE)
-        pkt[0] = (FLAG_ACK shl 3).toByte()
+        pkt[0] = (FLAG_ACK shl FLAGS_SHIFT).toByte()
         pkt[1] = HEADER_SIZE.toByte()
-        writeU16(pkt, 2, sessionId)
-        writeU16(pkt, 4, ackId)
+        writeU16(pkt, OFFSET_SESSION_ID, sessionId)
+        writeU16(pkt, OFFSET_ACK_PACKET_ID, ackId)
         sendRaw(pkt)
     }
 
@@ -704,10 +838,10 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val pkt = receivePacket() ?: return null
         lastReceivedAt = System.currentTimeMillis()   // liveness signal for the keepalive loop
         if (pkt.size < HEADER_SIZE) return emptyList()
-        val flags = (pkt[0].toInt() and 0xFF) shr 3
+        val flags = (pkt[0].toInt() and BYTE_MASK) shr FLAGS_SHIFT
         // The ATEM assigns the real session id after the handshake — track it always
-        sessionId = u16(pkt, 2)
-        val remoteId = u16(pkt, 10)
+        sessionId = u16(pkt, OFFSET_SESSION_ID)
+        val remoteId = u16(pkt, OFFSET_PACKET_ID)
 
         if (flags and FLAG_HELLO != 0) {
             helloReceived = true
@@ -717,7 +851,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
         }
 
         if (flags and FLAG_RETRANSMIT_REQUEST != 0) {
-            retransmitFrom(u16(pkt, 6) % MAX_PACKET_ID)
+            retransmitFrom(u16(pkt, OFFSET_RETRANSMIT_FROM) % MAX_PACKET_ID)
         }
 
         var commands: List<Pair<String, ByteArray>> = emptyList()
@@ -734,7 +868,7 @@ class AtemClient(val host: String, val port: Int = 9910) {
         }
 
         if (flags and FLAG_ACK != 0) {
-            val ackId = u16(pkt, 4)
+            val ackId = u16(pkt, OFFSET_ACK_PACKET_ID)
             inFlight.keys.removeAll { isCoveredByAck(ackId, it) }
         }
 
@@ -814,9 +948,10 @@ class AtemClient(val host: String, val port: Int = 9910) {
      */
     private fun collectState(sock: DatagramSocket): Map<String, List<ByteArray>> {
         val result = mutableMapOf<String, MutableList<ByteArray>>()
-        val deadline = System.currentTimeMillis() + 2000
+        val deadline = System.currentTimeMillis() + STATE_DUMP_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            sock.soTimeout = (deadline - System.currentTimeMillis()).coerceAtLeast(1).toInt().coerceAtMost(300)
+            sock.soTimeout = (deadline - System.currentTimeMillis())
+                .coerceAtLeast(1).toInt().coerceAtMost(STATE_DUMP_IDLE_MS)
             val commands = receiveAndProcess() ?: break
             commands.forEach { (name, payload) ->
                 result.getOrPut(name) { mutableListOf() }.add(payload)
@@ -829,11 +964,11 @@ class AtemClient(val host: String, val port: Int = 9910) {
     internal fun parseAllCommands(packet: ByteArray): List<Pair<String, ByteArray>> {
         val out = mutableListOf<Pair<String, ByteArray>>()
         var offset = HEADER_SIZE
-        while (offset + 8 <= packet.size) {
-            val len = ((packet[offset].toInt() and 0xFF) shl 8) or (packet[offset + 1].toInt() and 0xFF)
-            if (len < 8 || offset + len > packet.size) break
-            val name = String(packet, offset + 4, 4, Charsets.US_ASCII)
-            out.add(name to packet.copyOfRange(offset + 8, offset + len))
+        while (offset + CMD_HEADER_SIZE <= packet.size) {
+            val len = u16(packet, offset)
+            if (len < CMD_HEADER_SIZE || offset + len > packet.size) break
+            val name = String(packet, offset + CMD_NAME_OFFSET, CMD_NAME_SIZE, Charsets.US_ASCII)
+            out.add(name to packet.copyOfRange(offset + CMD_HEADER_SIZE, offset + len))
             offset += len
         }
         return out
@@ -842,40 +977,35 @@ class AtemClient(val host: String, val port: Int = 9910) {
     // ── State parsers ─────────────────────────────────────────────────────────
 
     internal fun parseAtemState(m: Map<String, List<ByteArray>>): AtemState {
-        val (mode, fps) = when (m["VidM"]?.firstOrNull()?.getOrNull(0)?.toInt()?.and(0xFF)) {
-            0, 2 -> "525i59.94 NTSC" to 30000.0 / 1001.0   // 29.97…
-            1, 3 -> "625i50 PAL"     to 25.0
-            4    -> "720p50"         to 50.0
-            5    -> "720p59.94"      to 60000.0 / 1001.0    // 59.94…
-            6    -> "1080i50"        to 50.0
-            7    -> "1080i59.94"     to 60000.0 / 1001.0
-            8    -> "1080p23.98"     to 24000.0 / 1001.0    // 23.976…
-            9    -> "1080p24"        to 24.0
-            10   -> "1080p25"        to 25.0
-            11   -> "1080p29.97"     to 30000.0 / 1001.0
-            12   -> "1080p50"        to 50.0
-            13   -> "1080p59.94"     to 60000.0 / 1001.0
-            14   -> "2160p23.98"     to 24000.0 / 1001.0
-            15   -> "2160p24"        to 24.0
-            16   -> "2160p25"        to 25.0
-            17   -> "2160p29.97"     to 30000.0 / 1001.0
-            else -> "Unknown"        to 30.0
-        }
+        val videoModeId = m["VidM"]?.firstOrNull()?.getOrNull(0)?.toInt()?.and(BYTE_MASK)
+        val (mode, fps) = VIDEO_MODES[videoModeId] ?: (UNKNOWN_VIDEO_MODE to DEFAULT_FPS)
         val (clipMaxFrames, unassigned) = parseMediaPoolSettings(m)
         // _top topology byte 0 = number of M/E buses (program outputs); byte 2 = number of DSKs
         // (sofie-atem-connection TopologyCommand layout: ME, sources, downstreamKeyers, …)
         val topology = m["_top"]?.firstOrNull()
-        val mixEffectCount = topology?.getOrNull(0)?.toInt()?.and(0xFF) ?: 0
-        val downstreamKeyers = topology?.getOrNull(2)?.toInt()?.and(0xFF) ?: 0
+        val mixEffectCount = topology?.getOrNull(0)?.toInt()?.and(BYTE_MASK) ?: 0
+        val downstreamKeyers = topology?.getOrNull(OFFSET_TOP_DOWNSTREAM_KEYERS)?.toInt()?.and(BYTE_MASK) ?: 0
         // _MeC: one per M/E — byte 0 = M/E index, byte 1 = upstream keyer count
         val keyersPerMe = if (mixEffectCount > 0) {
             val byMe = HashMap<Int, Int>()
             m["_MeC"]?.forEach { p ->
-                if (p.size >= 2) byMe[p[0].toInt() and 0xFF] = p[1].toInt() and 0xFF
+                if (p.size > OFFSET_MEC_KEYER_COUNT) {
+                    byMe[p[0].toInt() and BYTE_MASK] = p[OFFSET_MEC_KEYER_COUNT].toInt() and BYTE_MASK
+                }
             }
             (0 until mixEffectCount).map { byMe[it] ?: 0 }
         } else emptyList()
-        return AtemState(fps, mode, parseStillSlots(m), parseClipSlots(m), clipMaxFrames, unassigned, mixEffectCount, keyersPerMe, downstreamKeyers)
+        return AtemState(
+            fps,
+            mode,
+            parseStillSlots(m),
+            parseClipSlots(m),
+            clipMaxFrames,
+            unassigned,
+            mixEffectCount,
+            keyersPerMe,
+            downstreamKeyers
+        )
     }
 
     /**
@@ -889,11 +1019,11 @@ class AtemClient(val host: String, val port: Int = 9910) {
      */
     internal fun parseStillSlots(m: Map<String, List<ByteArray>>): List<AtemMediaSlot> =
         m["MPfe"]?.mapNotNull { p ->
-            if (p.size < 24 || p[0].toInt() != 0) return@mapNotNull null   // still store only
-            val idx  = ((p[2].toInt() and 0xFF) shl 8) or (p[3].toInt() and 0xFF)
-            val used = p[4].toInt() == 1
-            val nameLen = (p[23].toInt() and 0xFF).coerceAtMost(p.size - 24)
-            val name = if (used && nameLen > 0) String(p, 24, nameLen, Charsets.UTF_8) else ""
+            if (p.size < MPFE_MIN_SIZE || p[0].toInt() != 0) return@mapNotNull null   // still store only
+            val idx  = u16(p, OFFSET_MPFE_FRAME_INDEX)
+            val used = p[OFFSET_MPFE_IS_USED].toInt() == 1
+            val nameLen = (p[OFFSET_MPFE_NAME_LEN].toInt() and BYTE_MASK).coerceAtMost(p.size - OFFSET_MPFE_NAME)
+            val name = if (used && nameLen > 0) String(p, OFFSET_MPFE_NAME, nameLen, Charsets.UTF_8) else ""
             AtemMediaSlot(idx, name, used)
         }?.sortedBy { it.index } ?: emptyList()
 
@@ -906,11 +1036,11 @@ class AtemClient(val host: String, val port: Int = 9910) {
      */
     internal fun parseClipSlots(m: Map<String, List<ByteArray>>): List<AtemMediaSlot> =
         m["MPCS"]?.mapNotNull { p ->
-            if (p.size < 68) return@mapNotNull null
-            val idx  = p[0].toInt() and 0xFF
+            if (p.size < MPCS_MIN_SIZE) return@mapNotNull null
+            val idx  = p[0].toInt() and BYTE_MASK
             val used = p[1].toInt() == 1
             val name = if (used) {
-                val raw = p.copyOfRange(2, 66)
+                val raw = p.copyOfRange(OFFSET_MPCS_NAME, MPCS_NAME_END)
                 val end = raw.indexOfFirst { it.toInt() == 0 }.let { if (it < 0) raw.size else it }
                 String(raw, 0, end, Charsets.UTF_8)
             } else ""
@@ -925,17 +1055,23 @@ class AtemClient(val host: String, val port: Int = 9910) {
      */
     internal fun parseMediaPoolSettings(m: Map<String, List<ByteArray>>): Pair<List<Int>, Int> {
         val p = m["MPSp"]?.firstOrNull() ?: return emptyList<Int>() to 0
-        if (p.size < 10) return emptyList<Int>() to 0
-        val clipCount = m["_mpl"]?.firstOrNull()?.getOrNull(1)?.toInt()?.and(0xFF) ?: 4
-        val maxFrames = (0 until minOf(4, clipCount)).map { u16(p, it * 2) }
-        return maxFrames to u16(p, 8)
+        if (p.size < MPSP_MIN_SIZE) return emptyList<Int>() to 0
+        val clipCount = m["_mpl"]?.firstOrNull()?.getOrNull(OFFSET_MPL_CLIP_COUNT)?.toInt()?.and(BYTE_MASK)
+            ?: DEFAULT_CLIP_BANK_COUNT
+        val maxFrames = (0 until minOf(DEFAULT_CLIP_BANK_COUNT, clipCount)).map { u16(p, it * U16_SIZE) }
+        return maxFrames to u16(p, OFFSET_MPSP_UNASSIGNED_FRAMES)
     }
 
     // ── Payload builders ─────────────────────────────────────────────────────
 
     internal fun writeU16(buf: ByteArray, offset: Int, value: Int) {
-        buf[offset] = ((value shr 8) and 0xFF).toByte()
-        buf[offset + 1] = (value and 0xFF).toByte()
+        buf[offset] = ((value shr BYTE_BITS) and BYTE_MASK).toByte()
+        buf[offset + 1] = (value and BYTE_MASK).toByte()
+    }
+
+    internal fun writeU32(buf: ByteArray, offset: Int, value: Int) {
+        writeU16(buf, offset, (value ushr U16_BITS) and U16_MASK)
+        writeU16(buf, offset + U16_SIZE, value and U16_MASK)
     }
 
     /** LOCK payload (4 bytes): storeId (uint16), locked (uint8), padding. */
@@ -959,12 +1095,9 @@ class AtemClient(val host: String, val port: Int = 9910) {
         val buf = ByteArray(16)
         writeU16(buf, 0, transferId)
         writeU16(buf, 2, storeId)
-        writeU16(buf, 6, frameIndex)
-        buf[8] = ((size shr 24) and 0xFF).toByte()
-        buf[9] = ((size shr 16) and 0xFF).toByte()
-        buf[10] = ((size shr 8) and 0xFF).toByte()
-        buf[11] = (size and 0xFF).toByte()
-        writeU16(buf, 12, 1)   // mode
+        writeU16(buf, OFFSET_FTSD_FRAME_INDEX, frameIndex)
+        writeU32(buf, OFFSET_FTSD_SIZE, size)
+        writeU16(buf, OFFSET_FTSD_MODE, FTSD_MODE_WRITE)
         return buf
     }
 
@@ -980,18 +1113,18 @@ class AtemClient(val host: String, val port: Int = 9910) {
         writeU16(buf, 0, transferId)
         if (!name.isNullOrEmpty()) {
             val nameBytes = name.toByteArray(Charsets.UTF_8)
-            System.arraycopy(nameBytes, 0, buf, 2, minOf(64, nameBytes.size))
+            System.arraycopy(nameBytes, 0, buf, OFFSET_FTFD_NAME, minOf(FTFD_NAME_MAX, nameBytes.size))
         }
-        System.arraycopy(md5, 0, buf, 194, minOf(16, md5.size))
+        System.arraycopy(md5, 0, buf, OFFSET_FTFD_MD5, minOf(MD5_SIZE, md5.size))
         return buf
     }
 
     /** FTDa payload: transferId (uint16), chunk length (uint16), chunk data. */
     internal fun buildDataChunkPayload(transferId: Int, data: ByteArray, offset: Int, length: Int): ByteArray {
-        val buf = ByteArray(4 + length)
+        val buf = ByteArray(FTDA_HEADER_SIZE + length)
         writeU16(buf, 0, transferId)
-        writeU16(buf, 2, length)
-        System.arraycopy(data, offset, buf, 4, length)
+        writeU16(buf, OFFSET_FTDA_LENGTH, length)
+        System.arraycopy(data, offset, buf, FTDA_HEADER_SIZE, length)
         return buf
     }
 
@@ -1001,11 +1134,11 @@ class AtemClient(val host: String, val port: Int = 9910) {
      */
     internal fun buildSetClipPayload(clipIndex: Int, name: String, frames: Int): ByteArray {
         val buf = ByteArray(68)
-        buf[0] = 3
+        buf[0] = SMPC_MASK_NAME_AND_FRAMES.toByte()
         buf[1] = clipIndex.toByte()
         val nameBytes = name.toByteArray(Charsets.UTF_8)
-        System.arraycopy(nameBytes, 0, buf, 2, minOf(44, nameBytes.size))
-        writeU16(buf, 66, frames)
+        System.arraycopy(nameBytes, 0, buf, OFFSET_SMPC_NAME, minOf(SMPC_NAME_MAX, nameBytes.size))
+        writeU16(buf, OFFSET_SMPC_FRAME_COUNT, frames)
         return buf
     }
 

@@ -29,6 +29,8 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 
+private const val OP_REQUEST = 6
+
 class OBSWebSocketManager {
 
     enum class ConnectionStatus { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
@@ -72,7 +74,7 @@ class OBSWebSocketManager {
                     withContext(Dispatchers.Main) { _status.value = ConnectionStatus.CONNECTED }
                     CrashReporter.breadcrumb("OBS connected ($host:$port)", category = "integration")
 
-                    for (frame in incoming) { /* drain event notifications */ }
+                    while (incoming.receiveCatching().isSuccess) { /* drain event notifications */ }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -113,7 +115,7 @@ class OBSWebSocketManager {
         scope.launch {
             try {
                 sess.send(buildJsonObject {
-                    put("op", 6)
+                    put("op", OP_REQUEST)
                     put("d", buildJsonObject {
                         put("requestType", "SetCurrentProgramScene")
                         put("requestId", UUID.randomUUID().toString())

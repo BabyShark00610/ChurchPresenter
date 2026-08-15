@@ -59,6 +59,17 @@
     <string name="shadow_opacity">Intenzita (%)</string>
     <string name="hold_live">Podržet živě</string>
     <string name="bible_split_browse_mode">Režim rozděleného prohlížení</string>
+    <string name="bible_cross_references">Křížové odkazy</string>
+    <string name="bible_cross_references_title">Odkazy</string>
+    <string name="bible_cross_references_enable">Zobrazovat křížové odkazy</string>
+    <string name="bible_cross_references_none">Žádné křížové odkazy</string>
+    <string name="bible_cross_references_often_next">Často následuje</string>
+    <string name="bible_cross_references_passage">Pasáž %1$s</string>
+    <string name="bible_cross_references_count">Křížové odkazy: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · křížové odkazy: %2$d</string>
+    <string name="bible_cross_references_keep_open">Připnout</string>
+    <string name="bible_cross_references_close">Zavřít panel</string>
+    <string name="bible_cross_references_dismiss_hint">Esc — zavřít</string>
     <string name="bible_live_view">Živě</string>
     <string name="copy_verse">Kopírovat verš</string>
     <string name="fade_in">Postupné zobrazení</string>

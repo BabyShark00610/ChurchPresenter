@@ -83,7 +83,6 @@ import org.churchpresenter.app.churchpresenter.presenter.STTPresenter
 import org.churchpresenter.app.churchpresenter.presenter.QAQRCodePresenter
 import org.churchpresenter.app.churchpresenter.presenter.ScenePresenter
 import org.churchpresenter.app.churchpresenter.presenter.PresentationPresenter
-import org.churchpresenter.app.churchpresenter.presenter.SlidePresenter
 import org.churchpresenter.app.churchpresenter.presenter.SongPresenter
 import org.churchpresenter.app.churchpresenter.BuildConfig
 import org.churchpresenter.app.churchpresenter.utils.Constants
@@ -97,6 +96,11 @@ import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+
+private const val PREVIEW_BACKGROUND = 0xFF121212
+private const val LIVE_BADGE_COLOR = 0xFF2196F3
+private const val LOCK_BADGE_COLOR = 0xFFFFC107
+private const val AUDIO_LEVEL_COLOR = 0xFF4CAF50
 
 /**
  * A scaled-down preview of whatever is currently live on the presenter windows.
@@ -392,7 +396,7 @@ private fun SingleDisplayPreview(
                                 )
                             Presenting.MEDIA ->
                                 if (mediaViewModel != null && !mediaViewModel.isAudioFile) {
-                                    MediaPresenter(modifier = Modifier.fillMaxSize(), audioEnabled = false, transitionAlpha = mediaTransitionAlpha)
+                                    MediaPresenter(modifier = Modifier.fillMaxSize(), transitionAlpha = mediaTransitionAlpha)
                                 }
                             Presenting.LOWER_THIRD ->
                                 LowerThirdPresenter(
@@ -461,7 +465,7 @@ private fun SingleDisplayPreview(
                 )
             } else {
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color(0xFF121212)),
+                    modifier = Modifier.fillMaxSize().background(Color(PREVIEW_BACKGROUND)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -498,7 +502,7 @@ private fun SingleDisplayPreview(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(4.dp)
-                    .background(Color(0xFF2196F3), RoundedCornerShape(3.dp))
+                    .background(Color(LIVE_BADGE_COLOR), RoundedCornerShape(3.dp))
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             )
         }
@@ -515,7 +519,7 @@ private fun SingleDisplayPreview(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 4.dp, bottom = if (screenAssignment.hasKeyOutput) 24.dp else 4.dp)
-                        .background(Color(0xFFFFC107), RoundedCornerShape(3.dp))
+                        .background(Color(LOCK_BADGE_COLOR), RoundedCornerShape(3.dp))
                         .padding(horizontal = 5.dp, vertical = 2.dp)
                 )
             }
@@ -534,7 +538,7 @@ private fun SingleDisplayPreview(
                     .padding(2.dp)
                     .size(24.dp),
                 colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = if (lockedMode != null) Color(0xFFFFC107) else Color.White.copy(alpha = 0.5f)
+                    contentColor = if (lockedMode != null) Color(LOCK_BADGE_COLOR) else Color.White.copy(alpha = 0.5f)
                 )
             ) {
                 Icon(
@@ -558,9 +562,8 @@ private fun SingleDisplayPreview(
         )
 
         // Animated audio indicator — only when presenting and media is playing
-        if (effectiveMode != Presenting.NONE
-            && mediaViewModel != null && mediaViewModel.isLoaded && mediaViewModel.isPlaying
-        ) {
+        val mediaAudible = mediaViewModel != null && mediaViewModel.isLoaded && mediaViewModel.isPlaying
+        if (effectiveMode != Presenting.NONE && mediaAudible) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -602,7 +605,7 @@ private fun AnimatedEqualizer() {
                 modifier = Modifier
                     .width(3.dp)
                     .fillMaxHeight(heightFraction.value)
-                    .background(Color(0xFF4CAF50), RoundedCornerShape(1.dp))
+                    .background(Color(AUDIO_LEVEL_COLOR), RoundedCornerShape(1.dp))
             )
         }
     }

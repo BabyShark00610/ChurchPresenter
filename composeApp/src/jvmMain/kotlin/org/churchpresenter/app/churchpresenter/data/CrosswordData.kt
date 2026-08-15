@@ -2,6 +2,8 @@ package org.churchpresenter.app.churchpresenter.data
 
 import java.util.Base64
 
+private const val CLUE_LINE_FIELDS = 4
+
 // XOR key shared with the ChurchPresenter-Cross encoder app
 internal const val CROSSWORD_XOR_KEY = "CHURCHPRESENTER"
 
@@ -67,6 +69,19 @@ object CrosswordDecoder {
      *   DOWN:
      *   2. Clue text | ANSWER
      */
+    private fun putLayoutEntry(
+        line: String,
+        layout: MutableMap<Pair<Int, CrosswordDirection>, Pair<Int, Int>>,
+    ) {
+        val (key, position) = parseLayoutLine(line) ?: return
+        layout[key] = position
+    }
+
+    private fun addClue(line: String, direction: CrosswordDirection?, clues: MutableList<CrosswordClue>) {
+        val dir = direction ?: return
+        parseClueLine(line, dir)?.let { clues.add(it) }
+    }
+
     private fun parseText(text: String): Triple<String, List<CrosswordClue>, Map<Pair<Int, CrosswordDirection>, Pair<Int, Int>>?>? {
         var title = "Crossword"
         val clues = mutableListOf<CrosswordClue>()
@@ -84,36 +99,38 @@ object CrosswordDecoder {
                 line.equals("ACROSS:", ignoreCase = true) -> { direction = CrosswordDirection.ACROSS; inLayout = false }
                 line.equals("DOWN:", ignoreCase = true) -> { direction = CrosswordDirection.DOWN; inLayout = false }
                 line.equals("LAYOUT:", ignoreCase = true) -> inLayout = true
-                inLayout -> {
-                    val parts = line.split(" ")
-                    if (parts.size == 4) {
-                        val num = parts[0].toIntOrNull() ?: continue
-                        val dir = when (parts[1].uppercase()) {
-                            "ACROSS" -> CrosswordDirection.ACROSS
-                            "DOWN"   -> CrosswordDirection.DOWN
-                            else     -> continue
-                        }
-                        val row = parts[2].toIntOrNull() ?: continue
-                        val col = parts[3].toIntOrNull() ?: continue
-                        layout[num to dir] = row to col
-                    }
-                }
-                else -> {
-                    val dir = direction ?: continue
-                    val dotIdx = line.indexOf('.')
-                    val pipeIdx = line.lastIndexOf('|')
-                    if (dotIdx < 0 || pipeIdx < 0 || pipeIdx <= dotIdx) continue
-                    val number = line.substring(0, dotIdx).trim().toIntOrNull() ?: continue
-                    val clueText = line.substring(dotIdx + 1, pipeIdx).trim()
-                    val answer = line.substring(pipeIdx + 1).trim().uppercase()
-                    if (answer.isNotBlank()) {
-                        clues.add(CrosswordClue(number, dir, clueText, answer))
-                    }
-                }
+                inLayout -> putLayoutEntry(line, layout)
+                else -> addClue(line, direction, clues)
             }
         }
         return if (clues.isEmpty()) null
         else Triple(title, clues, if (layout.isEmpty()) null else layout)
+    }
+
+    /** `"1 ACROSS 3 5"` → the clue key and its (row, col) origin, or null if the line is malformed. */
+    private fun parseLayoutLine(line: String): Pair<Pair<Int, CrosswordDirection>, Pair<Int, Int>>? {
+        val parts = line.split(" ").takeIf { it.size == CLUE_LINE_FIELDS } ?: return null
+        val num = parts[0].toIntOrNull()
+        val dir = when (parts[1].uppercase()) {
+            "ACROSS" -> CrosswordDirection.ACROSS
+            "DOWN" -> CrosswordDirection.DOWN
+            else -> null
+        }
+        if (num == null || dir == null) return null
+        val row = parts[2].toIntOrNull()
+        val col = parts[3].toIntOrNull()
+        return if (row != null && col != null) (num to dir) to (row to col) else null
+    }
+
+    /** `"1. Clue text | ANSWER"` → the clue, or null if the line is malformed or has no answer. */
+    private fun parseClueLine(line: String, dir: CrosswordDirection): CrosswordClue? {
+        val dotIdx = line.indexOf('.')
+        val pipeIdx = line.lastIndexOf('|')
+        if (dotIdx < 0 || pipeIdx < 0 || pipeIdx <= dotIdx) return null
+        val number = line.substring(0, dotIdx).trim().toIntOrNull() ?: return null
+        val clueText = line.substring(dotIdx + 1, pipeIdx).trim()
+        val answer = line.substring(pipeIdx + 1).trim().uppercase()
+        return if (answer.isBlank()) null else CrosswordClue(number, dir, clueText, answer)
     }
 }
 
@@ -205,22 +222,33 @@ object CrosswordLayoutEngine {
             for (pw in placed) {
                 // Only intersect words running in the opposite direction
                 if (pw.direction == dir) continue
+                crossingAt(grid, clue, pw, dir)?.let { return it }
+            }
+        }
+        return null
+    }
 
-                for ((i, ch) in clue.answer.withIndex()) {
-                    for ((j, pwCh) in pw.answer.withIndex()) {
-                        if (ch != pwCh) continue
+    /** Where [clue] can sit crossing [pw] in [dir], or null when no shared letter fits. */
+    private fun crossingAt(
+        grid: Map<Pair<Int, Int>, Char>,
+        clue: CrosswordClue,
+        pw: PlacedEntry,
+        dir: CrosswordDirection
+    ): Triple<Int, Int, CrosswordDirection>? {
+        for ((i, ch) in clue.answer.withIndex()) {
+            for ((j, pwCh) in pw.answer.withIndex()) {
+                if (ch != pwCh) continue
 
-                        // The intersection cell in absolute coordinates
-                        val (intRow, intCol) = if (pw.direction == CrosswordDirection.ACROSS)
-                            pw.row to pw.col + j else pw.row + j to pw.col
+                // The intersection cell in absolute coordinates
+                val (intRow, intCol) = if (pw.direction == CrosswordDirection.ACROSS)
+                    pw.row to pw.col + j else pw.row + j to pw.col
 
-                        // Start of the new word given the intersection is at index i
-                        val (startRow, startCol) = if (dir == CrosswordDirection.ACROSS)
-                            intRow to intCol - i else intRow - i to intCol
+                // Start of the new word given the intersection is at index i
+                val (startRow, startCol) = if (dir == CrosswordDirection.ACROSS)
+                    intRow to intCol - i else intRow - i to intCol
 
-                        if (isValid(grid, clue.answer, startRow, startCol, dir))
-                            return Triple(startRow, startCol, dir)
-                    }
+                if (isValid(grid, clue.answer, startRow, startCol, dir)) {
+                    return Triple(startRow, startCol, dir)
                 }
             }
         }
@@ -240,18 +268,24 @@ object CrosswordLayoutEngine {
         var hasIntersection = false
         for (i in word.indices) {
             val (r, c) = if (dir == CrosswordDirection.ACROSS) row to col + i else row + i to col
-            val existing = grid[r to c]
-            if (existing != null) {
-                if (existing != word[i]) return false  // letter conflict
-                hasIntersection = true
-            } else {
-                // No parallel adjacency — perpendicular neighbours must be empty
-                val n1 = if (dir == CrosswordDirection.ACROSS) r - 1 to c else r to c - 1
-                val n2 = if (dir == CrosswordDirection.ACROSS) r + 1 to c else r to c + 1
-                if (grid.containsKey(n1) || grid.containsKey(n2)) return false
-            }
+            if (blocksLetter(grid, r, c, word[i], dir)) return false
+            if (grid.containsKey(r to c)) hasIntersection = true
         }
         return hasIntersection  // must share at least one letter with an existing word
+    }
+
+    private fun blocksLetter(
+        grid: Map<Pair<Int, Int>, Char>,
+        r: Int, c: Int,
+        letter: Char,
+        dir: CrosswordDirection
+    ): Boolean {
+        val existing = grid[r to c]
+        if (existing != null) return existing != letter  // letter conflict
+        // No parallel adjacency — perpendicular neighbours must be empty
+        val n1 = if (dir == CrosswordDirection.ACROSS) r - 1 to c else r to c - 1
+        val n2 = if (dir == CrosswordDirection.ACROSS) r + 1 to c else r to c + 1
+        return grid.containsKey(n1) || grid.containsKey(n2)
     }
 
     internal fun renderGrid(

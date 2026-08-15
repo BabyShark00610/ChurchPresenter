@@ -6,6 +6,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 
+private const val DEFAULT_ATEM_PORT = 9910
+
 /**
  * Singleton that maintains a single reusable [AtemClient] connection.
  *
@@ -79,14 +81,15 @@ object AtemConnectionManager {
         client?.disconnect()
         client = null
         cachedHost = ""
-        cachedPort = 9910
+        cachedPort = DEFAULT_ATEM_PORT
     }
 
     private suspend fun ensureConnected(host: String, port: Int, needsState: Boolean): AtemClient {
         val existing = client
         // Reconnect when there is no client, the target changed, or the keepalive loop
         // tore the socket down because the ATEM went silent.
-        if (existing == null || !existing.isAlive() || host != cachedHost || port != cachedPort) {
+        val endpointChanged = host != cachedHost || port != cachedPort
+        if (existing == null || !existing.isAlive() || endpointChanged) {
             existing?.disconnect()
             return openConnection(host, port, collectState = needsState)
         }

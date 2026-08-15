@@ -26,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -45,6 +46,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLException
 import kotlin.random.Random
+
+private const val FAILURE_LOG_INTERVAL = 10
 
 enum class InstanceLinkStatus { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 
@@ -196,7 +199,7 @@ class InstanceLinkClient(
             } catch (e: Exception) {
                 consecutiveFailures++
                 System.err.println("InstanceLink: connect to ws://$host:$port${Constants.ENDPOINT_WS} failed — ${e.message}")
-                if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0) {
+                if (consecutiveFailures == 1 || consecutiveFailures % FAILURE_LOG_INTERVAL == 0) {
                     CrashReporter.reportWarning(
                         "InstanceLink: connection failed — ${e.message}",
                         tags = mapOf(
@@ -242,69 +245,54 @@ class InstanceLinkClient(
         else -> "other"
     }
 
-    internal fun handleMessage(raw: String) {
-        val msg = runCatching { json.decodeFromString(WebSocketMessage.serializer(), raw) }.getOrNull()
-        if (msg == null) {
+    /** Decodes one payload, logging the decode failure the follower log expects, or null. */
+    private fun <T> decodePayload(payload: String, context: String, serializer: KSerializer<T>): T? {
+        val decoded = runCatching { json.decodeFromString(serializer, payload) }.getOrNull()
+        if (decoded == null) {
             InstanceLinkLogger.log(
                 InstanceLinkLogSide.FOLLOWER, "ws_message_decode_failed",
-                mapOf("context" to "envelope")
+                mapOf("context" to context)
             )
-            return
         }
+        return decoded
+    }
+
+    internal fun handleMessage(raw: String) {
+        val msg = decodePayload(raw, "envelope", WebSocketMessage.serializer()) ?: return
         InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "ws_message_received", mapOf("type" to msg.type))
         onMessageReceived()
         when (msg.type) {
-            Constants.WS_EVENT_SCHEDULE_UPDATED -> {
-                val response = runCatching { json.decodeFromString(ScheduleResponse.serializer(), msg.payload) }.getOrNull()
-                if (response == null) {
-                    InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "ws_message_decode_failed", mapOf("context" to "schedule"))
-                    return
-                }
-                onScheduleUpdated(response.items)
-            }
-            Constants.WS_EVENT_LIVE_STATE_CHANGED -> {
-                val state = runCatching { json.decodeFromString(LiveStateDto.serializer(), msg.payload) }.getOrNull()
-                if (state == null) {
-                    InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "ws_message_decode_failed", mapOf("context" to "live_state"))
-                    return
-                }
-                onLiveStateUpdated(state)
-            }
-            Constants.WS_EVENT_SONGS_UPDATED -> {
-                val catalog = runCatching { json.decodeFromString(SongCatalogResponse.serializer(), msg.payload) }.getOrNull()
-                if (catalog == null) {
-                    InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "ws_message_decode_failed", mapOf("context" to "song_catalog"))
-                    return
-                }
-                onSongsUpdated(catalog)
-            }
+            Constants.WS_EVENT_SCHEDULE_UPDATED ->
+                decodePayload(msg.payload, "schedule", ScheduleResponse.serializer())
+                    ?.let { onScheduleUpdated(it.items) }
+            Constants.WS_EVENT_LIVE_STATE_CHANGED ->
+                decodePayload(msg.payload, "live_state", LiveStateDto.serializer())
+                    ?.let { onLiveStateUpdated(it) }
+            Constants.WS_EVENT_SONGS_UPDATED ->
+                decodePayload(msg.payload, "song_catalog", SongCatalogResponse.serializer())
+                    ?.let { onSongsUpdated(it) }
             Constants.WS_EVENT_DISPLAY_CLEARED -> onDisplayCleared()
             Constants.WS_EVENT_BIBLE_UPDATED -> onBibleUpdated()
             Constants.WS_EVENT_SECONDARY_BIBLE_UPDATED -> onSecondaryBibleUpdated()
             Constants.WS_EVENT_PICTURES_UPDATED -> onPicturesUpdated()
             Constants.WS_EVENT_BACKGROUNDS_UPDATED -> onBackgroundsUpdated()
-            Constants.WS_EVENT_COMMAND_ACK -> {
-                val ack = runCatching { json.decodeFromString(CommandAckPayload.serializer(), msg.payload) }.getOrNull()
-                if (ack == null) {
-                    InstanceLinkLogger.log(InstanceLinkLogSide.FOLLOWER, "ws_message_decode_failed", mapOf("context" to "command_ack"))
-                    return
-                }
-                pendingAcks.remove(ack.commandId)?.complete(ack)
-            }
-            Constants.WS_EVENT_SONG_SECTION_SELECTED -> {
-                val index = msg.payload.toIntOrNull() ?: return
-                onSongSectionSelected(index)
-            }
-            Constants.WS_EVENT_PRESENTATION_SLIDE_CHANGED -> {
-                val obj = runCatching { json.parseToJsonElement(msg.payload).jsonObject }.getOrNull() ?: return
-                val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return
-                val index = obj["index"]?.jsonPrimitive?.intOrNull ?: return
-                val total = obj["total"]?.jsonPrimitive?.intOrNull ?: return
-                val isPlaying = obj["isPlaying"]?.jsonPrimitive?.booleanOrNull ?: false
-                val isLive = obj["isLive"]?.jsonPrimitive?.booleanOrNull ?: false
-                onPresentationSlideChanged(id, index, total, isPlaying, isLive)
-            }
+            Constants.WS_EVENT_COMMAND_ACK ->
+                decodePayload(msg.payload, "command_ack", CommandAckPayload.serializer())
+                    ?.let { ack -> pendingAcks.remove(ack.commandId)?.complete(ack) }
+            Constants.WS_EVENT_SONG_SECTION_SELECTED ->
+                msg.payload.toIntOrNull()?.let { onSongSectionSelected(it) }
+            Constants.WS_EVENT_PRESENTATION_SLIDE_CHANGED -> handlePresentationSlideChanged(msg.payload)
         }
+    }
+
+    private fun handlePresentationSlideChanged(payload: String) {
+        val obj = runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return
+        val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return
+        val index = obj["index"]?.jsonPrimitive?.intOrNull ?: return
+        val total = obj["total"]?.jsonPrimitive?.intOrNull ?: return
+        val isPlaying = obj["isPlaying"]?.jsonPrimitive?.booleanOrNull ?: false
+        val isLive = obj["isLive"]?.jsonPrimitive?.booleanOrNull ?: false
+        onPresentationSlideChanged(id, index, total, isPlaying, isLive)
     }
 
     /**

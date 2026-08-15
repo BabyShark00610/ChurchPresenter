@@ -89,6 +89,8 @@ import kotlinx.coroutines.withContext
 import org.churchpresenter.app.churchpresenter.composables.ColorPickerField
 import org.churchpresenter.app.churchpresenter.composables.FileImagePicker
 import org.churchpresenter.app.churchpresenter.composables.FileVideoPicker
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.SlimSlider
 import org.churchpresenter.app.churchpresenter.composables.TvScreenBox
@@ -112,6 +114,8 @@ import java.io.File
 import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 
+private const val PREVIEW_DEBOUNCE_MS = 800L
+
 @Composable
 fun BackgroundSettingsTab(
     settings: AppSettings,
@@ -126,6 +130,7 @@ fun BackgroundSettingsTab(
         onSettingsChange { s -> s.copy(stockPhotoSettings = s.stockPhotoSettings.copy(pixabayApiKey = key)) }
     }
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -135,7 +140,8 @@ fun BackgroundSettingsTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState)
+                .padding(end = SettingsScrollbarGutter),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Row 1: Default Full Screen + Default Lower Third
@@ -455,6 +461,7 @@ fun BackgroundSettingsTab(
                 }
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }
 
@@ -868,7 +875,7 @@ private suspend fun uploadBackgroundToAtem(atemSettings: AtemSettings, imagePath
             client.disconnect()
         }
         AtemUploadStatus.complete(id)
-        delay(800)
+        delay(PREVIEW_DEBOUNCE_MS)
         AtemUploadStatus.clear(id)
     } catch (e: Exception) {
         AtemUploadStatus.fail(id, e.message)

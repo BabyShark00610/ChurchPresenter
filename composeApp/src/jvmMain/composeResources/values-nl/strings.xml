@@ -1719,6 +1719,17 @@
     <string name="copy_verse">Vers kopiëren</string>
     <string name="style">Stijl</string>
     <string name="bible_split_browse_mode">Gesplitste bladermodus</string>
+    <string name="bible_cross_references">Kruisverwijzingen</string>
+    <string name="bible_cross_references_title">Verwijzingen</string>
+    <string name="bible_cross_references_enable">Kruisverwijzingen tonen</string>
+    <string name="bible_cross_references_none">Geen kruisverwijzingen</string>
+    <string name="bible_cross_references_often_next">Vaak hierna</string>
+    <string name="bible_cross_references_passage">Passage %1$s</string>
+    <string name="bible_cross_references_count">Kruisverwijzingen: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · kruisverwijzingen: %2$d</string>
+    <string name="bible_cross_references_keep_open">Vastzetten</string>
+    <string name="bible_cross_references_close">Paneel sluiten</string>
+    <string name="bible_cross_references_dismiss_hint">Esc om te sluiten</string>
     <string name="bible_live_view">Live</string>
     <string name="clear_recents">Recenten wissen</string>
     <string name="recent">Recent:</string>

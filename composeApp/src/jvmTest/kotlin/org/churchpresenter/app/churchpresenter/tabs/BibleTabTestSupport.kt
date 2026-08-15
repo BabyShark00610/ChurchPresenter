@@ -3,6 +3,10 @@
 package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -27,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import org.churchpresenter.app.churchpresenter.data.SpbFixture
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
+import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
@@ -34,8 +39,9 @@ import org.churchpresenter.app.churchpresenter.viewmodel.BibleEngineClient
 import org.churchpresenter.app.churchpresenter.viewmodel.BibleViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.churchpresenter.app.churchpresenter.viewmodel.STTManager
+import org.churchpresenter.app.churchpresenter.data.CrossReferenceRepository
 import org.churchpresenter.app.churchpresenter.data.StatisticsManager
-import java.io.File
+import org.churchpresenter.app.churchpresenter.data.VerseSequenceLog
 import java.nio.file.Files
 
 /**
@@ -86,6 +92,19 @@ internal val bibleFixture = SpbFixture.buildContent(
     ),
 )
 
+/** File name of the optional second module — see `bibleTab`'s `secondContent`. */
+internal const val SECOND_MODULE = "second.spb"
+
+/**
+ * A repository that knows nothing, which is what a test not about cross references should see.
+ *
+ * The tab now reads the dataset for every chapter it opens, to number the link chip at the end of
+ * each verse — so leaving `crossReferences` unset would put the real 3 MB file behind every Bible
+ * test, cost the parse once per JVM, and paint chips whose counts are whatever TSK says about
+ * Genesis 1 today. `bibleTab` substitutes this instead.
+ */
+internal fun noCrossReferences() = CrossReferenceRepository { """{"v":1,"r":{}}""".toByteArray() }
+
 // ── Harness ─────────────────────────────────────────────────────────────────────────────────────
 
 /** What the tab reported back, so a test asserts on the choice rather than on a stub. */
@@ -118,6 +137,23 @@ internal class BibleReports {
 @OptIn(ExperimentalTestApi::class)
 internal fun bibleTab(
     content: String = bibleFixture,
+    /**
+     * A second module, written alongside the first and configured as the secondary translation.
+     *
+     * Needed by anything exercising a translation change — the swap button does nothing with one
+     * module configured. Give it wording that differs from [content] so a test can tell which
+     * module the tab is reading from.
+     */
+    secondContent: String? = null,
+    /**
+     * Extra modules written into the folder, by file name.
+     *
+     * A test that names translations through [settings] has to write them, or the tab reports them
+     * as translations that could not be read — which is correct, and is exactly what
+     * `BibleTabLoadErrorTest` drives on purpose, so a test about something else must not trip it by
+     * accident. The content does not matter to those tests, so it defaults to the shared fixture.
+     */
+    extraModules: List<String> = emptyList(),
     settings: (AppSettings) -> AppSettings = { it },
     /**
      * Passed to the tab as its [STTManager] when non-null.
@@ -140,6 +176,21 @@ internal fun bibleTab(
      * `user.home` first — see [bibleTabWithStatistics].
      */
     statistics: StatisticsManager? = null,
+    /**
+     * Passed as the tab's [VerseSequenceLog] when non-null.
+     *
+     * Its default store is under `~/.churchpresenter`, so build one over a temp file rather than
+     * calling `VerseSequenceLog()`.
+     */
+    sequenceLog: VerseSequenceLog? = null,
+    /**
+     * Passed as the tab's [CrossReferenceRepository].
+     *
+     * Null substitutes [noCrossReferences] rather than letting the tab fall back to the shared
+     * instance over the real 3 MB dataset — that would make every Bible test depend on what TSK
+     * happens to say about Genesis 1. Cross-reference tests pass their own fixture.
+     */
+    crossReferences: CrossReferenceRepository? = null,
     /** Instance Link Controller mode: non-null makes the tab mirror every go-live to the primary. */
     onInstanceLinkSendVerse: ((SelectedVerse) -> Unit)? = null,
     onInstanceLinkSendBibleHold: ((Boolean) -> Unit)? = null,
@@ -160,22 +211,34 @@ internal fun bibleTab(
     val dir = Files.createTempDirectory("cp-bible-tab").toFile()
     try {
         SpbFixture.spbFile(dir, content = content)
-        val appSettings = settings(
+        secondContent?.let { SpbFixture.spbFile(dir, name = SECOND_MODULE, content = it) }
+        extraModules.forEach { SpbFixture.spbFile(dir, name = it, content = content) }
+        val initialSettings = settings(
             AppSettings(
                 bibleSettings = BibleSettings(
                     storageDirectory = dir.absolutePath,
                     primaryBible = "test.spb",
+                    secondaryBible = if (secondContent != null) SECOND_MODULE else "",
+                    translations = if (secondContent == null) emptyList() else listOf(
+                        BibleTranslationSettings(fileName = "test.spb"),
+                        BibleTranslationSettings(fileName = SECOND_MODULE),
+                    ),
                 )
             )
         )
         val vm = BibleViewModel(
-            appSettings,
+            initialSettings,
             dispatcher = Dispatchers.Unconfined,
             ioDispatcher = Dispatchers.Unconfined,
         )
         val reports = BibleReports()
         runComposeUiTest {
             setContent {
+                // The tab holds no settings of its own — the host applies its transform and hands
+                // the result back. Doing that here rather than only recording it is what lets a
+                // test drive a settings change through to its effect on the tab: a swap, for
+                // instance, has to reach BibleViewModel.updateSettings to reload anything.
+                var appSettings by remember { mutableStateOf(initialSettings) }
                 ThemedForTest(themeMode) {
                     Box(modifier = width?.let { Modifier.width(it) } ?: Modifier) {
                     BibleTab(
@@ -183,7 +246,9 @@ internal fun bibleTab(
                         appSettings = appSettings,
                         onSettingsChange = { transform ->
                             reports.settingsChanges++
-                            reports.settingsAfterChange = transform(appSettings)
+                            val updated = transform(appSettings)
+                            reports.settingsAfterChange = updated
+                            appSettings = updated
                         },
                         onAddToSchedule = { book, chapter, verse, _, _, _ ->
                             reports.scheduled += "$book $chapter:$verse"
@@ -193,6 +258,8 @@ internal fun bibleTab(
                         sttManager = stt,
                         presenterManager = presenter,
                         statisticsManager = statistics,
+                        verseSequenceLog = sequenceLog,
+                        crossReferences = crossReferences ?: noCrossReferences(),
                         onInstanceLinkSendVerse = onInstanceLinkSendVerse?.let { send ->
                             { book, chapter, verseNumber, verseText, verseRange ->
                                 send(
@@ -229,6 +296,21 @@ internal object BibleLabel {
     const val GO_LIVE = "Go Live"
     const val ADD_TO_SCHEDULE = "Add to Schedule"
     const val HISTORY = "History"
+    const val CROSS_REFS = "Refs"
+    const val CROSS_REFS_EMPTY = "No cross references"
+
+    /**
+     * The docked panel's close button.
+     *
+     * What tells a test the panel is docked: [CROSS_REFS] is now also the header toggle's own
+     * label, so it is on screen whether the panel is open or not.
+     */
+    const val CROSS_REFS_CLOSE = "Close panel"
+    const val CROSS_REFS_KEEP_OPEN = "Keep open"
+
+    /** The header dock toggle, addressed by the name its icon carries rather than its "Refs" label. */
+    const val CROSS_REFS_TOGGLE = "Cross References"
+    const val OFTEN_NEXT = "Often next"
     const val CLEAR_HISTORY = "Clear"
     const val ENTIRE_BIBLE = "Entire Bible"
     const val CURRENT_BOOK = "Current Book"

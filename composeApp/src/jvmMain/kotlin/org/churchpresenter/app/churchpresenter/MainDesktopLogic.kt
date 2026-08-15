@@ -1,14 +1,9 @@
 package org.churchpresenter.app.churchpresenter
 
 import kotlin.math.roundToInt
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.window.WindowPlacement
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.key
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.ImageBitmap
@@ -18,17 +13,18 @@ import org.churchpresenter.app.churchpresenter.data.settings.BibleSettings
 import org.churchpresenter.app.churchpresenter.data.settings.CompanionSatelliteSettings
 import org.churchpresenter.app.churchpresenter.data.settings.InstanceLinkRole
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
-import org.churchpresenter.app.churchpresenter.data.Bible
 import org.churchpresenter.app.churchpresenter.data.SongItem
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
 import org.churchpresenter.app.churchpresenter.models.SelectedVerse
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.server.InstanceLinkStatus
 import org.churchpresenter.app.churchpresenter.server.SelectBibleVerseRequest
-import org.churchpresenter.app.churchpresenter.tabs.BibleTab
 import org.churchpresenter.app.churchpresenter.tabs.Tabs
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import java.io.File
+
+private const val MILLIS_PER_SECOND = 1000
+private const val HEX_RADIX = 16
 
 /**
  * The decisions the root composable makes, held apart from the composable that makes them.
@@ -281,24 +277,6 @@ internal fun shouldMirrorFromPrimary(
 ): Boolean = status == InstanceLinkStatus.CONNECTED && role == InstanceLinkRole.CONTROLLED
 
 /**
- * The tab a function-key shortcut jumps to, or null when the key is not one of them.
- *
- * F6–F12 in tab order. These are pressed by feel during a service — the operator is looking at the
- * platform, not the screen — so a key wired to the neighbouring tab is not noticed until the wrong
- * panel is already open.
- */
-internal fun tabForFunctionKey(key: Key): Tabs? = when (key) {
-    Key.F6 -> Tabs.BIBLE
-    Key.F7 -> Tabs.SONGS
-    Key.F8 -> Tabs.PICTURES
-    Key.F9 -> Tabs.PRESENTATION
-    Key.F10 -> Tabs.MEDIA
-    Key.F11 -> Tabs.LOWER_THIRD
-    Key.F12 -> Tabs.ANNOUNCEMENTS
-    else -> null
-}
-
-/**
  * The width a collapsible side panel actually renders at, in pixels.
  *
  * Order matters: the cap is applied to the requested width *before* the collapse fraction scales it.
@@ -340,7 +318,7 @@ internal fun parseVerseRangeEnd(verseRange: String, verseNumber: Int): Int? {
 }
 
 internal fun retrySecondsLeft(nextRetryAtMs: Long?, nowMs: Long): Long? =
-    nextRetryAtMs?.let { ((it - nowMs) / 1000).coerceAtLeast(0) }
+    nextRetryAtMs?.let { ((it - nowMs) / MILLIS_PER_SECOND).coerceAtLeast(0) }
 
 internal fun findLottiePresetFile(files: List<File>?, presetLabel: String, presetId: String): File? =
     files?.find { it.nameWithoutExtension == presetLabel || it.nameWithoutExtension == presetId }
@@ -465,7 +443,7 @@ internal fun isPanelRendered(collapsed: Boolean, visibleFraction: Float): Boolea
 internal fun canDisconnectInstanceLink(status: InstanceLinkStatus): Boolean =
     status != InstanceLinkStatus.DISCONNECTED
 
-internal fun stableFileId(file: File): String = file.absolutePath.hashCode().toUInt().toString(16)
+internal fun stableFileId(file: File): String = file.absolutePath.hashCode().toUInt().toString(HEX_RADIX)
 
 internal fun tabForScheduleItem(item: ScheduleItem): Tabs? = when (item) {
     is ScheduleItem.SongItem -> Tabs.SONGS

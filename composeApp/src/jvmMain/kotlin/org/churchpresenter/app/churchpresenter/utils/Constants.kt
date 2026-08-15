@@ -12,6 +12,10 @@ import java.awt.GraphicsDevice
 import java.awt.GraphicsEnvironment
 import java.awt.HeadlessException
 import java.awt.Rectangle
+import java.util.Locale
+
+private const val SCREEN_POLL_INTERVAL_MS = 2000L
+private const val MAX_SIMPLE_RATIO_SIDE = 64
 
 /** Empty on a headless JVM (CI, or a genuinely displayless deployment) instead of throwing. */
 private fun safeScreenDevices(): Array<GraphicsDevice> = try {
@@ -26,7 +30,7 @@ fun rememberScreenDevices(): Array<GraphicsDevice> {
     var devices by remember { mutableStateOf(safeScreenDevices()) }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(2000)
+            delay(SCREEN_POLL_INTERVAL_MS)
             val current = safeScreenDevices()
             if (current.size != devices.size) {
                 devices = current
@@ -116,8 +120,8 @@ fun formatAspectRatio(width: Int, height: Int): String {
     val w = width / gcd
     val h = height / gcd
     // Accept simplified ratios where both sides are reasonable (≤64)
-    return if (w <= 64 && h <= 64) "$w:$h"
-    else String.format("%.2f:1", width.toFloat() / height.toFloat())
+    return if (w <= MAX_SIMPLE_RATIO_SIDE && h <= MAX_SIMPLE_RATIO_SIDE) "$w:$h"
+    else String.format(Locale.US, "%.2f:1", width.toFloat() / height.toFloat())
 }
 
 private fun gcd(a: Int, b: Int): Int = if (b == 0) a else gcd(b, a % b)
@@ -204,9 +208,11 @@ object Constants {
     const val LANGUAGE_INTERFACE = "Interface"
     const val LANGUAGE_DATABASE = "Database"
 
-    // Default Bible storage folder, relative to the user's home directory. Seeded on first run
-    // and used as the fallback target when a download is started before a folder has been picked.
-    const val DEFAULT_BIBLES_DIR = ".churchpresenter/Bibles"
+    /**
+     * The Bibles folder, relative to the app data directory [AppDataDir] resolves. Seeded with the
+     * bundled KJV on first run.
+     */
+    const val DEFAULT_BIBLES_FOLDER = "Bibles"
 
     // How many translations the parallel Bible stack may hold. Full screen gives each one an equal
     // band of the output height, and auto-fit shrinks the text until it fits its band -- with no

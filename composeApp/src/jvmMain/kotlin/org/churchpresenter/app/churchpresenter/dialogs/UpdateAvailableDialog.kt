@@ -86,13 +86,6 @@ import java.net.URI
 import kotlin.system.exitProcess
 import org.churchpresenter.app.churchpresenter.composables.LabeledSwitch
 
-internal sealed class DownloadState {
-    object Idle : DownloadState()
-    data class Downloading(val progress: Float) : DownloadState() // -1f = indeterminate
-    data class Done(val file: File) : DownloadState()
-    data class Error(val message: String) : DownloadState()
-}
-
 /**
  * The temp-file suffix for a downloaded installer, inferred from the release asset's URL so the
  * OS-native launcher in [launchInstaller] can dispatch on file extension.

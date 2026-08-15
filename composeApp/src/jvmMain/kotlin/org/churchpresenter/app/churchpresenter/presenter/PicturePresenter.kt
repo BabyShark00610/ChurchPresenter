@@ -29,7 +29,8 @@ import org.jetbrains.skia.Image
 import java.io.File
 import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.utils.Constants
-import org.churchpresenter.app.churchpresenter.utils.HeicDecoder
+import org.churchpresenter.app.churchpresenter.utils.PictureDecoder
+import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 
 /** The white key-output's alpha for [PicturePresenter]/[SlidePresenter] — a slide's own translation
  *  carries the transition, not a fade, so slides always key fully opaque. */
@@ -158,18 +159,7 @@ internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxH
         val file = File(imagePath)
         if (!file.exists()) return null
 
-        val bytes = file.readBytes()
-
-        val originalImage = try {
-            Image.makeFromEncoded(bytes)
-        } catch (e: Exception) {
-            if (file.extension.lowercase() in listOf("heic", "heif")) {
-                val jpegBytes = HeicDecoder.toJpegBytes(file) ?: return null
-                try {
-                    Image.makeFromEncoded(jpegBytes)
-                } catch (_: Exception) { return null }
-            } else return null
-        }
+        val originalImage = PictureDecoder.decodeOrNull(file) ?: return null
 
         // Cap at actual screen resolution — no point storing more pixels than the display can show
         val widthScale = maxWidth.toFloat() / originalImage.width
@@ -204,7 +194,7 @@ internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxH
             originalImage.toComposeImageBitmap()
         }
     } catch (e: Exception) {
-        e.printStackTrace()
+        CrashReporter.reportException(e, "Decoding picture for presenter")
         null
     }
 }
@@ -290,8 +280,6 @@ private fun SlideBitmapContent(slide: ImageBitmap?) {
         // Get physical pixel dimensions of the presenter window
         val windowInfo = LocalWindowInfo.current
         val containerSize = windowInfo.containerSize
-        val screenW = containerSize.width.takeIf { it > 0 } ?: 1920
-        val screenH = containerSize.height.takeIf { it > 0 } ?: 1080
         Image(
             bitmap = slide,
             contentDescription = stringResource(Res.string.presented_slide),

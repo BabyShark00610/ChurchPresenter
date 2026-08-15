@@ -20,7 +20,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import org.churchpresenter.app.churchpresenter.composables.ScanningRow
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -102,7 +105,6 @@ import org.churchpresenter.app.churchpresenter.data.SpsConverter
 import org.churchpresenter.app.churchpresenter.dialogs.BibleCatalogBrowserDialog
 import org.churchpresenter.app.churchpresenter.dialogs.filechooser.FileChooser
 import org.churchpresenter.app.churchpresenter.server.CompanionServer
-import org.churchpresenter.app.churchpresenter.ui.theme.ThemeMode
 import org.churchpresenter.app.churchpresenter.utils.AutoStartManager
 import org.churchpresenter.app.churchpresenter.utils.CrashReporter
 import org.churchpresenter.app.churchpresenter.viewmodel.FileManager
@@ -124,8 +126,6 @@ private val exportJsonFormat = Json {
 
 @Composable
 fun SystemSettingsTab(
-    currentTheme: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit,
     settings: AppSettings = AppSettings(),
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit = {},
     companionServer: CompanionServer? = null
@@ -155,6 +155,7 @@ fun SystemSettingsTab(
         }
     }
 
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -164,7 +165,8 @@ fun SystemSettingsTab(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scrollState)
+            .padding(end = SettingsScrollbarGutter),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Bible Storage Directory
@@ -350,7 +352,7 @@ fun SystemSettingsTab(
 
                                 // Check if target folder already exists
                                 if (converter.targetFolderExists(spsPath, settings.songSettings.storageDirectory)) {
-                                    val folderName = converter.getTargetFolderName(spsPath, settings.songSettings.storageDirectory) ?: spsFile
+                                    val folderName = converter.getTargetFolderName(spsPath) ?: spsFile
                                     val confirm = JOptionPane.showConfirmDialog(
                                         null,
                                         String.format(folderOverwriteConfirmFmt, folderName),
@@ -760,6 +762,7 @@ fun SystemSettingsTab(
         }
         } // end General SettingsSection
     }
+    SettingsScrollbar(scrollState)
     }
 }
 
@@ -931,33 +934,6 @@ private fun DetectedFilesList(
                 else MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
         modifier = Modifier.padding(top = 4.dp, start = 2.dp)
     )
-}
-
-/**
- * Spinner plus label, sized to sit inline with the body-small text it replaces.
- *
- * `internal` so it can be composed directly in a test: the state it represents is transient by
- * nature, and `SystemSettingsTab` builds its own `FileManager`, so there is no seam to hold a scan
- * open long enough to catch this on screen without racing it.
- */
-@Composable
-internal fun ScanningRow(scanningText: String) {
-    Row(
-        modifier = Modifier.padding(top = 4.dp, start = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(12.dp),
-            strokeWidth = 1.5.dp,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = scanningText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
 }
 
 private suspend fun copySongSamples(storageDirectory: String): Int {

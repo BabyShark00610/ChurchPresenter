@@ -9,22 +9,26 @@ import kotlinx.serialization.decodeFromString
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings.Companion.CURRENT_SETTINGS_VERSION
 import org.churchpresenter.app.churchpresenter.data.settings.ScreenAssignment
+import org.churchpresenter.app.churchpresenter.utils.AppDataDir
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
+private const val VERSION_HIDDEN_TABS = 5
+private const val VERSION_SCREEN_ASSIGNMENTS = 6
+
 /** The three placement-field prefixes used throughout companionSatelliteConnections[] entries
  * (tabRows, leftSidebarRows, rightSidebarRows, etc.) — shared by the migrations below. */
 private val CompanionSurfacePlacementPrefixes = listOf("tab", "leftSidebar", "rightSidebar")
 
 class SettingsManager {
-    private val userHome = System.getProperty("user.home")
-    private val appDataDir = File(userHome, ".churchpresenter")
+    private val appDataDir = AppDataDir.resolve()
     private val settingsFile = File(appDataDir, "settings.json")
     private val settingsTmpFile = File(appDataDir, "settings.json.tmp")
     val lottiePresetsDir: File = File(appDataDir, "lottie_presets")
@@ -129,8 +133,8 @@ class SettingsManager {
             if (toVersion > fromVersion) migrated = step(migrated)
         }
         var settings = jsonFormat.decodeFromString<AppSettings>(migrated)
-        if (fromVersion < 5) settings = migrateHiddenTabs(settings, raw)
-        if (fromVersion < 6) {
+        if (fromVersion < VERSION_HIDDEN_TABS) settings = migrateHiddenTabs(settings, raw)
+        if (fromVersion < VERSION_SCREEN_ASSIGNMENTS) {
             // The primary/secondary bible pair became an ordered list of any length. Typed rather
             // than raw, because the conversion is a field-by-field restructure the data class
             // already knows how to do. The old fields are left in the document on purpose so a
@@ -239,27 +243,59 @@ class SettingsManager {
         return result
     }
 
+    /** One screen assignment with showBible/showSongs turned into modes, or null if untouched. */
+    private fun assignmentWithModes(obj: JsonObject): JsonObject? {
+        val showBibleFalse = (obj["showBible"] as? JsonPrimitive)?.content == "false"
+        val showSongsFalse = (obj["showSongs"] as? JsonPrimitive)?.content == "false"
+        if (!showBibleFalse && !showSongsFalse) return null
+        return buildJsonObject {
+            obj.forEach { (k, v) -> if (k != "showBible" && k != "showSongs") put(k, v) }
+            if (showBibleFalse && !obj.containsKey("bibleMode")) put("bibleMode", JsonPrimitive("off"))
+            if (showSongsFalse && !obj.containsKey("songMode")) put("songMode", JsonPrimitive("off"))
+        }
+    }
+
+    /** One satellite connection with row/column ranges turned back into counts, or null if untouched. */
+    private fun connectionWithCounts(obj: JsonObject, rangeKeys: Set<String>): JsonObject? {
+        val additions = buildJsonObject {
+            for (prefix in CompanionSurfacePlacementPrefixes) {
+                val startRow = (obj["${prefix}StartRow"] as? JsonPrimitive)?.content?.toIntOrNull()
+                val endRow = (obj["${prefix}EndRow"] as? JsonPrimitive)?.content?.toIntOrNull()
+                val startColumn = (obj["${prefix}StartColumn"] as? JsonPrimitive)?.content?.toIntOrNull()
+                val endColumn = (obj["${prefix}EndColumn"] as? JsonPrimitive)?.content?.toIntOrNull()
+                if (startRow != null && endRow != null && !obj.containsKey("${prefix}Rows")) {
+                    put("${prefix}Rows", JsonPrimitive((endRow - startRow + 1).coerceAtLeast(1)))
+                }
+                if (startColumn != null && endColumn != null && !obj.containsKey("${prefix}Columns")) {
+                    put("${prefix}Columns", JsonPrimitive((endColumn - startColumn + 1).coerceAtLeast(1)))
+                }
+            }
+        }
+        // Stray range keys with no rows/columns to derive (shouldn't normally happen) are still
+        // stripped, so they don't linger as dead unknown keys forever.
+        if (additions.isEmpty() && rangeKeys.none { it in obj }) return null
+        return buildJsonObject {
+            obj.forEach { (k, v) -> if (k !in rangeKeys) put(k, v) }
+            additions.forEach { (k, v) -> put(k, v) }
+        }
+    }
+
+    private fun parseSettingsRoot(raw: String): JsonObject? =
+        try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { null }
+
     /** Schema version 1. Converts old showBible:false/showSongs:false booleans to
      * bibleMode:"off"/songMode:"off" strings. */
     private fun migrateScreenAssignmentModes(raw: String): String {
         if (!raw.contains("\"showBible\"") && !raw.contains("\"showSongs\"")) return raw
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val proj = root["projectionSettings"]?.jsonObject ?: return raw
         val assignments = proj["screenAssignments"]?.jsonArray ?: return raw
         var changed = false
         val newAssignments = buildJsonArray {
             for (element in assignments) {
-                val obj = element.jsonObject
-                val showBibleFalse = (obj["showBible"] as? JsonPrimitive)?.content == "false"
-                val showSongsFalse = (obj["showSongs"] as? JsonPrimitive)?.content == "false"
-                if (showBibleFalse || showSongsFalse) {
-                    changed = true
-                    add(buildJsonObject {
-                        obj.forEach { (k, v) -> if (k != "showBible" && k != "showSongs") put(k, v) }
-                        if (showBibleFalse && !obj.containsKey("bibleMode")) put("bibleMode", JsonPrimitive("off"))
-                        if (showSongsFalse && !obj.containsKey("songMode")) put("songMode", JsonPrimitive("off"))
-                    })
-                } else { add(element) }
+                val migrated = assignmentWithModes(element.jsonObject)
+                if (migrated != null) changed = true
+                add(migrated ?: element)
             }
         }
         if (!changed) return raw
@@ -281,7 +317,7 @@ class SettingsManager {
      * [migrateCompanionSatelliteRowColumnRangeBackToCount].) */
     private fun migrateCompanionSatelliteStartPage(raw: String): String {
         if (!raw.contains("\"companionSatelliteConnections\"")) return raw
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val connections = root["companionSatelliteConnections"]?.jsonArray ?: return raw
         val renames = mapOf("rows" to "tabRows", "columns" to "tabColumns", "bitmapSize" to "tabBitmapSize")
         var changed = false
@@ -317,7 +353,7 @@ class SettingsManager {
      * rows=N — identical count to what was already configured, just without the (unreliable) offset. */
     private fun migrateCompanionSatelliteRowColumnRangeBackToCount(raw: String): String {
         if (!raw.contains("\"companionSatelliteConnections\"")) return raw
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val connections = root["companionSatelliteConnections"]?.jsonArray ?: return raw
         var changed = false
         val rangeKeys = CompanionSurfacePlacementPrefixes.flatMap { prefix ->
@@ -325,33 +361,9 @@ class SettingsManager {
         }.toSet()
         val newConnections = buildJsonArray {
             for (element in connections) {
-                val obj = element.jsonObject
-                val additions = buildJsonObject {
-                    for (prefix in CompanionSurfacePlacementPrefixes) {
-                        val startRow = (obj["${prefix}StartRow"] as? JsonPrimitive)?.content?.toIntOrNull()
-                        val endRow = (obj["${prefix}EndRow"] as? JsonPrimitive)?.content?.toIntOrNull()
-                        val startColumn = (obj["${prefix}StartColumn"] as? JsonPrimitive)?.content?.toIntOrNull()
-                        val endColumn = (obj["${prefix}EndColumn"] as? JsonPrimitive)?.content?.toIntOrNull()
-                        if (startRow != null && endRow != null && !obj.containsKey("${prefix}Rows")) {
-                            put("${prefix}Rows", JsonPrimitive((endRow - startRow + 1).coerceAtLeast(1)))
-                        }
-                        if (startColumn != null && endColumn != null && !obj.containsKey("${prefix}Columns")) {
-                            put("${prefix}Columns", JsonPrimitive((endColumn - startColumn + 1).coerceAtLeast(1)))
-                        }
-                    }
-                }
-                if (additions.isNotEmpty()) {
-                    changed = true
-                    add(buildJsonObject {
-                        obj.forEach { (k, v) -> if (k !in rangeKeys) put(k, v) }
-                        additions.forEach { (k, v) -> put(k, v) }
-                    })
-                } else if (rangeKeys.any { it in obj }) {
-                    // Stray range keys with no rows/columns to derive (shouldn't normally happen) —
-                    // still strip them so they don't linger as dead unknown keys forever.
-                    changed = true
-                    add(buildJsonObject { obj.forEach { (k, v) -> if (k !in rangeKeys) put(k, v) } })
-                } else { add(element) }
+                val migrated = connectionWithCounts(element.jsonObject, rangeKeys)
+                if (migrated != null) changed = true
+                add(migrated ?: element)
             }
         }
         if (!changed) return raw
@@ -363,7 +375,7 @@ class SettingsManager {
 
     /** Schema version 2. Migrates old screen1-4Assignment fields to screenAssignments list. */
     private fun migrateProjectionSettings(raw: String): String {
-        val root = try { jsonFormat.parseToJsonElement(raw).jsonObject } catch (_: Exception) { return raw }
+        val root = parseSettingsRoot(raw) ?: return raw
         val proj = root["projectionSettings"]?.jsonObject ?: return raw
         if ("screenAssignments" in proj) return raw // already new format
 

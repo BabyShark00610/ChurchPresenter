@@ -2,7 +2,6 @@ package org.churchpresenter.app.churchpresenter.dialogs.tabs
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,19 +26,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import churchpresenter.composeapp.generated.resources.Res
 import churchpresenter.composeapp.generated.resources.animation_crossfade
-import churchpresenter.composeapp.generated.resources.bible_catalog_button
 import churchpresenter.composeapp.generated.resources.bible_selection
-import churchpresenter.composeapp.generated.resources.bible_reference
 import churchpresenter.composeapp.generated.resources.bible_multi_layout
 import churchpresenter.composeapp.generated.resources.bible_translation_divider
 import churchpresenter.composeapp.generated.resources.bible_translation_spacing
 import churchpresenter.composeapp.generated.resources.bible_split_browse_mode
+import churchpresenter.composeapp.generated.resources.bible_cross_references
+import churchpresenter.composeapp.generated.resources.bible_cross_references_enable
 import churchpresenter.composeapp.generated.resources.bible_transition_settings
 import churchpresenter.composeapp.generated.resources.color
 import churchpresenter.composeapp.generated.resources.font_size
@@ -52,16 +49,7 @@ import churchpresenter.composeapp.generated.resources.milliseconds_suffix
 import churchpresenter.composeapp.generated.resources.none
 import churchpresenter.composeapp.generated.resources.position
 import churchpresenter.composeapp.generated.resources.pixels_short
-import churchpresenter.composeapp.generated.resources.primary_bible
-import churchpresenter.composeapp.generated.resources.primary_bible_reference
-import churchpresenter.composeapp.generated.resources.primary_bible_text
-import churchpresenter.composeapp.generated.resources.secondary_bible
-import churchpresenter.composeapp.generated.resources.secondary_bible_reference
-import churchpresenter.composeapp.generated.resources.secondary_bible_text
 import churchpresenter.composeapp.generated.resources.show_abbreviation
-import churchpresenter.composeapp.generated.resources.show_in_lower_third
-import churchpresenter.composeapp.generated.resources.swap_bibles
-import churchpresenter.composeapp.generated.resources.ic_swap
 import churchpresenter.composeapp.generated.resources.ic_delete
 import churchpresenter.composeapp.generated.resources.ic_arrow_up
 import churchpresenter.composeapp.generated.resources.ic_arrow_down
@@ -78,6 +66,7 @@ import churchpresenter.composeapp.generated.resources.bible_transition_settings
 import churchpresenter.composeapp.generated.resources.bottom
 import churchpresenter.composeapp.generated.resources.left
 import churchpresenter.composeapp.generated.resources.right
+import churchpresenter.composeapp.generated.resources.scanning_directory
 import churchpresenter.composeapp.generated.resources.screen
 import churchpresenter.composeapp.generated.resources.text_margins
 import churchpresenter.composeapp.generated.resources.top
@@ -93,10 +82,13 @@ import org.churchpresenter.app.churchpresenter.composables.DropdownSettingsField
 import org.churchpresenter.app.churchpresenter.composables.rememberDropdownWidthFor
 import org.churchpresenter.app.churchpresenter.composables.FontSettingsDropdown
 import org.churchpresenter.app.churchpresenter.composables.HorizontalAlignmentButtons
+import org.churchpresenter.app.churchpresenter.composables.ScanningRow
+import org.churchpresenter.app.churchpresenter.composables.rememberBibleFolderListing
 import org.churchpresenter.app.churchpresenter.composables.NumberSettingsTextField
 import org.churchpresenter.app.churchpresenter.composables.PositionButtons
 import org.churchpresenter.app.churchpresenter.composables.SettingRow
-import org.churchpresenter.app.churchpresenter.composables.SettingRowFirstControlOffset
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbar
+import org.churchpresenter.app.churchpresenter.composables.SettingsScrollbarGutter
 import org.churchpresenter.app.churchpresenter.composables.SettingsSection
 import org.churchpresenter.app.churchpresenter.composables.ShadowDetailRow
 import org.churchpresenter.app.churchpresenter.composables.SlimSlider
@@ -114,18 +106,17 @@ import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.data.settings.moveBibleTranslation
 import org.churchpresenter.app.churchpresenter.data.settings.removeBibleTranslation
 import org.churchpresenter.app.churchpresenter.data.settings.BibleTranslationSettings
-import org.churchpresenter.app.churchpresenter.dialogs.BibleCatalogBrowserDialog
 import org.churchpresenter.app.churchpresenter.utils.Constants
 import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDefault
 import org.churchpresenter.app.churchpresenter.presenter.Presenting
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
-import org.churchpresenter.app.churchpresenter.viewmodel.BibleSettingsViewModel
+import org.churchpresenter.app.churchpresenter.utils.rememberSystemFonts
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import java.awt.GraphicsEnvironment
-import java.io.File
 import org.churchpresenter.app.churchpresenter.composables.LabeledCheckbox
+
+private const val COLUMN_WEIGHT = 0.48f
 
 /** [ActionIconButton]'s own default size, which the reorder buttons take and their gaps stand in for. */
 private val REORDER_BUTTON_SIZE = 34.dp
@@ -136,49 +127,35 @@ fun BibleSettingsTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     presenterManager: PresenterManager? = null
 ) {
-    val availableFonts = remember {
-        GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toList()
-    }
-    val viewModel = remember {
-        BibleSettingsViewModel().also { vm ->
-            val dir = settings.bibleSettings.storageDirectory
-            if (dir.isNotEmpty()) vm.setDirectory(dir)
-        }
-    }
+    val availableFonts = rememberSystemFonts()
+    // Null while the folder is still being read. Walking it and reading a header out of every module
+    // used to happen inline here, so the whole dialog waited on it before painting once per open.
+    val listing = rememberBibleFolderListing(settings.bibleSettings.storageDirectory)
+    val bibleFilesInDirectory = listing?.files.orEmpty()
+    val bibleFileDisplayNames = listing?.displayNames.orEmpty()
 
-    // Keep viewModel directory in sync if settings change after initial load
-    LaunchedEffect(settings.bibleSettings.storageDirectory) {
-        val dir = settings.bibleSettings.storageDirectory
-        if (viewModel.storageDirectory != dir) viewModel.setDirectory(dir)
-    }
-
-    val bibleFilesInDirectory = remember(viewModel.storageDirectory, viewModel.refreshTrigger) {
-        viewModel.filesInDirectory()
-    }
-    val bibleFileDisplayNames = remember(viewModel.storageDirectory, bibleFilesInDirectory) {
-        viewModel.fileDisplayNames(bibleFilesInDirectory)
-    }
-
+    val scrollState = rememberScrollState()
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(14.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(end = SettingsScrollbarGutter),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 400.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 LeftColumn(
                     settings,
                     onSettingsChange,
                     bibleFilesInDirectory,
-                    bibleFileDisplayNames
+                    bibleFileDisplayNames,
+                    scanning = listing == null
                 )
             }
             Column(
-                modifier = Modifier.weight(0.48f).widthIn(min = 400.dp, max = 450.dp),
+                modifier = Modifier.weight(COLUMN_WEIGHT).widthIn(min = 400.dp, max = 450.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val translations = settings.bibleSettings.translationList()
@@ -202,6 +179,7 @@ fun BibleSettingsTab(
                 }
             }
         }
+        SettingsScrollbar(scrollState)
     }
 }
 
@@ -231,7 +209,7 @@ private fun TranslationStyleSection(
         onExpandedChange = onExpandedChange,
     ) {
         TranslationTextSection(settings, translation, ::update, availableFonts, presenterManager)
-        TranslationReferenceSection(settings, translation, ::update, availableFonts, presenterManager)
+        TranslationReferenceSection(translation, ::update, availableFonts)
     }
 }
 
@@ -240,7 +218,8 @@ private fun LeftColumn(
     settings: AppSettings,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     bibleFilesInDirectory: List<String>,
-    bibleFileDisplayNames: Map<String, String>
+    bibleFileDisplayNames: Map<String, String>,
+    scanning: Boolean
 ) {
     val noneStr = stringResource(Res.string.none)
     val bibleDisplayOptions = listOf(noneStr) + bibleFilesInDirectory.map { fileName ->
@@ -339,7 +318,11 @@ private fun LeftColumn(
             }
             // Hidden at the cap as well as when nothing is left to add: `addTranslation` refuses past
             // it, and a picker that answers a selection by doing nothing is worse than no picker.
-            if (unselectedFiles.isNotEmpty() && translations.size < Constants.MAX_BIBLE_TRANSLATIONS) {
+            // Until the folder has been read there is nothing to offer yet — say so, because an
+            // absent picker otherwise reads as "this folder holds no other translations".
+            if (scanning) {
+                ScanningRow(stringResource(Res.string.scanning_directory))
+            } else if (unselectedFiles.isNotEmpty() && translations.size < Constants.MAX_BIBLE_TRANSLATIONS) {
                 DropdownSettingsField(
                     width = pickerWidth,
                     label = addTranslationLabel,
@@ -407,6 +390,20 @@ private fun LeftColumn(
                 },
             controlModifier = Modifier.size(24.dp),
             label = stringResource(Res.string.bible_split_browse_mode),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+
+    SettingsSection(title = stringResource(Res.string.bible_cross_references)) {
+        LabeledCheckbox(
+            checked = settings.bibleSettings.crossReferencesEnabled,
+            onCheckedChange = { enabled ->
+                onSettingsChange { s -> s.copy(bibleSettings = s.bibleSettings.copy(crossReferencesEnabled = enabled)) }
+            },
+            controlModifier = Modifier.size(24.dp),
+            label = stringResource(Res.string.bible_cross_references_enable),
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
@@ -724,11 +721,9 @@ private fun TranslationTextSection(
 
 @Composable
 private fun TranslationReferenceSection(
-    settings: AppSettings,
     translation: BibleTranslationSettings,
     update: ((BibleTranslationSettings) -> BibleTranslationSettings) -> Unit,
     availableFonts: List<String>,
-    presenterManager: PresenterManager? = null
 ) {
     SettingRow(stringResource(Res.string.color)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

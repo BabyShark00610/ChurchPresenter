@@ -2,7 +2,6 @@ package org.churchpresenter.app.churchpresenter.tabs
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.text.font.FontWeight
-import kotlinx.serialization.json.Json
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
@@ -62,7 +61,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +71,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -123,6 +120,8 @@ import churchpresenter.composeapp.generated.resources.no_folder_selected
 import churchpresenter.composeapp.generated.resources.pause
 import churchpresenter.composeapp.generated.resources.play
 import churchpresenter.composeapp.generated.resources.previous_image
+import churchpresenter.composeapp.generated.resources.recent_pin
+import churchpresenter.composeapp.generated.resources.recent_unpin
 import churchpresenter.composeapp.generated.resources.select_folder
 import churchpresenter.composeapp.generated.resources.tab_focus_lost
 import churchpresenter.composeapp.generated.resources.select_folder_to_view
@@ -136,7 +135,10 @@ import org.churchpresenter.app.churchpresenter.composables.DropdownSelector
 import org.churchpresenter.app.churchpresenter.data.settings.AppSettings
 import org.churchpresenter.app.churchpresenter.models.AnimationType
 import org.churchpresenter.app.churchpresenter.models.ScheduleItem
+import org.churchpresenter.app.churchpresenter.models.ShortcutAction
 import org.churchpresenter.app.churchpresenter.utils.Constants
+import org.churchpresenter.app.churchpresenter.utils.LocalShortcuts
+import org.churchpresenter.app.churchpresenter.utils.pairLabel
 import org.churchpresenter.app.churchpresenter.viewmodel.PicturesViewModel
 import org.churchpresenter.app.churchpresenter.viewmodel.PresenterManager
 import org.jetbrains.compose.resources.painterResource
@@ -148,84 +150,18 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 
-/**
- * Recent picture folders, mirroring `data/RecentPresentationFiles` for the Pictures tab.
- *
- * `internal` rather than private so the bar it feeds can be driven from a test by seeding [folders]
- * and [pinned] — they are the state the bar renders from, and the sibling object this copies is
- * public for the same reason. [file], [pinnedFile] and [load] are `internal var`/`internal fun` for
- * the same reason: a test points them at a temp dir before calling [add]/[togglePin]/[clear]/[load],
- * so the real read/write logic runs without ever touching the developer's own recent/pinned JSON
- * files under `~/.churchpresenter`. Nothing else is widened.
- */
-internal object RecentPictureFolders {
-    private const val MAX = 10
-    internal var file = File(System.getProperty("user.home"), ".churchpresenter/recent_picture_folders.json")
-    internal var pinnedFile = File(System.getProperty("user.home"), ".churchpresenter/pinned_picture_folders.json")
-    val folders = androidx.compose.runtime.mutableStateListOf<String>()
-    val pinned = androidx.compose.runtime.mutableStateListOf<String>()
-
-    init { load() }
-
-    fun add(path: String) {
-        folders.remove(path)
-        folders.add(0, path)
-        while (folders.size > MAX) folders.removeLast()
-        save()
-    }
-
-    fun togglePin(path: String) {
-        if (path in pinned) {
-            pinned.remove(path)
-        } else {
-            pinned.remove(path)
-            pinned.add(0, path)
-        }
-        savePinned()
-    }
-
-    fun clear() {
-        val keep = folders.filter { it in pinned }
-        folders.clear()
-        folders.addAll(keep)
-        save()
-    }
-
-    internal fun load() {
-        try {
-            if (file.exists()) {
-                val json = Json { ignoreUnknownKeys = true }
-                val list = json.decodeFromString<List<String>>(file.readText())
-                folders.clear()
-                folders.addAll(list.take(MAX))
-            }
-        } catch (_: Exception) {}
-        try {
-            if (pinnedFile.exists()) {
-                val json = Json { ignoreUnknownKeys = true }
-                val list = json.decodeFromString<List<String>>(pinnedFile.readText())
-                pinned.clear()
-                pinned.addAll(list)
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun save() {
-        try {
-            file.parentFile?.mkdirs()
-            val json = Json { encodeDefaults = true }
-            file.writeText(json.encodeToString(folders.toList()))
-        } catch (_: Exception) {}
-    }
-
-    private fun savePinned() {
-        try {
-            pinnedFile.parentFile?.mkdirs()
-            val json = Json { encodeDefaults = true }
-            pinnedFile.writeText(json.encodeToString(pinned.toList()))
-        } catch (_: Exception) {}
-    }
-}
+private const val MILLIS_PER_SECOND = 1000
+private const val CAPTION_FONT_SP = 12.5f
+private const val TINY_LABEL_FONT_SP = 8f
+private const val TINY_LABEL_LINE_SP = 9f
+private const val SMALL_LABEL_FONT_SP = 11.5f
+private const val MAX_AUTO_SCROLL_SECONDS = 30
+private const val MIN_TRANSITION_MS = 100
+private const val MAX_TRANSITION_MS = 2000
+private const val DRAGGED_ITEM_ALPHA = 0.35f
+private const val DRAGGED_ITEM_Z_INDEX = 10f
+private const val DRAGGED_ITEM_SCALE = 1.08f
+private const val DRAGGED_ITEM_ELEVATION = 16f
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -252,14 +188,12 @@ fun PicturesTab(
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit = {},
     viewModel: PicturesViewModel = remember { PicturesViewModel(appSettings) }
 ) {
-    val scope = rememberCoroutineScope()
     val folderDialogTitle = stringResource(Res.string.select_image_folder_dialog)
-
 
     // Auto-scroll effect
     LaunchedEffect(viewModel.isPlaying, viewModel.selectedImageIndex, viewModel.autoScrollInterval) {
         if (viewModel.isPlaying && viewModel.images.isNotEmpty()) {
-            delay((viewModel.autoScrollInterval * 1000).toLong())
+            delay((viewModel.autoScrollInterval * MILLIS_PER_SECOND).toLong())
             viewModel.nextImage()
         }
     }
@@ -308,6 +242,7 @@ fun PicturesTab(
     // focus AND the window is focused — full machinery in composables/FocusLostRescue.kt
     // (shared with Presentation/Bible/Songs).
     val focusRescue = rememberFocusLostRescue(hostWindow, focusRequester)
+    val shortcuts = LocalShortcuts.current
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -323,28 +258,28 @@ fun PicturesTab(
                     // since Controller mode doesn't mirror the primary's content.
                     val hasInstanceLinkNav = onInstanceLinkSendNextPicture != null || onInstanceLinkSendPreviousPicture != null
                     return@onPreviewKeyEvent if (hasInstanceLinkNav) {
-                        when (keyEvent.key) {
-                            Key.DirectionLeft -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
-                            Key.DirectionRight -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
+                        when {
+                            shortcuts.matches(ShortcutAction.PICTURES_PREVIOUS, keyEvent) -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
+                            shortcuts.matches(ShortcutAction.PICTURES_NEXT, keyEvent) -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
                             else -> false
                         }
                     } else false
                 }
                 val columnCount = (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
-                when (keyEvent.key) {
-                    Key.DirectionLeft -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
-                    Key.DirectionRight -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
-                    Key.DirectionUp -> {
+                when {
+                    shortcuts.matches(ShortcutAction.PICTURES_PREVIOUS, keyEvent) -> { viewModel.previousImage(onInstanceLinkSendPreviousPicture); true }
+                    shortcuts.matches(ShortcutAction.PICTURES_NEXT, keyEvent) -> { viewModel.nextImage(onInstanceLinkSendNextPicture); true }
+                    shortcuts.matches(ShortcutAction.PICTURES_ROW_UP, keyEvent) -> {
                         val target = viewModel.selectedImageIndex - columnCount
                         if (target >= 0) viewModel.selectImage(target)
                         true
                     }
-                    Key.DirectionDown -> {
+                    shortcuts.matches(ShortcutAction.PICTURES_ROW_DOWN, keyEvent) -> {
                         val target = viewModel.selectedImageIndex + columnCount
                         if (target < viewModel.images.size) viewModel.selectImage(target)
                         true
                     }
-                    Key.Spacebar -> { viewModel.togglePlayPause(); true }
+                    shortcuts.matches(ShortcutAction.PICTURES_PLAY_PAUSE, keyEvent) -> { viewModel.togglePlayPause(); true }
                     else -> false
                 }
             }
@@ -381,7 +316,7 @@ fun PicturesTab(
                 Text(
                     stringResource(Res.string.select_folder),
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = TextUnit(12.5f, TextUnitType.Sp),
+                        fontSize = TextUnit(CAPTION_FONT_SP, TextUnitType.Sp),
                         fontWeight = FontWeight.SemiBold
                     )
                 )
@@ -489,7 +424,7 @@ fun PicturesTab(
                             IconButton(onClick = { RecentPictureFolders.togglePin(path) }, modifier = Modifier.size(20.dp)) {
                                 Icon(
                                     painter = painterResource(if (isPinned) Res.drawable.ic_star_filled else Res.drawable.ic_star),
-                                    contentDescription = null,
+                                    contentDescription = stringResource(if (isPinned) Res.string.recent_unpin else Res.string.recent_pin),
                                     modifier = Modifier.size(12.dp),
                                     tint = if (isPinned) MaterialTheme.colorScheme.primary
                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
@@ -603,7 +538,9 @@ fun PicturesTab(
                         contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                     )
                 ) {
-                    Icon(painterResource(Res.drawable.ic_refresh), contentDescription = null, modifier = Modifier.size(16.dp))
+                    // Same text the tooltip shows: TooltipArea is a hover popup and contributes no
+                    // semantics, so without this the button has no name at all.
+                    Icon(painterResource(Res.drawable.ic_refresh), contentDescription = stringResource(if (viewModel.isLooping) Res.string.loop_on else Res.string.loop_off), modifier = Modifier.size(16.dp))
                 }
             }
 
@@ -634,8 +571,8 @@ fun PicturesTab(
                 ) {
                     Text(
                         text = stringResource(Res.string.auto_scroll_interval).uppercase(),
-                        fontSize = TextUnit(8f, TextUnitType.Sp),
-                        lineHeight = TextUnit(9f, TextUnitType.Sp),
+                        fontSize = TextUnit(TINY_LABEL_FONT_SP, TextUnitType.Sp),
+                        lineHeight = TextUnit(TINY_LABEL_LINE_SP, TextUnitType.Sp),
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.9.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -671,7 +608,7 @@ fun PicturesTab(
                             TextButton(
                                 shape = RoundedCornerShape(6.dp),
                                 onClick = {
-                                intervalInput.toIntOrNull()?.coerceIn(1, 30)?.let { v ->
+                                intervalInput.toIntOrNull()?.coerceIn(1, MAX_AUTO_SCROLL_SECONDS)?.let { v ->
                                     viewModel.autoScrollInterval = v.toFloat()
                                     onSettingsChange { s -> s.copy(pictureSettings = s.pictureSettings.copy(autoScrollInterval = v.toFloat())) }
                                 }
@@ -697,8 +634,8 @@ fun PicturesTab(
                 ) {
                     Text(
                         text = stringResource(Res.string.transition_duration).uppercase(),
-                        fontSize = TextUnit(8f, TextUnitType.Sp),
-                        lineHeight = TextUnit(9f, TextUnitType.Sp),
+                        fontSize = TextUnit(TINY_LABEL_FONT_SP, TextUnitType.Sp),
+                        lineHeight = TextUnit(TINY_LABEL_LINE_SP, TextUnitType.Sp),
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.9.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
@@ -734,7 +671,7 @@ fun PicturesTab(
                             TextButton(
                                 shape = RoundedCornerShape(6.dp),
                                 onClick = {
-                                transitionInput.toIntOrNull()?.coerceIn(100, 2000)?.let { v ->
+                                transitionInput.toIntOrNull()?.coerceIn(MIN_TRANSITION_MS, MAX_TRANSITION_MS)?.let { v ->
                                     viewModel.transitionDuration = v.toFloat()
                                     onSettingsChange { s -> s.copy(pictureSettings = s.pictureSettings.copy(transitionDuration = v.toFloat())) }
                                 }
@@ -792,24 +729,31 @@ fun PicturesTab(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = stringResource(Res.string.pictures_arrow_key_hint),
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = TextUnit(11.5f, TextUnitType.Sp)
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "·",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
-                )
+                // Drawn from the live bindings, so a rebind is reflected here rather than the hint
+                // going on describing the arrow keys. Hidden entirely when the user has unbound
+                // both pairs — an empty "  next/prev image" would be worse than no hint.
+                val navLabel = shortcuts.pairLabel(ShortcutAction.PICTURES_PREVIOUS, ShortcutAction.PICTURES_NEXT)
+                val rowLabel = shortcuts.pairLabel(ShortcutAction.PICTURES_ROW_UP, ShortcutAction.PICTURES_ROW_DOWN)
+                if (navLabel.isNotEmpty() || rowLabel.isNotEmpty()) {
+                    Text(
+                        text = stringResource(Res.string.pictures_arrow_key_hint, navLabel, rowLabel),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = TextUnit(SMALL_LABEL_FONT_SP, TextUnitType.Sp)
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                    )
+                }
                 Text(
                     text = stringResource(Res.string.pictures_reorder_hint),
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = TextUnit(11.5f, TextUnitType.Sp)
+                        fontSize = TextUnit(SMALL_LABEL_FONT_SP, TextUnitType.Sp)
                     ),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                     maxLines = 1,
@@ -853,15 +797,16 @@ fun PicturesTab(
                         Column(
                             modifier = Modifier
                                 .animateItem()
-                                .alpha(if (isDraggingThis) 0.35f else 1f)
+                                .alpha(if (isDraggingThis) DRAGGED_ITEM_ALPHA else 1f)
                                 .border(2.dp, borderColor, RoundedCornerShape(8.dp))
                                 .clip(RoundedCornerShape(8.dp))
                                 .pointerInput(imageFile) {
                                     awaitPointerEventScope {
                                         while (true) {
                                             val pressEvent = awaitPointerEvent(PointerEventPass.Initial)
-                                            if (pressEvent.type != PointerEventType.Press) continue
-                                            if (!pressEvent.keyboardModifiers.isShiftPressed) continue
+                                            if (pressEvent.type != PointerEventType.Press ||
+                                                !pressEvent.keyboardModifiers.isShiftPressed
+                                            ) continue
 
                                             pressEvent.changes.forEach { it.consume() }
                                             val startPos = pressEvent.changes.first().position
@@ -969,7 +914,7 @@ fun PicturesTab(
                                 Text(
                                     text = imageFile.nameWithoutExtension,
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = TextUnit(11.5f, TextUnitType.Sp),
+                                        fontSize = TextUnit(SMALL_LABEL_FONT_SP, TextUnitType.Sp),
                                         fontWeight = if (isSelected) FontWeight.SemiBold
                                                      else FontWeight.Medium
                                     ),
@@ -990,13 +935,13 @@ fun PicturesTab(
                             Box(
                                 modifier = Modifier
                                     .size(150.dp)
-                                    .zIndex(10f)
+                                    .zIndex(DRAGGED_ITEM_Z_INDEX)
                                     .graphicsLayer {
                                         translationX = dragCursorInGrid.x - 75.dp.toPx()
                                         translationY = dragCursorInGrid.y - 75.dp.toPx()
-                                        scaleX = 1.08f
-                                        scaleY = 1.08f
-                                        shadowElevation = 16f
+                                        scaleX = DRAGGED_ITEM_SCALE
+                                        scaleY = DRAGGED_ITEM_SCALE
+                                        shadowElevation = DRAGGED_ITEM_ELEVATION
                                     }
                                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                                     .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
@@ -1045,4 +990,3 @@ fun PicturesTab(
         }
     }
 }
-

@@ -68,8 +68,13 @@ class BibleCatalogBrowserContentTest {
         var writesInstalledFile: Boolean = false,
     ) : BibleSource {
         override val sourceId = BibleSourceId.EBIBLE
+
+        var installCalls = 0
+            private set
+
         override suspend fun catalog(nowMillis: Long) = parkedCatalog?.await() ?: catalogOutcome
         override suspend fun install(module: BibleModule, targetDir: File, onProgress: (InstallProgress) -> Unit): BibleInstallOutcome {
+            installCalls++
             emitProgress?.let(onProgress)
             val outcome = parkedInstall?.await() ?: installOutcome
             if (writesInstalledFile && outcome is BibleInstallOutcome.Success) {
@@ -577,6 +582,89 @@ class BibleCatalogBrowserContentTest {
     }
 
     @Test
+    fun `the licence dialog explains that the Holy Bible XML archive has not checked its copyrights`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(module(sourceId = BibleSourceId.BEBLIA, copyright = "Public Domain"))
+        ),
+    ) { _, _ ->
+        onNodeWithText("Download").performClick()
+
+        // Unlike Zefania, this archive states a copyright up front — and still cannot vouch for it,
+        // which is why the badge is the unverified one rather than "Redistributable".
+        onNodeWithText("Licence unverified".uppercase()).assertExists()
+        onNodeWithText("none of the statements have been checked", substring = true).assertExists()
+    }
+
+    @Test
+    fun `the licence dialog warns when book names will come out in English`() = dialog(
+        // Mizo: real verse text, but no book-name table in the app, and the archive's files name
+        // books by number alone.
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(module(sourceId = BibleSourceId.BEBLIA, language = "LUS", languageName = "Lushai"))
+        ),
+    ) { _, _ ->
+        onNodeWithText("Download").performClick()
+        onNodeWithText("Book names will appear in English", substring = true).assertExists()
+    }
+
+    @Test
+    fun `a translation in a language the app has book names for gets no such warning`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(module(sourceId = BibleSourceId.BEBLIA, language = "ENG"))
+        ),
+    ) { _, _ ->
+        onNodeWithText("Download").performClick()
+        onNodeWithText("Book names will appear in English", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the warning is only about that archive, not about every source`() = dialog(
+        catalogOutcome = BibleCatalogOutcome.Success(
+            listOf(module(sourceId = BibleSourceId.ZEFANIA, language = "LUS"))
+        ),
+    ) { _, _ ->
+        onNodeWithText("Download").performClick()
+        onNodeWithText("Book names will appear in English", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a third archive gets its own tab, listing its own translations`() {
+        fun vm(outcome: BibleCatalogOutcome) = BibleCatalogViewModel(
+            FakeSource(outcome, writesInstalledFile = true), dir.absolutePath, dispatcher = Dispatchers.Unconfined
+        ).also { created.add(it) }
+
+        val models = listOf(
+            vm(BibleCatalogOutcome.Success(listOf(module(displayName = "From eBible", fileStem = "ENG_A")))),
+            vm(BibleCatalogOutcome.Success(listOf(module(displayName = "From Zefania", fileStem = "ENG_B")))),
+            vm(BibleCatalogOutcome.Success(listOf(module(displayName = "From Holy Bible XML", fileStem = "ENG_C")))),
+        )
+        runComposeUiTest {
+            setContent {
+                MaterialTheme {
+                    BibleCatalogBrowserDialogContent(
+                        viewModels = models,
+                        tabLabels = listOf("eBible.org", "Zefania Archive", "Holy Bible XML"),
+                        onDismiss = {},
+                        onBibleInstalled = {},
+                    )
+                }
+            }
+            settle()
+            waitForIdle()
+
+            onNodeWithText("From eBible").assertExists()
+            onNodeWithText("From Holy Bible XML").assertDoesNotExist()
+
+            onNodeWithText("Holy Bible XML").performClick()
+            settle()
+            waitForIdle()
+
+            onNodeWithText("From Holy Bible XML").assertExists()
+            onNodeWithText("From eBible").assertDoesNotExist()
+        }
+    }
+
+    @Test
     fun `re-downloading an installed module warns before overwriting it`() {
         val installedFile = File(dir, "ENG_ACV.spb").apply { writeText("##spDataVersion:\t1\n") }
         dialog(catalogOutcome = BibleCatalogOutcome.Success(listOf(module()))) { _, _ ->
@@ -630,9 +718,49 @@ class BibleCatalogBrowserContentTest {
     }
 
     @Test
+    fun `a stalled download offers a retry that installs on the second try`() {
+        val source = FakeSource(
+            catalogOutcome = BibleCatalogOutcome.Success(listOf(module())),
+            installOutcome = BibleInstallOutcome.DownloadStalled,
+        )
+        dialog(source = source) { _, _ ->
+            onNodeWithText("Download").performClick()
+            onNodeWithText("I understand — Download").performClick()
+            settle()
+            waitForIdle()
+
+            source.installOutcome = BibleInstallOutcome.Success(File("x.spb"), "Installed Title", 66, "")
+            onNodeWithText("Retry").performClick()
+            settle()
+            waitForIdle()
+
+            assertEquals(2, source.installCalls)
+            onNodeWithText("Installed \"Installed Title\" — 66 books.").assertExists()
+        }
+    }
+
+    @Test
+    fun `only a stalled download offers a retry`() {
+        // A conversion failure will fail the same way next time; offering to repeat it wastes a wait.
+        dialog(
+            catalogOutcome = BibleCatalogOutcome.Success(listOf(module())),
+            installOutcome = BibleInstallOutcome.ConversionFailed,
+        ) { _, _ ->
+            onNodeWithText("Download").performClick()
+            onNodeWithText("I understand — Download").performClick()
+            settle()
+            waitForIdle()
+
+            onNodeWithText("Retry").assertDoesNotExist()
+        }
+    }
+
+    @Test
     fun `each install failure shows its own message`() {
         val cases = listOf(
             BibleInstallOutcome.NetworkError to "Download failed — check your connection",
+            BibleInstallOutcome.DownloadStalled to
+                "The download kept stopping — your connection may be slow or restricted.",
             BibleInstallOutcome.HttpError(500) to "Download failed. Please try again.",
             BibleInstallOutcome.ChecksumMismatch to "The download was incomplete and was discarded. Please try again.",
             BibleInstallOutcome.CorruptArchive to "The downloaded file was damaged and was discarded. Please try again.",

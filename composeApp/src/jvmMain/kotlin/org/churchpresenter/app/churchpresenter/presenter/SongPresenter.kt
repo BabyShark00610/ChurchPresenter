@@ -60,6 +60,9 @@ import org.churchpresenter.app.churchpresenter.utils.Utils.systemFontFamilyOrDef
 import org.jetbrains.skia.Image
 import java.io.File
 
+private const val SHADOW_OFFSET_PX = 6f
+private const val INDICATOR_REPEAT_COUNT = 3
+
 @Composable
 fun SongPresenter(
     modifier: Modifier = Modifier,
@@ -318,7 +321,7 @@ fun SongPresenter(
             val alpha = (opacity / 100f).coerceIn(0f, 1f)
             return Shadow(
                 color = base.copy(alpha = alpha),
-                offset = Offset(6f * scaleFactor * mul, 6f * scaleFactor * mul),
+                offset = Offset(SHADOW_OFFSET_PX * scaleFactor * mul, SHADOW_OFFSET_PX * scaleFactor * mul),
                 blurRadius = 12f * scaleFactor * mul
             )
         }
@@ -459,11 +462,6 @@ fun SongPresenter(
         }
         // Bilingual flags for layout decisions (outside remember, always fresh)
         val langDisplay = effectiveLangDisplay
-        val hasBilingualContent = allLyricSections.any { it.secondaryLines.isNotEmpty() }
-        val isBilingualSideBySide = langDisplay == Constants.SONG_LANG_BOTH &&
-                ss.bilingualLayout == Constants.BILINGUAL_SIDE_BY_SIDE && hasBilingualContent
-        val isBilingualTopBottom = langDisplay == Constants.SONG_LANG_BOTH &&
-                ss.bilingualLayout == Constants.BILINGUAL_TOP_BOTTOM && hasBilingualContent
         val autoFitEnabled = if (lookAheadEnabled) {
             if (isLowerThird) ss.lowerThirdLookAheadFontSizeAutoFit else ss.lookAheadFontSizeAutoFit
         } else {
@@ -624,15 +622,15 @@ fun SongPresenter(
                             nextSection.lines
                         }
                     } else if (lookAheadEnabled && isLineMode && effectiveLineIndex >= 0 && groupEndExclusive < allDisplayLines.size) {
-                        // No next section but there are further lines in the current section
+                        // No next section but there are further lines in the current section.
+                        // (Upstream tightened the old one-line form to `in 0 until size - 1`; the
+                        // group form below is that same bound generalised past a group of one.)
                         if (laIsLineMode) songLineGroup(allDisplayLines, groupEndExclusive, linesPerSlide) else emptyList()
                     } else {
                         emptyList()
                     }
 
                     // Combine main + look-ahead
-                    val displayLines = mainLines + laLines
-                    val lookAheadStartIndex = if (laLines.isNotEmpty()) mainLines.size else -1
 
                     // Build main secondary lines (for bilingual)
                     val mainSecondaryLines: List<String> = if (section.secondaryLines.isNotEmpty()) {
@@ -664,7 +662,6 @@ fun SongPresenter(
                         emptyList()
                     }
 
-                    val secondaryLookAheadStartIndex = if (laSecondaryLines.isNotEmpty()) mainSecondaryLines.size else -1
 
                     // Apply language display to main lines
                     val effectiveDisplayLines: List<String>
@@ -845,7 +842,7 @@ fun SongPresenter(
                         val indicatorPad = " ".repeat(ss.endOfSongIndicatorSpacing)
                         val indicatorText = "$indicatorPad*$indicatorPad"
                         Row(modifier = Modifier.fillMaxWidth().alpha(indicatorAlpha), horizontalArrangement = Arrangement.Center) {
-                            repeat(3) { Text(text = indicatorText, fontSize = scaledLyricsFontSize, color = lyricsColor, style = lyricsTextStyleScaled) }
+                            repeat(INDICATOR_REPEAT_COUNT) { Text(text = indicatorText, fontSize = scaledLyricsFontSize, color = lyricsColor, style = lyricsTextStyleScaled) }
                         }
                     }
 
@@ -950,8 +947,6 @@ fun SongPresenter(
                     }
 
                     // Determine which positions have content for balancing
-                    val hasTopContent = (titleConfigured && effectiveTitlePosition == Constants.ABOVE_VERSE) ||
-                            (numberConfigured && effectiveSongNumberPosition == Constants.ABOVE_VERSE)
                     val hasBottomContent = (titleConfigured && effectiveTitlePosition == Constants.BELOW_VERSE) ||
                             (numberConfigured && effectiveSongNumberPosition == Constants.BELOW_VERSE)
 

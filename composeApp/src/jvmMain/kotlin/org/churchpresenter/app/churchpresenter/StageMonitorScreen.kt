@@ -71,7 +71,6 @@ import churchpresenter.composeapp.generated.resources.song_play
 import churchpresenter.composeapp.generated.resources.unit_bpm
 import churchpresenter.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import org.churchpresenter.app.churchpresenter.utils.ChordTransposer
 import org.churchpresenter.app.churchpresenter.utils.calculateAutoFitFontSize
 import org.churchpresenter.app.churchpresenter.utils.calculateChordChartFontSize
 import org.churchpresenter.app.churchpresenter.composables.ChordChart
@@ -86,6 +85,10 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import java.io.File
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+private const val CLOCK_TICK_MS = 1000L
+private const val BOTTOM_MIDDLE_WEIGHT = 0.8f
+private const val SHADOW_OFFSET_DIVISOR = 10f
 
 /**
  * Full-screen stage monitor layout — 5 quadrant zones plus a full-screen zone, whose content is
@@ -164,7 +167,7 @@ fun StageMonitorScreen(
     LaunchedEffect(Unit) {
         while (true) {
             clockText = formatClock()
-            delay(1000L)
+            delay(CLOCK_TICK_MS)
         }
     }
 
@@ -232,10 +235,8 @@ fun StageMonitorScreen(
 
     fun contentFor(zone: StageMonitorZone): StageMonitorContentType? {
         val assigned = StageMonitorContentType.entries.filter { sm.zoneFor(it) == zone }
-        if (assigned.isEmpty()) return null
-        assigned.firstOrNull { it in activeTypes }?.let { return it }
-        if (StageMonitorContentType.CLOCK in assigned) return StageMonitorContentType.CLOCK
-        return null
+        return assigned.firstOrNull { it in activeTypes }
+            ?: StageMonitorContentType.CLOCK.takeIf { it in assigned }
     }
 
     val fullScreenContent = contentFor(StageMonitorZone.FULL_SCREEN)
@@ -268,7 +269,7 @@ fun StageMonitorScreen(
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     StageZoneBox(sm, StageMonitorZone.BOTTOM_LEFT, renderData, mediaViewModel, ::contentFor, Modifier.weight(1f))
                     VerticalDivider(color = Color.DarkGray, thickness = 1.dp)
-                    StageZoneBox(sm, StageMonitorZone.BOTTOM_MIDDLE, renderData, mediaViewModel, ::contentFor, Modifier.weight(0.8f))
+                    StageZoneBox(sm, StageMonitorZone.BOTTOM_MIDDLE, renderData, mediaViewModel, ::contentFor, Modifier.weight(BOTTOM_MIDDLE_WEIGHT))
                     VerticalDivider(color = Color.DarkGray, thickness = 1.dp)
                     StageZoneBox(sm, StageMonitorZone.BOTTOM_RIGHT, renderData, mediaViewModel, ::contentFor, Modifier.weight(1f))
                 }
@@ -593,7 +594,7 @@ private fun buildTextStyle(
         textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None,
         shadow = if (shadow) Shadow(
             color = shadowColor.copy(alpha = shadowOpacity / 100f),
-            offset = Offset(shadowSize / 10f, shadowSize / 10f),
+            offset = Offset(shadowSize / SHADOW_OFFSET_DIVISOR, shadowSize / SHADOW_OFFSET_DIVISOR),
             blurRadius = shadowSize / 5f
         ) else null
     )

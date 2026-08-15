@@ -1697,6 +1697,17 @@
     <string name="copy_verse">Копіювати вірш</string>
     <string name="style">Стиль</string>
     <string name="bible_split_browse_mode">Режим розділеного перегляду</string>
+    <string name="bible_cross_references">Перехресні посилання</string>
+    <string name="bible_cross_references_title">Посилання</string>
+    <string name="bible_cross_references_enable">Показувати перехресні посилання</string>
+    <string name="bible_cross_references_none">Немає перехресних посилань</string>
+    <string name="bible_cross_references_often_next">Часто далі</string>
+    <string name="bible_cross_references_passage">Уривок %1$s</string>
+    <string name="bible_cross_references_count">Перехресних посилань: %1$d</string>
+    <string name="bible_cross_references_popover_title">%1$s · перехресних посилань: %2$d</string>
+    <string name="bible_cross_references_keep_open">Закріпити</string>
+    <string name="bible_cross_references_close">Закрити панель</string>
+    <string name="bible_cross_references_dismiss_hint">Esc — закрити</string>
     <string name="bible_live_view">Наживо</string>
     <string name="clear_recents">Очистити останні</string>
     <string name="recent">Недавні:</string>
