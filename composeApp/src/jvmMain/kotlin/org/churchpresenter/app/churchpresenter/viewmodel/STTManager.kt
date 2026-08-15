@@ -353,6 +353,26 @@ class STTManager {
      * comes up. `internal` rather than private for the same reason as the `handle*Update` parsers:
      * in production it is only reachable from a socket callback, and it is plain HTTP otherwise.
      */
+    /** The enabled highlighted words in the payload; words in a disabled colour group are dropped. */
+    private fun highlightedWordsFrom(json: JSONObject): List<HighlightedWord> {
+        val disabledArray = json.optJSONArray("disabled_colors")
+        val disabledColors = (0 until (disabledArray?.length() ?: 0))
+            .map { disabledArray!!.stringOr(it) }
+            .toSet()
+        val wordsArray = json.optJSONArray("words") ?: return emptyList()
+        return (0 until wordsArray.length())
+            .map { wordsArray.getJSONObject(it) }
+            .filter { it.stringOr("color", "#ffff00") !in disabledColors }
+            .map { w ->
+                HighlightedWord(
+                    word = w.stringOr("word"),
+                    color = w.stringOr("color", "#ffff00"),
+                    caseSensitive = w.optBoolean("case_sensitive", false),
+                    isRegex = w.optBoolean("is_regex", false)
+                )
+            }
+    }
+
     internal fun fetchWordHighlighting(baseUrl: String) {
         try {
             val client = HttpClient.newHttpClient()
@@ -361,40 +381,14 @@ class STTManager {
                 .GET()
                 .build()
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            if (response.statusCode() == HTTP_OK) {
-                val json = JSONObject(response.body())
-                if (json.optBoolean("success", false)) {
-                    // Collect disabled color groups to filter them out
-                    val disabledColors = mutableSetOf<String>()
-                    val disabledArray = json.optJSONArray("disabled_colors")
-                    if (disabledArray != null) {
-                        for (i in 0 until disabledArray.length()) {
-                            disabledColors.add(disabledArray.stringOr(i))
-                        }
-                    }
-
-                    scope.launch {
-                        _wordHighlightingEnabled.value = json.optBoolean("enabled", true)
-                        val wordsArray = json.optJSONArray("words")
-                        _highlightedWords.clear()
-                        if (wordsArray != null) {
-                            for (i in 0 until wordsArray.length()) {
-                                val w = wordsArray.getJSONObject(i)
-                                val color = w.stringOr("color", "#ffff00")
-                                // Skip words whose color group is disabled
-                                if (color in disabledColors) continue
-                                _highlightedWords.add(
-                                    HighlightedWord(
-                                        word = w.stringOr("word"),
-                                        color = color,
-                                        caseSensitive = w.optBoolean("case_sensitive", false),
-                                        isRegex = w.optBoolean("is_regex", false)
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
+            if (response.statusCode() != HTTP_OK) return
+            val json = JSONObject(response.body())
+            if (!json.optBoolean("success", false)) return
+            val words = highlightedWordsFrom(json)
+            scope.launch {
+                _wordHighlightingEnabled.value = json.optBoolean("enabled", true)
+                _highlightedWords.clear()
+                _highlightedWords.addAll(words)
             }
         } catch (_: Exception) {
             // Silently ignore — highlighting is optional

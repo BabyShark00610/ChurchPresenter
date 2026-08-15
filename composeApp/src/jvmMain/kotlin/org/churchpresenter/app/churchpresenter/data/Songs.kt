@@ -366,31 +366,26 @@ class Songs {
             // a name this app has no word for. Matching on a word list here instead would write
             // every unrecognised header back out as a lyric line, brackets and all.
             if (isHeaderLine(trimmedLine)) {
-                // If we have accumulated lines, save them as a section
-                if (currentSection.isNotEmpty()) {
-                    if (result.isNotEmpty()) result.append("@\$")
-                    result.append(currentSection)
-                    currentSection = StringBuilder()
-                }
+                result.appendSection(currentSection)
+                currentSection = StringBuilder()
                 // Start new section with the marker (strip [] or {} wrapping for SPS format)
-                val unwrapped = trimmedLine.removePrefix("[").removePrefix("{").removeSuffix("]").removeSuffix("}")
-                currentSection.append(unwrapped)
+                currentSection.append(
+                    trimmedLine.removePrefix("[").removePrefix("{").removeSuffix("]").removeSuffix("}")
+                )
             } else if (trimmedLine.isNotEmpty()) {
-                // Add line to current section
-                if (currentSection.isNotEmpty()) {
-                    currentSection.append("@%")
-                }
+                if (currentSection.isNotEmpty()) currentSection.append("@%")
                 currentSection.append(trimmedLine)
             }
         }
 
-        // Add last section
-        if (currentSection.isNotEmpty()) {
-            if (result.isNotEmpty()) result.append("@\$")
-            result.append(currentSection)
-        }
-
+        result.appendSection(currentSection)
         return result.toString()
+    }
+
+    private fun StringBuilder.appendSection(section: StringBuilder) {
+        if (section.isEmpty()) return
+        if (isNotEmpty()) append("@\$")
+        append(section)
     }
 }
 

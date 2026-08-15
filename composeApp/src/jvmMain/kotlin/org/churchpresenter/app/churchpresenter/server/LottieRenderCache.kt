@@ -462,6 +462,12 @@ object LottieRenderCache {
     /** Runs shorter than this stay literal — a run record costs 8 bytes. */
     private const val MIN_RUN = 3
 
+    /** Writes pixels [from, until) as one negative-length literal record. */
+    private fun flushLiteralRun(buf: ByteBuffer, pixels: IntArray, from: Int, until: Int) {
+        buf.putInt(-(until - from))
+        for (j in from until until) buf.putInt(pixels[j])
+    }
+
     internal fun encodeArgbRle(pixels: IntArray): ByteArray {
         // Worst case is alternating length-1 literal records and minimum runs, which stays
         // at parity with raw size; headroom covers record headers.
@@ -474,11 +480,8 @@ object LottieRenderCache {
             while (runEnd < pixels.size && pixels[runEnd] == value) runEnd++
             val runLen = runEnd - i
             if (runLen >= MIN_RUN) {
-                if (literalStart >= 0) {
-                    buf.putInt(-(i - literalStart))
-                    for (j in literalStart until i) buf.putInt(pixels[j])
-                    literalStart = -1
-                }
+                if (literalStart >= 0) flushLiteralRun(buf, pixels, literalStart, i)
+                literalStart = -1
                 buf.putInt(runLen)
                 buf.putInt(value)
             } else if (literalStart < 0) {
@@ -486,10 +489,7 @@ object LottieRenderCache {
             }
             i = if (runLen >= MIN_RUN) runEnd else i + runLen
         }
-        if (literalStart >= 0) {
-            buf.putInt(-(pixels.size - literalStart))
-            for (j in literalStart until pixels.size) buf.putInt(pixels[j])
-        }
+        if (literalStart >= 0) flushLiteralRun(buf, pixels, literalStart, pixels.size)
         return buf.array().copyOf(buf.position())
     }
 

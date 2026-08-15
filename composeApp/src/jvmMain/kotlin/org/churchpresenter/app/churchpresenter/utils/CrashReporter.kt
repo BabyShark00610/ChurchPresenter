@@ -393,15 +393,14 @@ object CrashReporter {
         }
     }
 
+    private fun sentryMessage(text: String): Message = Message().apply { message = text }
+
     private fun sendToSentry(throwable: Throwable, context: String, fatal: Boolean) {
         try {
             if (!Sentry.isEnabled()) return
-            val event = SentryEvent(throwable).apply {
-                level = if (fatal) SentryLevel.FATAL else SentryLevel.ERROR
-                if (context.isNotBlank()) {
-                    message = Message().apply { message = context }
-                }
-            }
+            val event = SentryEvent(throwable)
+            event.level = if (fatal) SentryLevel.FATAL else SentryLevel.ERROR
+            if (context.isNotBlank()) event.message = sentryMessage(context)
             Sentry.captureEvent(event)
         } catch (_: Exception) {
             // Never let Sentry errors surface to the user

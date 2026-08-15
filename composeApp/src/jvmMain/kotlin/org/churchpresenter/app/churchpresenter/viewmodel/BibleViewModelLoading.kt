@@ -126,7 +126,12 @@ internal fun BibleViewModel.setInstanceLinkSource(
             if (bytes == null) {
                 InstanceLinkLogger.log(
                     InstanceLinkLogSide.FOLLOWER, "bible_sync_result",
-                    mapOf("mode" to mode.name, "primaryDownloaded" to false, "secondaryDownloaded" to false, "reason" to "primary_fetch_failed")
+                    mapOf(
+                        "mode" to mode.name,
+                        "primaryDownloaded" to false,
+                        "secondaryDownloaded" to false,
+                        "reason" to "primary_fetch_failed"
+                    )
                 )
                 return@launch
             }
@@ -154,7 +159,11 @@ internal fun BibleViewModel.setInstanceLinkSource(
 
         InstanceLinkLogger.log(
             InstanceLinkLogSide.FOLLOWER, "bible_sync_result",
-            mapOf("mode" to mode.name, "primaryDownloaded" to primaryDownloaded, "secondaryDownloaded" to secondaryDownloaded)
+            mapOf(
+                "mode" to mode.name,
+                "primaryDownloaded" to primaryDownloaded,
+                "secondaryDownloaded" to secondaryDownloaded
+            )
         )
         loadBibles()
     }

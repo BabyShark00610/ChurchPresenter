@@ -69,6 +69,19 @@ object CrosswordDecoder {
      *   DOWN:
      *   2. Clue text | ANSWER
      */
+    private fun putLayoutEntry(
+        line: String,
+        layout: MutableMap<Pair<Int, CrosswordDirection>, Pair<Int, Int>>,
+    ) {
+        val (key, position) = parseLayoutLine(line) ?: return
+        layout[key] = position
+    }
+
+    private fun addClue(line: String, direction: CrosswordDirection?, clues: MutableList<CrosswordClue>) {
+        val dir = direction ?: return
+        parseClueLine(line, dir)?.let { clues.add(it) }
+    }
+
     private fun parseText(text: String): Triple<String, List<CrosswordClue>, Map<Pair<Int, CrosswordDirection>, Pair<Int, Int>>?>? {
         var title = "Crossword"
         val clues = mutableListOf<CrosswordClue>()
@@ -86,8 +99,8 @@ object CrosswordDecoder {
                 line.equals("ACROSS:", ignoreCase = true) -> { direction = CrosswordDirection.ACROSS; inLayout = false }
                 line.equals("DOWN:", ignoreCase = true) -> { direction = CrosswordDirection.DOWN; inLayout = false }
                 line.equals("LAYOUT:", ignoreCase = true) -> inLayout = true
-                inLayout -> parseLayoutLine(line)?.let { (key, position) -> layout[key] = position }
-                else -> direction?.let { dir -> parseClueLine(line, dir)?.let { clues.add(it) } }
+                inLayout -> putLayoutEntry(line, layout)
+                else -> addClue(line, direction, clues)
             }
         }
         return if (clues.isEmpty()) null
@@ -209,22 +222,33 @@ object CrosswordLayoutEngine {
             for (pw in placed) {
                 // Only intersect words running in the opposite direction
                 if (pw.direction == dir) continue
+                crossingAt(grid, clue, pw, dir)?.let { return it }
+            }
+        }
+        return null
+    }
 
-                for ((i, ch) in clue.answer.withIndex()) {
-                    for ((j, pwCh) in pw.answer.withIndex()) {
-                        if (ch != pwCh) continue
+    /** Where [clue] can sit crossing [pw] in [dir], or null when no shared letter fits. */
+    private fun crossingAt(
+        grid: Map<Pair<Int, Int>, Char>,
+        clue: CrosswordClue,
+        pw: PlacedEntry,
+        dir: CrosswordDirection
+    ): Triple<Int, Int, CrosswordDirection>? {
+        for ((i, ch) in clue.answer.withIndex()) {
+            for ((j, pwCh) in pw.answer.withIndex()) {
+                if (ch != pwCh) continue
 
-                        // The intersection cell in absolute coordinates
-                        val (intRow, intCol) = if (pw.direction == CrosswordDirection.ACROSS)
-                            pw.row to pw.col + j else pw.row + j to pw.col
+                // The intersection cell in absolute coordinates
+                val (intRow, intCol) = if (pw.direction == CrosswordDirection.ACROSS)
+                    pw.row to pw.col + j else pw.row + j to pw.col
 
-                        // Start of the new word given the intersection is at index i
-                        val (startRow, startCol) = if (dir == CrosswordDirection.ACROSS)
-                            intRow to intCol - i else intRow - i to intCol
+                // Start of the new word given the intersection is at index i
+                val (startRow, startCol) = if (dir == CrosswordDirection.ACROSS)
+                    intRow to intCol - i else intRow - i to intCol
 
-                        if (isValid(grid, clue.answer, startRow, startCol, dir))
-                            return Triple(startRow, startCol, dir)
-                    }
+                if (isValid(grid, clue.answer, startRow, startCol, dir)) {
+                    return Triple(startRow, startCol, dir)
                 }
             }
         }

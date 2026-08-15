@@ -177,15 +177,27 @@ internal fun mergeCrossRefs(perVerse: List<List<CrossRef>>, limit: Int): List<Cr
     val seen = HashSet<CrossRef>()
     val deepest = perVerse.maxOfOrNull { it.size } ?: 0
     for (position in 0 until deepest) {
-        for (refs in perVerse) {
-            val ref = refs.getOrNull(position) ?: continue
-            if (seen.add(ref)) {
-                merged.add(ref)
-                if (merged.size == limit) return merged
-            }
-        }
+        if (takeRefsAt(perVerse, position, merged, seen, limit)) break
     }
     return merged
+}
+
+/** Takes each verse's ref at [position]; true once [limit] is reached. */
+private fun takeRefsAt(
+    perVerse: List<List<CrossRef>>,
+    position: Int,
+    merged: MutableList<CrossRef>,
+    seen: MutableSet<CrossRef>,
+    limit: Int,
+): Boolean {
+    for (refs in perVerse) {
+        val ref = refs.getOrNull(position) ?: continue
+        if (seen.add(ref)) {
+            merged.add(ref)
+            if (merged.size == limit) return true
+        }
+    }
+    return false
 }
 
 /** A passage that several verses of a reading point at, and how many of them do. */

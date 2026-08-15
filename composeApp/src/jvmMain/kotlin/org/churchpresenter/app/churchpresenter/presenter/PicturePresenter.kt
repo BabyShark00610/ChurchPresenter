@@ -158,13 +158,12 @@ private fun decodePictureBytes(file: File): Image? = try {
     Image.makeFromEncoded(file.readBytes())
 } catch (_: Exception) {
     // A HEIC/HEIF that Skia cannot read is transcoded to JPEG first
-    if (file.extension.lowercase() in listOf("heic", "heif")) {
-        HeicDecoder.toJpegBytes(file)?.let { jpegBytes ->
-            try { Image.makeFromEncoded(jpegBytes) } catch (_: Exception) { null }
-        }
-    } else {
-        null
-    }
+    if (file.extension.lowercase() in listOf("heic", "heif")) decodeHeic(file) else null
+}
+
+private fun decodeHeic(file: File): Image? {
+    val jpegBytes = HeicDecoder.toJpegBytes(file) ?: return null
+    return try { Image.makeFromEncoded(jpegBytes) } catch (_: Exception) { null }
 }
 
 internal fun loadAndDownscaleImage(imagePath: String, maxWidth: Int = 1920, maxHeight: Int = 1080): ImageBitmap? {

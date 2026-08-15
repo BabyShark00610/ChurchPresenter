@@ -461,7 +461,12 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
     var mirroredBackgroundSettings by remember { mutableStateOf<BackgroundSettings?>(null) }
     val instanceLinkConnectionStatusForBackgrounds by instanceLinkViewModel.connectionStatus.collectAsState()
     val instanceLinkBackgroundsSignal by instanceLinkViewModel.backgroundsUpdatedSignal.collectAsState()
-    LaunchedEffect(instanceLinkConnectionStatusForBackgrounds, appSettings.instanceLink.mirrorBackgrounds, appSettings.instanceLink.role, instanceLinkBackgroundsSignal) {
+    LaunchedEffect(
+        instanceLinkConnectionStatusForBackgrounds,
+        appSettings.instanceLink.mirrorBackgrounds,
+        appSettings.instanceLink.role,
+        instanceLinkBackgroundsSignal
+    ) {
         if (!shouldMirrorRemoteBackgrounds(
                 status = instanceLinkConnectionStatusForBackgrounds,
                 role = appSettings.instanceLink.role,
@@ -516,7 +521,11 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
         prevTunnelWasConnected.value = isConnected
     }
     var presentationFrozen by remember { mutableStateOf(false) }
-    LaunchedEffect(appSettings.presentationRemoteSettings.remoteControlEnabled, appSettings.serverSettings.apiKeyEnabled, appSettings.serverSettings.apiKey) {
+    LaunchedEffect(
+        appSettings.presentationRemoteSettings.remoteControlEnabled,
+        appSettings.serverSettings.apiKeyEnabled,
+        appSettings.serverSettings.apiKey
+    ) {
         val activeApiKey = activeApiKey(appSettings.serverSettings)
         companionServer.updatePresentationRemoteSettings(appSettings.presentationRemoteSettings, activeApiKey)
     }
@@ -552,7 +561,12 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
             }
             val qaDisplayUrlState = rememberUpdatedState(qaDisplayUrl)
             val bsOutput = browserSourceOutputAt(appSettings.projectionSettings.browserSourceOutputs, i)
-            val renderer = remember(i, bsOutput.browserSourceWidth, bsOutput.browserSourceHeight, bsOutput.browserSourceFps) {
+            val renderer = remember(
+                i,
+                bsOutput.browserSourceWidth,
+                bsOutput.browserSourceHeight,
+                bsOutput.browserSourceFps
+            ) {
                 BrowserSourceVideoRenderer(
                     presenterManager, appSettingsState, screenAssignmentState, effectiveModeState,
                     outputIndex = i,
@@ -1080,7 +1094,9 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                             includePrereleases = appSettings.participateInPrereleases
                                         )
                                         pendingUpdateCheckWasManual = true
-                                        appSettings = appSettings.copy(lastUpdateCheckTimestamp = System.currentTimeMillis())
+                                        appSettings = appSettings.copy(
+                                            lastUpdateCheckTimestamp = System.currentTimeMillis()
+                                        )
                                         settingsManager.saveSettings(appSettings)
                                     }
                                 },
@@ -1128,11 +1144,15 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                 var showBanner by remember { mutableStateOf(true) }
                                 if (showBanner) {
                                     Box(
-                                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer),
+                                        modifier = Modifier.fillMaxSize().background(
+                                            MaterialTheme.colorScheme.errorContainer
+                                        ),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = "Video backgrounds disabled after ${CrashReporter.consecutiveCrashes} consecutive crashes.  [Re-enable]  [Dismiss]",
+                                            text =
+                                                "Video backgrounds disabled after ${CrashReporter.consecutiveCrashes}" +
+                                                    " consecutive crashes.  [Re-enable]  [Dismiss]",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onErrorContainer,
                                             modifier = Modifier.onPreviewKeyEvent {
@@ -1154,12 +1174,16 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                 shouldUseRemoteContent(instanceLinkStatus, appSettings.instanceLink.role)
                             MainDesktop(
                                 hostWindow = window,
-                                instanceLinkConnectionStatus = instanceLinkViewModel.connectionStatus.collectAsState().value,
+                                instanceLinkConnectionStatus =
+                                    instanceLinkViewModel.connectionStatus.collectAsState().value,
                                 instanceLinkNextRetryAtMs = instanceLinkViewModel.nextRetryAtMs.collectAsState().value,
-                                instanceLinkBibleUpdatedSignal = instanceLinkViewModel.bibleUpdatedSignal.collectAsState().value,
-                                instanceLinkSecondaryBibleUpdatedSignal = instanceLinkViewModel.secondaryBibleUpdatedSignal.collectAsState().value,
+                                instanceLinkBibleUpdatedSignal =
+                                    instanceLinkViewModel.bibleUpdatedSignal.collectAsState().value,
+                                instanceLinkSecondaryBibleUpdatedSignal =
+                                    instanceLinkViewModel.secondaryBibleUpdatedSignal.collectAsState().value,
                                 instanceLinkFollowingHost = appSettings.instanceLink.primaryHost,
-                                connectedInstanceLinkFollowerCount = companionServer.connectedInstanceLinkFollowers.collectAsState().value.size,
+                                connectedInstanceLinkFollowerCount =
+                                    companionServer.connectedInstanceLinkFollowers.collectAsState().value.size,
                                 onInstanceLinkConnect = {
                                     val link = appSettings.instanceLink
                                     setInstanceLinkEnabled(true)
@@ -1172,15 +1196,25 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                     setInstanceLinkEnabled(false)
                                     instanceLinkViewModel.disconnect()
                                 },
-                                instanceLinkRemoteSchedule = instanceLinkViewModel.remoteSchedule.collectAsState().value,
-                                instanceLinkRemoteSongCatalog = instanceLinkViewModel.remoteSongCatalog.collectAsState().value,
-                                instanceLinkFetchSongDetail = { number, songbook -> instanceLinkViewModel.fetchSongDetail(number, songbook) },
+                                instanceLinkRemoteSchedule =
+                                    instanceLinkViewModel.remoteSchedule.collectAsState().value,
+                                instanceLinkRemoteSongCatalog =
+                                    instanceLinkViewModel.remoteSongCatalog.collectAsState().value,
+                                instanceLinkFetchSongDetail = { number, songbook ->
+                                    instanceLinkViewModel.fetchSongDetail(number, songbook)
+                                },
                                 instanceLinkFetchBibleFile = { instanceLinkViewModel.fetchBibleFile() },
                                 instanceLinkBibleSyncMode = appSettings.instanceLink.bibleSyncMode,
-                                instanceLinkFetchSecondaryBibleFile = { instanceLinkViewModel.fetchSecondaryBibleFile() },
+                                instanceLinkFetchSecondaryBibleFile = {
+                                    instanceLinkViewModel.fetchSecondaryBibleFile()
+                                },
                                 instanceLinkFetchBibleTranslations = { instanceLinkViewModel.fetchBibleTranslations() },
-                                instanceLinkOnSecondaryBibleFilePathChanged = { path -> companionServer.updateSecondaryBibleFilePath(path) },
-                                instanceLinkOnBibleFilePathsChanged = { paths -> companionServer.updateBibleFilePaths(paths) },
+                                instanceLinkOnSecondaryBibleFilePathChanged = { path ->
+                                    companionServer.updateSecondaryBibleFilePath(path)
+                                },
+                                instanceLinkOnBibleFilePathsChanged = { paths ->
+                                    companionServer.updateBibleFilePaths(paths)
+                                },
                                 instanceLinkSendAddToSchedule = if (canPushToSchedule(appSettings.instanceLink)) {
                                     { item -> instanceLinkViewModel.sendAddToSchedule(item) }
                                 } else null,
@@ -1193,11 +1227,19 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                 } else null,
                                 instanceLinkSendVerse = if (instanceLinkIsControllerConnected) {
                                     { bookName, chapter, verseNumber, verseText, verseRange ->
-                                        instanceLinkViewModel.sendSelectBibleVerse(bookName, chapter, verseNumber, verseText, verseRange)
+                                        instanceLinkViewModel.sendSelectBibleVerse(
+                                            bookName,
+                                            chapter,
+                                            verseNumber,
+                                            verseText,
+                                            verseRange
+                                        )
                                     }
                                 } else null,
                                 instanceLinkSendSongSection = if (instanceLinkIsControllerConnected) {
-                                    { number, section, lineIndex -> instanceLinkViewModel.sendSelectSongSection(number, section, lineIndex) }
+                                    { number, section, lineIndex ->
+                                        instanceLinkViewModel.sendSelectSongSection(number, section, lineIndex)
+                                    }
                                 } else null,
                                 instanceLinkSendClear = if (instanceLinkIsControllerConnected) {
                                     { instanceLinkViewModel.sendClear() }
@@ -1270,7 +1312,10 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                     companionServer.updateBible(
                                         bible,
                                         translation,
-                                        filePath = bibleFilePath(appSettings.bibleSettings.storageDirectory, translation)
+                                        filePath = bibleFilePath(
+                                            appSettings.bibleSettings.storageDirectory,
+                                            translation
+                                        )
                                     )
                                 },
                                 onScheduleChanged = { items -> companionServer.updateSchedule(items) },
@@ -1322,7 +1367,9 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                                 qaManager = qaManager,
                                 tunnelStatus = tunnelStatus,
                                 tunnelUrl = tunnelUrl ?: "",
-                                onStartTunnel = { companionServer.tunnelManager.start(appSettings.serverSettings.port) },
+                                onStartTunnel = {
+                                    companionServer.tunnelManager.start(appSettings.serverSettings.port)
+                                },
                                 onStopTunnel = { companionServer.tunnelManager.stop() },
                                 qaDisplayUrl = qaDisplayUrl,
                                 onQaDisplayUrlChanged = { qaDisplayUrl = it },
@@ -1593,7 +1640,8 @@ private fun ApplicationScope.ChurchPresenterApp(coroutineExceptionHandler: Corou
                             )
                             RemoteActivityToastHost(
                                 notifications = remoteActivityNotifications,
-                                connectedInstanceLinkFollowers = companionServer.connectedInstanceLinkFollowers.collectAsState().value,
+                                connectedInstanceLinkFollowers =
+                                    companionServer.connectedInstanceLinkFollowers.collectAsState().value,
                                 onDismiss = { n -> remoteActivityNotifications.remove(n) },
                                 onDismissAll = { remoteActivityNotifications.clear() },
                                 onBlockForSession = { n ->

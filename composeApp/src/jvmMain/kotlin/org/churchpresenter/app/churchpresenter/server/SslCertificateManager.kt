@@ -57,6 +57,8 @@ import java.util.Date
  *     Android: companion app adds it as a custom trust anchor via NetworkSecurityConfig.
  *  3. All subsequent HTTPS connections to the server are accepted without errors.
  */
+private const val CERT_RENEWAL_MARGIN_DAYS = 30L
+
 object SslCertificateManager {
 
     private val baseDir = File(System.getProperty("user.home"), ".churchpresenter").also { it.mkdirs() }
@@ -120,26 +122,43 @@ object SslCertificateManager {
 
     // ── CA generation ─────────────────────────────────────────────────────────
 
+    /** The stored CA when it is ECDSA and still valid for a month; null means regenerate. */
+    private fun reusableCA(): Pair<PrivateKey, X509Certificate>? {
+        try {
+            val ks = loadKeyStore(caKeystoreFile)
+            val key = ks.getKey(CA_ALIAS, PASSWORD) as? PrivateKey ?: return null
+            val cert = ks.getCertificate(CA_ALIAS) as? X509Certificate ?: return null
+            // Only reuse the CA if it already uses ECDSA — migrate away from old RSA keystores
+            val stillUsable = key.algorithm == "EC" &&
+                cert.notAfter.after(Date.from(Instant.now().plus(CERT_RENEWAL_MARGIN_DAYS, ChronoUnit.DAYS)))
+            return if (stillUsable) key to cert else null
+        } catch (e: Exception) {
+            System.err.println("[SslCertificateManager] Existing CA keystore unreadable, regenerating: ${e.message}")
+            CrashReporter.reportWarning(
+                "SSL: Existing CA keystore unreadable, regenerating",
+                throwable = e,
+                tags = mapOf("subsystem" to "ssl")
+            )
+            return null
+        }
+    }
+
+    /** The stored server keystore when it is ECDSA, still valid and covers [serverHost]. */
+    private fun reusableServerKeyStore(serverHost: String): KeyStore? = try {
+        val ks = loadKeyStore(serverKeystoreFile)
+        val key = ks.getKey(SERVER_ALIAS, PASSWORD) as? PrivateKey
+        val cert = ks.getCertificate(SERVER_ALIAS) as? X509Certificate
+        // Only reuse the server cert if it already uses ECDSA — migrate RSA keystores
+        val stillUsable = key != null && cert != null && key.algorithm == "EC" &&
+            cert.notAfter.after(Date.from(Instant.now().plus(CERT_RENEWAL_MARGIN_DAYS, ChronoUnit.DAYS)))
+        if (stillUsable && cert != null && serverHost in extractSanNames(cert)) ks else null
+    } catch (_: Exception) {
+        null
+    }
+
     private fun getOrCreateCA(): Pair<PrivateKey, X509Certificate> {
         if (caKeystoreFile.exists()) {
-            try {
-                val ks   = loadKeyStore(caKeystoreFile)
-                val key  = ks.getKey(CA_ALIAS, PASSWORD) as? PrivateKey
-                val cert = ks.getCertificate(CA_ALIAS) as? X509Certificate
-                // Only reuse the CA if it already uses ECDSA — migrate away from old RSA keystores
-                if (key != null && cert != null) {
-                    val stillUsable = key.algorithm == "EC" &&
-                        cert.notAfter.after(Date.from(Instant.now().plus(30, ChronoUnit.DAYS)))
-                    if (stillUsable) return key to cert
-                }
-            } catch (e: Exception) {
-                System.err.println("[SslCertificateManager] Existing CA keystore unreadable, regenerating: ${e.message}")
-                CrashReporter.reportWarning(
-                    "SSL: Existing CA keystore unreadable, regenerating",
-                    throwable = e,
-                    tags = mapOf("subsystem" to "ssl")
-                )
-            }
+            reusableCA()?.let { return it }
             caKeystoreFile.delete()
         }
 
@@ -179,17 +198,7 @@ object SslCertificateManager {
         caKey: PrivateKey, caCert: X509Certificate, serverHost: String
     ): KeyStore {
         if (serverKeystoreFile.exists()) {
-            try {
-                val ks   = loadKeyStore(serverKeystoreFile)
-                val key  = ks.getKey(SERVER_ALIAS, PASSWORD) as? PrivateKey
-                val cert = ks.getCertificate(SERVER_ALIAS) as? X509Certificate
-                // Only reuse the server cert if it already uses ECDSA — migrate RSA keystores
-                if (key != null && cert != null) {
-                    val stillUsable = key.algorithm == "EC" &&
-                        cert.notAfter.after(Date.from(Instant.now().plus(30, ChronoUnit.DAYS)))
-                    if (stillUsable && serverHost in extractSanNames(cert)) return ks
-                }
-            } catch (_: Exception) { /* fall through */ }
+            reusableServerKeyStore(serverHost)?.let { return it }
             serverKeystoreFile.delete()
         }
         return generateServerKeyStore(caKey, caCert, serverHost)

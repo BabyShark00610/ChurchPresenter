@@ -739,61 +739,53 @@ class SongsViewModel(
         }
     }
 
-    private fun refreshFilteredSongItems() {
-        var items = _filteredSongsList.value
-
-        if (_sortColumn.value.isNotEmpty()) {
-            items = when (_sortColumn.value) {
-                Constants.SORT_NUMBER -> if (_sortAscending.value)
-                    items.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
-                else
-                    items.sortedByDescending { it.number.toIntOrNull() ?: Int.MIN_VALUE }
-
-                Constants.SORT_TITLE -> if (_sortAscending.value)
-                    items.sortedBy { it.title.lowercase() }
-                else
-                    items.sortedByDescending { it.title.lowercase() }
-
-                Constants.SORT_SONGBOOK -> if (_sortAscending.value)
-                    items.sortedBy { it.songbook.lowercase() }
-                else
-                    items.sortedByDescending { it.songbook.lowercase() }
-
-                Constants.SORT_TUNE -> if (_sortAscending.value)
-                    items.sortedBy { it.tune.lowercase() }
-                else
-                    items.sortedByDescending { it.tune.lowercase() }
-
-                Constants.SORT_PLAY_COUNT -> {
-                    val sm = statisticsManager
-                    if (sm != null) {
-                        val counts = items.associate { it.songId to sm.getSongPlayCount(it.songId) }
-                        if (_sortAscending.value) items.sortedBy { counts[it.songId] ?: 0 }
-                        else items.sortedByDescending { counts[it.songId] ?: 0 }
-                    } else items
-                }
-
-                Constants.SORT_FAVORITES -> {
-                    val favIds = _favorites.value
-                    if (_sortAscending.value)
-                        items.sortedBy { if (it.songId in favIds) 0 else 1 }
-                    else
-                        items.sortedByDescending { if (it.songId in favIds) 0 else 1 }
-                }
-
-                Constants.SORT_AUTHOR -> if (_sortAscending.value)
-                    items.sortedBy { it.author.lowercase() }
-                else
-                    items.sortedByDescending { it.author.lowercase() }
-
-                Constants.SORT_COMPOSER -> if (_sortAscending.value)
-                    items.sortedBy { it.composer.lowercase() }
-                else
-                    items.sortedByDescending { it.composer.lowercase() }
-
-                else -> items
-            }
+    /** [items] in the order [column] asks for; the sort itself, without the selection bookkeeping. */
+    private fun sortedBy(column: String, items: List<SongItem>): List<SongItem> = when (column) {
+        Constants.SORT_NUMBER -> if (_sortAscending.value)
+            items.sortedBy { it.number.toIntOrNull() ?: Int.MAX_VALUE }
+        else
+            items.sortedByDescending { it.number.toIntOrNull() ?: Int.MIN_VALUE }
+        Constants.SORT_TITLE -> if (_sortAscending.value)
+            items.sortedBy { it.title.lowercase() }
+        else
+            items.sortedByDescending { it.title.lowercase() }
+        Constants.SORT_SONGBOOK -> if (_sortAscending.value)
+            items.sortedBy { it.songbook.lowercase() }
+        else
+            items.sortedByDescending { it.songbook.lowercase() }
+        Constants.SORT_TUNE -> if (_sortAscending.value)
+            items.sortedBy { it.tune.lowercase() }
+        else
+            items.sortedByDescending { it.tune.lowercase() }
+        Constants.SORT_PLAY_COUNT -> {
+            val sm = statisticsManager
+            if (sm != null) {
+                val counts = items.associate { it.songId to sm.getSongPlayCount(it.songId) }
+                if (_sortAscending.value) items.sortedBy { counts[it.songId] ?: 0 }
+                else items.sortedByDescending { counts[it.songId] ?: 0 }
+            } else items
         }
+        Constants.SORT_FAVORITES -> {
+            val favIds = _favorites.value
+            if (_sortAscending.value)
+                items.sortedBy { if (it.songId in favIds) 0 else 1 }
+            else
+                items.sortedByDescending { if (it.songId in favIds) 0 else 1 }
+        }
+        Constants.SORT_AUTHOR -> if (_sortAscending.value)
+            items.sortedBy { it.author.lowercase() }
+        else
+            items.sortedByDescending { it.author.lowercase() }
+        Constants.SORT_COMPOSER -> if (_sortAscending.value)
+            items.sortedBy { it.composer.lowercase() }
+        else
+            items.sortedByDescending { it.composer.lowercase() }
+        else -> items
+    }
+
+    private fun refreshFilteredSongItems() {
+        val unsorted = _filteredSongsList.value
+        val items = if (_sortColumn.value.isEmpty()) unsorted else sortedBy(_sortColumn.value, unsorted)
 
         _filteredSongItems.value = items
         // A re-sort leaves _selectedSongIndex where it was, so a different song — with a different
@@ -809,6 +801,37 @@ class SongsViewModel(
         }
     }
 
+    /**
+     * Moves the .song file when the songbook, title or number changed, and returns the song with
+     * its new path — or null when nothing had to move.
+     */
+    private fun moveSongFile(oldSong: SongItem, newSong: SongItem, storageDir: String): SongItem? {
+        val oldFile = File(oldSong.sourceFile)
+        if (!oldFile.exists()) return null
+        val songbookChanged = oldSong.songbook != newSong.songbook
+        val titleChanged = oldSong.title != newSong.title
+        val numberChanged = oldSong.number != newSong.number
+        if (!songbookChanged && !titleChanged && !numberChanged) return null
+
+        val targetDir = if (songbookChanged) File(storageDir, newSong.songbook) else oldFile.parentFile
+        if (!targetDir.exists()) targetDir.mkdirs()
+        val newFileName = if (titleChanged || numberChanged) {
+            buildSongFileName(newSong.number, newSong.title)
+        } else {
+            oldFile.name
+        }
+
+        val newFile = File(targetDir, newFileName)
+        oldFile.copyTo(newFile, overwrite = true)
+        if (oldFile.absolutePath != newFile.absolutePath) oldFile.delete()
+        if (songbookChanged) deleteIfEmpty(oldFile.parentFile)
+        return newSong.copy(sourceFile = newFile.absolutePath)
+    }
+
+    private fun deleteIfEmpty(dir: File?) {
+        if (dir != null && dir.isDirectory && dir.listFiles()?.isEmpty() == true) dir.delete()
+    }
+
     fun updateSong(
         oldSong: SongItem,
         newSong: SongItem
@@ -820,41 +843,7 @@ class SongsViewModel(
 
             // Handle .song file moves/renames when songbook, title, or number change
             if (oldSong.sourceFile.isNotEmpty() && storageDir.isNotEmpty()) {
-                val oldFile = File(oldSong.sourceFile)
-                if (oldFile.exists()) {
-                    val songbookChanged = oldSong.songbook != newSong.songbook
-                    val titleChanged = oldSong.title != newSong.title
-                    val numberChanged = oldSong.number != newSong.number
-
-                    if (songbookChanged || titleChanged || numberChanged) {
-                        val targetDir = if (songbookChanged) {
-                            File(storageDir, newSong.songbook)
-                        } else {
-                            oldFile.parentFile
-                        }
-                        if (!targetDir.exists()) targetDir.mkdirs()
-
-                        val newFileName = if (titleChanged || numberChanged) {
-                            buildSongFileName(newSong.number, newSong.title)
-                        } else {
-                            oldFile.name
-                        }
-
-                        val newFile = File(targetDir, newFileName)
-                        oldFile.copyTo(newFile, overwrite = true)
-                        if (oldFile.absolutePath != newFile.absolutePath) {
-                            oldFile.delete()
-                        }
-                        // Clean up empty old directory
-                        if (songbookChanged) {
-                            val oldDir = oldFile.parentFile
-                            if (oldDir != null && oldDir.isDirectory && oldDir.listFiles()?.isEmpty() == true) {
-                                oldDir.delete()
-                            }
-                        }
-                        songToSave = newSong.copy(sourceFile = newFile.absolutePath)
-                    }
-                }
+                songToSave = moveSongFile(oldSong, newSong, storageDir) ?: songToSave
             }
 
             // Update in memory
