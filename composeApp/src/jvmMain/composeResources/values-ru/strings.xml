@@ -877,6 +877,7 @@
     <string name="tab_canvas">Холст</string>
     <string name="tab_visibility">Видимость вкладок</string>
     <string name="text_margins">Отступы текста</string>
+    <string name="end_of_song_indicator">Показывать метку конца песни (* * *)</string>
     <string name="end_of_song_spacing">Конец песни (*) интервал</string>
     <string name="theme">Тема</string>
     <string name="timer_expired">Время вышло!</string>
@@ -1123,7 +1124,8 @@
     <string name="fullscreen_display">Полноэкранный режим</string>
     <string name="display_mode_label">Режим отображения:</string>
     <string name="display_mode_one_verse">1 куплет</string>
-    <string name="display_mode_one_line">1 строка</string>
+    <string name="display_mode_one_line">По строкам</string>
+    <string name="display_mode_lines_per_slide">Строк на слайд:</string>
     <string name="song_language_both">Оба</string>
     <string name="song_language_primary">Основной</string>
     <string name="song_language_secondary">Дополнительный</string>
@@ -2197,4 +2199,22 @@
     <string name="bible_catalog_language_named">%1$s · %2$s (%3$d)</string>
     <string name="bible_catalog_language_named_native">%1$s · %2$s · %3$s (%4$d)</string>
     <string name="stage_monitor_show_chords">Показывать аккорды</string>
+
+    <!-- Затемнение под текстом песни -->
+    <string name="lyrics_scrim">Затемнение под текстом</string>
+    <string name="lyrics_scrim_opacity">Сила</string>
+    <string name="lyrics_scrim_softness">Мягкость</string>
+    <string name="lyrics_scrim_padding">Разлёт</string>
+    <string name="lyrics_scrim_width">Ширина</string>
+
+    <!-- Оформление отдельной песни, вкладка в редакторе -->
+    <string name="song_pane_appearance">Оформление</string>
+    <string name="song_appearance_intro">Всё, что не отмечено, берётся из общих настроек песен.</string>
+    <string name="song_appearance_own_font">Свой шрифт и размер</string>
+    <string name="song_appearance_own_color">Свой цвет и начертание</string>
+    <string name="song_appearance_own_scrim">Своё затемнение под текстом</string>
+    <string name="song_appearance_own_split">Своё деление на слайды</string>
+    <string name="song_appearance_own_background">Свой фон</string>
+    <string name="song_appearance_section_sizes">Размер шрифта для отдельных куплетов</string>
+    <string name="song_appearance_section_default">авто</string>
 </resources>
